@@ -258,6 +258,9 @@ export type Inspection = {
 
   // Voice notes
   audioNotes?: AudioNote[];
+
+  // Free-form notes
+  notes?: string;
 };
 
 export type AudioNote = {
@@ -505,6 +508,20 @@ export type ActivityEvent = {
 // -----------------------------------------------------------------------------
 // Mileage tracker
 // -----------------------------------------------------------------------------
+
+export type SavedEstimate = {
+  id: string;
+  createdAt: string;
+  address: string;
+  lat?: number;
+  lng?: number;
+  material: RoofMaterial;
+  scope: 'repair' | 'partial_replacement' | 'full_replacement';
+  totalSquares: number;
+  totalLow: number;
+  totalMid: number;
+  totalHigh: number;
+};
 
 export type MileageTrip = {
   id: string;

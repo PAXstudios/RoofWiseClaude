@@ -14,6 +14,7 @@ import {
   INSURANCE_CARRIER_LABELS,
   ROOF_MATERIAL_LABELS,
 } from '../models/types';
+import { useInspectorProfileStore } from '../stores/inspectorProfileStore';
 import {
   CLAIM_WORTHINESS_LABELS,
   claimWorthiness,
@@ -38,6 +39,7 @@ function renderHtml(ins: Inspection): string {
   const score = damageScore(ins);
   const worthiness = claimWorthiness(decision, score);
   const threshold = thresholdFor(ins.material);
+  const inspector = useInspectorProfileStore.getState().profile;
   const generatedAt = new Date().toLocaleString();
   const createdDate = new Date(ins.createdAt).toLocaleDateString();
 
@@ -121,6 +123,12 @@ function renderHtml(ins: Inspection): string {
         <div class="label">Claim #</div>
         <div class="value">${esc(ins.claimNumber ?? '—')}</div>
       </div>
+      ${inspector.fullName ? `
+        <div>
+          <div class="label">Inspector</div>
+          <div class="value">${esc(inspector.fullName)}${inspector.haagCertified ? ' · HAAG' : ''}${inspector.haagCertificationNumber ? ` (${esc(inspector.haagCertificationNumber)})` : ''}</div>
+        </div>
+      ` : ''}
     </div>
   </div>
 
@@ -184,6 +192,11 @@ function renderHtml(ins: Inspection): string {
           })
           .join('')
   }
+
+  ${ins.notes && ins.notes.trim() ? `
+    <h2>4b. Inspector notes</h2>
+    <p>${esc(ins.notes.trim())}</p>
+  ` : ''}
 
   <h2>5. Collateral Checklist</h2>
   ${

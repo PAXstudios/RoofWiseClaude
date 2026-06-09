@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/auth/authStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useEstimateStore } from '@/lib/stores/estimateStore';
 import { AICalibrationCard } from '@/components/AICalibrationCard';
 import { WeatherTile } from '@/components/WeatherTile';
 import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
@@ -31,6 +32,7 @@ export default function HomeScreen() {
     [alerts],
   );
   const recentActivity = useActivityStore((s) => s.events.slice(0, 5));
+  const estimates = useEstimateStore((s) => s.estimates.slice(0, 4));
 
   const firstName = useMemo(() => {
     const email = user?.email ?? '';
@@ -243,6 +245,39 @@ export default function HomeScreen() {
         icon="calendar-outline"
         message="Nothing scheduled. Add jobs to your plan to see them here."
       />
+
+      {/* Saved Estimates */}
+      {estimates.length > 0 && (
+        <>
+          <SectionHeader title="Saved estimates" />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.recentRow}
+          >
+            {estimates.map((est) => (
+              <Pressable
+                key={est.id}
+                style={styles.estimateCard}
+                onPress={() => router.push('/estimator')}
+              >
+                <Text style={styles.estimateAmount}>
+                  ${est.totalMid.toLocaleString()}
+                </Text>
+                <Text style={styles.estimateRange}>
+                  ${est.totalLow.toLocaleString()} – ${est.totalHigh.toLocaleString()}
+                </Text>
+                <Text style={styles.estimateAddress} numberOfLines={1}>
+                  {est.address || 'No address'}
+                </Text>
+                <Text style={styles.estimateMeta}>
+                  {est.totalSquares.toFixed(1)} sq · {est.scope.replace('_', ' ')}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </>
+      )}
 
       {/* Activity */}
       <Pressable onPress={() => router.push('/activity')} hitSlop={6}>
@@ -510,6 +545,19 @@ const styles = StyleSheet.create({
   recentCustomer: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
   recentAddress: { fontSize: fontSize.bodySm, color: colors.slate },
   recentMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
+
+  estimateCard: {
+    width: 200,
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    gap: 4,
+    ...shadows.card,
+  },
+  estimateAmount: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.orange },
+  estimateRange: { fontSize: fontSize.caption, color: colors.slate },
+  estimateAddress: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium, marginTop: spacing.xs },
+  estimateMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2, textTransform: 'capitalize' },
 
   activityHeaderRow: {
     flexDirection: 'row',

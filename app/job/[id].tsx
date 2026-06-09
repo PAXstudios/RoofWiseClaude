@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScrollView, View, Text, Pressable, StyleSheet, Alert, Image, Share } from 'react-native';
+import { ScrollView, View, Text, Pressable, StyleSheet, Alert, Image, Share, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,6 +52,7 @@ export default function JobDetail() {
   const setStatus = useInspectionStore((s) => s.setStatus);
   const setInspectorSignature = useInspectionStore((s) => s.setInspectorSignature);
   const setCollateralItem = useInspectionStore((s) => s.setCollateralItem);
+  const setNotes = useInspectionStore((s) => s.setNotes);
   const addAudioNote = useInspectionStore((s) => s.addAudioNote);
   const removeAudioNote = useInspectionStore((s) => s.removeAudioNote);
   const logActivity = useActivityStore((s) => s.log);
@@ -294,6 +295,19 @@ export default function JobDetail() {
               </Pressable>
             );
           })}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Notes</Text>
+          <TextInput
+            value={inspection.notes ?? ''}
+            onChangeText={(t) => setNotes(inspection.id, t)}
+            placeholder="Anything the AI shouldn't miss?"
+            placeholderTextColor={colors.textSubtle}
+            style={styles.notesInput}
+            multiline
+            textAlignVertical="top"
+          />
         </View>
 
         <VoiceNoteRecorder
@@ -589,6 +603,16 @@ const styles = StyleSheet.create({
   collateralChecked: { textDecorationLine: 'line-through', color: colors.slate },
 
   stormCard: { borderLeftWidth: 4, borderLeftColor: colors.orange },
+
+  notesInput: {
+    minHeight: 96,
+    fontSize: fontSize.bodyMd,
+    color: colors.navy,
+    padding: spacing.md,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.md,
+    marginTop: spacing.sm,
+  },
 
   editBadge: {
     position: 'absolute',

@@ -91,6 +91,7 @@ type InspectionStoreState = {
   removeAudioNote: (id: string, noteId: string) => void;
   removePhoto: (inspectionId: string, slopeId: string, photoIndex: number) => void;
   replacePhoto: (inspectionId: string, slopeId: string, photoIndex: number, uri: string) => void;
+  setNotes: (id: string, notes: string) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
   attachRawPhotos: (inspectionId: string, captures: RawCapture[]) => void;
@@ -243,6 +244,11 @@ export const useInspectionStore = create<InspectionStoreState>()(
               }),
             };
           }),
+        })),
+
+      setNotes: (id, notes) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) => (i.id === id ? { ...i, notes } : i)),
         })),
 
       replacePhoto: (inspectionId, slopeId, photoIndex, uri) =>

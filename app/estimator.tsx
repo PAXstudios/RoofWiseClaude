@@ -14,6 +14,8 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
+import { useEstimateStore } from '@/lib/stores/estimateStore';
+import { useToastStore } from '@/lib/stores/toastStore';
 import {
   colors,
   fontSize,
@@ -72,6 +74,8 @@ const SCOPE_CHOICES: { id: DamageScope; label: string; sub: string }[] = [
 export default function CostEstimatorScreen() {
   const router = useRouter();
   const setPrefill = useWizardPrefillStore((s) => s.set);
+  const saveEstimate = useEstimateStore((s) => s.save);
+  const toast = useToastStore((s) => s.show);
   const [step, setStep] = useState<Step>(0);
   const [draft, setDraft] = useState<Draft>({
     address: '',
@@ -311,10 +315,32 @@ export default function CostEstimatorScreen() {
                 ))}
               </View>
 
-              <Pressable style={styles.convertBtn} onPress={convertToJob}>
-                <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
-                <Text style={styles.convertBtnText}>Convert to job</Text>
-              </Pressable>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <Pressable
+                  style={[styles.secondarySaveBtn, { flex: 1 }]}
+                  onPress={() => {
+                    saveEstimate({
+                      address: draft.address,
+                      lat: draft.lat,
+                      lng: draft.lng,
+                      material: draft.material,
+                      scope: draft.scope,
+                      totalSquares,
+                      totalLow: estimate.totalLow,
+                      totalMid: estimate.totalMid,
+                      totalHigh: estimate.totalHigh,
+                    });
+                    toast({ tone: 'success', title: 'Estimate saved' });
+                  }}
+                >
+                  <Ionicons name="bookmark-outline" size={18} color={colors.navy} />
+                  <Text style={styles.secondarySaveText}>Save</Text>
+                </Pressable>
+                <Pressable style={[styles.convertBtn, { flex: 1 }]} onPress={convertToJob}>
+                  <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
+                  <Text style={styles.convertBtnText}>Convert to job</Text>
+                </Pressable>
+              </View>
             </View>
           )}
         </ScrollView>
@@ -492,4 +518,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.navy,
   },
   convertBtnText: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+
+  secondarySaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.preferred,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.navy,
+  },
+  secondarySaveText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
 });
