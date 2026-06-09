@@ -122,20 +122,27 @@ export default function HomeScreen() {
         </Pressable>
       )}
 
-      {/* Hail Tracer + Estimator CTAs */}
+      {/* Hail Tracer + Estimator + Mileage CTAs */}
       <View style={styles.utilityRow}>
         <Pressable style={styles.utilityCta} onPress={() => router.push('/hail-tracer')}>
           <Ionicons name="thunderstorm" size={22} color={colors.orange} />
           <View style={{ flex: 1 }}>
             <Text style={styles.utilityTitle}>Hail Tracer</Text>
-            <Text style={styles.utilitySub}>NOAA heat map</Text>
+            <Text style={styles.utilitySub}>NOAA map</Text>
           </View>
         </Pressable>
         <Pressable style={styles.utilityCta} onPress={() => router.push('/estimator')}>
           <Ionicons name="calculator-outline" size={22} color={colors.orange} />
           <View style={{ flex: 1 }}>
             <Text style={styles.utilityTitle}>Estimator</Text>
-            <Text style={styles.utilitySub}>Solar API + cost</Text>
+            <Text style={styles.utilitySub}>Solar + cost</Text>
+          </View>
+        </Pressable>
+        <Pressable style={styles.utilityCta} onPress={() => router.push('/mileage')}>
+          <Ionicons name="car-outline" size={22} color={colors.orange} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.utilityTitle}>Mileage</Text>
+            <Text style={styles.utilitySub}>Tax log</Text>
           </View>
         </Pressable>
       </View>

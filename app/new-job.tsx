@@ -23,6 +23,7 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 import {
+  type BrittlenessTest,
   type InsuranceCarrier,
   INSURANCE_CARRIER_LABELS,
   INSURANCE_CARRIER_TIER,
@@ -54,6 +55,7 @@ type Draft = {
   ageYears: number;
   geometry: RoofGeometry | null;
   condition: RoofCondition | null;
+  brittlenessTest: BrittlenessTest;
 };
 
 const EMPTY: Draft = {
@@ -71,6 +73,7 @@ const EMPTY: Draft = {
   ageYears: 0,
   geometry: null,
   condition: null,
+  brittlenessTest: 'not_tested',
 };
 
 const STEP_TITLES = ['Customer & Property', 'Insurance', 'Roof System', 'Review'];
@@ -124,6 +127,7 @@ export default function NewJobWizard() {
       ageYears: draft.ageYears,
       geometry: draft.geometry,
       condition: draft.condition,
+      brittlenessTest: draft.brittlenessTest,
     });
     logActivity({
       kind: 'job_created',
@@ -425,6 +429,28 @@ function Step3({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => void
                 style={[styles.bigChipText, draft.condition === c && styles.bigChipTextSelected]}
               >
                 {c[0].toUpperCase() + c.slice(1)}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View>
+        <Text style={styles.subSection}>Brittleness test (HAAG)</Text>
+        <View style={styles.chipWrap}>
+          {(['not_tested', 'passed', 'failed'] as const).map((b) => (
+            <Pressable
+              key={b}
+              style={[styles.bigChip, draft.brittlenessTest === b && styles.bigChipSelected]}
+              onPress={() => setDraft({ ...draft, brittlenessTest: b })}
+            >
+              <Text
+                style={[
+                  styles.bigChipText,
+                  draft.brittlenessTest === b && styles.bigChipTextSelected,
+                ]}
+              >
+                {b.replace('_', ' ')}
               </Text>
             </Pressable>
           ))}

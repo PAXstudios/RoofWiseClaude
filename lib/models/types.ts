@@ -488,6 +488,24 @@ export type ActivityEvent = {
 };
 
 // -----------------------------------------------------------------------------
+// Mileage tracker
+// -----------------------------------------------------------------------------
+
+export type MileageTrip = {
+  id: string;
+  startedAt: string;
+  endedAt: string;
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+  startAddress?: string;
+  endAddress?: string;
+  miles: number;
+  purpose?: string;       // "inspection", "knocking", "supply run", etc.
+};
+
+// -----------------------------------------------------------------------------
 // Schedule entry (today's plan)
 // -----------------------------------------------------------------------------
 

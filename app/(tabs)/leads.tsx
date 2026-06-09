@@ -1,7 +1,9 @@
 import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useLeadStore } from '@/lib/stores/leadStore';
+import type { LeadStage } from '@/lib/models/types';
 import {
   colors,
   fontSize,
@@ -12,7 +14,7 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-const STAGES = [
+const STAGES: Array<{ id: LeadStage | 'all'; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'new', label: 'New' },
   { id: 'contacted', label: 'Contacted' },
@@ -20,17 +22,30 @@ const STAGES = [
   { id: 'inspected', label: 'Inspected' },
   { id: 'proposal_sent', label: 'Proposal' },
   { id: 'signed', label: 'Signed' },
-] as const;
+];
 
 export default function LeadsScreen() {
   const router = useRouter();
+  const leads = useLeadStore((s) => s.leads);
   const [stage, setStage] = useState<(typeof STAGES)[number]['id']>('all');
+
+  const filtered = useMemo(
+    () => (stage === 'all' ? leads : leads.filter((l) => l.stage === stage)),
+    [leads, stage],
+  );
 
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Text style={styles.title}>Leads</Text>
-        <Pressable style={styles.fab} onPress={() => router.push('/new-job')} hitSlop={8}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Leads</Text>
+          <Text style={styles.sub}>{leads.length} total</Text>
+        </View>
+        <Pressable
+          style={styles.fab}
+          onPress={() => router.push('/new-job')}
+          hitSlop={8}
+        >
           <Ionicons name="add" size={24} color={colors.textInverse} />
         </Pressable>
       </View>
@@ -55,19 +70,62 @@ export default function LeadsScreen() {
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.empty}>
-          <Ionicons name="people-outline" size={40} color={colors.slate} />
-          <Text style={styles.emptyTitle}>No leads yet</Text>
-          <Text style={styles.emptyBody}>
-            Leads created from door knocks, inspections, or manually will appear here.
-          </Text>
-          <Pressable style={styles.cta} onPress={() => router.push('/new-job')}>
-            <Text style={styles.ctaText}>Start a new job</Text>
-          </Pressable>
-        </View>
+        {filtered.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="people-outline" size={40} color={colors.slate} />
+            <Text style={styles.emptyTitle}>
+              {leads.length === 0 ? 'No leads yet' : 'No leads in this stage'}
+            </Text>
+            <Text style={styles.emptyBody}>
+              {leads.length === 0
+                ? 'Leads from door knocks, inspections, or manual entry will appear here.'
+                : 'Try a different stage filter.'}
+            </Text>
+            {leads.length === 0 && (
+              <Pressable style={styles.cta} onPress={() => router.push('/new-job')}>
+                <Text style={styles.ctaText}>Start a new job</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : (
+          filtered.map((lead) => (
+            <View key={lead.id} style={styles.leadCard}>
+              <View style={styles.leadHeader}>
+                <Text style={styles.leadName}>{lead.customerName}</Text>
+                <View style={[styles.stagePill, stageTone(lead.stage)]}>
+                  <Text style={styles.stagePillText}>
+                    {lead.stage.replace(/_/g, ' ')}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.leadAddress}>{lead.address}</Text>
+              {lead.source && (
+                <Text style={styles.leadMeta}>
+                  Source: {lead.source.replace(/_/g, ' ')}
+                </Text>
+              )}
+            </View>
+          ))
+        )}
       </ScrollView>
     </View>
   );
+}
+
+function stageTone(stage: LeadStage) {
+  switch (stage) {
+    case 'signed':
+      return { backgroundColor: colors.successSoft };
+    case 'lost':
+      return { backgroundColor: colors.dangerSoft };
+    case 'inspection_scheduled':
+    case 'inspected':
+      return { backgroundColor: colors.brandSoft };
+    case 'proposal_sent':
+      return { backgroundColor: colors.warnSoft };
+    default:
+      return { backgroundColor: colors.surfaceMuted };
+  }
 }
 
 const styles = StyleSheet.create({
@@ -77,13 +135,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing.xl,
     paddingBottom: spacing.md,
+    gap: spacing.md,
   },
-  title: {
-    flex: 1,
-    fontSize: fontSize.titleXl,
-    fontWeight: fontWeight.bold,
-    color: colors.navy,
-  },
+  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
+  sub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
   fab: {
     width: touchTarget.standard,
     height: touchTarget.standard,
@@ -109,7 +164,22 @@ const styles = StyleSheet.create({
   chipText: { fontSize: fontSize.bodySm, color: colors.navy, fontWeight: fontWeight.medium },
   chipTextActive: { color: colors.textInverse },
 
-  content: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
+
+  leadCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    ...shadows.card,
+  },
+  leadHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  leadName: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, flex: 1 },
+  leadAddress: { fontSize: fontSize.bodyMd, color: colors.slate },
+  leadMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
+  stagePill: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radii.pill },
+  stagePillText: { fontSize: fontSize.caption, color: colors.navy, fontWeight: fontWeight.semibold, textTransform: 'capitalize' },
+
   empty: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
@@ -118,17 +188,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card,
   },
-  emptyTitle: {
-    fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.semibold,
-    color: colors.navy,
-    marginTop: spacing.sm,
-  },
-  emptyBody: {
-    fontSize: fontSize.bodyMd,
-    color: colors.slate,
-    textAlign: 'center',
-  },
+  emptyTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, marginTop: spacing.sm },
+  emptyBody: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },
   cta: {
     marginTop: spacing.lg,
     height: touchTarget.preferred,

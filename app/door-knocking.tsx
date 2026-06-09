@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import type MapView from 'react-native-maps';
 import { Map, MapPin, regionForLatLon } from '@/components/map/Map';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import type { KnockOutcome } from '@/lib/models/types';
@@ -50,6 +51,7 @@ export default function DoorKnockingScreen() {
   const start = useKnockSessionStore((s) => s.start);
   const end = useKnockSessionStore((s) => s.end);
   const logKnock = useKnockSessionStore((s) => s.logKnock);
+  const createLead = useLeadStore((s) => s.create);
   const logActivity = useActivityStore((s) => s.log);
   const toast = useToastStore((s) => s.show);
 
@@ -131,10 +133,29 @@ export default function DoorKnockingScreen() {
       Alert.alert('Locating…', 'Waiting for a GPS fix.');
       return;
     }
+    let createdLeadId: string | undefined;
+    if (outcome === 'interested' || outcome === 'inspection_scheduled') {
+      const lead = createLead({
+        customerName: 'Walk-in lead',
+        address: `${position.latitude.toFixed(5)}, ${position.longitude.toFixed(5)}`,
+        lat: position.latitude,
+        lng: position.longitude,
+        stage: outcome === 'inspection_scheduled' ? 'inspection_scheduled' : 'new',
+        source: 'door_knock',
+      });
+      createdLeadId = lead.id;
+      logActivity({
+        kind: 'knock_converted_to_lead',
+        leadId: lead.id,
+        message: `Knock converted to lead — ${outcome.replace(/_/g, ' ')}`,
+      });
+    }
+
     const k = logKnock({
       lat: position.latitude,
       lng: position.longitude,
       outcome,
+      createdLeadId,
     });
     if (!k) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -142,7 +163,11 @@ export default function DoorKnockingScreen() {
       kind: 'knock_logged',
       message: `Knock logged: ${outcome.replace(/_/g, ' ')}`,
     });
-    toast({ tone: 'success', title: 'Knock saved', body: outcome.replace(/_/g, ' ') });
+    toast({
+      tone: 'success',
+      title: createdLeadId ? 'Knock saved · lead created' : 'Knock saved',
+      body: outcome.replace(/_/g, ' '),
+    });
   };
 
   const stats = useMemo(() => {

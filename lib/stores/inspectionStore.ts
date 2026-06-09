@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
+  BrittlenessTest,
   Inspection,
   InspectionStatus,
   RoofMaterial,
@@ -61,6 +62,7 @@ type CreateDraft = {
   ageYears: number;
   geometry: RoofGeometry;
   condition: RoofCondition;
+  brittlenessTest?: BrittlenessTest;
 };
 
 export type PhotoCapture = {
@@ -142,7 +144,7 @@ export const useInspectionStore = create<InspectionStoreState>()(
           ageYears: d.ageYears,
           geometry: d.geometry,
           condition: d.condition,
-          brittlenessTest: 'not_tested',
+          brittlenessTest: d.brittlenessTest ?? 'not_tested',
           collateralChecklist: {},
           slopes: [],
           verifyWithInspector: false,
