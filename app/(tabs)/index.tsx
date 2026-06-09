@@ -7,6 +7,9 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useEstimateStore } from '@/lib/stores/estimateStore';
+import { useProposalStore } from '@/lib/stores/proposalStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
+import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { AICalibrationCard } from '@/components/AICalibrationCard';
 import { WeatherTile } from '@/components/WeatherTile';
 import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
@@ -33,12 +36,43 @@ export default function HomeScreen() {
   );
   const recentActivity = useActivityStore((s) => s.events.slice(0, 5));
   const estimates = useEstimateStore((s) => s.estimates.slice(0, 4));
+  const proposals = useProposalStore((s) => s.proposals);
+  const leads = useLeadStore((s) => s.leads);
+  const inspectorName = useInspectorProfileStore((s) => s.profile.fullName);
+
+  const pipelineValue = useMemo(
+    () =>
+      proposals
+        .filter((p) => p.status === 'sent' || p.status === 'viewed')
+        .reduce((sum, p) => sum + p.total, 0),
+    [proposals],
+  );
+
+  const revenueYTD = useMemo(() => {
+    const year = new Date().getFullYear();
+    return proposals
+      .filter(
+        (p) =>
+          p.status === 'signed' &&
+          p.signedAt &&
+          new Date(p.signedAt).getFullYear() === year,
+      )
+      .reduce((sum, p) => sum + p.total, 0);
+  }, [proposals]);
+
+  const openLeads = useMemo(
+    () => leads.filter((l) => l.stage !== 'signed' && l.stage !== 'lost').length,
+    [leads],
+  );
 
   const firstName = useMemo(() => {
+    if (inspectorName?.trim()) {
+      return inspectorName.trim().split(/\s+/)[0];
+    }
     const email = user?.email ?? '';
     if (!email) return 'there';
     return email.split('@')[0].split(/[._-]/)[0].replace(/^\w/, (c) => c.toUpperCase());
-  }, [user]);
+  }, [user, inspectorName]);
 
   const pipelineCounts = useMemo(() => {
     return {
@@ -177,9 +211,9 @@ export default function HomeScreen() {
 
       {/* KPI tiles */}
       <View style={styles.kpiRow}>
-        <Kpi label="Revenue" value="$0" />
-        <Kpi label="Open" value={String(inspections.length)} />
-        <Kpi label="Pipeline" value="$0" />
+        <Kpi label="Revenue YTD" value={revenueYTD > 0 ? `$${formatShort(revenueYTD)}` : '$0'} />
+        <Kpi label="Leads" value={String(openLeads)} />
+        <Kpi label="Pipeline" value={pipelineValue > 0 ? `$${formatShort(pipelineValue)}` : '$0'} />
       </View>
 
       <AICalibrationCard />
@@ -313,6 +347,12 @@ export default function HomeScreen() {
       <View style={{ height: spacing.xxxl }} />
     </ScrollView>
   );
+}
+
+function formatShort(amount: number): string {
+  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K`;
+  return String(Math.round(amount));
 }
 
 function iconFor(kind: string): keyof typeof Ionicons.glyphMap {

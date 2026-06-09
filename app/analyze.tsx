@@ -18,6 +18,7 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { analyzeSlope } from '@/lib/services/analyzeSlope';
+import { scorePhotos } from '@/lib/services/photoQuality';
 import { isGeminiConfigured } from '@/lib/env';
 import {
   colors,
@@ -115,6 +116,25 @@ export default function AnalyzeView() {
       );
       return;
     }
+
+    const toAnalyze = onlyNew
+      ? unanalyzed.map((i) => slope!.photoPaths[i])
+      : slope!.photoPaths;
+    const quality = await scorePhotos(toAnalyze);
+    if (!quality.ok) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'Photo quality issues',
+          quality.flags.join('\n• '),
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Analyze anyway', onPress: () => resolve(true) },
+          ],
+        );
+      });
+      if (!proceed) return;
+    }
+
     setRunning(true);
     setError(null);
     setProgress({ done: 0, total: onlyNew ? unanalyzed.length : slope.photoPaths.length });
