@@ -32,6 +32,7 @@ import {
   ROOF_MATERIAL_LABELS,
 } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useActivityStore } from '@/lib/stores/activityStore';
 
 type Step = 0 | 1 | 2 | 3;
 
@@ -72,6 +73,7 @@ const STEP_TITLES = ['Customer & Property', 'Insurance', 'Roof System', 'Review'
 export default function NewJobWizard() {
   const router = useRouter();
   const createInspection = useInspectionStore((s) => s.create);
+  const logActivity = useActivityStore((s) => s.log);
   const [step, setStep] = useState<Step>(0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
 
@@ -115,6 +117,11 @@ export default function NewJobWizard() {
       ageYears: draft.ageYears,
       geometry: draft.geometry,
       condition: draft.condition,
+    });
+    logActivity({
+      kind: 'job_created',
+      inspectionId: ins.id,
+      message: `Created job ${ins.reportId} for ${ins.customerName}`,
     });
     Alert.alert('Job created', `Report ${ins.reportId} saved locally.`, [
       { text: 'Done', onPress: () => router.replace('/(tabs)') },

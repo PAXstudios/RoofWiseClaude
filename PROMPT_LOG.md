@@ -272,3 +272,68 @@ Aligned to spec phases. Status is current state in *this* Expo repo, not the ror
 - Build Home dashboard, NewJobWizard, Quick Inspection scaffold.
 - Strip web-only deps (`react-native-web`, `react-dom`, `react-leaflet`, `leaflet`) in a follow-up pass.
 - Confirm Gemini model choice once user is back (revisit #9 if user still wants Gemini 3 Pro).
+
+---
+
+### [2026-06-09] #04 — Tier 1 MVP build: persistence, hero flows, pitch gauge, dead-code purge
+
+**Prompt:**
+> Now continue doing the entire app. Thanks. Wake me when you're done.
+
+**Intent / Goal:**
+- Push the Tier 1 MVP as far as I could autonomously while the user slept: real data model, hero flows (New Job + Quick Inspection), persistence, Job Detail, Pitch Gauge, Activity + Storm Alert stores.
+- Strip the old web-only scaffold and dead components so the codebase next session is honest about its real surface.
+
+**Decisions:**
+- **Persistence:** Inspections, Activity events, and Storm Alerts each get their own Zustand store with AsyncStorage persistence (`lib/stores/inspectionStore.ts`, `activityStore.ts`, `stormAlertStore.ts`). Inspection store auto-mints `RW-YYYY-####` report IDs.
+- **Hero flows:**
+  - `app/new-job.tsx` — 4-step wizard. On Save: writes Inspection + logs ActivityEvent(`job_created`) + alerts the user. Glove-friendly 88pt sticky CTA, big chips and steppers, pencil-edit jump-back on Review step.
+  - `app/quick-inspection.tsx` — camera scaffold with slope chip selector, multi-photo strip, Gemini analysis call (real REST), results view with summary card + per-photo findings. Surfaces a friendly warning when `EXPO_PUBLIC_GEMINI_API_KEY` is missing — never fakes detections.
+  - `app/pitch-gauge.tsx` — full-screen live pitch readout in degrees + X/12 ratio + bullseye level + GPS altitude. Uses `expo-sensors` DeviceMotion + `expo-location` watch position via `lib/services/deviceMotion.ts`.
+  - `app/job/[id].tsx` — Job Detail. Reads the inspection, runs Decision Engine + damage score + claim worthiness, surfaces HAAG verdict, exposes Start Quick Inspection CTA and a delete action.
+- **Home dashboard polish:**
+  - Storm Alert hero (Drift #4) is wired to `useStormAlertStore.alerts.find(status==='new')`. In `__DEV__` builds, a small "Inject demo storm alert" pill lets you preview the hero without a real Storm Watch service.
+  - Recent Jobs carousel binds to the InspectionStore.
+  - Pipeline counts derive from inspection statuses.
+  - Recent Activity surfaces the latest 5 ActivityEvents.
+- **Map:** Switched off `PROVIDER_GOOGLE` so iOS uses MapKit (spec preference). Filter chips updated to Leads / Jobs / Storms / Knocks. Storm data continues to load from NOAA via `lib/noaa.ts`.
+- **Dead-code purge:** Removed `components/dashboard/`, `components/ui/`, `components/shell/Sidebar.tsx`, `TopBar.tsx`, `HeaderGreeting.tsx`, `StubScreen.tsx`, `components/map/StormFilters.tsx`, `StormLegend.tsx`, `theme/useResponsive.ts`, `lib/mock/`. Removed web-only deps (`react-native-web`, `react-dom`, `react-leaflet`, `leaflet`, `@types/leaflet`) plus the `.web.tsx` map shim. Web target dropped from `app.json` earlier.
+
+**Files touched (this entry):**
+- `lib/stores/inspectionStore.ts`, `lib/stores/activityStore.ts`, `lib/stores/stormAlertStore.ts` — created.
+- `lib/services/deviceMotion.ts` — created (DeviceMotion + altitude hooks).
+- `app/new-job.tsx` — wired to Inspection + Activity stores.
+- `app/quick-inspection.tsx` — pitch-gauge entry point added.
+- `app/pitch-gauge.tsx` — created.
+- `app/job/[id].tsx` — created.
+- `app/(tabs)/index.tsx` — Storm Alert hero, real Recent Jobs, real Pipeline counts, Recent Activity section.
+- `app/(tabs)/settings.tsx` — Integrations section with Gemini + Supabase status.
+- `package.json` / `package-lock.json` — removed web-only deps, no others added in this entry.
+- Removed: `components/dashboard/*`, `components/ui/*`, `components/shell/{Sidebar,TopBar,HeaderGreeting,StubScreen}.tsx`, `components/map/{StormFilters,StormLegend}.tsx`, `components/map/StormHistoryMap.web.tsx`, `theme/useResponsive.ts`, `lib/mock/*`.
+
+**What's working end-to-end now:**
+- Sign in / create account / reset password (Supabase).
+- Auth gate forces the Welcome screen until a session exists.
+- 5-tab nav: Home, Leads, Map, Plan, Train.
+- New Job Wizard creates an inspection that persists locally and shows up on Home + Job Detail.
+- Quick Inspection: take photos with slope tags, attempt Gemini analysis, see structured findings + summary (or a clean "AI not connected" state).
+- Pitch Gauge: live readout backed by real device sensors.
+- Storm Alert hero appears on demand in dev, hides when no active alert in prod (Drift #4).
+- Settings shows the signed-in account + integration status, with a confirm-on-sign-out.
+
+**Follow-ups (Tier 1 still owed):**
+- HAAG PDF report generation (`expo-print`).
+- Save Quick Inspection results back to an Inspection (currently standalone).
+- Photo quality scoring before Gemini send.
+- Activity Feed full screen.
+- Apple Sign In (Supabase Apple provider + `expo-apple-authentication`).
+
+**Follow-ups (Tier 2+):**
+- Service Area + Storm Watch background service + Push Notifications.
+- Door Knocking Mode.
+- Proposals + Send Sheet + PDF.
+- Solar API roof measurement + Cost Estimator.
+- Weather tile.
+- Training Queue + SwipeReview + LocalLearningEngine (recursive learning loop).
+- Voice command service.
+- Offline sync queue.

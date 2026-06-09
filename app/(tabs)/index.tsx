@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
+import { useActivityStore } from '@/lib/stores/activityStore';
 import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
 import {
   colors,
@@ -19,6 +21,14 @@ export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const inspections = useInspectionStore((s) => s.inspections);
+  const alerts = useStormAlertStore((s) => s.alerts);
+  const dismissAlert = useStormAlertStore((s) => s.dismiss);
+  const injectAlert = useStormAlertStore((s) => s.inject);
+  const activeAlert = useMemo(
+    () => alerts.find((a) => a.status === 'new'),
+    [alerts],
+  );
+  const recentActivity = useActivityStore((s) => s.events.slice(0, 5));
 
   const firstName = useMemo(() => {
     const email = user?.email ?? '';
@@ -61,8 +71,55 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* Storm Alert hero — hides when no active alert (Drift #4) */}
-      {/* TODO Phase 6D: wire to StormAlertStore.latestActiveAlert */}
+      {/* Storm Alert hero — hides when no active alert (Drift #4). */}
+      {activeAlert && (
+        <View style={styles.stormHero}>
+          <View style={styles.stormHeroChipRow}>
+            <View style={styles.stormHeroChip}>
+              <Ionicons name="thunderstorm" size={14} color={colors.textInverse} />
+              <Text style={styles.stormHeroChipText}>
+                {activeAlert.eventKind === 'hail' ? 'Severe Hail' : 'Severe Wind'}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => dismissAlert(activeAlert.id)}
+              hitSlop={10}
+            >
+              <Ionicons name="close" size={20} color={colors.cream} />
+            </Pressable>
+          </View>
+          <Text style={styles.stormHeroTitle}>{activeAlert.areaLabel}</Text>
+          <Text style={styles.stormHeroSub}>
+            {activeAlert.propertyCount} propert{activeAlert.propertyCount === 1 ? 'y' : 'ies'} in range
+            {activeAlert.hailSizeInches ? ` · ${activeAlert.hailSizeInches}" hail` : ''}
+            {activeAlert.windSpeedMph ? ` · ${activeAlert.windSpeedMph} mph` : ''}
+          </Text>
+          <Pressable
+            style={styles.stormHeroCta}
+            onPress={() => router.push('/(tabs)/map')}
+          >
+            <Text style={styles.stormHeroCtaText}>View impacted properties</Text>
+            <Ionicons name="arrow-forward" size={20} color={colors.navy} />
+          </Pressable>
+        </View>
+      )}
+
+      {!activeAlert && __DEV__ && (
+        <Pressable
+          style={styles.debugStorm}
+          onPress={() =>
+            injectAlert({
+              eventKind: 'hail',
+              areaLabel: 'Plano, TX · 75024',
+              propertyCount: 3,
+              hailSizeInches: 1.75,
+            })
+          }
+        >
+          <Ionicons name="bug-outline" size={14} color={colors.slate} />
+          <Text style={styles.debugStormText}>Inject demo storm alert</Text>
+        </Pressable>
+      )}
 
       {/* Hero CTAs */}
       <View style={styles.heroRow}>
@@ -147,9 +204,57 @@ export default function HomeScreen() {
         message="Nothing scheduled. Add jobs to your plan to see them here."
       />
 
+      {/* Activity */}
+      <SectionHeader title="Recent Activity" />
+      {recentActivity.length === 0 ? (
+        <EmptyCard
+          icon="time-outline"
+          message="Inspections, knocks, and saves will show up here."
+        />
+      ) : (
+        <View style={styles.activityCard}>
+          {recentActivity.map((evt, i) => (
+            <View
+              key={evt.id}
+              style={[styles.activityRow, i > 0 && styles.activityRowBorder]}
+            >
+              <Ionicons name={iconFor(evt.kind)} size={18} color={colors.orange} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.activityMsg}>{evt.message}</Text>
+                <Text style={styles.activityTime}>{formatRelative(evt.createdAt)}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
       <View style={{ height: spacing.xxxl }} />
     </ScrollView>
   );
+}
+
+function iconFor(kind: string): keyof typeof Ionicons.glyphMap {
+  switch (kind) {
+    case 'job_created': return 'briefcase-outline';
+    case 'photo_captured': return 'camera-outline';
+    case 'analysis_ran': return 'analytics-outline';
+    case 'proposal_sent': return 'send-outline';
+    case 'proposal_signed': return 'document-text-outline';
+    case 'knock_logged': return 'walk-outline';
+    case 'storm_alert_received': return 'thunderstorm-outline';
+    default: return 'ellipse-outline';
+  }
+}
+
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min}m ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 function Kpi({ label, value }: { label: string; value: string }) {
@@ -278,6 +383,50 @@ const styles = StyleSheet.create({
   },
   pipelineLabel: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
 
+  stormHero: {
+    backgroundColor: colors.navy,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    ...shadows.card,
+  },
+  stormHeroChipRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stormHeroChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.orange,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+  },
+  stormHeroChipText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.bold, textTransform: 'uppercase' },
+  stormHeroTitle: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.textInverse },
+  stormHeroSub: { fontSize: fontSize.bodyMd, color: 'rgba(240,240,228,0.85)' },
+  stormHeroCta: {
+    marginTop: spacing.md,
+    height: touchTarget.preferred,
+    borderRadius: radii.pill,
+    backgroundColor: colors.cream,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  stormHeroCtaText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+
+  debugStorm: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
+  },
+  debugStormText: { color: colors.slate, fontSize: fontSize.caption, fontWeight: fontWeight.medium },
+
   recentRow: { gap: spacing.md, paddingRight: spacing.xl },
   recentCard: {
     width: 240,
@@ -299,4 +448,20 @@ const styles = StyleSheet.create({
   recentCustomer: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
   recentAddress: { fontSize: fontSize.bodySm, color: colors.slate },
   recentMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
+
+  activityCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    ...shadows.card,
+  },
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  activityRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
+  activityMsg: { fontSize: fontSize.bodyMd, color: colors.navy },
+  activityTime: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2 },
 });

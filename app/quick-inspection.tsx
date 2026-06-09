@@ -177,7 +177,14 @@ export default function QuickInspection() {
               {photos.length === 0 ? 'Tap shutter to capture' : `${photos.length} photo${photos.length === 1 ? '' : 's'}`}
             </Text>
           </View>
-          <View style={styles.topBtn} />
+          <Pressable
+            onPress={() => router.push('/pitch-gauge')}
+            hitSlop={10}
+            style={styles.topBtn}
+            accessibilityLabel="Open pitch gauge"
+          >
+            <Ionicons name="compass-outline" size={22} color={colors.textInverse} />
+          </Pressable>
         </View>
 
         <View style={styles.bottomDock}>
