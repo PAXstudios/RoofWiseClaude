@@ -9,9 +9,12 @@ import {
 } from './gemini';
 import { useInspectionStore } from '../stores/inspectionStore';
 import { useCorrectionsStore } from '../stores/correctionsStore';
+import { useTrainingQueueStore } from '../stores/trainingQueueStore';
 import { computeProfile } from './learning/userCorrectionProfile';
 import { userStylePromptPrefix } from './learning/localLearningEngine';
 import type { Slope } from '../models/types';
+
+const LOW_CONFIDENCE_THRESHOLD = 60;
 
 export type SlopeAnalysisProgress = {
   done: number;
@@ -72,6 +75,22 @@ export async function analyzeSlope(
         r.markers,
       );
       mergeFindingsForPhoto(inspectionId, slopeId, r);
+
+      // Auto-enqueue low-confidence detections for inspector review
+      const avgConfidence = avgMarkerConfidence(r.markers);
+      const shouldQueue =
+        r.markers.length > 0 &&
+        (avgConfidence < LOW_CONFIDENCE_THRESHOLD || r.markers.length > 10);
+      if (shouldQueue) {
+        useTrainingQueueStore.getState().enqueue({
+          inspectionId,
+          slopeId,
+          photoPath: uri,
+          findings: r.findings,
+          markers: r.markers,
+        });
+      }
+
       attached++;
     } catch {
       failed++;
@@ -79,6 +98,11 @@ export async function analyzeSlope(
   }
   opts.onProgress?.({ done: todoIndexes.length, total: todoIndexes.length });
   return { results, attached, failed };
+}
+
+function avgMarkerConfidence(markers: AnalysisResult['markers']): number {
+  if (markers.length === 0) return 100;
+  return markers.reduce((sum, m) => sum + m.confidence, 0) / markers.length;
 }
 
 function pickPhotos(slope: Slope, onlyNew: boolean): number[] {

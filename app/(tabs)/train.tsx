@@ -1,6 +1,11 @@
 import { ScrollView, View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useMemo } from 'react';
+import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
+import { useTrainingQueueStore } from '@/lib/stores/trainingQueueStore';
+import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
+import { overallAccuracy } from '@/lib/services/learning/localLearningEngine';
 import {
   colors,
   fontSize,
@@ -13,6 +18,16 @@ import {
 
 export default function TrainScreen() {
   const router = useRouter();
+  const corrections = useCorrectionsStore((s) => s.corrections);
+  const queueItems = useTrainingQueueStore((s) => s.items);
+
+  const pendingCount = useMemo(
+    () => queueItems.filter((i) => i.status === 'pending').length,
+    [queueItems],
+  );
+  const profile = useMemo(() => computeProfile(corrections), [corrections]);
+  const accuracy = overallAccuracy(profile);
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -21,22 +36,35 @@ export default function TrainScreen() {
       </View>
 
       <View style={styles.tilesRow}>
-        <View style={[styles.tile, styles.tilePrimary]}>
+        <Pressable
+          style={[styles.tile, styles.tilePrimary]}
+          onPress={() => router.push('/swipe-review')}
+        >
           <View style={styles.tileTopRow}>
             <Ionicons name="layers-outline" size={20} color={colors.textInverse} />
-            <Text style={styles.tilePrimaryCount}>0</Text>
+            <Text style={styles.tilePrimaryCount}>{pendingCount}</Text>
           </View>
           <Text style={styles.tilePrimaryLabel}>Pending review</Text>
-          <Text style={styles.tilePrimarySub}>Photos waiting on your verdict</Text>
-        </View>
+          <Text style={styles.tilePrimarySub}>
+            {pendingCount === 0
+              ? 'All caught up.'
+              : 'Photos waiting on your verdict'}
+          </Text>
+        </Pressable>
 
         <View style={[styles.tile, styles.tileSecondary]}>
           <View style={styles.tileTopRow}>
             <Ionicons name="bar-chart-outline" size={20} color={colors.navy} />
-            <Text style={styles.tileSecondaryCount}>—</Text>
+            <Text style={styles.tileSecondaryCount}>
+              {accuracy === null ? '—' : `${accuracy}%`}
+            </Text>
           </View>
           <Text style={styles.tileSecondaryLabel}>Calibration accuracy</Text>
-          <Text style={styles.tileSecondarySub}>Available after 5 corrections</Text>
+          <Text style={styles.tileSecondarySub}>
+            {accuracy === null
+              ? `Available after 5 corrections (${corrections.length}/5)`
+              : `From ${corrections.length} corrections`}
+          </Text>
         </View>
       </View>
 
@@ -45,7 +73,7 @@ export default function TrainScreen() {
           <Ionicons name="git-branch-outline" size={20} color={colors.slate} />
           <View style={{ flex: 1 }}>
             <Text style={styles.rowLabel}>Calibrating to your inspection style</Text>
-            <Text style={styles.rowSub}>0 corrections recorded</Text>
+            <Text style={styles.rowSub}>{corrections.length} corrections recorded</Text>
           </View>
         </View>
       </Section>
@@ -57,8 +85,18 @@ export default function TrainScreen() {
           sub="Measure roof slope with the accelerometer"
           onPress={() => router.push('/pitch-gauge')}
         />
-        <Row icon="bulb-outline" label="Damage explainer" sub="What each damage type looks like" />
-        <Row icon="chatbubble-ellipses-outline" label="Role-play coach" sub="Practice objections (coming soon)" />
+        <Row
+          icon="bulb-outline"
+          label="Damage explainer"
+          sub="What each damage type looks like"
+          onPress={() => router.push('/damage-explainer')}
+        />
+        <Row
+          icon="walk-outline"
+          label="Door knocking"
+          sub="Live route stats + outcome logging"
+          onPress={() => router.push('/door-knocking')}
+        />
       </Section>
 
       <Section title="Lessons">
