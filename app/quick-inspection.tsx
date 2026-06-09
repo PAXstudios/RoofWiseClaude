@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -36,6 +36,8 @@ import {
   type AnalysisResult,
 } from '@/lib/services/gemini';
 import { isGeminiConfigured } from '@/lib/env';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useActivityStore } from '@/lib/stores/activityStore';
 
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
@@ -49,6 +51,9 @@ type CapturedPhoto = {
 
 export default function QuickInspection() {
   const router = useRouter();
+  const { jobId } = useLocalSearchParams<{ jobId?: string }>();
+  const attachPhotos = useInspectionStore((s) => s.attachPhotos);
+  const logActivity = useActivityStore((s) => s.log);
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
   const [phase, setPhase] = useState<Phase>('camera');
@@ -57,6 +62,7 @@ export default function QuickInspection() {
   const [analyzing, setAnalyzing] = useState(false);
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [attached, setAttached] = useState(false);
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -119,6 +125,23 @@ export default function QuickInspection() {
       }
       setResults(out);
       setPhase('results');
+      if (jobId) {
+        attachPhotos(
+          jobId,
+          photos.map((p, i) => ({
+            uri: p.uri,
+            slope: p.slope,
+            findings: out[i]?.findings ?? [],
+            markers: out[i]?.markers ?? [],
+          })),
+        );
+        logActivity({
+          kind: 'analysis_ran',
+          inspectionId: jobId,
+          message: `Analyzed ${out.length} photo${out.length === 1 ? '' : 's'}`,
+        });
+        setAttached(true);
+      }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       if (e instanceof GeminiNotConfiguredError) {
@@ -148,10 +171,13 @@ export default function QuickInspection() {
           photos={photos}
           results={results}
           error={error}
+          attached={attached}
+          jobId={jobId}
           onRetake={() => {
             setPhotos([]);
             setResults([]);
             setError(null);
+            setAttached(false);
             setPhase('camera');
           }}
         />
@@ -250,12 +276,16 @@ function ResultsView({
   photos,
   results,
   error,
+  attached,
+  jobId,
   onRetake,
 }: {
   analyzing: boolean;
   photos: CapturedPhoto[];
   results: AnalysisResult[];
   error: string | null;
+  attached: boolean;
+  jobId?: string;
   onRetake: () => void;
 }) {
   if (analyzing) {
@@ -270,6 +300,13 @@ function ResultsView({
 
   return (
     <ScrollView contentContainerStyle={styles.resultsScroll}>
+      {attached && jobId && (
+        <View style={styles.successCard}>
+          <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+          <Text style={styles.successText}>Photos attached to job.</Text>
+        </View>
+      )}
+
       {error && !isGeminiConfigured && (
         <View style={styles.warnCard}>
           <Ionicons name="information-circle-outline" size={22} color={colors.warn} />
@@ -568,4 +605,14 @@ const styles = StyleSheet.create({
     borderColor: colors.navy,
   },
   retakeBtnText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+
+  successCard: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radii.card,
+    backgroundColor: colors.successSoft,
+    alignItems: 'center',
+  },
+  successText: { color: colors.success, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 });

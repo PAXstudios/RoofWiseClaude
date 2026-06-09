@@ -1,11 +1,13 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { ScrollView, View, Text, Pressable, StyleSheet, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import {
+  DAMAGE_CATEGORY_LABELS,
   INSURANCE_CARRIER_LABELS,
   ROOF_MATERIAL_LABELS,
+  type Slope,
 } from '@/lib/models/types';
 import {
   CLAIM_WORTHINESS_LABELS,
@@ -122,11 +124,26 @@ export default function JobDetail() {
 
         <Pressable
           style={styles.primaryBtn}
-          onPress={() => router.push('/quick-inspection')}
+          onPress={() =>
+            router.push({ pathname: '/quick-inspection', params: { jobId: inspection.id } })
+          }
         >
           <Ionicons name="scan-outline" size={20} color={colors.textInverse} />
           <Text style={styles.primaryBtnText}>Start Quick Inspection</Text>
         </Pressable>
+
+        {inspection.slopes.length === 0 ? (
+          <View style={styles.placeholderBox}>
+            <Ionicons name="camera-outline" size={28} color={colors.slate} />
+            <Text style={styles.placeholderText}>
+              No slopes captured yet. Tap Start Quick Inspection to take photos.
+            </Text>
+          </View>
+        ) : (
+          inspection.slopes.map((slope) => (
+            <SlopeBlock key={slope.id} slope={slope} />
+          ))
+        )}
 
         <View style={styles.placeholderBox}>
           <Ionicons name="document-text-outline" size={28} color={colors.slate} />
@@ -136,6 +153,42 @@ export default function JobDetail() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function SlopeBlock({ slope }: { slope: Slope }) {
+  const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
+  return (
+    <View style={styles.card}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={styles.cardValue}>Slope {slope.orientation}</Text>
+        <Text style={styles.cardSub}>{slope.photoPaths.length} photo{slope.photoPaths.length === 1 ? '' : 's'}</Text>
+      </View>
+
+      {slope.photoPaths.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            {slope.photoPaths.map((uri, i) => (
+              <Image
+                key={i}
+                source={{ uri }}
+                style={{ width: 140, height: 100, borderRadius: radii.md }}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      )}
+
+      {detected.length > 0 && (
+        <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
+          {detected.map((f) => (
+            <Text key={f.label} style={styles.cardSub}>
+              • {DAMAGE_CATEGORY_LABELS[f.label]} × {f.count} ({f.confidence}%)
+            </Text>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 

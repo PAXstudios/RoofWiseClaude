@@ -8,12 +8,38 @@ import type {
   RoofGeometry,
   RoofCondition,
   InsuranceCarrier,
+  Slope,
+  SlopeOrientation,
+  DamageMarker,
+  InspectionFinding,
 } from '../models/types';
 
 let counter = 0;
 
 function newId(): string {
   return `ins_${Date.now()}_${counter++}`;
+}
+
+function newSlopeId(): string {
+  return `slp_${Date.now()}_${counter++}`;
+}
+
+function makeSlope(orientation: SlopeOrientation): Slope {
+  return {
+    id: newSlopeId(),
+    orientation,
+    areaSquares: 0,
+    damage: [],
+    hailCount: 0,
+    windLiftCount: 0,
+    wearCount: 0,
+    missingCount: 0,
+    bruisingCount: 0,
+    functional: false,
+    verifyWithInspector: false,
+    aiFindings: [],
+    photoPaths: [],
+  };
 }
 
 function mintReportId(year: number, ordinal: number): string {
@@ -37,6 +63,13 @@ type CreateDraft = {
   condition: RoofCondition;
 };
 
+export type PhotoCapture = {
+  uri: string;
+  slope: SlopeOrientation;
+  findings: InspectionFinding[];
+  markers: DamageMarker[];
+};
+
 type InspectionStoreState = {
   inspections: Inspection[];
   nextOrdinal: number;
@@ -45,6 +78,7 @@ type InspectionStoreState = {
   remove: (id: string) => void;
   setStatus: (id: string, status: InspectionStatus) => void;
   getById: (id: string) => Inspection | undefined;
+  attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
 };
 
 export const useInspectionStore = create<InspectionStoreState>()(
@@ -96,6 +130,41 @@ export const useInspectionStore = create<InspectionStoreState>()(
         })),
 
       getById: (id) => get().inspections.find((i) => i.id === id),
+
+      attachPhotos: (inspectionId, captures) => {
+        if (captures.length === 0) return;
+        set((s) => ({
+          inspections: s.inspections.map((ins) => {
+            if (ins.id !== inspectionId) return ins;
+            const slopes = [...ins.slopes];
+            for (const cap of captures) {
+              let slope = slopes.find((sl) => sl.orientation === cap.slope);
+              if (!slope) {
+                slope = makeSlope(cap.slope);
+                slopes.push(slope);
+              }
+              slope.photoPaths = [...slope.photoPaths, cap.uri];
+              slope.damage = [...slope.damage, ...cap.markers];
+              slope.aiFindings = [...(slope.aiFindings ?? []), ...cap.findings];
+              for (const f of cap.findings) {
+                if (!f.detected) continue;
+                switch (f.label) {
+                  case 'hail_hits': slope.hailCount += f.count; break;
+                  case 'bruising': slope.bruisingCount += f.count; break;
+                  case 'wind_creasing':
+                  case 'lifted_shingles':
+                  case 'wind_damage': slope.windLiftCount += f.count; break;
+                  case 'missing_shingles': slope.missingCount += f.count; break;
+                  case 'granule_loss':
+                  case 'cracking':
+                  case 'splitting': slope.wearCount += f.count; break;
+                }
+              }
+            }
+            return { ...ins, slopes };
+          }),
+        }));
+      },
     }),
     {
       name: 'roofwise.inspections.v1',
