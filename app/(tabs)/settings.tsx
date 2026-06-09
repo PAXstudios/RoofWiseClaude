@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
+import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { syncCorrections } from '@/lib/services/correctionsSync';
 import { isGeminiConfigured } from '@/lib/env';
@@ -16,6 +17,7 @@ export default function SettingsScreen() {
   const signOut = useAuthStore((s) => s.signOut);
   const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
   const correctionsCount = useCorrectionsStore((s) => s.corrections.length);
+  const inspectorProfile = useInspectorProfileStore((s) => s.profile);
   const pendingCorrections = useCorrectionsStore((s) => s.corrections.filter((c) => c.syncStatus === 'pending').length);
   const toast = useToastStore((s) => s.show);
   const [syncing, setSyncing] = useState(false);
@@ -114,7 +116,20 @@ export default function SettingsScreen() {
 
       <Text style={styles.sectionLabel}>Field</Text>
       <View style={styles.card}>
-        <Pressable style={styles.row} onPress={() => router.push('/settings/service-area')}>
+        <Pressable style={styles.row} onPress={() => router.push('/settings/inspector-profile')}>
+          <Ionicons name="person-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Inspector profile</Text>
+            <Text style={styles.rowValue}>
+              {inspectorProfile.fullName
+                ? `${inspectorProfile.fullName}${inspectorProfile.haagCertified ? ' · HAAG certified' : ''}`
+                : 'Not set'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+
+        <Pressable style={[styles.row, styles.rowBorder]} onPress={() => router.push('/settings/service-area')}>
           <Ionicons name="map-outline" size={22} color={colors.accent} />
           <View style={styles.rowText}>
             <Text style={styles.rowLabel}>Service Area</Text>

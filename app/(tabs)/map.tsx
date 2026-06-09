@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import StormHistoryMap from '@/components/map/StormHistoryMap';
-import { fetchStormHistory, rangeYearsAgo, STATE_CENTERS, type StormEvent } from '@/lib/noaa';
+import { Map, MapPin, regionForLatLon } from '@/components/map/Map';
+import { fetchStormHistory, rangeYearsAgo, STATE_CENTERS, severityColor, magnitudeLabel, type StormEvent } from '@/lib/noaa';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
+import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import {
   colors,
   fontSize,
@@ -25,6 +28,11 @@ const FILTERS: Array<{ id: Filter; label: string; icon: keyof typeof import('@ex
 
 export default function MapScreen() {
   const router = useRouter();
+  const inspections = useInspectionStore((s) => s.inspections);
+  const leads = useLeadStore((s) => s.leads);
+  const archive = useKnockSessionStore((s) => s.archive);
+  const active = useKnockSessionStore((s) => s.activeSession);
+
   const [filter, setFilter] = useState<Filter>('storms');
   const [events, setEvents] = useState<StormEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,6 +56,23 @@ export default function MapScreen() {
   }, [filter]);
 
   const center = STATE_CENTERS.TX;
+  const initialRegion = regionForLatLon(center.lat, center.lon, 4);
+
+  const jobPins = useMemo(
+    () => inspections.filter((i) => typeof i.lat === 'number' && typeof i.lng === 'number'),
+    [inspections],
+  );
+  const leadPins = useMemo(
+    () => leads.filter((l) => typeof l.lat === 'number' && typeof l.lng === 'number'),
+    [leads],
+  );
+  const knockPins = useMemo(() => {
+    const knocks = [
+      ...archive.flatMap((s) => s.knocks),
+      ...(active?.knocks ?? []),
+    ];
+    return knocks;
+  }, [archive, active]);
 
   return (
     <View style={styles.root}>
@@ -88,11 +113,55 @@ export default function MapScreen() {
       </ScrollView>
 
       <View style={styles.mapWrap}>
-        <StormHistoryMap
-          events={filter === 'storms' ? events : []}
-          center={{ lat: center.lat, lon: center.lon }}
-          zoom={center.zoom}
-        />
+        <Map initialRegion={initialRegion}>
+          {filter === 'storms' &&
+            events.map((e) => (
+              <MapPin
+                key={e.id}
+                coordinate={{ latitude: e.lat, longitude: e.lon }}
+                title={`${e.type === 'hail' ? 'Hail' : 'Wind'} · ${magnitudeLabel(e)}`}
+                description={`${new Date(e.occurredAt).toLocaleDateString()} ${e.city ?? ''}`}
+                pinColor={severityColor(e)}
+              />
+            ))}
+          {filter === 'jobs' &&
+            jobPins.map((ins) => (
+              <MapPin
+                key={ins.id}
+                coordinate={{ latitude: ins.lat!, longitude: ins.lng! }}
+                title={ins.customerName}
+                description={`${ins.reportId} · ${ins.status.replace('_', ' ')}`}
+                tone="orange"
+                onCalloutPress={() => router.push(`/job/${ins.id}` as any)}
+              />
+            ))}
+          {filter === 'leads' &&
+            leadPins.map((lead) => (
+              <MapPin
+                key={lead.id}
+                coordinate={{ latitude: lead.lat!, longitude: lead.lng! }}
+                title={lead.customerName}
+                description={`Stage: ${lead.stage.replace('_', ' ')}`}
+                tone="info"
+              />
+            ))}
+          {filter === 'knocks' &&
+            knockPins.map((k) => (
+              <MapPin
+                key={k.id}
+                coordinate={{ latitude: k.lat, longitude: k.lng }}
+                title={k.outcome.replace(/_/g, ' ')}
+                description={new Date(k.createdAt).toLocaleString()}
+                tone={
+                  k.outcome === 'interested' || k.outcome === 'inspection_scheduled'
+                    ? 'success'
+                    : k.outcome === 'not_interested'
+                    ? 'danger'
+                    : 'cream'
+                }
+              />
+            ))}
+        </Map>
         {loading && (
           <View style={styles.loading}>
             <ActivityIndicator color={colors.textInverse} />
@@ -105,16 +174,14 @@ export default function MapScreen() {
         )}
       </View>
 
-      {filter !== 'storms' && (
-        <View style={styles.empty}>
-          <Ionicons name="information-circle-outline" size={20} color={colors.slate} />
-          <Text style={styles.emptyText}>
-            {filter === 'leads' && 'Leads will appear on the map once you create them.'}
-            {filter === 'jobs' && 'Jobs will appear on the map once you create them.'}
-            {filter === 'knocks' && 'Door-knock pins appear during an active route session.'}
-          </Text>
-        </View>
-      )}
+      <View style={styles.statBar}>
+        <Text style={styles.statText}>
+          {filter === 'storms' && `${events.length} storm events`}
+          {filter === 'jobs' && `${jobPins.length} of ${inspections.length} jobs mapped`}
+          {filter === 'leads' && `${leadPins.length} of ${leads.length} leads mapped`}
+          {filter === 'knocks' && `${knockPins.length} knock pins`}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -191,15 +258,13 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.danger, fontSize: fontSize.bodySm },
 
-  empty: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'center',
+  statBar: {
     margin: spacing.xl,
-    padding: spacing.lg,
+    marginTop: spacing.sm,
+    padding: spacing.md,
     backgroundColor: colors.surface,
-    borderRadius: radii.card,
+    borderRadius: radii.md,
     ...shadows.card,
   },
-  emptyText: { flex: 1, fontSize: fontSize.bodySm, color: colors.slate },
+  statText: { color: colors.slate, fontSize: fontSize.bodySm, textAlign: 'center' },
 });
