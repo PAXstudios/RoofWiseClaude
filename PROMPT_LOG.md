@@ -792,3 +792,85 @@ at `gemini-2.5-flash`, Corrections endpoint, and feature flags.
 - Once those are set, the button works on a real iOS build. Expo Go
   cannot exercise Apple Sign In (no entitlement) — use `expo run:ios`
   or EAS for live testing.
+
+---
+
+### [2026-06-09] #11 — Conversion flows, voice notes, list/map polish, profile, push routing
+
+**Prompt (continuation of #10):**
+> I don't know. But yes keep going.
+
+Multiple batches of features bundled into one log entry.
+
+**Funnels closed:**
+- Lead → Inspection conversion: a one-shot `wizardPrefillStore`
+  populates the NewJobWizard from a lead row; the lead flips to
+  `inspection_scheduled` automatically.
+- Estimator → New Job: same prefill pipe, "Convert to job" button on
+  the Estimator result step.
+- Storm Match card on Job Detail surfaces the auto-matched NOAA event
+  (size or wind, date, distance, source, event ID).
+
+**Hardware-aware capture:**
+- VoiceNoteRecorder (expo-av) on Job Detail. 88pt record button
+  switches red while recording, live duration counter, per-note
+  playback with play/pause, trash to delete. Microphone permission
+  handled in-component. Inspection.audioNotes added to the model.
+
+**Lists + search:**
+- All-inspections list at `/inspections` with search (name / address /
+  report ID) and status chip filter (all / in progress / scheduled /
+  complete / lead). Decision Engine result rendered inline.
+- Activity full-screen gains filter chips (All / Jobs / AI / Knocks /
+  Storms / Proposals).
+
+**Collateral checklist** on Job Detail (6 HAAG-spec items)
+persisted into `Inspection.collateralChecklist`.
+
+**Inspector profile** (`/settings/inspector-profile`): Zustand-backed
+identity, HAAG certification (toggle gates the certification number
+field), years experience, emergency contact. Surfaced in Settings →
+Field with HAAG-certified badge.
+
+**Map polish:** the Map tab now renders pins for every filter — jobs
+(orange) with callout routing to the job, leads (info-blue), knocks
+(tone-coded by outcome). Bottom stat bar replaces the empty-state
+card.
+
+**Push routing:** root layout subscribes to
+`expo-notifications.addNotificationResponseReceivedListener`. Storm
+Watch push → `/storm-alert/[id]`. Weekly calibration push →
+`/(tabs)/train`. Closes the loop from server-fired alert to in-app
+action.
+
+**Location-biased Places:** `lib/services/locationBias.ts` caches the
+user's last-known coords; AddressAutocomplete uses it as a default
+bias when callers don't pass their own. Now NewJobWizard + Estimator
+surface nearby suggestions first.
+
+**Files touched (this entry, in batches):**
+- Conversion: `lib/stores/wizardPrefillStore.ts`, NewJobWizard,
+  Leads tab, Estimator.
+- Collateral: `lib/stores/inspectionStore.ts` (`setCollateralItem`),
+  Job Detail.
+- Voice notes: `expo-av` install, types.ts (`AudioNote`),
+  inspectionStore (`addAudioNote` + `removeAudioNote`),
+  `components/VoiceNoteRecorder.tsx`, Job Detail.
+- Inspections list: `app/inspections.tsx`, Home Recent-Jobs header.
+- Activity filter: `app/activity.tsx` rebuilt with chips.
+- Storm match card: Job Detail.
+- Inspector profile: `lib/stores/inspectorProfileStore.ts`,
+  `app/settings/inspector-profile.tsx`, Settings.
+- Map pins: `app/(tabs)/map.tsx` rebuilt on the unified Map component.
+- Push routing: `app/_layout.tsx`.
+- Location bias: `lib/services/locationBias.ts`,
+  `components/AddressAutocomplete.tsx`.
+
+**Still parked:**
+- Photo quality scoring before Gemini (limited cross-platform image
+  primitives without a vision lib).
+- Onboarding flow for first-launch users.
+- Background analyze queue via `expo-task-manager`.
+- Mileage auto-tracking via geofencing / Bluetooth.
+- Camera HUD overlays (compass arrow + bullseye level + slope hint).
+- Photo edit (crop / rotate) before analysis.
