@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Image, RefreshControl } from 'react-native';
+import { ScrollView, View, Text, Pressable, StyleSheet, Image, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
@@ -79,6 +79,16 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
+  const onQuickAdd = () => {
+    Alert.alert('Add', undefined, [
+      { text: 'Quick Inspection', onPress: () => router.push('/quick-inspection') },
+      { text: 'New Job', onPress: () => router.push('/new-job') },
+      { text: 'New Lead', onPress: () => router.push('/new-lead') },
+      { text: 'Cost Estimate', onPress: () => router.push('/estimator') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   const firstName = useMemo(() => {
     if (inspectorName?.trim()) {
       return inspectorName.trim().split(/\s+/)[0];
@@ -103,6 +113,7 @@ export default function HomeScreen() {
     hour < 5 ? 'Up early' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   return (
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
       contentContainerStyle={styles.container}
@@ -386,6 +397,11 @@ export default function HomeScreen() {
 
       <View style={{ height: spacing.xxxl }} />
     </ScrollView>
+
+    <Pressable style={styles.fab} onPress={onQuickAdd}>
+      <Ionicons name="add" size={28} color={colors.textInverse} />
+    </Pressable>
+    </View>
   );
 }
 
@@ -466,6 +482,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: spacing.sm,
     ...shadows.card,
+  },
+  fab: {
+    position: 'absolute',
+    right: spacing.xl,
+    bottom: spacing.xl,
+    width: touchTarget.sticky,
+    height: touchTarget.sticky,
+    borderRadius: touchTarget.sticky / 2,
+    backgroundColor: colors.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.pressed,
   },
 
   heroRow: { flexDirection: 'row', gap: spacing.md },
