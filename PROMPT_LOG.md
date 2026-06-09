@@ -1044,3 +1044,76 @@ Google AI Studio).
 - Cloud sync of inspections to Supabase (requires backend schema
   rollout).
 - Service area boundary overlay on Map (needs geocoded centroids).
+
+---
+
+### [2026-06-09] #14 — Leads cloud sync, service area circles, audio transcription, FAB, new lead
+
+**Prompt:** Continue.
+
+**Cloud sync of leads:**
+- `Lead` gains `updatedAt` + `syncStatus`. `leadStore.create`/`setStage`
+  stamp pending; `pending()` selector.
+- `lib/services/leadSync.ts`: 2-way last-write-wins against Supabase
+  `public.leads`. Pushes via upsert, pulls 500 rows for `auth.uid()`,
+  merges by `updated_at`. Detects "missing table" errors so
+  unprovisioned users see a friendly nudge.
+- Lifecycle hook joins the foreground rotation at a 5-min cadence
+  when a session exists.
+- Settings AI calibration section: row renamed to "Sync corrections";
+  new "Sync leads to cloud" row with pending count + toast result.
+- About screen carries the canonical `LEADS_SQL` snippet (RLS +
+  index) inside a navy code block with a Copy button.
+
+**Service area circles on Map:**
+- `lib/services/geocoding.ts`: thin Google Geocoding client.
+- `serviceAreaStore.setCentroid(id, lat, lng)`.
+- Service Area screen geocodes the label in the background on add.
+- Map tab overlays a 5-mile `MapCircle` per area with a centroid
+  (faint navy fill + navy border).
+
+**Audio transcription:**
+- `lib/services/transcribeAudio.ts`: reads audio URI as base64 via
+  `expo-file-system` and asks Gemini for a verbatim transcript with
+  punctuation. Reuses `env.GEMINI_MODEL` and the existing error types.
+- `inspectionStore.setAudioNoteLabel` stamps the transcript on the
+  note.
+- `VoiceNoteRecorder` gains an optional `onTranscribe` handler.
+  When provided AND the note has no label, a sparkles button appears
+  next to the trash. Tapping shows an inline spinner.
+- Job Detail wires the handler with friendly toasts and a clean fall-
+  back when Gemini isn't configured.
+
+**Pull-to-refresh + FAB + New Lead:**
+- Home gets `RefreshControl` that fires leads sync + corrections sync
+  + storm watch in parallel.
+- Home gets a sticky 88pt orange FAB (lower-right) that opens an
+  action sheet — Quick Inspection / New Job / New Lead / Cost
+  Estimate.
+- `app/new-lead.tsx`: minimal lead capture modal (name + phone +
+  email + AddressAutocomplete). Save writes through `leadStore.create`
+  with `source='manual'`, fires `lead_created`, toasts, routes to
+  Leads.
+
+**Files touched (this entry):**
+- `lib/models/types.ts` — Lead.updatedAt / syncStatus.
+- `lib/stores/leadStore.ts` — upsert, pending, markSynced, setStage
+  bumps pending.
+- `lib/services/leadSync.ts`, `lib/services/geocoding.ts`,
+  `lib/services/transcribeAudio.ts` — created.
+- `lib/services/lifecycleHooks.ts` — leads sync in the rotation.
+- `lib/stores/serviceAreaStore.ts` — setCentroid.
+- `lib/stores/inspectionStore.ts` — setAudioNoteLabel.
+- `app/settings/{about,service-area}.tsx` — SQL snippet copy, geocode
+  on add.
+- `app/(tabs)/{settings,map,index}.tsx` — sync row, circles, refresh
+  + FAB.
+- `app/job/[id].tsx` — transcribe wire-up.
+- `components/VoiceNoteRecorder.tsx` — sparkles transcribe button.
+- `app/new-lead.tsx` — created.
+
+**Still on the parking lot:**
+- Background analyze queue via `expo-task-manager`.
+- Mileage auto-tracking via geofencing / Bluetooth car-connect.
+- Voice input on free-text fields (still needs a native module).
+- Cloud sync of inspections (photos make this much heavier than leads).
