@@ -2,34 +2,34 @@
 
 A structured context engineering log for the RoofWise project. Every meaningful prompt, decision, and implementation step is captured here so that future agents (and humans) can quickly reconstruct intent, scope, and history.
 
+The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captures *intent, drift warnings, and per-prompt history* — the spec captures *the product*.
+
 ---
 
 ## How to use this log
 
-- **Append, don't rewrite.** Add a new entry at the bottom for each prompt or change.
-- **Be specific.** Capture the *why*, not just the *what*.
-- **Link to files.** Reference the screens/components touched so context is easy to recover.
-- **Keep entries short but complete.** One section per prompt.
-- **Re-summarize.** Every 5 new entries, refresh the **Context Summary** section below so the top of this file stays current.
+- **Append, don't rewrite** the Prompt History section.
+- Re-summarize the **Context Summary** at the top every 5 new entries.
+- Reference the spec by section, don't duplicate it.
 
 ### Entry template
 
 ```md
 ## [YYYY-MM-DD] #NN — Short title
 
-**Prompt (verbatim or summarized):**
+**Prompt:**
 > ...
 
 **Intent / Goal:**
 - ...
 
-**Decisions made:**
+**Decisions:**
 - ...
 
 **Files touched:**
-- `path/to/file.tsx` — what changed
+- ...
 
-**Open questions / Follow-ups:**
+**Follow-ups:**
 - ...
 ```
 
@@ -37,53 +37,55 @@ A structured context engineering log for the RoofWise project. Every meaningful 
 
 ## Context Summary
 
-> Last refreshed: 2026-06-09 (after entry #01).
+> Last refreshed: 2026-06-09 (after entry #03).
 
-**Product in one line:** RoofWise is a mobile CRM + AI inspection tool for roofing contractors that turns a phone into a forensic roof-damage scanner and generates HAAG-standard claim packets for insurance adjusters.
+**Product in one line:** RoofWise is the objective layer between roofing contractors and insurance carriers — AI vision + HAAG-protocol-compliant claim packets on a mobile device.
 
-**Where we are today:**
-- The project lives in this Expo (React Native + TypeScript) repo. A previous native-Swift implementation exists at `paxstudios/rork-roofwise-dashboard-` and is the reference for product spec, but is not the active codebase.
-- Current code is a scaffold: dashboard with KPIs, NOAA storm map, mock data for leads/jobs/schedule/tasks/activity, basic bottom-tab navigation (Dashboard, Leads, Map, Inspections, Jobs, Storm Intel, Reports, Settings).
-- No backend, auth, camera flow, AI integration, or claim packet yet.
+**Codebase:** Expo (React Native + TypeScript), targets iOS + Android. The active codebase for the product. Source-of-truth spec is `docs/SPEC.md`; native-Swift reference at `paxstudios/rork-roofwise-dashboard-` is feature-archived only.
 
-**Platforms:** iOS + Android. Mobile-only. No web target.
+**Persona we build for:** A roofer in gloves on a hot roof. Every UI decision respects glove-friendly touch targets (≥56pt, sticky 88pt CTAs in thumb zone), high contrast for outdoor sun, voice input on free text, confirm sheets on destructive actions, no precision-only gestures.
+
+**Where we are today (entry #03):**
+- Brand theme tokens (navy / orange / cream / slate) with type ramp + motion tokens in `theme/tokens.ts`.
+- Auth foundation: Supabase client (`lib/supabase.ts`), env reader (`lib/env.ts`), Zustand auth store (`lib/auth/authStore.ts`), Welcome sign-in/up/reset screen (`app/welcome.tsx`), auth gate (`app/index.tsx` + `app/(tabs)/_layout.tsx`), Settings account row.
+- Old 8-tab scaffold (Dashboard, Leads, Map, Inspections, Jobs, Storm Intel, Reports, Settings) being replaced with the 5-tab spec IA (Home, Leads, Map, Plan, Train).
+
+**What's next (Tier 1 MVP build):**
+1. Data model types (Inspection, Slope, DamageMarker, StormEvent, Customer, Lead, Job, Estimate, Proposal, Knock, ServiceArea, StormAlert, TrainingItem, Correction, UserCorrectionProfile, ActivityEvent).
+2. Damage taxonomy + HAAG threshold lookup.
+3. 5-tab nav (Home, Leads, Map, Plan, Train).
+4. Home dashboard per spec (Storm Alert hero, Quick Inspection + New Job hero CTAs, KPI tiles, Recent Jobs carousel, Pipeline mini-Kanban, Today's Plan).
+5. New Job Wizard (4 steps: Customer/Property → Insurance → Roof System → Review).
+6. Quick Inspection camera scaffold (expo-camera, slope selector, photo strip, Gemini service stub that errors clearly when no key configured).
+7. Decision Engine (HAAG threshold rules engine).
+8. Map tab scaffold (react-native-maps + NOAA storm pins).
+9. Plan, Train tab scaffolds with empty-state cards.
 
 **What's mocked / placeholder:**
-- All data (`lib/mock/`).
-- No AI vision integration.
-- No backend persistence.
+- `lib/mock/` data still present but no longer flowing through tabs. Per spec: empty state always — no seeded sample data.
 
-**What's not started:**
-- Supabase wiring (auth + leads sync)
-- Quick Inspection camera flow
-- Gemini 3 Pro vision analysis + damage taxonomy + HAAG grading + Claim Packet
-- Dashboard CTAs (Quick Inspection + New Job)
-- Recent Jobs strip
-- Storm map filters + event detail sheet
-- Mileage tracker
-- Proposals + PDF export
-- Push notifications for storm alerts
-- EAS Build / TestFlight / Play Store internal
+**What's parked (Drift Warning #10):**
+- LiDAR + ARKit (no good RN binding; iOS Pro-only). Live AR overlay is parked.
 
 ---
 
 ## Drift Warning
 
-Every agent working on this project must read this section before making changes. The following constraints have been established by the founder and **must not silently drift**:
+The following constraints are hardened and **must not silently drift**. If a prompt contradicts any of these, surface it explicitly before changing it.
 
-1. **Quick Inspection is the hero feature.** Do not bury it behind extra steps, gate it behind paywalls without explicit instruction, or replace its CTA on the Dashboard.
-2. **Dashboard CTAs are "Quick Inspection" and "New Job".** Old KPI buttons ("Active Leads" / "Inspections Today") have been intentionally removed in the rork product spec and must not be reintroduced.
-3. **Dashboard must remain scrollable** so the storm map and Recent Jobs are always reachable.
-4. **Slope selector dropdown** replaces individual Slope / 3D Scan / Macro buttons in the camera flow.
-5. **Damage taxonomy is fixed (13 canonical snake_case tokens):** `hail_hits`, `bruising`, `granule_loss`, `wind_damage`, `wind_creasing`, `blistering`, `cracking`, `splitting`, `flashing`, `algae_moss`, `missing_shingles`, `lifted`, `structural_sagging`. Each finding carries severity (None / Minor / Moderate / Severe) and a confidence %.
-6. **HAAG grades are fixed:** "No Functional Damage", "Functional Damage — Hail", "Functional Damage — Wind", "Functional Damage — Combined Peril".
-7. **Claim Worthiness badges are fixed:** Not Claimable / Borderline / Claimable / Urgent.
-8. **Mobile-first, card-based, lots of whitespace, rounded corners, subtle shadows.** No web-style dense tables.
-9. **Gemini 3 Pro Vision** via Google AI Studio direct API is the chosen AI model. Do not swap providers without an explicit prompt. (Previously Gemini 1.5/2.5 Flash via the rork toolkit proxy; pinned forward by user request on 2026-06-09.)
-10. **No LiDAR / ARKit in v1.** Camera-only Quick Inspection. LiDAR mesh capture is parked until a custom native module is justified by user need.
-11. **Append, don't rewrite** the Prompt History section. Existing entries are immutable history.
-
-If a new prompt seems to contradict any of the above, surface it explicitly in your response before changing it.
+1. **Persona is a gloved roofer in sun.** Glove rules from `docs/SPEC.md` apply to every view: ≥56pt touch targets, ≥12pt spacing between tappable elements, sticky 88pt primary CTAs in thumb zone, high contrast, voice input on free-text fields, chips/steppers/segmented-controls over text inputs where possible, confirm on destructive actions, no precision-only gestures, one-handed reachable controls.
+2. **5 bottom tabs:** Home, Leads, Map, Plan, Train. (Settings is a route reached from Home/profile, not a tab.) The earlier 8-tab scaffold is being removed.
+3. **Quick Inspection is the hero feature.** Dashboard CTAs are "Quick Inspection" and "New Job", side by side. No KPI buttons in their place.
+4. **Storm Alert hero hides when there is no active alert.** Never show a stale "Severe Hail" placeholder.
+5. **No mocks, no seeded sample data.** App boots to an empty state. When a service can't reach its API, show a friendly "Not available" state — never synthesize fake data.
+6. **Damage taxonomy is 13 canonical categories** per `docs/SPEC.md` "13-Category AI Damage Taxonomy": Hail Hits, Bruising, Granule Loss, Wind Damage, Wind Creasing, Blistering, Cracking, Flashing Damage, Algae/Moss, Missing Shingles, Splitting, Lifted Shingles, Structural Sagging. Each finding has severity (None/Minor/Moderate/Severe) and confidence (0-100).
+7. **HAAG functional-damage thresholds are material-specific.** Lookup table in `lib/services/haagThresholds.ts`. 3-tab asphalt = 8 hits per test square; architectural = 10; metal = penetration only; tile = any crack qualifies; etc.
+8. **Decision Engine is pure logic.** Given a populated Inspection, it returns per-slope + roof-level verdict + reasoning. No I/O.
+9. **Gemini model:** `gemini-2.5-flash` via Google AI Studio direct REST call. **There is no `gemini-3-flash`** (per spec, prior attempt was a hallucination). Do not change the model or provider without an explicit prompt that acknowledges this constraint.
+10. **No LiDAR / ARKit in v1.** Camera-only Quick Inspection. Live AR overlay parked until a custom native module is justified by user need (and Android equivalents are sorted).
+11. **Theme tokens everywhere.** Never inline hex. Never inline font sizes. Always go through `colors.<token>`, `fontSize.<token>`, `radii.<token>`, `spacing.<token>`, `motion.<token>`.
+12. **Auth bypass flag** is wired from day one. `requireAuth` is false during dev so the app is usable without sign-in; flip to true when ready to ship.
+13. **Append, don't rewrite** the Prompt History section. Existing entries are immutable.
 
 ---
 
@@ -91,84 +93,98 @@ If a new prompt seems to contradict any of the above, surface it explicitly in y
 
 Before completing any change, the agent must:
 
-1. **Re-read** `PROMPT_LOG.md` (this file) — at minimum the Context Summary, Drift Warning, and the last 3 prompt entries.
-2. **Diff intent vs. request.** State, in your response, which Drift Warning items the request touches and confirm the user is intentionally changing them.
-3. **Verify the Damage Taxonomy, HAAG grades, and Claim Worthiness badges** are still intact in code after your change.
-4. **Verify the Dashboard CTAs** are still "Quick Inspection" and "New Job" once they're built.
-5. **Verify the Quick Inspection flow** still: launches camera → slope dropdown → multi-photo capture → Gemini analysis → results with damage score + claim worthiness → HAAG Claim Packet sheet (once built).
-6. **Append a new prompt entry** to the Prompt History section.
-7. **If this is the 5th entry since the last Context Summary refresh**, refresh the Context Summary in the same change.
+1. Re-read the Context Summary, Drift Warning, and the last 3 prompt entries.
+2. State which Drift Warning items the request touches and confirm any intentional changes.
+3. Verify damage taxonomy, HAAG threshold table, Claim Worthiness badges remain intact.
+4. Verify Dashboard hero CTAs are still Quick Inspection + New Job.
+5. Verify Quick Inspection flow still: camera → slope selector → multi-photo capture → Gemini analysis → results with damage score + claim worthiness → HAAG Claim Packet (once built).
+6. Verify no mocks were reintroduced.
+7. Append a new prompt entry.
+8. Refresh the Context Summary if this is the 5th entry since the last refresh.
 
 ---
 
 ## Project Overview
 
 **Name:** RoofWise
-**Type:** Mobile CRM + AI assistant for roofing companies
-**Persona:** Elite Forensic Roofing Consultant
-**Platform:** Expo (React Native + TypeScript) — iOS + Android
-**Primary user:** Roofing contractors, adjusters, inspectors
+**Type:** Mobile CRM + AI inspection tool for roofing contractors
+**Platform:** Expo SDK 51, React Native 0.74, TypeScript — iOS + Android
+**Backend:** Supabase (project `mzsabjegtxmzlfpxmmfm`) — auth + Postgres + storage
+**AI Vision:** Gemini 2.5 Flash via Google AI Studio direct REST
 
-### Core value proposition
+### One-line pitch (from spec)
+> The objective layer between roofing contractors and insurance carriers.
 
-A field-ready CRM and AI inspection tool that helps roofing pros:
-1. Triage leads, jobs, and storm-impacted properties from one dashboard.
-2. Run AI-powered Quick Inspections to detect hail, wind, and shingle damage.
-3. Generate HAAG-standard claim packets ready for adjusters and insurers.
+### The wedge
+A single denied claim costs the contractor $5K-$20K. A single approved claim is worth $10K-$50K. RoofWise pays for itself with one additional approval per month.
 
-### Brand & UX direction
-
-- Clean, minimal, card-based layout
-- Lots of white space, rounded corners, subtle shadows
-- Orange accent (`#F26B1F`)
-- Bottom tab nav; central `+` quick action button
+### The moat
+The recursive learning loop (Phase 9). Tinder-swipe inspector review → corrections → trust-weighted training data → weekly retraining → accuracy compounds.
 
 ---
 
 ## Information Architecture
 
-**Bottom tab bar:** Dashboard, Leads, Map, Inspections, Jobs, Storm Intel, Reports, Settings.
+**5 bottom tabs:** Home / Leads / Map / Plan / Train.
 
-**Central `+` button:** quick actions (Quick Inspection, New Job, New Lead).
+**Cross-cutting routes:**
+- `/welcome` — sign in / create / reset (gated entry)
+- `/settings` (under tabs initially, may move under Home header)
+- `/new-job` — full-screen 4-step wizard (modal-style)
+- `/quick-inspection` — full-screen camera flow
+- `/job/[id]` — JobDetailView
+- `/inspection/[id]` — InspectionDetail (per slope, etc.)
 
 ---
 
 ## Feature Backlog & Status
 
-| # | Feature | Status |
+Aligned to spec phases. Status is current state in *this* Expo repo, not the rork Swift repo.
+
+| Phase | Feature | Status |
 |---|---|---|
-| 1 | Dashboard scaffold (KPIs, schedule, pipeline, AI insights, tasks, activity) | Implemented |
-| 2 | Bottom tab nav + sidebar shim | Implemented |
-| 3 | NOAA storm history map (4-year hail/wind) | Implemented |
-| 4 | Supabase auth (email + Apple) + persisted session | Not started |
-| 5 | Supabase leads sync + RLS | Not started |
-| 6 | Dashboard CTAs (Quick Inspection + New Job) | Not started |
-| 7 | Recent Jobs strip | Not started |
-| 8 | Quick Inspection camera flow | Not started |
-| 9 | Slope selector dropdown | Not started |
-| 10 | Multi-photo capture strip | Not started |
-| 11 | Gemini 3 Pro vision analysis | Not started |
-| 12 | Damage taxonomy + Damage Score + Claim Worthiness | Not started |
-| 13 | HAAG grading + Claim Packet sheet | Not started |
-| 14 | Storm map filters (year/type) + event detail sheet | Not started |
-| 15 | Pitch + Elevation HUD (CoreMotion-equivalent via expo-sensors + expo-location) | Not started |
-| 16 | Mileage tracker (background) | Not started |
-| 17 | Proposals + PDF export (expo-print) | Not started |
-| 18 | Push notifications for storm alerts | Not started |
-| 19 | RevenueCat paywall | Not started |
-| 20 | EAS Build → TestFlight + Play Store internal | Not started |
+| 0 | Brand theme tokens | Implemented |
+| 0 | Supabase auth + Welcome screen + gate | Implemented |
+| 0 | 5-tab IA migration | In progress |
+| 1 | Home dashboard (Storm Alert hero, hero CTAs, KPI, Recent Jobs, Pipeline, Today's Plan) | In progress |
+| 2A | Data foundation (Inspection model + InspectionStore + NewJobWizard) | In progress |
+| 2B | Quick Inspection camera + Gemini + DecisionEngine | In progress |
+| 3 | HAAG PDF report + signatures | Not started |
+| 4A | Map (react-native-maps + NOAA pins + filters + Storm Detail) | In progress |
+| 4B | Weather tile (Google Weather API) | Not started |
+| 4C | NOAA auto-event-fill on inspection save | Not started |
+| 4D | Solar API roof measurement | Not started |
+| 4E | Cost Estimator wizard | Not started |
+| 5A | Inspection.originEstimateId traceability | Not started |
+| 5B | Activity Feed | Not started |
+| 5C | AI Training Queue | Not started |
+| 6A | Service Area (zips/cities) | Not started |
+| 6B | Storm Watch background polling | Not started |
+| 6C | Push notifications for storm alerts | Not started |
+| 6D | Dynamic Storm Alert hero (consumes alert store) | Not started |
+| 6E | Door Knocking Mode | Not started |
+| 7 | Proposals + PDF export + send sheet | Not started |
+| 8 | Structured Gemini confidence (flag-gated) | Not started |
+| 9 | Recursive Learning Loop (SwipeReview + OverlayEditor + LocalLearningEngine + corrections sync) | Not started |
+| 10 | Corrections backend (separate Next.js project) | N/A here |
+| - | Voice command service | Not started |
+| - | Offline mode + sync queue | Not started |
+| - | Photo Quality scoring | Not started |
 
 ---
 
 ## Key Technical Decisions
 
 - **Framework:** Expo SDK 51, React Native 0.74, TypeScript.
-- **AI Vision:** Google Gemini 3 Pro via direct REST call to `generativelanguage.googleapis.com`. API key in `EXPO_PUBLIC_GEMINI_API_KEY`.
-- **Backend:** Supabase (project `mzsabjegtxmzlfpxmmfm`). Auth + Postgres + storage. Row-level security per user.
-- **State:** Zustand for client state; Supabase as source of truth for synced data.
-- **Sensors:** `expo-sensors` (accelerometer for pitch) + `expo-location` (altitude). Mock values in simulator.
+- **AI Vision:** Gemini 2.5 Flash via direct REST. Key in `EXPO_PUBLIC_GEMINI_API_KEY` (gitignored `.env.local`).
+- **Backend:** Supabase JS SDK. Auth + Postgres + storage. RLS per user.
+- **State:** Zustand for client state; Supabase for synced data.
+- **Sensors:** `expo-sensors` (accelerometer/gyroscope for pitch + roll), `expo-location` (altitude + GPS).
 - **Camera:** `expo-camera` with custom HUD overlays.
-- **No LiDAR in v1.** Camera-only.
+- **Map:** `react-native-maps` (Apple MapKit on iOS, Google Maps on Android). Reuse existing `lib/noaa.ts`.
+- **Storage:** AsyncStorage for sessions, Zustand for in-memory, Supabase for sync. (Long-term: consider WatermelonDB or `expo-sqlite` for richer offline.)
+- **No LiDAR/ARKit in v1.** Camera-only.
+- **Theme tokens everywhere.** No inline hex / font sizes.
 
 ---
 
@@ -186,20 +202,16 @@ A field-ready CRM and AI inspection tool that helps roofing pros:
 - Park LiDAR/ARKit features for v1.
 
 **Decisions made:**
-- Adopted `CONTRIBUTING.md` (the 3-rule AI agent contract) and `PROMPT_LOG.md` (this file) from the rork repo, adapted for Expo + iOS/Android.
-- Drift Warnings updated: #9 now pins Gemini 3 Pro via direct Google API (was Gemini 1.5 Flash via rork toolkit). Added #10 (no LiDAR/ARKit in v1).
-- Drift Warnings #1–#8 carried over verbatim. Damage taxonomy expanded to the 13 canonical snake_case tokens used in the latest rork code (vs. the 10-item list in the older rork PROMPT_LOG).
-- Feature Backlog rebuilt to reflect the Expo repo's actual state (most rork-era "Implemented" rows are now "Not started" here).
+- Adopted `CONTRIBUTING.md` and `PROMPT_LOG.md` from the rork repo, adapted for Expo.
+- Drift Warning #9 set to Gemini 3 Pro (reverted in #03 — see below).
+- Drift Warning #10 parks LiDAR/ARKit for v1.
 
 **Files touched:**
 - `CONTRIBUTING.md` — created.
-- `PROMPT_LOG.md` — created with full Context Summary, Drift Warning, Constraint Verification Protocol, Project Overview, IA, Feature Backlog, Key Technical Decisions, and this entry.
+- `PROMPT_LOG.md` — created.
 
 **Open questions / Follow-ups:**
-- Set up Supabase JS client + persistent session storage (next entry).
-- Build Welcome/Sign-in screen (Apple + email) per `PLAN.md` from the rork repo.
-- Get a `EXPO_PUBLIC_GEMINI_API_KEY` from Google AI Studio for Quick Inspection.
-- Decide on splitting EAS profiles for dev / preview / production builds.
+- Set up Supabase JS client + persistent session storage (#02).
 
 ---
 
@@ -208,35 +220,55 @@ A field-ready CRM and AI inspection tool that helps roofing pros:
 **Prompt (summarized):**
 > Begin work on the migration. Start with the foundation — Supabase auth + the Welcome / sign-in screen.
 
-**Intent / Goal:**
-- Wire Supabase into the Expo app so future features can persist per-user data.
-- Block unauthenticated users at launch with a Welcome screen that supports email sign-in, account creation, and password reset.
-- Lay the groundwork for Apple Sign In in a follow-up entry.
-
 **Decisions made:**
 - Installed `@supabase/supabase-js`, `@react-native-async-storage/async-storage`, `react-native-url-polyfill`.
-- Supabase URL + anon key live in `lib/env.ts` with safe public fallbacks (project `mzsabjegtxmzlfpxmmfm`); real keys go in `.env.local` (gitignored, example committed).
-- Auth state is a Zustand store (`lib/auth/authStore.ts`) initialized in the root layout, with persistent session via AsyncStorage.
-- Auth gate is implemented as redirects in `app/index.tsx` (entry) and `app/(tabs)/_layout.tsx` (group gate). Unauthenticated visits to `/(tabs)` redirect to `/welcome`; authenticated visits to `/welcome` redirect to `/(tabs)`.
-- Welcome screen is a single screen that toggles between Sign In / Create Account / Reset Password modes (orange gradient background per `theme/tokens.ts`, white card, 56pt primary button).
-- Settings tab now shows the signed-in email, account creation date, and a destructive Sign Out pill — replacing the prior stub.
+- Supabase URL + anon key in `lib/env.ts` with safe public fallbacks.
+- Auth state is Zustand store (`lib/auth/authStore.ts`).
+- Welcome screen at `app/welcome.tsx` toggles between sign-in / create / reset.
+- Auth gate via redirects in `app/index.tsx` + `app/(tabs)/_layout.tsx`.
+- Settings tab now shows account row + Sign Out.
 
 **Files touched:**
-- `package.json`, `package-lock.json` — added Supabase + AsyncStorage + URL polyfill.
-- `lib/env.ts` — created; central env-var reader with public fallbacks.
-- `lib/supabase.ts` — created; Supabase client init with AsyncStorage session storage.
-- `lib/auth/authStore.ts` — created; Zustand store for session, sign in / sign up / reset / sign out.
-- `app/_layout.tsx` — initializes the auth store on mount and unsubscribes on unmount.
-- `app/index.tsx` — created; redirects to `/welcome` or `/(tabs)` based on session.
-- `app/welcome.tsx` — created; sign-in / sign-up / reset screen with gradient + form card.
-- `app/(tabs)/_layout.tsx` — added auth gate that redirects to `/welcome` when no session.
-- `app/(tabs)/settings.tsx` — replaced stub with real Account section + Sign Out.
-- `.env.local.example` — created.
-- `components/dashboard/OverviewKpis.tsx` — fixed duplicate `key` prop TS errors (unrelated cleanup).
-- `theme/tokens.ts` — removed dead `web: { boxShadow }` blocks now that the project is mobile-only.
+- `package.json`, `package-lock.json`, `lib/env.ts`, `lib/supabase.ts`, `lib/auth/authStore.ts`, `app/_layout.tsx`, `app/index.tsx`, `app/welcome.tsx`, `app/(tabs)/_layout.tsx`, `app/(tabs)/settings.tsx`, `.env.local.example`, plus minor cleanups.
 
 **Open questions / Follow-ups:**
-- Apple Sign In: needs `expo-apple-authentication`, Supabase Apple provider configuration, and an iOS bundle entitlement. Park as entry #03.
-- Verify email confirmation flow: Supabase project may require confirmation before sign-in succeeds. Confirm with founder whether to disable that for dev or wire up the deep-link confirmation handler.
-- Strip remaining web-only deps from `package.json` (`react-native-web`, `react-dom`, `react-leaflet`, `leaflet`) in a future cleanup pass.
-- Create the `leads` table + RLS in Supabase before wiring lead sync.
+- Apple Sign In (deferred).
+- Email confirmation flow.
+
+---
+
+### [2026-06-09] #03 — Absorb full RoofWise spec; rebuild brand + IA + Drift Warnings
+
+**Prompt:**
+> You might want to check this out. I don't want you to copy this exactly into our app. But I do want you to ensure the FEATURES are included in our app. [Attaches `RoofWise_ClaudeCode_Spec.md`, 2680 lines.] Now continue doing the entire app. Wake me when you're done.
+
+**Intent / Goal:**
+- Treat `docs/SPEC.md` (the attached spec) as the product source of truth from here on.
+- Realign the codebase: brand palette, type ramp, motion tokens, IA, Drift Warnings, glove rules, damage taxonomy, HAAG thresholds, no-mocks/no-seed-data discipline.
+- Build the Tier 1 MVP as far as I can in a single autonomous session.
+
+**Decisions:**
+- **Spec wins on conflicts.** Reverted Drift Warning #9 from "Gemini 3 Pro" to `gemini-2.5-flash` per spec's explicit rule that there is no `gemini-3-flash`.
+- Brand palette is now navy `#0C183C` + orange `#FC6018` + cream `#F0F0E4` + slate `#546078`. No raw hex anywhere else. Cream is the bg; navy is text/primary; orange is accent/CTA; slate is muted text.
+- Type ramp from spec adopted as named tokens in `fontSize`.
+- Added `touchTarget` (44/56/64/88) and `motion` tokens (quick/standard/gentle/bouncy + stagger).
+- IA collapses from 8 tabs to 5 (Home / Leads / Map / Plan / Train). Settings moves under tabs initially.
+- Damage taxonomy refined to spec's 13 categories (Hail Hits, Bruising, Granule Loss, Wind Damage, Wind Creasing, Blistering, Cracking, Flashing Damage, Algae/Moss, Missing Shingles, Splitting, Lifted Shingles, Structural Sagging).
+- HAAG threshold lookup table will live in `lib/services/haagThresholds.ts`.
+- DecisionEngine will live in `lib/services/decisionEngine.ts` (pure logic).
+- No mocks. Empty states everywhere. `lib/mock/` retained as reference but no longer flows into tabs.
+- Full spec committed to repo at `docs/SPEC.md` so future agents can reference it.
+
+**Files touched (this entry):**
+- `docs/SPEC.md` — full 2680-line spec committed for reference.
+- `theme/tokens.ts` — replaced with brand palette + type ramp + touch targets + motion tokens.
+- `PROMPT_LOG.md` — Context Summary, Drift Warning, IA, Feature Backlog, Key Tech Decisions rebuilt; this entry appended.
+
+**Follow-ups:**
+- Build data model types (`lib/models/`).
+- Build Gemini service (real API, real error on missing key).
+- Build Decision Engine + HAAG thresholds.
+- Restructure tabs to 5-tab layout.
+- Build Home dashboard, NewJobWizard, Quick Inspection scaffold.
+- Strip web-only deps (`react-native-web`, `react-dom`, `react-leaflet`, `leaflet`) in a follow-up pass.
+- Confirm Gemini model choice once user is back (revisit #9 if user still wants Gemini 3 Pro).

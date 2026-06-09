@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker } from 'react-native-maps';
 import { severityColor, magnitudeLabel } from '@/lib/noaa';
 import type { StormMapProps } from './types';
 import { colors, radii } from '@/theme/tokens';
@@ -25,8 +25,8 @@ export default function StormHistoryMap({ events, center, zoom }: StormMapProps)
     <View style={styles.wrap}>
       <MapView
         ref={ref}
-        provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
+        showsUserLocation
         initialRegion={{
           latitude: center.lat,
           longitude: center.lon,

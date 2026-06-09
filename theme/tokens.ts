@@ -1,23 +1,31 @@
 import { Platform, ViewStyle } from 'react-native';
 
+// RoofWise brand palette — single source of truth.
+// Per spec: navy + orange + cream + slate. No raw hex anywhere else in the app.
 export const colors = {
-  bg: '#F6F7F9',
-  surface: '#FFFFFF',
-  surfaceMuted: '#F1F3F6',
-  border: '#E6E8EC',
-  borderStrong: '#D8DCE3',
+  navy: '#0C183C',
+  orange: '#FC6018',
+  cream: '#F0F0E4',
+  slate: '#546078',
 
-  text: '#0E1116',
-  textMuted: '#5B6472',
-  textSubtle: '#8A93A1',
+  // Convenience aliases (so existing call sites keep working while we migrate)
+  bg: '#F0F0E4',           // cream
+  surface: '#FFFFFF',
+  surfaceMuted: '#F6F5EC',
+  border: '#DDDED1',
+  borderStrong: '#C7C8B8',
+
+  text: '#0C183C',         // navy
+  textMuted: '#546078',    // slate
+  textSubtle: '#8A8F9A',
   textInverse: '#FFFFFF',
 
-  accent: '#F26B1F',
-  accentSoft: '#FFE6D5',
-  accentPressed: '#D85B14',
+  accent: '#FC6018',       // orange
+  accentSoft: '#FFE0CC',
+  accentPressed: '#E04E0F',
 
-  brand: '#1E66F5',
-  brandSoft: '#E0EAFF',
+  brand: '#0C183C',        // navy
+  brandSoft: '#D6DAE8',
 
   success: '#2BB673',
   successSoft: '#DBF5E7',
@@ -25,14 +33,14 @@ export const colors = {
   warnSoft: '#FFF1C2',
   danger: '#E5484D',
   dangerSoft: '#FCE2E3',
-  info: '#3B82F6',
+  info: '#1E66F5',
   infoSoft: '#DBEAFE',
 
-  overlay: 'rgba(14, 17, 22, 0.45)',
-  scrim: 'rgba(14, 17, 22, 0.7)',
+  overlay: 'rgba(12, 24, 60, 0.45)',
+  scrim: 'rgba(12, 24, 60, 0.72)',
 
   stormHail: '#1E66F5',
-  stormWind: '#F26B1F',
+  stormWind: '#FC6018',
   stormSevere: '#E5484D',
 };
 
@@ -41,6 +49,7 @@ export const radii = {
   md: 12,
   card: 16,
   lg: 20,
+  xl: 24,
   pill: 999,
 };
 
@@ -54,14 +63,25 @@ export const spacing = {
   xxxl: 32,
 };
 
+// Type ramp from spec — Apple-system font, named sizes only.
 export const fontSize = {
+  caption: 11,
+  bodySm: 13,
+  bodyMd: 15,
+  bodyLg: 17,
+  titleSm: 22,    // intentionally 22, not 18 — from real usage
+  titleMd: 20,
+  titleLg: 24,
+  titleXl: 28,
+  display: 34,
+
+  // Backwards-compatible aliases used in existing components.
   xs: 11,
   sm: 13,
   md: 15,
   lg: 18,
   xl: 22,
   xxl: 28,
-  display: 34,
 };
 
 export const fontWeight = {
@@ -71,12 +91,20 @@ export const fontWeight = {
   bold: '700' as const,
 };
 
+// Glove-friendly touch targets, per spec.
+export const touchTarget = {
+  small: 44,         // not for primary actions
+  standard: 56,      // minimum for tappable elements
+  preferred: 64,     // preferred for CTAs and chips
+  sticky: 88,        // sticky primary CTAs in thumb zone
+};
+
 const cardShadow: ViewStyle = Platform.select({
   ios: {
-    shadowColor: '#0E1116',
+    shadowColor: colors.navy,
     shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   android: {
     elevation: 2,
@@ -86,7 +114,7 @@ const cardShadow: ViewStyle = Platform.select({
 
 const pressedShadow: ViewStyle = Platform.select({
   ios: {
-    shadowColor: '#0E1116',
+    shadowColor: colors.navy,
     shadowOpacity: 0.1,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -105,14 +133,25 @@ export const breakpoints = {
   lg: 1100,
 };
 
+// Motion tokens — every withTiming/withSpring/etc should reference these.
+export const motion = {
+  quick: { mass: 1, damping: 18, stiffness: 320 },
+  standard: { mass: 1, damping: 16, stiffness: 200 },
+  gentle: { mass: 1, damping: 16, stiffness: 130 },
+  bouncy: { mass: 1, damping: 11, stiffness: 200 },
+  staggerDelayMs: 60,
+};
+
 export const theme = {
   colors,
   radii,
   spacing,
   fontSize,
   fontWeight,
+  touchTarget,
   shadows,
   breakpoints,
+  motion,
 };
 
 export type Theme = typeof theme;

@@ -1,92 +1,142 @@
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { Card } from '@/components/ui/Card';
-import { Pill, type PillTone } from '@/components/ui/Pill';
-import { Avatar } from '@/components/ui/Avatar';
-import { leads } from '@/lib/mock/leads';
-import { colors, fontSize, fontWeight, spacing } from '@/theme/tokens';
+import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  radii,
+  shadows,
+  spacing,
+  touchTarget,
+} from '@/theme/tokens';
 
-const stageTone: Record<string, PillTone> = {
-  New: 'brand',
-  Contacted: 'accent',
-  Proposal: 'success',
-  Won: 'success',
-  Lost: 'danger',
-};
+const STAGES = [
+  { id: 'all', label: 'All' },
+  { id: 'new', label: 'New' },
+  { id: 'contacted', label: 'Contacted' },
+  { id: 'inspection_scheduled', label: 'Scheduled' },
+  { id: 'inspected', label: 'Inspected' },
+  { id: 'proposal_sent', label: 'Proposal' },
+  { id: 'signed', label: 'Signed' },
+] as const;
 
 export default function LeadsScreen() {
+  const router = useRouter();
+  const [stage, setStage] = useState<(typeof STAGES)[number]['id']>('all');
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: 96 }}
-    >
-      <Text style={styles.title}>Leads</Text>
-      <Text style={styles.sub}>{leads.length} active records</Text>
-      {leads.map((l) => (
-        <Card key={l.id} style={styles.row}>
-          <Avatar name={l.name} size={42} />
-          <View style={{ flex: 1 }}>
-            <View style={styles.rowHead}>
-              <Text style={styles.name}>{l.name}</Text>
-              <Pill label={l.stage} tone={stageTone[l.stage]} />
-            </View>
-            <Text style={styles.address}>{l.address}</Text>
-            <View style={styles.metaRow}>
-              <Text style={styles.value}>${l.value.toLocaleString()}</Text>
-              {l.storm && (
-                <Pill
-                  label={l.storm === 'hail' ? 'Hail-impacted' : 'Wind-impacted'}
-                  tone={l.storm === 'hail' ? 'info' : 'accent'}
-                />
-              )}
-            </View>
-          </View>
-        </Card>
-      ))}
-    </ScrollView>
+    <View style={styles.root}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Leads</Text>
+        <Pressable style={styles.fab} onPress={() => router.push('/new-job')} hitSlop={8}>
+          <Ionicons name="add" size={24} color={colors.textInverse} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
+        contentContainerStyle={styles.chipScrollContent}
+      >
+        {STAGES.map((s) => (
+          <Pressable
+            key={s.id}
+            style={[styles.chip, stage === s.id && styles.chipActive]}
+            onPress={() => setStage(s.id)}
+          >
+            <Text style={[styles.chipText, stage === s.id && styles.chipTextActive]}>
+              {s.label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.empty}>
+          <Ionicons name="people-outline" size={40} color={colors.slate} />
+          <Text style={styles.emptyTitle}>No leads yet</Text>
+          <Text style={styles.emptyBody}>
+            Leads created from door knocks, inspections, or manually will appear here.
+          </Text>
+          <Pressable style={styles.cta} onPress={() => router.push('/new-job')}>
+            <Text style={styles.ctaText}>Start a new job</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.xl,
+    paddingBottom: spacing.md,
+  },
   title: {
-    fontSize: fontSize.xxl,
+    flex: 1,
+    fontSize: fontSize.titleXl,
     fontWeight: fontWeight.bold,
-    color: colors.text,
-    letterSpacing: -0.5,
+    color: colors.navy,
   },
-  sub: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
+  fab: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    borderRadius: radii.pill,
+    backgroundColor: colors.orange,
     alignItems: 'center',
-    gap: spacing.md,
+    justifyContent: 'center',
+    ...shadows.card,
   },
-  rowHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
+
+  chipScroll: { maxHeight: 56 },
+  chipScrollContent: { paddingHorizontal: spacing.xl, gap: spacing.sm },
+  chip: {
+    minHeight: touchTarget.small,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
   },
-  name: {
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
-    color: colors.text,
-  },
-  address: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
-  },
-  metaRow: {
-    flexDirection: 'row',
+  chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  chipText: { fontSize: fontSize.bodySm, color: colors.navy, fontWeight: fontWeight.medium },
+  chipTextActive: { color: colors.textInverse },
+
+  content: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  empty: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.xxl,
     alignItems: 'center',
     gap: spacing.sm,
-    marginTop: 6,
+    ...shadows.card,
   },
-  value: {
-    fontSize: fontSize.sm,
+  emptyTitle: {
+    fontSize: fontSize.titleSm,
     fontWeight: fontWeight.semibold,
-    color: colors.text,
+    color: colors.navy,
+    marginTop: spacing.sm,
   },
+  emptyBody: {
+    fontSize: fontSize.bodyMd,
+    color: colors.slate,
+    textAlign: 'center',
+  },
+  cta: {
+    marginTop: spacing.lg,
+    height: touchTarget.preferred,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: radii.pill,
+    backgroundColor: colors.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
 });

@@ -1,0 +1,143 @@
+import { ScrollView, View, Text, StyleSheet, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  radii,
+  shadows,
+  spacing,
+  touchTarget,
+} from '@/theme/tokens';
+
+export default function TrainScreen() {
+  return (
+    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Train</Text>
+        <Text style={styles.sub}>Inspector review queue + AI calibration</Text>
+      </View>
+
+      <View style={styles.tilesRow}>
+        <View style={[styles.tile, styles.tilePrimary]}>
+          <View style={styles.tileTopRow}>
+            <Ionicons name="layers-outline" size={20} color={colors.textInverse} />
+            <Text style={styles.tilePrimaryCount}>0</Text>
+          </View>
+          <Text style={styles.tilePrimaryLabel}>Pending review</Text>
+          <Text style={styles.tilePrimarySub}>Photos waiting on your verdict</Text>
+        </View>
+
+        <View style={[styles.tile, styles.tileSecondary]}>
+          <View style={styles.tileTopRow}>
+            <Ionicons name="bar-chart-outline" size={20} color={colors.navy} />
+            <Text style={styles.tileSecondaryCount}>—</Text>
+          </View>
+          <Text style={styles.tileSecondaryLabel}>Calibration accuracy</Text>
+          <Text style={styles.tileSecondarySub}>Available after 5 corrections</Text>
+        </View>
+      </View>
+
+      <Section title="AI Calibration">
+        <View style={styles.row}>
+          <Ionicons name="git-branch-outline" size={20} color={colors.slate} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>Calibrating to your inspection style</Text>
+            <Text style={styles.rowSub}>0 corrections recorded</Text>
+          </View>
+        </View>
+      </Section>
+
+      <Section title="AI Tools">
+        <Row icon="bulb-outline" label="Damage explainer" sub="What each damage type looks like" />
+        <Row icon="chatbubble-ellipses-outline" label="Role-play coach" sub="Practice objections (coming soon)" />
+      </Section>
+
+      <Section title="Lessons">
+        <View style={styles.empty}>
+          <Ionicons name="school-outline" size={32} color={colors.slate} />
+          <Text style={styles.emptyText}>Lessons will appear here. Coming soon.</Text>
+        </View>
+      </Section>
+
+      <View style={{ height: spacing.xxxl }} />
+    </ScrollView>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.card}>{children}</View>
+    </View>
+  );
+}
+
+function Row({
+  icon,
+  label,
+  sub,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  sub: string;
+}) {
+  return (
+    <Pressable style={styles.row}>
+      <Ionicons name={icon} size={22} color={colors.slate} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowSub}>{sub}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+  content: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
+  header: {},
+  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
+  sub: { fontSize: fontSize.bodyMd, color: colors.slate, marginTop: spacing.xs },
+
+  tilesRow: { flexDirection: 'row', gap: spacing.md },
+  tile: {
+    flex: 1,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    minHeight: 130,
+    ...shadows.card,
+  },
+  tilePrimary: { backgroundColor: colors.navy },
+  tileSecondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  tileTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  tilePrimaryCount: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.textInverse },
+  tilePrimaryLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
+  tilePrimarySub: { fontSize: fontSize.bodySm, color: 'rgba(255,255,255,0.78)' },
+  tileSecondaryCount: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.navy },
+  tileSecondaryLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  tileSecondarySub: { fontSize: fontSize.bodySm, color: colors.slate },
+
+  sectionTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    gap: spacing.md,
+    ...shadows.card,
+  },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: touchTarget.standard },
+  rowLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium, color: colors.navy },
+  rowSub: { fontSize: fontSize.bodySm, color: colors.slate },
+
+  empty: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  emptyText: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },
+});

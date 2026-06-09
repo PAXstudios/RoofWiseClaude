@@ -8,21 +8,55 @@
     "userInterfaceStyle": "light",
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F0F0E4"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.roofwise.app"
+      "bundleIdentifier": "com.roofwise.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "RoofWise uses the camera to capture roof damage photos for AI analysis.",
+        "NSPhotoLibraryUsageDescription": "RoofWise can attach inspection photos from your library.",
+        "NSPhotoLibraryAddUsageDescription": "RoofWise can save captured inspection photos to your library.",
+        "NSLocationWhenInUseUsageDescription": "RoofWise uses your location to map storm activity, find nearby leads, and log door-knocking visits.",
+        "NSMicrophoneUsageDescription": "RoofWise uses the microphone for voice-to-text notes during inspections.",
+        "NSSpeechRecognitionUsageDescription": "RoofWise uses speech recognition to transcribe your voice notes.",
+        "NSMotionUsageDescription": "RoofWise uses motion sensors to measure roof pitch and detect slope orientation."
+      }
     },
     "android": {
-      "package": "com.roofwise.app"
+      "package": "com.roofwise.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#0C183C"
+      }
     },
-    "web": {
-      "bundler": "metro",
-      "output": "single"
-    },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow RoofWise to access your camera to capture roof damage photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow RoofWise to use your location to map storms, leads, and door-knocking routes."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow RoofWise to access your photo library to attach inspection photos."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": false,
       "tsconfigPaths": true

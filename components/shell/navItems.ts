@@ -5,25 +5,15 @@ export type NavItem = {
   label: string;
   href: string;
   icon: keyof typeof Ionicons.glyphMap;
-  // Show in mobile bottom tab bar (other items live in a More sheet).
-  primary?: boolean;
 };
 
+// Spec IA: 5 bottom tabs — Home / Leads / Map / Plan / Train.
 export const navItems: NavItem[] = [
-  { name: 'index', label: 'Dashboard', href: '/', icon: 'grid', primary: true },
-  { name: 'leads', label: 'Leads', href: '/leads', icon: 'people-outline', primary: true },
-  { name: 'map', label: 'Map', href: '/map', icon: 'map-outline', primary: true },
-  { name: 'inspections', label: 'Inspections', href: '/inspections', icon: 'camera-outline' },
-  { name: 'jobs', label: 'Jobs', href: '/jobs', icon: 'hammer-outline' },
-  { name: 'storms', label: 'Storm Intel', href: '/storms', icon: 'thunderstorm-outline' },
-  { name: 'reports', label: 'Reports', href: '/reports', icon: 'bar-chart-outline' },
-  { name: 'settings', label: 'Settings', href: '/settings', icon: 'settings-outline' },
+  { name: 'index', label: 'Home', href: '/', icon: 'home-outline' },
+  { name: 'leads', label: 'Leads', href: '/leads', icon: 'people-outline' },
+  { name: 'map', label: 'Map', href: '/map', icon: 'map-outline' },
+  { name: 'plan', label: 'Plan', href: '/plan', icon: 'calendar-outline' },
+  { name: 'train', label: 'Train', href: '/train', icon: 'school-outline' },
 ];
 
-// Mobile bottom nav - Plan = Schedule view
-export const mobileBottomItems: NavItem[] = [
-  { name: 'index', label: 'Home', href: '/', icon: 'grid', primary: true },
-  { name: 'leads', label: 'Leads', href: '/leads', icon: 'people-outline', primary: true },
-  { name: 'map', label: 'Map', href: '/map', icon: 'map-outline', primary: true },
-  { name: 'storms', label: 'Storms', href: '/storms', icon: 'thunderstorm-outline', primary: true },
-];
+export const mobileBottomItems = navItems;

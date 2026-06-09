@@ -1,92 +1,237 @@
-import { ScrollView, View, StyleSheet, Platform } from 'react-native';
-import { HeaderGreeting } from '@/components/shell/HeaderGreeting';
-import { OverviewKpis } from '@/components/dashboard/OverviewKpis';
-import { QuickActions } from '@/components/dashboard/QuickActions';
-import { WeatherStormCard } from '@/components/dashboard/WeatherStormCard';
-import { AreaActivityMap } from '@/components/dashboard/AreaActivityMap';
-import { PipelineKanban } from '@/components/dashboard/PipelineKanban';
-import { TodaysSchedule } from '@/components/dashboard/TodaysSchedule';
-import { RecentJobs } from '@/components/dashboard/RecentJobs';
-import { AiInsightsQueue } from '@/components/dashboard/AiInsightsQueue';
-import { MyTasks } from '@/components/dashboard/MyTasks';
-import { RecentActivity } from '@/components/dashboard/RecentActivity';
-import { useResponsive } from '@/theme/useResponsive';
-import { colors, spacing } from '@/theme/tokens';
+import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useMemo } from 'react';
+import { useAuthStore } from '@/lib/auth/authStore';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  radii,
+  shadows,
+  spacing,
+  touchTarget,
+} from '@/theme/tokens';
 
-export default function DashboardScreen() {
-  const { isWide } = useResponsive();
+export default function HomeScreen() {
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
 
-  if (isWide) {
-    return (
-      <ScrollView contentContainerStyle={styles.desktop}>
-        <View style={styles.desktopInner}>
-          <OverviewKpis />
-          <View style={styles.row2}>
-            <View style={styles.col}>
-              <WeatherStormCard />
-              <AreaActivityMap />
-              <PipelineKanban />
-            </View>
-            <View style={styles.col}>
-              <TodaysSchedule />
-              <RecentJobs />
-              <AiInsightsQueue />
-            </View>
-          </View>
-          <View style={styles.row2}>
-            <View style={styles.col}>
-              <MyTasks />
-            </View>
-            <View style={styles.col}>
-              <RecentActivity />
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-    );
-  }
+  const firstName = useMemo(() => {
+    const email = user?.email ?? '';
+    if (!email) return 'there';
+    return email.split('@')[0].split(/[._-]/)[0].replace(/^\w/, (c) => c.toUpperCase());
+  }, [user]);
+
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 5 ? 'Up early' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   return (
     <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={styles.mobile}
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
     >
-      <HeaderGreeting />
-      <OverviewKpis />
-      <QuickActions />
-      <WeatherStormCard />
-      <AreaActivityMap />
-      <PipelineKanban />
-      <TodaysSchedule />
-      <RecentJobs />
-      <AiInsightsQueue />
-      <MyTasks />
-      <RecentActivity />
-      <View style={{ height: 96 }} />
+      {/* Welcome header */}
+      <View style={styles.headerRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.greeting}>{greeting},</Text>
+          <Text style={styles.name}>{firstName}</Text>
+        </View>
+        <Pressable
+          style={styles.profileBtn}
+          onPress={() => router.push('/settings')}
+          hitSlop={8}
+        >
+          <Ionicons name="person-circle-outline" size={32} color={colors.navy} />
+        </Pressable>
+      </View>
+
+      {/* Storm Alert hero — hides when no active alert (Drift #4) */}
+      {/* TODO Phase 6D: wire to StormAlertStore.latestActiveAlert */}
+
+      {/* Hero CTAs */}
+      <View style={styles.heroRow}>
+        <Pressable
+          style={[styles.heroCta, styles.heroPrimary]}
+          onPress={() => router.push('/quick-inspection')}
+        >
+          <Ionicons name="scan-outline" size={28} color={colors.textInverse} />
+          <Text style={styles.heroPrimaryText}>Quick Inspection</Text>
+          <Text style={styles.heroPrimarySub}>Camera → AI → Claim packet</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.heroCta, styles.heroSecondary]}
+          onPress={() => router.push('/new-job')}
+        >
+          <Ionicons name="briefcase-outline" size={28} color={colors.navy} />
+          <Text style={styles.heroSecondaryText}>New Job</Text>
+          <Text style={styles.heroSecondarySub}>Customer · Insurance · Roof</Text>
+        </Pressable>
+      </View>
+
+      {/* KPI tiles */}
+      <View style={styles.kpiRow}>
+        <Kpi label="Revenue" value="$0" />
+        <Kpi label="Leads" value="0" />
+        <Kpi label="Pipeline" value="$0" />
+      </View>
+
+      {/* Recent Jobs */}
+      <SectionHeader title="Recent Jobs" />
+      <EmptyCard
+        icon="hammer-outline"
+        message="No jobs yet. Tap New Job above to create your first."
+      />
+
+      {/* Pipeline mini-Kanban */}
+      <SectionHeader title="Pipeline" />
+      <View style={styles.pipelineRow}>
+        {(['New', 'Contacted', 'Inspection', 'Proposal', 'Signed'] as const).map((stage) => (
+          <View key={stage} style={styles.pipelineCard}>
+            <Text style={styles.pipelineCount}>0</Text>
+            <Text style={styles.pipelineLabel}>{stage}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Today's Plan */}
+      <SectionHeader title="Today's Plan" />
+      <EmptyCard
+        icon="calendar-outline"
+        message="Nothing scheduled. Add jobs to your plan to see them here."
+      />
+
+      <View style={{ height: spacing.xxxl }} />
     </ScrollView>
   );
 }
 
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.kpiCard}>
+      <Text style={styles.kpiValue}>{value}</Text>
+      <Text style={styles.kpiLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return <Text style={styles.sectionTitle}>{title}</Text>;
+}
+
+function EmptyCard({
+  icon,
+  message,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  message: string;
+}) {
+  return (
+    <View style={styles.emptyCard}>
+      <Ionicons name={icon} size={32} color={colors.slate} />
+      <Text style={styles.emptyText}>{message}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  mobile: {
-    backgroundColor: colors.bg,
-    paddingBottom: Platform.OS === 'ios' ? spacing.xxxl : spacing.xl,
-  },
-  desktop: {
-    backgroundColor: colors.bg,
+  container: {
     padding: spacing.xl,
-  },
-  desktopInner: {
-    width: '100%',
-    maxWidth: 1280,
-    alignSelf: 'center',
     gap: spacing.lg,
+    paddingBottom: spacing.xxxl,
   },
-  row2: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-    alignItems: 'flex-start',
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  greeting: { fontSize: fontSize.bodyMd, color: colors.slate },
+  name: { fontSize: fontSize.titleXl, fontWeight: fontWeight.semibold, color: colors.navy },
+  profileBtn: { padding: spacing.sm },
+
+  heroRow: { flexDirection: 'row', gap: spacing.md },
+  heroCta: {
+    flex: 1,
+    minHeight: 120,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    justifyContent: 'space-between',
+    ...shadows.card,
   },
-  col: { flex: 1 },
+  heroPrimary: { backgroundColor: colors.orange },
+  heroPrimaryText: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.textInverse,
+    marginTop: spacing.sm,
+  },
+  heroPrimarySub: {
+    fontSize: fontSize.bodySm,
+    color: 'rgba(255,255,255,0.92)',
+  },
+  heroSecondary: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.navy,
+  },
+  heroSecondaryText: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.navy,
+    marginTop: spacing.sm,
+  },
+  heroSecondarySub: { fontSize: fontSize.bodySm, color: colors.slate },
+
+  kpiRow: { flexDirection: 'row', gap: spacing.md },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    ...shadows.card,
+  },
+  kpiValue: {
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+    color: colors.navy,
+  },
+  kpiLabel: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: spacing.xs },
+
+  sectionTitle: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.semibold,
+    color: colors.navy,
+    marginTop: spacing.md,
+  },
+
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.sm,
+    ...shadows.card,
+  },
+  emptyText: {
+    fontSize: fontSize.bodyMd,
+    color: colors.slate,
+    textAlign: 'center',
+  },
+
+  pipelineRow: { flexDirection: 'row', gap: spacing.sm },
+  pipelineCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    alignItems: 'center',
+    minHeight: touchTarget.standard,
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  pipelineCount: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    color: colors.orange,
+  },
+  pipelineLabel: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
 });
