@@ -146,6 +146,18 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
+      <Text style={styles.sectionLabel}>Business</Text>
+      <View style={styles.card}>
+        <Pressable style={styles.row} onPress={() => router.push('/reports')}>
+          <Ionicons name="bar-chart-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Reports</Text>
+            <Text style={styles.rowValue}>Revenue, funnel, mileage, AI calibration</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+      </View>
+
       <Text style={styles.sectionLabel}>Safety</Text>
       <View style={styles.card}>
         <Pressable

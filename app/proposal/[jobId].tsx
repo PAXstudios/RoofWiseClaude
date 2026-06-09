@@ -11,8 +11,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
+import { useProposalLinkStore } from '@/lib/stores/proposalLinkStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { generateProposalDraft } from '@/lib/services/proposalGenerator';
@@ -38,6 +40,9 @@ export default function ProposalView() {
   const upsert = useProposalStore((s) => s.upsert);
   const create = useProposalStore((s) => s.create);
   const setStatus = useProposalStore((s) => s.setStatus);
+  const getOrCreateLink = useProposalLinkStore((s) => s.getOrCreate);
+  const urlFor = useProposalLinkStore((s) => s.urlFor);
+  const allLinks = useProposalLinkStore((s) => s.links);
   const logActivity = useActivityStore((s) => s.log);
   const toast = useToastStore((s) => s.show);
   const [busy, setBusy] = useState(false);
@@ -166,6 +171,66 @@ export default function ProposalView() {
         <View style={styles.card}>
           <Text style={styles.section}>Terms</Text>
           <Text style={styles.body}>{proposal.termsText}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.section}>Share link</Text>
+          {(() => {
+            const existing = allLinks.find((l) => l.proposalId === proposal.id);
+            if (!existing) {
+              return (
+                <>
+                  <Text style={styles.body}>
+                    Generate a tokenized URL the homeowner can open from email or SMS.
+                  </Text>
+                  <Pressable
+                    style={styles.secondaryBtn}
+                    onPress={() => {
+                      const link = getOrCreateLink({
+                        proposalId: proposal.id,
+                        jobId: inspection.id,
+                      });
+                      toast({
+                        tone: 'success',
+                        title: 'Link generated',
+                        body: urlFor(link.token),
+                      });
+                    }}
+                  >
+                    <Ionicons name="link-outline" size={18} color={colors.navy} />
+                    <Text style={styles.secondaryBtnText}>Generate link</Text>
+                  </Pressable>
+                </>
+              );
+            }
+            const url = urlFor(existing.token);
+            return (
+              <>
+                <Text selectable style={styles.urlText}>{url}</Text>
+                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  <Pressable
+                    style={[styles.secondaryBtn, { flex: 1 }]}
+                    onPress={async () => {
+                      await Clipboard.setStringAsync(url);
+                      toast({ tone: 'success', title: 'Link copied' });
+                    }}
+                  >
+                    <Ionicons name="copy-outline" size={18} color={colors.navy} />
+                    <Text style={styles.secondaryBtnText}>Copy</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.secondaryBtn, { flex: 1 }]}
+                    onPress={async () => {
+                      await Share.share({ message: `Your roofing proposal: ${url}` });
+                    }}
+                  >
+                    <Ionicons name="share-outline" size={18} color={colors.navy} />
+                    <Text style={styles.secondaryBtnText}>Share</Text>
+                  </Pressable>
+                </View>
+              </>
+            );
+          })()}
         </View>
 
         <View style={styles.card}>
@@ -311,6 +376,15 @@ const styles = StyleSheet.create({
     borderColor: colors.navy,
   },
   secondaryBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  urlText: {
+    fontSize: fontSize.bodyMd,
+    color: colors.navy,
+    fontFamily: 'Courier',
+    backgroundColor: colors.surfaceMuted,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    marginVertical: spacing.sm,
+  },
 
   footer: { padding: spacing.xl, borderTopWidth: 1, borderTopColor: colors.border },
   primaryBtn: {
