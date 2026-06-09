@@ -383,3 +383,148 @@ Aligned to spec phases. Status is current state in *this* Expo repo, not the ror
 - Mileage tracker.
 - Voice commands.
 - Offline sync queue.
+
+---
+
+### [2026-06-09] #06 — Next Build Prompt absorbed (Steps 0, 1, 2, 4, 6, 5-polish)
+
+**Prompt:**
+> [attached `RoofWise_Next_Build_Prompt.md`] Continue.
+
+Plus the canonical `.env.local` was provided via attachment with the new
+Google Maps key (`AIza…YSBM` rotated → `AIza…tYU`), Gemini model pinned
+at `gemini-2.5-flash`, Corrections endpoint, and feature flags.
+
+**Drift Warning changes:**
+- #11 was "MapKit on iOS, Google Maps on Android" — replaced with
+  "Google Maps everywhere via `provider: PROVIDER_GOOGLE`". The unified
+  `components/map/Map.tsx` is the single point that switches providers.
+- The `.env.local` is provided locally and gitignored; keys never enter
+  the repo. `app.json` was converted to `app.config.js` so the Google
+  Maps key is read from `process.env` at build time and never committed.
+
+**Step 0 — Maps foundation:**
+- `lib/env.ts`: extended reader covers Maps base + iOS/Android/Web, Places,
+  Solar, Geocoding, Weather, Corrections endpoint, NOAA user-agent, and
+  feature flags (`USE_LIVE_AR`, `USE_STRUCTURED_CONFIDENCE`, `REQUIRE_AUTH`).
+- `app.json` → `app.config.js` (dynamic): Google Maps key read from env at
+  build time. Native bridging done via `ios.config.googleMapsApiKey` +
+  `android.config.googleMaps.apiKey`.
+- `components/map/Map.tsx`: unified Map + MapPin + MapPolyline + MapPolygon
+  + MapCircle + MapHeatmap. `PROVIDER_GOOGLE` always set. Provider switch
+  is now a one-file change.
+- `lib/services/places.ts`: Google Places (New) `searchText` + place
+  details client with `X-Goog-FieldMask` trimming, location bias,
+  `PlacesNotConfiguredError` / `PlacesError`.
+- `components/AddressAutocomplete.tsx`: debounced 250ms search, 56pt
+  input, dropdown of predictions, place select captures lat/lng. Surfaces
+  a friendly "key missing" hint when the key isn't configured.
+- `NewJobWizard Step 1`: real address autocomplete replaces the manual
+  textarea; lat/lng captured into the Inspection on save.
+
+**Step 4 — Manual damage overlay editor (Drift #4 / spec hero):**
+- `lib/stores/correctionsStore.ts`: Zustand store with pending/syncing/
+  synced/failed status, capped at 1000 entries, AsyncStorage persistence.
+- `components/DamageMarkerLayer.tsx`: photo + absolute-positioned markers
+  rendered against the photo's aspect-fit rect. Tap empty area → drop;
+  tap marker → select. Confidence bubble + severity-tinted ring.
+- `app/edit-detection.tsx`: full-screen editor. Category chip selector
+  (13 chips), severity selector, add/edit via marker tap, save writes
+  the new markers to the slope AND records a Correction with the
+  original / corrected / delta payload. Discard confirms when dirty.
+- JobDetail thumbnails now route to the editor with a pencil overlay
+  badge.
+
+**Step 6 — Recursive learning loop foundation:**
+- `lib/services/learning/userCorrectionProfile.ts`: rolling stats over
+  the last 100 corrections per category (accuracy, under_count,
+  over_count, total).
+- `lib/services/learning/localLearningEngine.ts`:
+  - `effectiveThreshold(category)`: per-user confidence cutoff capped
+    at ±20% from a 60 baseline.
+  - `userStylePromptPrefix()`: small Gemini system-prompt prefix once
+    20+ corrections are recorded.
+  - `overallAccuracy()`: hidden until 5+ corrections.
+- `lib/services/correctionsSync.ts`: best-effort POST to the corrections
+  backend; marks records syncing → synced → failed; batch size 50.
+- `inspectionStore.setSlopeMarkers(...)`: updates a slope's markers and
+  recounts hail / wind / wear / missing / bruising per category.
+- Quick Inspection: `analyzePhoto` now prepends the user-style prefix
+  derived from the corrections profile.
+- Gemini service: model now read from `env.GEMINI_MODEL`
+  (default `gemini-2.5-flash`).
+- `components/AICalibrationCard.tsx`: appears on Home once 5+
+  corrections are recorded. Tap routes to Train tab.
+
+**Step 1 — HailTracer:**
+- `Map.tsx`: added `MapHeatmap` export.
+- `app/hail-tracer.tsx`: full-screen Google-Maps heatmap of the last
+  24 months of NOAA storms. 7d/30d/6m/24m range chips, hail/wind/both
+  toggle, ≥1"/≥1.5"/≥58mph magnitude filter. Hail rendered as a
+  weighted heatmap (intensity ∝ size²). Wind + severe hail also drop
+  pins; tap → detail sheet.
+
+**Step 2 — Roof Price Estimator (Solar API):**
+- `lib/services/solar.ts`: Solar `buildingInsights:findClosest` client.
+  Returns total squares, per-slope orientation/pitch/azimuth, imagery
+  date + quality. Clear `SolarNotConfiguredError` / `SolarNotFoundError` /
+  `SolarServiceError`. `imageryIsStale()` helper.
+- `lib/services/costEstimator.ts`: pure cost-range engine — per-material
+  + per-region pricing × scope factor (repair/partial/full), itemized
+  line items (tear-off, underlayment, shingles, flashing, ventilation,
+  permits).
+- `app/estimator.tsx`: 4-step wizard — Address (Places autocomplete) →
+  Roof detection (Solar API call, manual fallback with stepper) →
+  Damage scope → Result card with Low/Mid/High range + line-item
+  breakdown.
+
+**Step 5 polish — Haag report data flow + UI:**
+- JobDetail per-slope card now shows:
+  - Verdict pill (Full replace / Partial / Verify / Repair).
+  - HAAG test square block: hits observed vs material threshold + rule.
+  - Detected-category list with severity-coded color.
+  - Decision Engine reasoning + average confidence.
+- Sets us up to revise the PDF in a follow-up — the data flow into
+  `decision.perSlope` is now visible in the UI so any divergence is
+  obvious.
+
+**Files touched (this entry):**
+- `lib/env.ts`, `.env.local.example` — env reader + template.
+- `app.json` → `app.config.js`.
+- `components/map/Map.tsx`, `components/map/StormHistoryMap.native.tsx`.
+- `lib/services/places.ts`, `components/AddressAutocomplete.tsx`.
+- `lib/stores/correctionsStore.ts`.
+- `lib/services/learning/userCorrectionProfile.ts`,
+  `lib/services/learning/localLearningEngine.ts`,
+  `lib/services/correctionsSync.ts`.
+- `lib/stores/inspectionStore.ts` — `setSlopeMarkers`.
+- `components/DamageMarkerLayer.tsx`, `app/edit-detection.tsx`.
+- `components/AICalibrationCard.tsx`, `app/(tabs)/index.tsx`.
+- `lib/services/solar.ts`, `lib/services/costEstimator.ts`,
+  `app/estimator.tsx`.
+- `app/hail-tracer.tsx`.
+- `lib/services/gemini.ts` — env-driven model name.
+- `app/quick-inspection.tsx` — user-style prefix threaded into analyze.
+- `app/new-job.tsx` — AddressAutocomplete + lat/lng capture.
+- `app/job/[id].tsx` — slope verdict pills + test-square block +
+  reasoning.
+
+**Still owed (Tier 1 from Next Build):**
+- Step 3: full Capture/Analyze split with background analysis via
+  expo-task-manager. Capture today still calls `analyzePhoto` directly;
+  splitting it requires a `lib/services/analysisQueue.ts` + a
+  per-photo persistence model. Parked as a deliberate v1 simplification —
+  the existing on-demand "Analyze" CTA already gives the user control
+  over when analysis fires.
+- Per-photo `photoIndex` tagging on `DamageMarker` so the editor only
+  shows markers from the active photo (today it shows all slope markers).
+- Pinch-zoom on the editor canvas with marker anchoring preserved.
+
+**Still owed (Tier 2 from Next Build):**
+- Per-correction toast + weekly Calibration push notification.
+- Proposals (Step 7 in main spec).
+- Door Knocking Mode (Phase 6E).
+- Service Area + Storm Watch background polling + push (Phase 6A-C).
+- Mileage tracker.
+- Voice commands.
+- Offline sync queue + corrections backend deployment.

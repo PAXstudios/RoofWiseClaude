@@ -6,18 +6,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { generateHaagReport } from '@/lib/services/haagPdf';
-import {
-  DAMAGE_CATEGORY_LABELS,
-  INSURANCE_CARRIER_LABELS,
-  ROOF_MATERIAL_LABELS,
-  type Slope,
-} from '@/lib/models/types';
+import { thresholdFor } from '@/lib/services/haagThresholds';
 import {
   CLAIM_WORTHINESS_LABELS,
   claimWorthiness,
   damageScore,
   evaluate,
 } from '@/lib/services/decisionEngine';
+import {
+  DAMAGE_CATEGORY_LABELS,
+  INSURANCE_CARRIER_LABELS,
+  ROOF_MATERIAL_LABELS,
+  type Inspection,
+  type Slope,
+  type SlopeVerdict,
+} from '@/lib/models/types';
 import {
   colors,
   fontSize,
@@ -145,9 +148,19 @@ export default function JobDetail() {
             </Text>
           </View>
         ) : (
-          inspection.slopes.map((slope) => (
-            <SlopeBlock key={slope.id} inspectionId={inspection.id} slope={slope} />
-          ))
+          inspection.slopes.map((slope) => {
+            const result = decision.perSlope.find((r) => r.slopeId === slope.id);
+            return (
+              <SlopeBlock
+                key={slope.id}
+                inspection={inspection}
+                slope={slope}
+                verdict={result?.verdict ?? 'repair'}
+                reasoning={result?.reasoning ?? ''}
+                confidenceAvg={result?.confidenceAvg ?? 0}
+              />
+            );
+          })
         )}
 
         <Pressable
@@ -181,19 +194,27 @@ export default function JobDetail() {
 }
 
 function SlopeBlock({
-  inspectionId,
+  inspection,
   slope,
+  verdict,
+  reasoning,
+  confidenceAvg,
 }: {
-  inspectionId: string;
+  inspection: Inspection;
   slope: Slope;
+  verdict: SlopeVerdict;
+  reasoning: string;
+  confidenceAvg: number;
 }) {
   const router = useRouter();
   const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
+  const threshold = thresholdFor(inspection.material);
+
   return (
     <View style={styles.card}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={styles.cardValue}>Slope {slope.orientation}</Text>
-        <Text style={styles.cardSub}>{slope.photoPaths.length} photo{slope.photoPaths.length === 1 ? '' : 's'}</Text>
+        <VerdictPill verdict={verdict} />
       </View>
 
       {slope.photoPaths.length > 0 && (
@@ -205,7 +226,7 @@ function SlopeBlock({
                 onPress={() =>
                   router.push({
                     pathname: '/edit-detection',
-                    params: { inspectionId, slopeId: slope.id, photoIndex: String(i) },
+                    params: { inspectionId: inspection.id, slopeId: slope.id, photoIndex: String(i) },
                   })
                 }
                 style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
@@ -223,6 +244,16 @@ function SlopeBlock({
         </ScrollView>
       )}
 
+      <View style={styles.testSquare}>
+        <Text style={styles.testSquareLabel}>HAAG test square</Text>
+        <Text style={styles.testSquareLine}>
+          {slope.hailCount} hits observed · threshold {threshold.hitsPerTestSquare === 0
+            ? '(penetration / crack)'
+            : `${threshold.hitsPerTestSquare}+ per 10×10' square`}
+        </Text>
+        <Text style={styles.testSquareRule}>{threshold.rule}</Text>
+      </View>
+
       {detected.length > 0 && (
         <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
           {detected.map((f) => (
@@ -232,6 +263,29 @@ function SlopeBlock({
           ))}
         </View>
       )}
+
+      {reasoning && (
+        <Text style={styles.reasoning}>
+          {reasoning}
+          {confidenceAvg > 0 ? ` (avg confidence ${Math.round(confidenceAvg)}%)` : ''}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function VerdictPill({ verdict }: { verdict: SlopeVerdict }) {
+  const tone = (() => {
+    switch (verdict) {
+      case 'full_replace': return { bg: colors.orange, fg: colors.textInverse, label: 'Full replace' };
+      case 'partial_replace': return { bg: colors.warn, fg: colors.navy, label: 'Partial' };
+      case 'verify_with_inspector': return { bg: colors.cream, fg: colors.navy, label: 'Verify' };
+      default: return { bg: colors.surfaceMuted, fg: colors.slate, label: 'Repair' };
+    }
+  })();
+  return (
+    <View style={[styles.verdictPill, { backgroundColor: tone.bg }]}>
+      <Text style={[styles.verdictText, { color: tone.fg }]}>{tone.label}</Text>
     </View>
   );
 }
@@ -327,6 +381,37 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  testSquare: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    gap: 2,
+    marginTop: spacing.md,
+  },
+  testSquareLabel: {
+    fontSize: fontSize.caption,
+    color: colors.slate,
+    fontWeight: fontWeight.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  testSquareLine: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
+  testSquareRule: { fontSize: fontSize.bodySm, color: colors.slate },
+
+  verdictPill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+  },
+  verdictText: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  reasoning: {
+    fontSize: fontSize.bodySm,
+    color: colors.slate,
+    fontStyle: 'italic',
+    marginTop: spacing.sm,
   },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
