@@ -25,9 +25,11 @@ type Props = {
   notes: AudioNote[];
   onRecorded: (note: { uri: string; durationSec: number }) => void;
   onRemove: (noteId: string) => void;
+  onTranscribe?: (noteId: string) => Promise<void> | void;
 };
 
-export function VoiceNoteRecorder({ notes, onRecorded, onRemove }: Props) {
+export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }: Props) {
+  const [transcribingId, setTranscribingId] = useState<string | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [permission, setPermission] = useState<boolean | null>(null);
@@ -169,7 +171,7 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove }: Props) {
                 />
               </Pressable>
               <View style={{ flex: 1 }}>
-                <Text style={styles.noteLabel}>
+                <Text style={styles.noteLabel} numberOfLines={3}>
                   {note.label ?? `Note · ${formatDuration(note.durationSec)}`}
                 </Text>
                 <Text style={styles.noteMeta}>
@@ -181,6 +183,26 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove }: Props) {
                   })}
                 </Text>
               </View>
+              {onTranscribe && !note.label && (
+                <Pressable
+                  onPress={async () => {
+                    setTranscribingId(note.id);
+                    try {
+                      await onTranscribe(note.id);
+                    } finally {
+                      setTranscribingId(null);
+                    }
+                  }}
+                  hitSlop={10}
+                  disabled={transcribingId === note.id}
+                >
+                  {transcribingId === note.id ? (
+                    <ActivityIndicator color={colors.orange} />
+                  ) : (
+                    <Ionicons name="sparkles-outline" size={18} color={colors.orange} />
+                  )}
+                </Pressable>
+              )}
               <Pressable onPress={() => onRemove(note.id)} hitSlop={10}>
                 <Ionicons name="trash-outline" size={18} color={colors.danger} />
               </Pressable>

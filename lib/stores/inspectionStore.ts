@@ -89,6 +89,7 @@ type InspectionStoreState = {
   setCollateralItem: (id: string, key: string, value: boolean) => void;
   addAudioNote: (id: string, note: { uri: string; durationSec: number; label?: string }) => void;
   removeAudioNote: (id: string, noteId: string) => void;
+  setAudioNoteLabel: (id: string, noteId: string, label: string) => void;
   removePhoto: (inspectionId: string, slopeId: string, photoIndex: number) => void;
   replacePhoto: (inspectionId: string, slopeId: string, photoIndex: number, uri: string) => void;
   setNotes: (id: string, notes: string) => void;
@@ -218,6 +219,20 @@ export const useInspectionStore = create<InspectionStoreState>()(
           inspections: s.inspections.map((i) =>
             i.id === id
               ? { ...i, audioNotes: (i.audioNotes ?? []).filter((n) => n.id !== noteId) }
+              : i,
+          ),
+        })),
+
+      setAudioNoteLabel: (id, noteId, label) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id
+              ? {
+                  ...i,
+                  audioNotes: (i.audioNotes ?? []).map((n) =>
+                    n.id === noteId ? { ...n, label } : n,
+                  ),
+                }
               : i,
           ),
         })),

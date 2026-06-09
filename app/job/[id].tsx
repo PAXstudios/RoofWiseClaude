@@ -10,6 +10,9 @@ import { generateHaagReport } from '@/lib/services/haagPdf';
 import { SignaturePad } from '@/components/SignaturePad';
 import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
+import { transcribeAudio } from '@/lib/services/transcribeAudio';
+import { useToastStore } from '@/lib/stores/toastStore';
+import { isGeminiConfigured } from '@/lib/env';
 import { thresholdFor } from '@/lib/services/haagThresholds';
 import {
   CLAIM_WORTHINESS_LABELS,
@@ -55,6 +58,8 @@ export default function JobDetail() {
   const setNotes = useInspectionStore((s) => s.setNotes);
   const addAudioNote = useInspectionStore((s) => s.addAudioNote);
   const removeAudioNote = useInspectionStore((s) => s.removeAudioNote);
+  const setAudioNoteLabel = useInspectionStore((s) => s.setAudioNoteLabel);
+  const toast = useToastStore((s) => s.show);
   const logActivity = useActivityStore((s) => s.log);
   const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const [generating, setGenerating] = useState(false);
@@ -313,7 +318,30 @@ export default function JobDetail() {
         <VoiceNoteRecorder
           notes={inspection.audioNotes ?? []}
           onRecorded={(note) => addAudioNote(inspection.id, note)}
-          onRemove={(id) => removeAudioNote(inspection.id, id)}
+          onRemove={(noteId) => removeAudioNote(inspection.id, noteId)}
+          onTranscribe={async (noteId) => {
+            if (!isGeminiConfigured) {
+              toast({
+                tone: 'warn',
+                title: 'AI not connected',
+                body: 'Add EXPO_PUBLIC_GEMINI_API_KEY in .env.local to transcribe.',
+              });
+              return;
+            }
+            const note = (inspection.audioNotes ?? []).find((n) => n.id === noteId);
+            if (!note) return;
+            try {
+              const text = await transcribeAudio(note.uri);
+              setAudioNoteLabel(inspection.id, noteId, text || 'Transcription unavailable');
+              toast({ tone: 'success', title: 'Note transcribed' });
+            } catch (e) {
+              toast({
+                tone: 'danger',
+                title: 'Transcription failed',
+                body: e instanceof Error ? e.message.slice(0, 80) : undefined,
+              });
+            }
+          }}
         />
 
         <View style={styles.card}>

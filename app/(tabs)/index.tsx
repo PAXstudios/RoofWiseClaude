@@ -1,8 +1,11 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Image } from 'react-native';
+import { ScrollView, View, Text, Pressable, StyleSheet, Image, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuthStore } from '@/lib/auth/authStore';
+import { syncLeads } from '@/lib/services/leadSync';
+import { syncCorrections } from '@/lib/services/correctionsSync';
+import { checkStormWatch } from '@/lib/services/stormWatch';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
@@ -65,6 +68,17 @@ export default function HomeScreen() {
     [leads],
   );
 
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      syncLeads().catch(() => {}),
+      syncCorrections().catch(() => {}),
+      checkStormWatch().catch(() => {}),
+    ]);
+    setRefreshing(false);
+  };
+
   const firstName = useMemo(() => {
     if (inspectorName?.trim()) {
       return inspectorName.trim().split(/\s+/)[0];
@@ -93,6 +107,13 @@ export default function HomeScreen() {
       style={{ flex: 1, backgroundColor: colors.bg }}
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.orange}
+        />
+      }
     >
       {/* Welcome header */}
       <View style={styles.headerRow}>
