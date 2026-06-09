@@ -31,6 +31,7 @@ import {
   type RoofMaterial,
   ROOF_MATERIAL_LABELS,
 } from '@/lib/models/types';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
 
 type Step = 0 | 1 | 2 | 3;
 
@@ -70,6 +71,7 @@ const STEP_TITLES = ['Customer & Property', 'Insurance', 'Roof System', 'Review'
 
 export default function NewJobWizard() {
   const router = useRouter();
+  const createInspection = useInspectionStore((s) => s.create);
   const [step, setStep] = useState<Step>(0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
 
@@ -88,7 +90,7 @@ export default function NewJobWizard() {
     switch (step) {
       case 0: return draft.customerName.trim().length > 0 && draft.address.trim().length > 0;
       case 1: return true;
-      case 2: return draft.material !== null && draft.geometry !== null;
+      case 2: return draft.material !== null && draft.geometry !== null && draft.condition !== null;
       case 3: return true;
     }
   })();
@@ -99,12 +101,24 @@ export default function NewJobWizard() {
   };
 
   const save = () => {
-    // TODO: hand off to InspectionStore once persistence is wired.
-    Alert.alert(
-      'Saved',
-      'Job saved locally. Persistence to Supabase comes online in the next phase.',
-      [{ text: 'OK', onPress: () => router.replace('/(tabs)') }],
-    );
+    if (!draft.material || !draft.geometry || !draft.condition) return;
+    const ins = createInspection({
+      customerName: draft.customerName.trim(),
+      customerPhone: draft.customerPhone.trim() || undefined,
+      customerEmail: draft.customerEmail.trim() || undefined,
+      address: draft.address.trim(),
+      carrier: draft.carrier ?? undefined,
+      policyNumber: draft.policyNumber.trim() || undefined,
+      claimNumber: draft.claimNumber.trim() || undefined,
+      adjusterName: draft.adjusterName.trim() || undefined,
+      material: draft.material,
+      ageYears: draft.ageYears,
+      geometry: draft.geometry,
+      condition: draft.condition,
+    });
+    Alert.alert('Job created', `Report ${ins.reportId} saved locally.`, [
+      { text: 'Done', onPress: () => router.replace('/(tabs)') },
+    ]);
   };
 
   return (

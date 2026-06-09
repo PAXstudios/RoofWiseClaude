@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
 import { useAuthStore } from '@/lib/auth/authStore';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
 import {
   colors,
   fontSize,
@@ -16,12 +18,23 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const inspections = useInspectionStore((s) => s.inspections);
 
   const firstName = useMemo(() => {
     const email = user?.email ?? '';
     if (!email) return 'there';
     return email.split('@')[0].split(/[._-]/)[0].replace(/^\w/, (c) => c.toUpperCase());
   }, [user]);
+
+  const pipelineCounts = useMemo(() => {
+    return {
+      New: inspections.filter((i) => i.status === 'lead').length,
+      Contacted: 0,
+      Inspection: inspections.filter((i) => i.status === 'in_progress').length,
+      Proposal: 0,
+      Signed: inspections.filter((i) => i.status === 'complete').length,
+    };
+  }, [inspections]);
 
   const hour = new Date().getHours();
   const greeting =
@@ -75,23 +88,53 @@ export default function HomeScreen() {
       {/* KPI tiles */}
       <View style={styles.kpiRow}>
         <Kpi label="Revenue" value="$0" />
-        <Kpi label="Leads" value="0" />
+        <Kpi label="Open" value={String(inspections.length)} />
         <Kpi label="Pipeline" value="$0" />
       </View>
 
       {/* Recent Jobs */}
       <SectionHeader title="Recent Jobs" />
-      <EmptyCard
-        icon="hammer-outline"
-        message="No jobs yet. Tap New Job above to create your first."
-      />
+      {inspections.length === 0 ? (
+        <EmptyCard
+          icon="hammer-outline"
+          message="No jobs yet. Tap New Job above to create your first."
+        />
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.recentRow}
+        >
+          {inspections.slice(0, 8).map((ins) => (
+            <Pressable
+              key={ins.id}
+              style={styles.recentCard}
+              onPress={() => router.push(`/job/${ins.id}` as any)}
+            >
+              <View style={styles.recentTopRow}>
+                <Text style={styles.recentReport}>{ins.reportId}</Text>
+                <View style={styles.statusPill}>
+                  <Text style={styles.statusText}>{ins.status.replace('_', ' ')}</Text>
+                </View>
+              </View>
+              <Text style={styles.recentCustomer} numberOfLines={1}>
+                {ins.customerName}
+              </Text>
+              <Text style={styles.recentAddress} numberOfLines={2}>
+                {ins.address}
+              </Text>
+              <Text style={styles.recentMeta}>{ROOF_MATERIAL_LABELS[ins.material]} · {ins.ageYears}yr</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Pipeline mini-Kanban */}
       <SectionHeader title="Pipeline" />
       <View style={styles.pipelineRow}>
-        {(['New', 'Contacted', 'Inspection', 'Proposal', 'Signed'] as const).map((stage) => (
+        {(Object.entries(pipelineCounts) as [string, number][]).map(([stage, count]) => (
           <View key={stage} style={styles.pipelineCard}>
-            <Text style={styles.pipelineCount}>0</Text>
+            <Text style={styles.pipelineCount}>{count}</Text>
             <Text style={styles.pipelineLabel}>{stage}</Text>
           </View>
         ))}
@@ -234,4 +277,26 @@ const styles = StyleSheet.create({
     color: colors.orange,
   },
   pipelineLabel: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
+
+  recentRow: { gap: spacing.md, paddingRight: spacing.xl },
+  recentCard: {
+    width: 240,
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    ...shadows.card,
+  },
+  recentTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  recentReport: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.semibold },
+  statusPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accentSoft,
+  },
+  statusText: { fontSize: fontSize.caption, color: colors.orange, fontWeight: fontWeight.semibold, textTransform: 'capitalize' },
+  recentCustomer: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
+  recentAddress: { fontSize: fontSize.bodySm, color: colors.slate },
+  recentMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
 });

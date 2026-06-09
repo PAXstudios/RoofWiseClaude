@@ -1,6 +1,7 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/lib/auth/authStore';
+import { isGeminiConfigured } from '@/lib/env';
 import { colors, fontSize, fontWeight, radii, spacing, shadows } from '@/theme/tokens';
 
 export default function SettingsScreen() {
@@ -51,13 +52,39 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
+      <Text style={styles.sectionLabel}>Integrations</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Ionicons
+            name={isGeminiConfigured ? 'checkmark-circle' : 'alert-circle-outline'}
+            size={22}
+            color={isGeminiConfigured ? colors.success : colors.warn}
+          />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Gemini Vision (AI damage detection)</Text>
+            <Text style={styles.rowValue}>
+              {isGeminiConfigured
+                ? 'Connected'
+                : 'Add EXPO_PUBLIC_GEMINI_API_KEY to .env.local'}
+            </Text>
+          </View>
+        </View>
+        <View style={[styles.row, styles.rowBorder]}>
+          <Ionicons name="cloud-outline" size={22} color={colors.info} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Supabase</Text>
+            <Text style={styles.rowValue}>Connected (auth + storage)</Text>
+          </View>
+        </View>
+      </View>
+
       <Text style={styles.sectionLabel}>Coming soon</Text>
       <View style={styles.card}>
         {[
-          'Team & roles (Adjuster, Crew Lead, Owner)',
-          'CRM + accounting integrations (HubSpot, QuickBooks)',
+          'Service area (ZIPs / cities) — Phase 6A',
+          'Storm watch + push notifications — Phase 6B/C',
           'AI thresholds: minimum confidence, auto-approve cutoffs',
-          'Storm watch radius and notification channels',
+          'Team & roles (Adjuster, Crew Lead, Owner)',
         ].map((line) => (
           <Text key={line} style={styles.bullet}>
             • {line}
