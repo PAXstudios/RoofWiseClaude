@@ -5,6 +5,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useProposalStore } from '@/lib/stores/proposalStore';
 import { generateHaagReport } from '@/lib/services/haagPdf';
 import { thresholdFor } from '@/lib/services/haagThresholds';
 import {
@@ -37,6 +38,7 @@ export default function JobDetail() {
   const inspection = useInspectionStore((s) => s.inspections.find((i) => i.id === id));
   const remove = useInspectionStore((s) => s.remove);
   const logActivity = useActivityStore((s) => s.log);
+  const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const [generating, setGenerating] = useState(false);
 
   if (!inspection) {
@@ -162,6 +164,22 @@ export default function JobDetail() {
             );
           })
         )}
+
+        <Pressable
+          style={styles.proposalCard}
+          onPress={() => router.push(`/proposal/${inspection.id}` as any)}
+        >
+          <Ionicons name="document-attach-outline" size={22} color={colors.orange} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.proposalTitle}>
+              {proposal ? `Proposal · $${proposal.total.toLocaleString()}` : 'Generate proposal'}
+            </Text>
+            <Text style={styles.proposalSub}>
+              {proposal ? `${proposal.status} · ${proposal.lineItems.length} line items` : 'From Decision Engine + Solar squares + regional pricing'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+        </Pressable>
 
         <Pressable
           style={[styles.secondaryCta, generating && { opacity: 0.5 }]}
@@ -383,6 +401,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   secondaryCtaText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+
+  proposalCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    minHeight: touchTarget.preferred,
+    ...shadows.card,
+  },
+  proposalTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
+  proposalSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2, textTransform: 'capitalize' },
 
   editBadge: {
     position: 'absolute',
