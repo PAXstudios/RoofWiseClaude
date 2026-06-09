@@ -2,7 +2,10 @@ import { ScrollView, View, Text, Pressable, StyleSheet, Linking } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
+import { LEADS_SQL } from '@/lib/services/leadSync';
+import { useToastStore } from '@/lib/stores/toastStore';
 import {
   colors,
   fontSize,
@@ -32,6 +35,7 @@ const LINKS = [
 
 export default function AboutScreen() {
   const router = useRouter();
+  const toast = useToastStore((s) => s.show);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -79,6 +83,27 @@ export default function AboutScreen() {
               <Ionicons name="open-outline" size={16} color={colors.slate} />
             </Pressable>
           ))}
+        </View>
+
+        <Text style={styles.sectionLabel}>Cloud sync setup</Text>
+        <View style={styles.card}>
+          <Text style={styles.featureDesc}>
+            Run the following once in your Supabase SQL editor to provision the
+            leads table with row-level security. Copy → paste → Run.
+          </Text>
+          <View style={styles.sqlBox}>
+            <Text style={styles.sqlText} selectable>{LEADS_SQL}</Text>
+          </View>
+          <Pressable
+            style={styles.sqlBtn}
+            onPress={async () => {
+              await Clipboard.setStringAsync(LEADS_SQL);
+              toast({ tone: 'success', title: 'SQL copied' });
+            }}
+          >
+            <Ionicons name="copy-outline" size={18} color={colors.textInverse} />
+            <Text style={styles.sqlBtnText}>Copy SQL</Text>
+          </Pressable>
         </View>
 
         <Text style={styles.tag}>
@@ -145,4 +170,28 @@ const styles = StyleSheet.create({
   linkText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
 
   tag: { fontSize: fontSize.bodySm, color: colors.slate, textAlign: 'center', fontStyle: 'italic', marginTop: spacing.xl },
+
+  sqlBox: {
+    backgroundColor: colors.navy,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
+  sqlText: {
+    fontSize: 11,
+    color: colors.cream,
+    fontFamily: 'Courier',
+    lineHeight: 16,
+  },
+  sqlBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.standard,
+    borderRadius: radii.pill,
+    backgroundColor: colors.orange,
+    marginTop: spacing.md,
+  },
+  sqlBtnText: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
 });

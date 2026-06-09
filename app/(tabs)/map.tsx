@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Map, MapPin, regionForLatLon } from '@/components/map/Map';
+import { Map, MapPin, MapCircle, regionForLatLon } from '@/components/map/Map';
 import { fetchStormHistory, rangeYearsAgo, STATE_CENTERS, severityColor, magnitudeLabel, type StormEvent } from '@/lib/noaa';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import {
   colors,
   fontSize,
@@ -32,6 +33,7 @@ export default function MapScreen() {
   const leads = useLeadStore((s) => s.leads);
   const archive = useKnockSessionStore((s) => s.archive);
   const active = useKnockSessionStore((s) => s.activeSession);
+  const serviceAreas = useServiceAreaStore((s) => s.areas);
 
   const [filter, setFilter] = useState<Filter>('storms');
   const [events, setEvents] = useState<StormEvent[]>([]);
@@ -114,6 +116,18 @@ export default function MapScreen() {
 
       <View style={styles.mapWrap}>
         <Map initialRegion={initialRegion}>
+          {serviceAreas
+            .filter((a) => typeof a.centroidLat === 'number' && typeof a.centroidLng === 'number')
+            .map((a) => (
+              <MapCircle
+                key={a.id}
+                center={{ latitude: a.centroidLat!, longitude: a.centroidLng! }}
+                radius={8047}  // 5 mi in meters
+                strokeColor={colors.navy}
+                strokeWidth={2}
+                fillColor="rgba(12,24,60,0.08)"
+              />
+            ))}
           {filter === 'storms' &&
             events.map((e) => (
               <MapPin

@@ -326,6 +326,8 @@ export type Lead = {
   lastContactAt?: string;
   followUpAt?: string;
   createdAt: string;
+  updatedAt?: string;
+  syncStatus?: 'pending' | 'synced' | 'failed';
 };
 
 export type JobStatus = 'scheduled' | 'in_progress' | 'awaiting_adjuster' | 'done' | 'lost';

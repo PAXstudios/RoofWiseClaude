@@ -12,10 +12,13 @@ function newId(): string {
 type LeadStoreState = {
   leads: Lead[];
 
-  create: (input: Omit<Lead, 'id' | 'createdAt'>) => Lead;
+  create: (input: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'syncStatus'>) => Lead;
+  upsert: (lead: Lead) => Lead;
   setStage: (id: string, stage: LeadStage) => void;
+  markSynced: (ids: string[]) => void;
   remove: (id: string) => void;
   countByStage: () => Record<LeadStage, number>;
+  pending: () => Lead[];
 };
 
 export const useLeadStore = create<LeadStoreState>()(
@@ -24,18 +27,39 @@ export const useLeadStore = create<LeadStoreState>()(
       leads: [],
 
       create: (input) => {
+        const now = new Date().toISOString();
         const lead: Lead = {
           ...input,
           id: newId(),
-          createdAt: new Date().toISOString(),
+          createdAt: now,
+          updatedAt: now,
+          syncStatus: 'pending',
         };
         set((s) => ({ leads: [lead, ...s.leads] }));
         return lead;
       },
 
+      upsert: (lead) => {
+        set((s) => ({
+          leads: s.leads.some((l) => l.id === lead.id)
+            ? s.leads.map((l) => (l.id === lead.id ? lead : l))
+            : [lead, ...s.leads],
+        }));
+        return lead;
+      },
+
       setStage: (id, stage) =>
         set((s) => ({
-          leads: s.leads.map((l) => (l.id === id ? { ...l, stage } : l)),
+          leads: s.leads.map((l) =>
+            l.id === id
+              ? { ...l, stage, updatedAt: new Date().toISOString(), syncStatus: 'pending' }
+              : l,
+          ),
+        })),
+
+      markSynced: (ids) =>
+        set((s) => ({
+          leads: s.leads.map((l) => (ids.includes(l.id) ? { ...l, syncStatus: 'synced' } : l)),
         })),
 
       remove: (id) =>
@@ -46,6 +70,8 @@ export const useLeadStore = create<LeadStoreState>()(
         for (const l of get().leads) out[l.stage] = (out[l.stage] ?? 0) + 1;
         return out as Record<LeadStage, number>;
       },
+
+      pending: () => get().leads.filter((l) => l.syncStatus !== 'synced'),
     }),
     {
       name: 'roofwise.leads.v1',

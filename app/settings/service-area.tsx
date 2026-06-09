@@ -17,6 +17,7 @@ import { useToastStore } from '@/lib/stores/toastStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { requestPushPermission, scheduleWeeklyCalibrationPush } from '@/lib/services/pushNotifications';
 import { checkStormWatch } from '@/lib/services/stormWatch';
+import { geocodeText } from '@/lib/services/geocoding';
 import {
   colors,
   fontSize,
@@ -33,6 +34,7 @@ export default function ServiceAreaScreen() {
   const router = useRouter();
   const areas = useServiceAreaStore((s) => s.areas);
   const add = useServiceAreaStore((s) => s.add);
+  const setCentroid = useServiceAreaStore((s) => s.setCentroid);
   const remove = useServiceAreaStore((s) => s.remove);
   const toast = useToastStore((s) => s.show);
   const logActivity = useActivityStore((s) => s.log);
@@ -53,6 +55,13 @@ export default function ServiceAreaScreen() {
     const area = add({ label: text, kind: isZip ? 'zip' : 'city' });
     setDraft('');
     toast({ tone: 'success', title: 'Added to service area', body: area.label });
+
+    // Background geocode so the Map can render the area as a circle.
+    geocodeText(text)
+      .then((g) => {
+        if (g) setCentroid(area.id, g.lat, g.lng);
+      })
+      .catch(() => {});
 
     // First-add: ask for push permission + schedule the weekly calibration push.
     if (areas.length === 0) {

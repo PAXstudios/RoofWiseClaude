@@ -13,6 +13,7 @@ type ServiceAreaState = {
   areas: ServiceArea[];
 
   add: (input: { label: string; kind: 'zip' | 'city'; centroidLat?: number; centroidLng?: number }) => ServiceArea;
+  setCentroid: (id: string, lat: number, lng: number) => void;
   remove: (id: string) => void;
   clear: () => void;
 };
@@ -33,6 +34,13 @@ export const useServiceAreaStore = create<ServiceAreaState>()(
         set((s) => ({ areas: [...s.areas, area] }));
         return area;
       },
+
+      setCentroid: (id, lat, lng) =>
+        set((s) => ({
+          areas: s.areas.map((a) =>
+            a.id === id ? { ...a, centroidLat: lat, centroidLng: lng } : a,
+          ),
+        })),
 
       remove: (id) => set((s) => ({ areas: s.areas.filter((a) => a.id !== id) })),
       clear: () => set({ areas: [] }),

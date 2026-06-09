@@ -5,8 +5,10 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
 import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
+import { syncLeads } from '@/lib/services/leadSync';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { syncCorrections } from '@/lib/services/correctionsSync';
 import { isGeminiConfigured } from '@/lib/env';
@@ -21,6 +23,8 @@ export default function SettingsScreen() {
   const inspectorProfile = useInspectorProfileStore((s) => s.profile);
   const preFlightEnabled = useSafetyStore((s) => s.preFlightEnabled);
   const setPreFlightEnabled = useSafetyStore((s) => s.setPreFlightEnabled);
+  const pendingLeads = useLeadStore((s) => s.leads.filter((l) => l.syncStatus !== 'synced').length);
+  const [leadsSyncing, setLeadsSyncing] = useState(false);
   const pendingCorrections = useCorrectionsStore((s) => s.corrections.filter((c) => c.syncStatus === 'pending').length);
   const toast = useToastStore((s) => s.show);
   const [syncing, setSyncing] = useState(false);
@@ -213,7 +217,7 @@ export default function SettingsScreen() {
         >
           <Ionicons name="cloud-upload-outline" size={22} color={colors.accent} />
           <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Sync now</Text>
+            <Text style={styles.rowLabel}>Sync corrections</Text>
             <Text style={styles.rowValue}>
               {pendingCorrections === 0
                 ? 'Up to date'
@@ -221,6 +225,39 @@ export default function SettingsScreen() {
             </Text>
           </View>
           {syncing ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : (
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          )}
+        </Pressable>
+
+        <Pressable
+          style={[styles.row, styles.rowBorder, leadsSyncing && { opacity: 0.5 }]}
+          onPress={async () => {
+            setLeadsSyncing(true);
+            try {
+              const r = await syncLeads();
+              toast({
+                tone: r.error ? 'warn' : 'success',
+                title: r.error
+                  ? 'Cloud sync issue'
+                  : `${r.pushed} pushed · ${r.pulled} pulled`,
+                body: r.error,
+              });
+            } finally {
+              setLeadsSyncing(false);
+            }
+          }}
+          disabled={leadsSyncing}
+        >
+          <Ionicons name="people-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Sync leads to cloud</Text>
+            <Text style={styles.rowValue}>
+              {pendingLeads === 0 ? 'Up to date' : `${pendingLeads} pending`}
+            </Text>
+          </View>
+          {leadsSyncing ? (
             <ActivityIndicator color={colors.accent} />
           ) : (
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
