@@ -228,6 +228,15 @@ export default function ProposalView() {
                     <Text style={styles.secondaryBtnText}>Share</Text>
                   </Pressable>
                 </View>
+                <Pressable
+                  style={styles.previewBtn}
+                  onPress={() =>
+                    router.push({ pathname: '/p/[token]', params: { token: existing.token } } as any)
+                  }
+                >
+                  <Ionicons name="eye-outline" size={18} color={colors.navy} />
+                  <Text style={styles.secondaryBtnText}>Preview as homeowner</Text>
+                </Pressable>
               </>
             );
           })()}
@@ -384,6 +393,16 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radii.md,
     marginVertical: spacing.sm,
+  },
+  previewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.preferred,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
+    marginTop: spacing.sm,
   },
 
   footer: { padding: spacing.xl, borderTopWidth: 1, borderTopColor: colors.border },
