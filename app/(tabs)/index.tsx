@@ -7,6 +7,7 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { AICalibrationCard } from '@/components/AICalibrationCard';
+import { WeatherTile } from '@/components/WeatherTile';
 import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
 import {
   colors,
@@ -71,6 +72,8 @@ export default function HomeScreen() {
           <Ionicons name="person-circle-outline" size={32} color={colors.navy} />
         </Pressable>
       </View>
+
+      <WeatherTile />
 
       {/* Storm Alert hero — hides when no active alert (Drift #4). */}
       {activeAlert && (

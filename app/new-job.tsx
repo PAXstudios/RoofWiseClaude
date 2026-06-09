@@ -34,6 +34,8 @@ import {
 } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useToastStore } from '@/lib/stores/toastStore';
+import { findMatchingStorm } from '@/lib/services/stormMatch';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 type Step = 0 | 1 | 2 | 3;
@@ -81,7 +83,9 @@ const STEP_TITLES = ['Customer & Property', 'Insurance', 'Roof System', 'Review'
 export default function NewJobWizard() {
   const router = useRouter();
   const createInspection = useInspectionStore((s) => s.create);
+  const setEvent = useInspectionStore((s) => s.setEvent);
   const logActivity = useActivityStore((s) => s.log);
+  const toast = useToastStore((s) => s.show);
   const [step, setStep] = useState<Step>(0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
 
@@ -134,6 +138,27 @@ export default function NewJobWizard() {
       inspectionId: ins.id,
       message: `Created job ${ins.reportId} for ${ins.customerName}`,
     });
+
+    // Background storm-match — auto-fill Inspection.event when a qualifying
+    // NOAA storm exists within 5mi / ±30d of the property + creation date.
+    if (ins.lat !== undefined && ins.lng !== undefined) {
+      const state = ins.address.match(/,\s*([A-Z]{2})/)?.[1];
+      if (state) {
+        findMatchingStorm({ lat: ins.lat, lng: ins.lng, near: new Date(ins.createdAt), state })
+          .then((event) => {
+            if (event) {
+              setEvent(ins.id, event);
+              toast({
+                tone: 'success',
+                title: 'Storm event matched',
+                body: `NOAA ${event.kind}${event.hailSizeInches ? ` ${event.hailSizeInches.toFixed(2)}"` : ''}${event.windSpeedMph ? ` ${event.windSpeedMph}mph` : ''} · ${event.distanceMiles?.toFixed(1)}mi away`,
+              });
+            }
+          })
+          .catch(() => {});
+      }
+    }
+
     Alert.alert('Job created', `Report ${ins.reportId} saved locally.`, [
       { text: 'Done', onPress: () => router.replace('/(tabs)') },
     ]);
