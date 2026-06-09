@@ -205,7 +205,14 @@ export default function HomeScreen() {
       />
 
       {/* Activity */}
-      <SectionHeader title="Recent Activity" />
+      <Pressable onPress={() => router.push('/activity')} hitSlop={6}>
+        <View style={styles.activityHeaderRow}>
+          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          {recentActivity.length > 0 && (
+            <Text style={styles.viewAll}>View all</Text>
+          )}
+        </View>
+      </Pressable>
       {recentActivity.length === 0 ? (
         <EmptyCard
           icon="time-outline"
@@ -448,6 +455,14 @@ const styles = StyleSheet.create({
   recentCustomer: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
   recentAddress: { fontSize: fontSize.bodySm, color: colors.slate },
   recentMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
+
+  activityHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+  },
+  viewAll: { color: colors.orange, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   activityCard: {
     backgroundColor: colors.surface,

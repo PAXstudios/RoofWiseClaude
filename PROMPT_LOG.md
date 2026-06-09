@@ -337,3 +337,49 @@ Aligned to spec phases. Status is current state in *this* Expo repo, not the ror
 - Training Queue + SwipeReview + LocalLearningEngine (recursive learning loop).
 - Voice command service.
 - Offline sync queue.
+
+---
+
+### [2026-06-09] #05 — Wire Quick Inspection ↔ Job; HAAG PDF; Activity full screen; Pitch from Train
+
+**Prompt (continuation of #04 — keep building until done):**
+> [implicit] keep pushing the Tier 1 MVP further
+
+**Decisions:**
+- `inspectionStore.attachPhotos(jobId, captures)` creates or extends per-orientation Slope records, increments per-category counts so the Decision Engine reflects new findings immediately.
+- Quick Inspection now accepts `?jobId=` and, on successful analysis, writes the captures into the inspection and logs `analysis_ran`. Surfaces a green "Photos attached" banner.
+- Job Detail's Start Quick Inspection now passes `jobId`; the screen renders captured slopes with photo strips + detected damage findings.
+- HAAG PDF generator (`lib/services/haagPdf.ts`) builds a styled HTML report (cover + 8 sections) and runs it through `expo-print`. Job Detail exposes a "Generate HAAG report (PDF)" CTA that produces the file, shares it via the native share sheet, and logs `pdf_generated`.
+- New `/activity` full-screen view (with Clear button + empty state). Home "Recent Activity" header is now tappable and routes to it.
+- Train tab now has a "Field tools" group with the Pitch Gauge tool wired up.
+
+**Files touched (this entry):**
+- `lib/stores/inspectionStore.ts` — added `attachPhotos` + slope creation helpers.
+- `lib/services/haagPdf.ts` — created.
+- `app/quick-inspection.tsx` — `jobId` plumbing + attached banner.
+- `app/job/[id].tsx` — slope photo strips, generate-PDF CTA.
+- `app/activity.tsx` — created.
+- `app/(tabs)/index.tsx` — Activity header tap → `/activity`.
+- `app/(tabs)/train.tsx` — Field tools row with Pitch Gauge.
+
+**End-to-end verticals now working:**
+1. **Onboard:** Welcome → sign up → enter app.
+2. **Lead-to-claim:** New Job Wizard → Inspection persisted → Job Detail → Start Quick Inspection → photos analyzed by Gemini (when key set) → Decision Engine runs → HAAG PDF generated and shared.
+3. **Field tool:** Train → Pitch Gauge → live accelerometer + altitude readout.
+4. **Activity:** All key events logged and surfaced on Home + full-screen `/activity`.
+5. **Storm Alert hero:** Hides when nil; injects a demo alert in dev for preview.
+
+**Still owed (Tier 1):**
+- Photo quality pre-check before sending to Gemini.
+- Brittleness test field in NewJobWizard Step 3.
+- Storm event auto-fill on inspection save (NOAA + 5mi/±30d window).
+- Apple Sign In.
+
+**Still owed (Tier 2+):**
+- Proposals + send sheet + signature canvas.
+- Solar API + Cost Estimator.
+- Service Area + Storm Watch background + Push Notifications + Door Knocking Mode.
+- Training Queue + SwipeReview + LocalLearningEngine.
+- Mileage tracker.
+- Voice commands.
+- Offline sync queue.

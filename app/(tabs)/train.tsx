@@ -1,5 +1,6 @@
 import { ScrollView, View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import {
   colors,
   fontSize,
@@ -11,6 +12,7 @@ import {
 } from '@/theme/tokens';
 
 export default function TrainScreen() {
+  const router = useRouter();
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -48,7 +50,13 @@ export default function TrainScreen() {
         </View>
       </Section>
 
-      <Section title="AI Tools">
+      <Section title="Field tools">
+        <Row
+          icon="compass-outline"
+          label="Pitch gauge"
+          sub="Measure roof slope with the accelerometer"
+          onPress={() => router.push('/pitch-gauge')}
+        />
         <Row icon="bulb-outline" label="Damage explainer" sub="What each damage type looks like" />
         <Row icon="chatbubble-ellipses-outline" label="Role-play coach" sub="Practice objections (coming soon)" />
       </Section>
@@ -78,13 +86,15 @@ function Row({
   icon,
   label,
   sub,
+  onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   sub: string;
+  onPress?: () => void;
 }) {
   return (
-    <Pressable style={styles.row}>
+    <Pressable style={styles.row} onPress={onPress}>
       <Ionicons name={icon} size={22} color={colors.slate} />
       <View style={{ flex: 1 }}>
         <Text style={styles.rowLabel}>{label}</Text>
