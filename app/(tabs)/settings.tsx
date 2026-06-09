@@ -9,6 +9,8 @@ import { useLeadStore } from '@/lib/stores/leadStore';
 import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
 import { syncLeads } from '@/lib/services/leadSync';
+import { syncInspections } from '@/lib/services/inspectionSync';
+import { useInspectionSyncStore } from '@/lib/stores/inspectionSyncStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { syncCorrections } from '@/lib/services/correctionsSync';
 import { isGeminiConfigured } from '@/lib/env';
@@ -25,6 +27,10 @@ export default function SettingsScreen() {
   const setPreFlightEnabled = useSafetyStore((s) => s.setPreFlightEnabled);
   const pendingLeads = useLeadStore((s) => s.leads.filter((l) => l.syncStatus !== 'synced').length);
   const [leadsSyncing, setLeadsSyncing] = useState(false);
+  const pendingInspections = useInspectionSyncStore(
+    (s) => Object.keys(s.dirty).length + s.deleted.length,
+  );
+  const [inspectionsSyncing, setInspectionsSyncing] = useState(false);
   const pendingCorrections = useCorrectionsStore((s) => s.corrections.filter((c) => c.syncStatus === 'pending').length);
   const toast = useToastStore((s) => s.show);
   const [syncing, setSyncing] = useState(false);
@@ -258,6 +264,39 @@ export default function SettingsScreen() {
             </Text>
           </View>
           {leadsSyncing ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : (
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          )}
+        </Pressable>
+
+        <Pressable
+          style={[styles.row, styles.rowBorder, inspectionsSyncing && { opacity: 0.5 }]}
+          onPress={async () => {
+            setInspectionsSyncing(true);
+            try {
+              const r = await syncInspections();
+              toast({
+                tone: r.error ? 'warn' : 'success',
+                title: r.error
+                  ? 'Cloud sync issue'
+                  : `${r.pushed} pushed · ${r.pulled} pulled`,
+                body: r.error,
+              });
+            } finally {
+              setInspectionsSyncing(false);
+            }
+          }}
+          disabled={inspectionsSyncing}
+        >
+          <Ionicons name="briefcase-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Sync inspections to cloud</Text>
+            <Text style={styles.rowValue}>
+              {pendingInspections === 0 ? 'Up to date' : `${pendingInspections} pending`}
+            </Text>
+          </View>
+          {inspectionsSyncing ? (
             <ActivityIndicator color={colors.accent} />
           ) : (
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />

@@ -17,6 +17,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { useAnalysisQueueStore } from '@/lib/stores/analysisQueueStore';
+import { drainAnalysisQueue } from '@/lib/services/analysisQueue';
 import { analyzeSlope } from '@/lib/services/analyzeSlope';
 import { scorePhotos } from '@/lib/services/photoQuality';
 import { isGeminiConfigured } from '@/lib/env';
@@ -43,6 +45,7 @@ export default function AnalyzeView() {
   const replacePhoto = useInspectionStore((s) => s.replacePhoto);
   const logActivity = useActivityStore((s) => s.log);
   const toast = useToastStore((s) => s.show);
+  const enqueueAnalysis = useAnalysisQueueStore((s) => s.enqueue);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -270,6 +273,33 @@ export default function AnalyzeView() {
             )}
           </Pressable>
         </View>
+        <Pressable
+          style={[styles.queueBtn, (running || unanalyzed.length === 0) && { opacity: 0.4 }]}
+          disabled={running || unanalyzed.length === 0}
+          onPress={() => {
+            const job = enqueueAnalysis({
+              inspectionId: inspection.id,
+              slopeId: slope.id,
+              slopeLabel: slope.orientation,
+            });
+            if (!job) {
+              toast({ tone: 'info', title: 'Already queued' });
+              return;
+            }
+            toast({
+              tone: 'success',
+              title: 'Added to queue',
+              body: 'Runs automatically while the app is open — you\'ll get a notification.',
+            });
+            drainAnalysisQueue().catch(() => {});
+            router.back();
+          }}
+        >
+          <Ionicons name="time-outline" size={16} color={colors.slate} />
+          <Text style={styles.queueBtnText}>
+            Queue for auto-run instead
+          </Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -343,6 +373,14 @@ const styles = StyleSheet.create({
   footer: { padding: spacing.xl, gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   progressText: { color: colors.slate, fontSize: fontSize.bodySm, textAlign: 'center' },
   btnRow: { flexDirection: 'row', gap: spacing.md },
+  queueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: touchTarget.small,
+  },
+  queueBtnText: { color: colors.slate, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
   secondaryBtn: {
     flex: 1,
     height: touchTarget.preferred,

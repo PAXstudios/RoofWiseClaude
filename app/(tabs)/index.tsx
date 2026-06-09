@@ -15,6 +15,7 @@ import { useLeadStore } from '@/lib/stores/leadStore';
 import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { AICalibrationCard } from '@/components/AICalibrationCard';
 import { WeatherTile } from '@/components/WeatherTile';
+import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
 import {
   colors,
@@ -149,6 +150,7 @@ export default function HomeScreen() {
       </View>
 
       <WeatherTile />
+      <AnalysisQueueChip />
 
       {/* Storm Alert hero — hides when no active alert (Drift #4). */}
       {activeAlert && (

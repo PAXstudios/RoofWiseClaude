@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import {
   colors,
@@ -39,11 +40,17 @@ export default function NewLead() {
   const [address, setAddress] = useState('');
   const [lat, setLat] = useState<number | undefined>();
   const [lng, setLng] = useState<number | undefined>();
+  const [followUpDays, setFollowUpDays] = useState<number | null>(null);
 
   const canSave =
     customerName.trim().length > 0 && address.trim().length > 0;
 
   const onSave = () => {
+    const followUpAt =
+      followUpDays !== null
+        ? new Date(Date.now() + followUpDays * 24 * 60 * 60 * 1000).toISOString()
+        : undefined;
+
     const lead = createLead({
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim() || undefined,
@@ -53,13 +60,27 @@ export default function NewLead() {
       lng,
       stage: 'new',
       source: 'manual',
+      followUpAt,
     });
     logActivity({
       kind: 'lead_created',
       leadId: lead.id,
       message: `New lead — ${lead.customerName}`,
     });
-    toast({ tone: 'success', title: 'Lead saved' });
+    if (followUpAt) {
+      scheduleFollowUpReminder({
+        leadId: lead.id,
+        customerName: lead.customerName,
+        date: new Date(followUpAt),
+      }).catch(() => {});
+    }
+    toast({
+      tone: 'success',
+      title: 'Lead saved',
+      body: followUpAt
+        ? `Follow-up reminder set for ${new Date(followUpAt).toLocaleDateString()}`
+        : undefined,
+    });
     router.replace('/(tabs)/leads');
   };
 
@@ -125,6 +146,33 @@ export default function NewLead() {
               setLng(p.lng);
             }}
           />
+
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Follow up</Text>
+            <View style={styles.chipRow}>
+              {([
+                { label: 'None', days: null },
+                { label: 'Tomorrow', days: 1 },
+                { label: '3 days', days: 3 },
+                { label: '1 week', days: 7 },
+              ] as const).map((opt) => (
+                <Pressable
+                  key={opt.label}
+                  style={[styles.chip, followUpDays === opt.days && styles.chipActive]}
+                  onPress={() => setFollowUpDays(opt.days)}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      followUpDays === opt.days && styles.chipTextActive,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
         </ScrollView>
 
         <View style={styles.footer}>
@@ -169,6 +217,20 @@ const styles = StyleSheet.create({
 
   field: { gap: spacing.xs },
   fieldLabel: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.medium },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    minHeight: touchTarget.preferred,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  chipText: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
+  chipTextActive: { color: colors.textInverse },
   input: {
     minHeight: touchTarget.standard,
     backgroundColor: colors.surface,

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
 import {
   colors,
   fontSize,
@@ -22,6 +23,24 @@ export default function PlanScreen() {
   const inspections = useInspectionStore((s) => s.inspections);
   const archive = useKnockSessionStore((s) => s.archive);
   const active = useKnockSessionStore((s) => s.activeSession);
+  const leads = useLeadStore((s) => s.leads);
+
+  const followUpsDue = useMemo(() => {
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    return leads
+      .filter(
+        (l) =>
+          l.followUpAt &&
+          l.stage !== 'signed' &&
+          l.stage !== 'lost' &&
+          new Date(l.followUpAt).getTime() <= endOfDay.getTime(),
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.followUpAt!).getTime() - new Date(b.followUpAt!).getTime(),
+      );
+  }, [leads]);
 
   const todayInspections = useMemo(() => {
     const now = new Date();
@@ -108,6 +127,42 @@ export default function PlanScreen() {
             </Pressable>
           ))}
         </View>
+      )}
+
+      {followUpsDue.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>Follow-ups due</Text>
+          <View style={styles.card}>
+            {followUpsDue.map((lead, i) => {
+              const overdue =
+                new Date(lead.followUpAt!).getTime() <
+                new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+              return (
+                <Pressable
+                  key={lead.id}
+                  style={[styles.row, i > 0 && styles.rowBorder]}
+                  onPress={() => router.push('/(tabs)/leads')}
+                >
+                  <Ionicons
+                    name={overdue ? 'alert-circle' : 'call-outline'}
+                    size={20}
+                    color={overdue ? colors.danger : colors.orange}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{lead.customerName}</Text>
+                    <Text style={styles.rowSub}>{lead.address}</Text>
+                    <Text style={[styles.rowMeta, overdue && { color: colors.danger }]}>
+                      {overdue
+                        ? `Overdue — ${new Date(lead.followUpAt!).toLocaleDateString()}`
+                        : 'Due today'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
       )}
 
       <Text style={styles.sectionLabel}>Quick actions</Text>

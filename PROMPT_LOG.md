@@ -1117,3 +1117,86 @@ Google AI Studio).
 - Mileage auto-tracking via geofencing / Bluetooth car-connect.
 - Voice input on free-text fields (still needs a native module).
 - Cloud sync of inspections (photos make this much heavier than leads).
+
+---
+
+### [2026-06-09] #15 — Inspections cloud sync, persisted analysis queue, lead follow-up reminders
+
+**Prompt:** Yes keep going.
+
+**Note on session state:** the working container had reset to commit
+915348c while origin held four newer commits (#14's work). Recovered by
+fast-forwarding to `origin/claude/wonderful-franklin-HuSTl` — nothing
+was lost because every batch had been pushed.
+
+**Inspections cloud sync (the "photos make this heavier" item, scoped to
+metadata):**
+- `lib/stores/inspectionSyncStore.ts` — persisted dirty map
+  (id → dirtiedAt) + deleted list + lastSyncAt.
+- `lib/services/inspectionSync.ts` —
+  - `startInspectionWatcher()` subscribes to the inspection store once
+    and diffs object identity per change. Any inspection whose
+    reference changed is marked dirty; removals are marked deleted.
+    This avoids stamping updatedAt in all 16 store mutations. Pulled
+    remote changes apply behind a guard flag so they don't re-mark
+    themselves dirty.
+  - `syncInspections()` pushes deletes, upserts dirty rows (full
+    Inspection as a jsonb `payload` column), then pulls the latest 200
+    rows and merges — remote wins unless the record is locally dirty.
+    Also bumps `nextOrdinal` past the highest pulled report ID to
+    reduce RW-YYYY-#### collisions across devices.
+  - Photo/audio URIs inside the payload are device-local; they sync as
+    data, not binaries — documented v1 behavior.
+  - `INSPECTIONS_SQL` exported; About's Cloud-sync-setup block now
+    copies LEADS_SQL + INSPECTIONS_SQL together.
+- Settings AI-calibration section gains "Sync inspections to cloud"
+  with a pending count (dirty + deleted) and toast result.
+- Lifecycle rotation runs it every 5 minutes when signed in.
+
+**Persisted analysis queue (the honest Expo Go version of "run in
+background"):**
+- `lib/stores/analysisQueueStore.ts` — persisted jobs with
+  queued/running/done/failed status, per-slope dedup, attempts counter.
+  Jobs stuck in "running" from a killed app re-queue on rehydrate.
+- `lib/services/analysisQueue.ts` — `drainAnalysisQueue()` runs jobs
+  serially through `analyzeSlope(onlyNew)`, retries once with backoff,
+  fires a local notification on completion ("Analysis complete — S
+  slope · 4 photos") or terminal failure. Guarded against concurrent
+  drains; skips entirely when Gemini isn't configured.
+- AnalyzeView gains a subtle "Queue for auto-run instead" action under
+  the Analyze buttons — enqueues, kicks the drain, navigates back.
+- `components/AnalysisQueueChip.tsx` shows on Home while jobs are
+  pending (orange-edged card, live "Analyzing X slope now…" line, tap
+  to drain immediately).
+- Lifecycle hook drains the queue on every app-foreground, so queued
+  work survives restarts and resumes the moment the app is open.
+
+**Lead follow-up reminders:**
+- `pushNotifications.scheduleFollowUpReminder()` — one-shot local
+  notification at 9am on the follow-up day ("Follow up today — reach
+  back out to {name}"); fires in a minute if the date is already past.
+- New Lead modal gains follow-up chips (None / Tomorrow / 3 days /
+  1 week). Save stamps `Lead.followUpAt` + schedules the reminder; the
+  toast confirms the date.
+- Plan tab gains a "Follow-ups due" card — open leads with
+  followUpAt ≤ end-of-today, sorted oldest first, overdue rows flagged
+  red. Taps route to the Leads tab.
+
+**Files touched (this entry):**
+- `lib/stores/{inspectionSyncStore,analysisQueueStore}.ts` — created.
+- `lib/services/{inspectionSync,analysisQueue}.ts` — created.
+- `lib/services/lifecycleHooks.ts` — watcher start + inspections sync
+  + queue drain joined the rotation.
+- `lib/services/pushNotifications.ts` — scheduleFollowUpReminder.
+- `components/AnalysisQueueChip.tsx` — created.
+- `app/(tabs)/{settings,index,plan}.tsx` — sync row, queue chip,
+  follow-ups card.
+- `app/settings/about.tsx` — combined CLOUD_SQL.
+- `app/analyze.tsx` — queue action.
+- `app/new-lead.tsx` — follow-up chips + scheduling.
+
+**Still on the parking lot:**
+- True background execution (`expo-task-manager` — needs a dev build).
+- Mileage auto-tracking via geofencing / Bluetooth car-connect.
+- Voice input on free-text fields (native module).
+- Photo binary sync (Supabase Storage upload pipeline).

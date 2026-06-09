@@ -5,6 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import { LEADS_SQL } from '@/lib/services/leadSync';
+import { INSPECTIONS_SQL } from '@/lib/services/inspectionSync';
+
+const CLOUD_SQL = `${LEADS_SQL}\n${INSPECTIONS_SQL}`;
 import { useToastStore } from '@/lib/stores/toastStore';
 import {
   colors,
@@ -92,12 +95,12 @@ export default function AboutScreen() {
             leads table with row-level security. Copy → paste → Run.
           </Text>
           <View style={styles.sqlBox}>
-            <Text style={styles.sqlText} selectable>{LEADS_SQL}</Text>
+            <Text style={styles.sqlText} selectable>{CLOUD_SQL}</Text>
           </View>
           <Pressable
             style={styles.sqlBtn}
             onPress={async () => {
-              await Clipboard.setStringAsync(LEADS_SQL);
+              await Clipboard.setStringAsync(CLOUD_SQL);
               toast({ tone: 'success', title: 'SQL copied' });
             }}
           >

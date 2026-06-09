@@ -44,6 +44,29 @@ export async function sendLocalNotification(args: {
   });
 }
 
+/** Schedule a one-shot follow-up reminder for a lead (9am on the given day). */
+export async function scheduleFollowUpReminder(args: {
+  leadId: string;
+  customerName: string;
+  date: Date;
+}): Promise<string | null> {
+  const granted = await requestPushPermission();
+  if (!granted) return null;
+  const fireAt = new Date(args.date);
+  fireAt.setHours(9, 0, 0, 0);
+  if (fireAt.getTime() <= Date.now()) {
+    fireAt.setTime(Date.now() + 60 * 1000); // due now-ish → fire in a minute
+  }
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Follow up today',
+      body: `Reach back out to ${args.customerName}.`,
+      data: { kind: 'lead_follow_up', leadId: args.leadId },
+    },
+    trigger: { date: fireAt },
+  });
+}
+
 /** Schedule a weekly calibration push (every Monday 9am). */
 export async function scheduleWeeklyCalibrationPush(): Promise<void> {
   // Wipe any previously-scheduled calibration push so we don't stack them.
