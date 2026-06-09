@@ -25,6 +25,7 @@ import {
 import { type SlopeOrientation } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { CameraHUD } from '@/components/CameraHUD';
 
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
@@ -111,6 +112,7 @@ export default function QuickInspection() {
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
       <CameraView ref={camRef} style={StyleSheet.absoluteFill} facing="back" />
+      <CameraHUD selectedSlope={slope} />
       <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
         <View style={styles.topRow}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={styles.topBtn}>
