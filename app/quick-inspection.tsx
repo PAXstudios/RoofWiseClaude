@@ -25,6 +25,7 @@ import {
 import { type SlopeOrientation } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useSafetyStore } from '@/lib/stores/safetyStore';
 import { CameraHUD } from '@/components/CameraHUD';
 
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -49,6 +50,21 @@ export default function QuickInspection() {
       requestPermission();
     }
   }, [permission, requestPermission]);
+
+  // Pre-flight safety check (re-runs the checklist every 4h while enabled)
+  const preFlightEnabled = useSafetyStore((s) => s.preFlightEnabled);
+  const lastConfirmedAt = useSafetyStore((s) => s.lastConfirmedAt);
+  useEffect(() => {
+    if (!preFlightEnabled) return;
+    const fresh =
+      lastConfirmedAt &&
+      Date.now() - new Date(lastConfirmedAt).getTime() < 4 * 60 * 60 * 1000;
+    if (fresh) return;
+    router.replace({
+      pathname: '/safety-check',
+      params: jobId ? { jobId } : undefined,
+    });
+  }, [preFlightEnabled, lastConfirmedAt, router, jobId]);
 
   if (!permission) return <View style={styles.permRoot} />;
 

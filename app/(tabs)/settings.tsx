@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/auth/authStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
+import { useSafetyStore } from '@/lib/stores/safetyStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { syncCorrections } from '@/lib/services/correctionsSync';
 import { isGeminiConfigured } from '@/lib/env';
@@ -18,6 +19,8 @@ export default function SettingsScreen() {
   const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
   const correctionsCount = useCorrectionsStore((s) => s.corrections.length);
   const inspectorProfile = useInspectorProfileStore((s) => s.profile);
+  const preFlightEnabled = useSafetyStore((s) => s.preFlightEnabled);
+  const setPreFlightEnabled = useSafetyStore((s) => s.setPreFlightEnabled);
   const pendingCorrections = useCorrectionsStore((s) => s.corrections.filter((c) => c.syncStatus === 'pending').length);
   const toast = useToastStore((s) => s.show);
   const [syncing, setSyncing] = useState(false);
@@ -140,6 +143,26 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+      </View>
+
+      <Text style={styles.sectionLabel}>Safety</Text>
+      <View style={styles.card}>
+        <Pressable
+          style={styles.row}
+          onPress={() => setPreFlightEnabled(!preFlightEnabled)}
+        >
+          <Ionicons
+            name={preFlightEnabled ? 'shield-checkmark' : 'shield-outline'}
+            size={22}
+            color={preFlightEnabled ? colors.success : colors.slate}
+          />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Pre-inspection safety check</Text>
+            <Text style={styles.rowValue}>
+              {preFlightEnabled ? 'On — runs every 4 hours' : 'Off'}
+            </Text>
+          </View>
         </Pressable>
       </View>
 

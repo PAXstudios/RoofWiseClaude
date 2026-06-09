@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, Pressable, StyleSheet, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
@@ -238,27 +238,39 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.recentRow}
         >
-          {inspections.slice(0, 8).map((ins) => (
-            <Pressable
-              key={ins.id}
-              style={styles.recentCard}
-              onPress={() => router.push(`/job/${ins.id}` as any)}
-            >
-              <View style={styles.recentTopRow}>
-                <Text style={styles.recentReport}>{ins.reportId}</Text>
-                <View style={styles.statusPill}>
-                  <Text style={styles.statusText}>{ins.status.replace('_', ' ')}</Text>
+          {inspections.slice(0, 8).map((ins) => {
+            const firstPhoto = ins.slopes.flatMap((sl) => sl.photoPaths)[0];
+            return (
+              <Pressable
+                key={ins.id}
+                style={styles.recentCard}
+                onPress={() => router.push(`/job/${ins.id}` as any)}
+              >
+                {firstPhoto ? (
+                  <Image source={{ uri: firstPhoto }} style={styles.recentImage} />
+                ) : (
+                  <View style={styles.recentImagePlaceholder}>
+                    <Ionicons name="image-outline" size={28} color={colors.slate} />
+                  </View>
+                )}
+                <View style={styles.recentBody}>
+                  <View style={styles.recentTopRow}>
+                    <Text style={styles.recentReport}>{ins.reportId}</Text>
+                    <View style={styles.statusPill}>
+                      <Text style={styles.statusText}>{ins.status.replace('_', ' ')}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.recentCustomer} numberOfLines={1}>
+                    {ins.customerName}
+                  </Text>
+                  <Text style={styles.recentAddress} numberOfLines={1}>
+                    {ins.address}
+                  </Text>
+                  <Text style={styles.recentMeta}>{ROOF_MATERIAL_LABELS[ins.material]} · {ins.ageYears}yr</Text>
                 </View>
-              </View>
-              <Text style={styles.recentCustomer} numberOfLines={1}>
-                {ins.customerName}
-              </Text>
-              <Text style={styles.recentAddress} numberOfLines={2}>
-                {ins.address}
-              </Text>
-              <Text style={styles.recentMeta}>{ROOF_MATERIAL_LABELS[ins.material]} · {ins.ageYears}yr</Text>
-            </Pressable>
-          ))}
+              </Pressable>
+            );
+          })}
         </ScrollView>
       )}
 
@@ -566,13 +578,21 @@ const styles = StyleSheet.create({
 
   recentRow: { gap: spacing.md, paddingRight: spacing.xl },
   recentCard: {
-    width: 240,
+    width: 260,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    padding: spacing.lg,
-    gap: spacing.xs,
+    overflow: 'hidden',
     ...shadows.card,
   },
+  recentImage: { width: '100%', height: 110, backgroundColor: colors.surfaceMuted },
+  recentImagePlaceholder: {
+    width: '100%',
+    height: 110,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recentBody: { padding: spacing.lg, gap: spacing.xs },
   recentTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   recentReport: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.semibold },
   statusPill: {
