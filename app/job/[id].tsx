@@ -1,8 +1,11 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Alert, Image } from 'react-native';
+import { useState } from 'react';
+import { ScrollView, View, Text, Pressable, StyleSheet, Alert, Image, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useActivityStore } from '@/lib/stores/activityStore';
+import { generateHaagReport } from '@/lib/services/haagPdf';
 import {
   DAMAGE_CATEGORY_LABELS,
   INSURANCE_CARRIER_LABELS,
@@ -30,6 +33,8 @@ export default function JobDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const inspection = useInspectionStore((s) => s.inspections.find((i) => i.id === id));
   const remove = useInspectionStore((s) => s.remove);
+  const logActivity = useActivityStore((s) => s.log);
+  const [generating, setGenerating] = useState(false);
 
   if (!inspection) {
     return (
@@ -145,12 +150,31 @@ export default function JobDetail() {
           ))
         )}
 
-        <View style={styles.placeholderBox}>
-          <Ionicons name="document-text-outline" size={28} color={colors.slate} />
-          <Text style={styles.placeholderText}>
-            HAAG PDF report generation comes online in Phase 3.
+        <Pressable
+          style={[styles.secondaryCta, generating && { opacity: 0.5 }]}
+          disabled={generating}
+          onPress={async () => {
+            try {
+              setGenerating(true);
+              const { uri } = await generateHaagReport(inspection);
+              logActivity({
+                kind: 'pdf_generated',
+                inspectionId: inspection.id,
+                message: `Generated HAAG report for ${inspection.reportId}`,
+              });
+              await Share.share({ url: uri, message: `RoofWise HAAG report ${inspection.reportId}` });
+            } catch (e) {
+              Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
+            } finally {
+              setGenerating(false);
+            }
+          }}
+        >
+          <Ionicons name="document-text-outline" size={20} color={colors.navy} />
+          <Text style={styles.secondaryCtaText}>
+            {generating ? 'Generating…' : 'Generate HAAG report (PDF)'}
           </Text>
-        </View>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -258,6 +282,20 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   placeholderText: { color: colors.slate, fontSize: fontSize.bodySm, textAlign: 'center' },
+
+  secondaryCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.preferred,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.navy,
+    marginTop: spacing.sm,
+  },
+  secondaryCtaText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
   emptyTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },
