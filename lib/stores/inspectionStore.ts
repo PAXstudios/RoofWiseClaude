@@ -87,6 +87,8 @@ type InspectionStoreState = {
   setEvent: (id: string, event: Inspection['event']) => void;
   setInspectorSignature: (id: string, svg: string) => void;
   setCollateralItem: (id: string, key: string, value: boolean) => void;
+  addAudioNote: (id: string, note: { uri: string; durationSec: number; label?: string }) => void;
+  removeAudioNote: (id: string, noteId: string) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
   attachRawPhotos: (inspectionId: string, captures: RawCapture[]) => void;
@@ -186,6 +188,33 @@ export const useInspectionStore = create<InspectionStoreState>()(
           inspections: s.inspections.map((i) =>
             i.id === id
               ? { ...i, collateralChecklist: { ...i.collateralChecklist, [key]: value } }
+              : i,
+          ),
+        })),
+
+      addAudioNote: (id, note) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) => {
+            if (i.id !== id) return i;
+            const audioNotes = [
+              ...(i.audioNotes ?? []),
+              {
+                id: `aud_${Date.now()}_${counter++}`,
+                uri: note.uri,
+                durationSec: note.durationSec,
+                recordedAt: new Date().toISOString(),
+                label: note.label,
+              },
+            ];
+            return { ...i, audioNotes };
+          }),
+        })),
+
+      removeAudioNote: (id, noteId) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id
+              ? { ...i, audioNotes: (i.audioNotes ?? []).filter((n) => n.id !== noteId) }
               : i,
           ),
         })),

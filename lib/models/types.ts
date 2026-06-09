@@ -255,6 +255,17 @@ export type Inspection = {
   homeownerSignaturePng?: string;
   homeownerSignatureSvg?: string;
   signedAt?: string;
+
+  // Voice notes
+  audioNotes?: AudioNote[];
+};
+
+export type AudioNote = {
+  id: string;
+  uri: string;
+  durationSec: number;
+  recordedAt: string;
+  label?: string;
 };
 
 // -----------------------------------------------------------------------------

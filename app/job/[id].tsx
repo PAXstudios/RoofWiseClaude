@@ -8,6 +8,7 @@ import { useActivityStore } from '@/lib/stores/activityStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
 import { generateHaagReport } from '@/lib/services/haagPdf';
 import { SignaturePad } from '@/components/SignaturePad';
+import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { thresholdFor } from '@/lib/services/haagThresholds';
 import {
   CLAIM_WORTHINESS_LABELS,
@@ -50,6 +51,8 @@ export default function JobDetail() {
   const setStatus = useInspectionStore((s) => s.setStatus);
   const setInspectorSignature = useInspectionStore((s) => s.setInspectorSignature);
   const setCollateralItem = useInspectionStore((s) => s.setCollateralItem);
+  const addAudioNote = useInspectionStore((s) => s.addAudioNote);
+  const removeAudioNote = useInspectionStore((s) => s.removeAudioNote);
   const logActivity = useActivityStore((s) => s.log);
   const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const [generating, setGenerating] = useState(false);
@@ -287,6 +290,12 @@ export default function JobDetail() {
             );
           })}
         </View>
+
+        <VoiceNoteRecorder
+          notes={inspection.audioNotes ?? []}
+          onRecorded={(note) => addAudioNote(inspection.id, note)}
+          onRemove={(id) => removeAudioNote(inspection.id, id)}
+        />
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Inspector signature</Text>

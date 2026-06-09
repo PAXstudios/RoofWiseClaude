@@ -183,7 +183,14 @@ export default function HomeScreen() {
       <AICalibrationCard />
 
       {/* Recent Jobs */}
-      <SectionHeader title="Recent Jobs" />
+      <Pressable onPress={() => router.push('/inspections')} hitSlop={6}>
+        <View style={styles.activityHeaderRow}>
+          <Text style={styles.sectionTitle}>Recent Jobs</Text>
+          {inspections.length > 0 && (
+            <Text style={styles.viewAll}>View all</Text>
+          )}
+        </View>
+      </Pressable>
       {inspections.length === 0 ? (
         <EmptyCard
           icon="hammer-outline"
