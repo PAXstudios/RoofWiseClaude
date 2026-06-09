@@ -74,7 +74,12 @@ export default function HomeScreen() {
 
       {/* Storm Alert hero — hides when no active alert (Drift #4). */}
       {activeAlert && (
-        <View style={styles.stormHero}>
+        <Pressable
+          onPress={() =>
+            router.push({ pathname: '/storm-alert/[id]', params: { id: activeAlert.id } } as any)
+          }
+          style={styles.stormHero}
+        >
           <View style={styles.stormHeroChipRow}>
             <View style={styles.stormHeroChip}>
               <Ionicons name="thunderstorm" size={14} color={colors.textInverse} />
@@ -95,14 +100,11 @@ export default function HomeScreen() {
             {activeAlert.hailSizeInches ? ` · ${activeAlert.hailSizeInches}" hail` : ''}
             {activeAlert.windSpeedMph ? ` · ${activeAlert.windSpeedMph} mph` : ''}
           </Text>
-          <Pressable
-            style={styles.stormHeroCta}
-            onPress={() => router.push('/(tabs)/map')}
-          >
+          <View style={styles.stormHeroCta}>
             <Text style={styles.stormHeroCtaText}>View impacted properties</Text>
             <Ionicons name="arrow-forward" size={20} color={colors.navy} />
-          </Pressable>
-        </View>
+          </View>
+        </Pressable>
       )}
 
       {!activeAlert && __DEV__ && (

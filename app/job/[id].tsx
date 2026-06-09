@@ -37,6 +37,7 @@ export default function JobDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const inspection = useInspectionStore((s) => s.inspections.find((i) => i.id === id));
   const remove = useInspectionStore((s) => s.remove);
+  const setStatus = useInspectionStore((s) => s.setStatus);
   const logActivity = useActivityStore((s) => s.log);
   const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const [generating, setGenerating] = useState(false);
@@ -85,6 +86,50 @@ export default function JobDetail() {
           <Text style={styles.reportId}>{inspection.reportId}</Text>
           <Text style={styles.customer}>{inspection.customerName}</Text>
         </View>
+        <Pressable
+          onPress={() => {
+            const next =
+              inspection.status === 'complete'
+                ? 'in_progress'
+                : inspection.status === 'in_progress'
+                ? 'complete'
+                : 'in_progress';
+            setStatus(inspection.id, next);
+            logActivity({
+              kind: next === 'complete' ? 'inspection_completed' : 'job_created',
+              inspectionId: inspection.id,
+              message:
+                next === 'complete'
+                  ? `Marked ${inspection.reportId} complete`
+                  : `Reopened ${inspection.reportId}`,
+            });
+          }}
+          hitSlop={10}
+          style={[
+            styles.statusToggle,
+            inspection.status === 'complete' && styles.statusToggleComplete,
+          ]}
+        >
+          <Ionicons
+            name={
+              inspection.status === 'complete'
+                ? 'checkmark-circle'
+                : 'ellipse-outline'
+            }
+            size={18}
+            color={
+              inspection.status === 'complete' ? colors.textInverse : colors.navy
+            }
+          />
+          <Text
+            style={[
+              styles.statusToggleText,
+              inspection.status === 'complete' && { color: colors.textInverse },
+            ]}
+          >
+            {inspection.status === 'complete' ? 'Complete' : 'Mark complete'}
+          </Text>
+        </Pressable>
         <Pressable onPress={onDelete} hitSlop={10} style={styles.headerBtn}>
           <Ionicons name="trash-outline" size={22} color={colors.danger} />
         </Pressable>
@@ -342,6 +387,17 @@ const styles = StyleSheet.create({
   headerBtn: { padding: spacing.xs },
   reportId: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.semibold },
   customer: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.navy },
+  statusToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
+  },
+  statusToggleComplete: { backgroundColor: colors.success },
+  statusToggleText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.navy },
 
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.md },
   card: {
