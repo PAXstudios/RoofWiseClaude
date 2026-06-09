@@ -156,6 +156,24 @@ export default function SettingsScreen() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </Pressable>
+
+        <Pressable style={[styles.row, styles.rowBorder]} onPress={() => router.push('/settings/backup')}>
+          <Ionicons name="archive-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Backup & Restore</Text>
+            <Text style={styles.rowValue}>Export everything as JSON, restore on a new device</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+
+        <Pressable style={[styles.row, styles.rowBorder]} onPress={() => router.push('/settings/about')}>
+          <Ionicons name="information-circle-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>About RoofWise</Text>
+            <Text style={styles.rowValue}>Features, references, version</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
       </View>
 
       <Text style={styles.sectionLabel}>Safety</Text>
