@@ -686,3 +686,54 @@ at `gemini-2.5-flash`, Corrections endpoint, and feature flags.
   existing EditDetectionView, which is fine but generic).
 - Surface "lead converted from knock" badge on the Leads list when the
   source is `door_knock`.
+
+---
+
+### [2026-06-09] #09 — Signatures, weather, storm auto-match, storm-alert sheet, status toggle
+
+**Prompt (continuation of #08):**
+> Okay. Seems like you've stopped?
+
+**Decisions:**
+- SignaturePad component (react-native-svg + PanResponder, no extra
+  dependency) emits a serializable SVG path string. Used on both the
+  Proposal (homeowner) and Job Detail (inspector) screens.
+- Captured signatures embed as inline `<svg><path/></svg>` inside the
+  Haag report PDF and the Proposal PDF.
+- Home gains a WeatherTile that pulls current conditions for the
+  user's location via Google Weather API; silently hides when the key
+  or location is missing.
+- New Job Wizard fires `findMatchingStorm` after save: looks for a
+  qualifying NOAA storm (≥0.75" hail or ≥58 mph wind) within 5 mi and
+  ±30 days, stamps `Inspection.event`, and pushes a "Storm event
+  matched" toast. Closes the loop for the HAAG report's weather
+  section.
+- Storm Alert hero card is now tappable; routes to
+  `/storm-alert/[id]` — a full sheet with kind chip, area, fired-at,
+  hail/wind stats, list of saved properties in-range, Open Map +
+  Start knocking route CTAs.
+- Job Detail header gains a Mark complete / Complete toggle; flips
+  Inspection.status and logs an ActivityEvent.
+
+**Files touched (this entry):**
+- `lib/services/{weather,stormMatch}.ts` — created.
+- `lib/services/haagPdf.ts`, `lib/services/proposalPdf.ts` — inline
+  signature SVGs.
+- `lib/models/types.ts` — `inspectorSignatureSvg`, `homeownerSignatureSvg`.
+- `lib/stores/inspectionStore.ts` — `setEvent`, `setInspectorSignature`.
+- `components/{SignaturePad,WeatherTile}.tsx` — created.
+- `app/(tabs)/index.tsx` — WeatherTile + tappable storm hero.
+- `app/storm-alert/[id].tsx` — created.
+- `app/new-job.tsx` — storm auto-match on save.
+- `app/job/[id].tsx` — status toggle + inspector signature card.
+- `app/proposal/[jobId].tsx` — homeowner signature card.
+
+**Still parked (deliberate v1 simplifications):**
+- Editor pinch-zoom + marker drag (Reanimated worklets refactor).
+- Voice input on free-text fields (requires native module beyond Expo Go).
+- Apple Sign In (needs Supabase provider config + provisioning).
+- Background analyze queue via `expo-task-manager`.
+- CostEstimator → New Job "Convert" flow (would need an Estimate store).
+- Inspector signature on the camera flow during Quick Inspection (live
+  capture before each slope).
+- Mileage auto-tracking via geofencing / Bluetooth car-connect.

@@ -202,8 +202,18 @@ function renderHtml(ins: Inspection): string {
 
   <h2>8. Signatures</h2>
   <div class="sig-row">
-    <div class="sig-box">Inspector signature</div>
-    <div class="sig-box">Homeowner signature</div>
+    <div class="sig-box">
+      ${ins.inspectorSignatureSvg
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet"><path d="${esc(ins.inspectorSignatureSvg)}" stroke="#0C183C" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg><br/>`
+        : ''}
+      Inspector signature${ins.signedAt ? ` · ${new Date(ins.signedAt).toLocaleDateString()}` : ''}
+    </div>
+    <div class="sig-box">
+      ${ins.homeownerSignatureSvg
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet"><path d="${esc(ins.homeownerSignatureSvg)}" stroke="#0C183C" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg><br/>`
+        : ''}
+      Homeowner signature
+    </div>
   </div>
 
   <div class="footer">

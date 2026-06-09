@@ -85,6 +85,7 @@ type InspectionStoreState = {
   remove: (id: string) => void;
   setStatus: (id: string, status: InspectionStatus) => void;
   setEvent: (id: string, event: Inspection['event']) => void;
+  setInspectorSignature: (id: string, svg: string) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
   attachRawPhotos: (inspectionId: string, captures: RawCapture[]) => void;
@@ -168,6 +169,15 @@ export const useInspectionStore = create<InspectionStoreState>()(
       setEvent: (id, event) =>
         set((s) => ({
           inspections: s.inspections.map((i) => (i.id === id ? { ...i, event } : i)),
+        })),
+
+      setInspectorSignature: (id, svg) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id
+              ? { ...i, inspectorSignatureSvg: svg, signedAt: new Date().toISOString() }
+              : i,
+          ),
         })),
 
       getById: (id) => get().inspections.find((i) => i.id === id),

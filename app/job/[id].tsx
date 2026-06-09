@@ -7,6 +7,7 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
 import { generateHaagReport } from '@/lib/services/haagPdf';
+import { SignaturePad } from '@/components/SignaturePad';
 import { thresholdFor } from '@/lib/services/haagThresholds';
 import {
   CLAIM_WORTHINESS_LABELS,
@@ -38,6 +39,7 @@ export default function JobDetail() {
   const inspection = useInspectionStore((s) => s.inspections.find((i) => i.id === id));
   const remove = useInspectionStore((s) => s.remove);
   const setStatus = useInspectionStore((s) => s.setStatus);
+  const setInspectorSignature = useInspectionStore((s) => s.setInspectorSignature);
   const logActivity = useActivityStore((s) => s.log);
   const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const [generating, setGenerating] = useState(false);
@@ -225,6 +227,24 @@ export default function JobDetail() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.slate} />
         </Pressable>
+
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Inspector signature</Text>
+          <Text style={styles.cardSub}>Sign below to seal the HAAG report.</Text>
+          <View style={{ alignItems: 'center', marginTop: spacing.md }}>
+            <SignaturePad
+              onChange={(svg) => {
+                if (svg) setInspectorSignature(inspection.id, svg);
+              }}
+            />
+          </View>
+          {inspection.inspectorSignatureSvg && (
+            <View style={styles.signedBadge}>
+              <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+              <Text style={styles.signedBadgeText}>Signed</Text>
+            </View>
+          )}
+        </View>
 
         <Pressable
           style={[styles.secondaryCta, generating && { opacity: 0.5 }]}
@@ -470,6 +490,19 @@ const styles = StyleSheet.create({
   },
   proposalTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
   proposalSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2, textTransform: 'capitalize' },
+
+  signedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    marginTop: spacing.sm,
+  },
+  signedBadgeText: { color: colors.success, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
   editBadge: {
     position: 'absolute',

@@ -251,7 +251,9 @@ export type Inspection = {
 
   // Signatures
   inspectorSignaturePng?: string;  // base64 or file URI
+  inspectorSignatureSvg?: string;  // serialized SVG path
   homeownerSignaturePng?: string;
+  homeownerSignatureSvg?: string;
   signedAt?: string;
 };
 
