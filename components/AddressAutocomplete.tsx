@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   type PlacePrediction,
   PlacesNotConfiguredError,
 } from '@/lib/services/places';
+import { getBiasCoordinate } from '@/lib/services/locationBias';
 import { isGooglePlacesConfigured } from '@/lib/env';
 import {
   colors,
@@ -50,8 +51,30 @@ export function AddressAutocomplete({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const [autoBias, setAutoBias] = useState<{ lat: number; lng: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedRef = useRef<string | null>(null);
+
+  // Fire-and-forget: warm up a current-location bias on mount.
+  useEffect(() => {
+    let cancelled = false;
+    if (biasLat === undefined && biasLng === undefined) {
+      getBiasCoordinate().then((c) => {
+        if (!cancelled && c) setAutoBias(c);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [biasLat, biasLng]);
+
+  const effectiveBias = useMemo(
+    () => ({
+      lat: biasLat ?? autoBias?.lat,
+      lng: biasLng ?? autoBias?.lng,
+    }),
+    [biasLat, biasLng, autoBias],
+  );
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -67,7 +90,10 @@ export function AddressAutocomplete({
       setLoading(true);
       setError(null);
       try {
-        const out = await searchPlaces(value, { biasLat, biasLng });
+        const out = await searchPlaces(value, {
+          biasLat: effectiveBias.lat,
+          biasLng: effectiveBias.lng,
+        });
         setPredictions(out);
       } catch (e) {
         if (e instanceof PlacesNotConfiguredError) {
@@ -83,7 +109,7 @@ export function AddressAutocomplete({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [value, biasLat, biasLng]);
+  }, [value, effectiveBias.lat, effectiveBias.lng]);
 
   const showDropdown = focused && (predictions.length > 0 || loading || error);
 

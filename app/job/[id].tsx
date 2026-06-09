@@ -175,6 +175,33 @@ export default function JobDetail() {
           </View>
         )}
 
+        {inspection.event && (
+          <View style={[styles.card, styles.stormCard]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              <Ionicons name="thunderstorm" size={20} color={colors.orange} />
+              <Text style={styles.cardLabel}>Storm match</Text>
+            </View>
+            <Text style={styles.cardValue}>
+              {inspection.event.kind === 'hail'
+                ? `${inspection.event.hailSizeInches?.toFixed(2) ?? ''}" hail`
+                : `${inspection.event.windSpeedMph ?? ''} mph wind`}
+            </Text>
+            <Text style={styles.cardSub}>
+              {new Date(inspection.event.date).toLocaleDateString(undefined, {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+              {inspection.event.distanceMiles
+                ? ` · ${inspection.event.distanceMiles.toFixed(1)} mi away`
+                : ''}
+              {' · '}
+              {inspection.event.source}
+              {inspection.event.noaaEventId ? ` · ${inspection.event.noaaEventId}` : ''}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.statsRow}>
           <Stat label="Damage" value={score === 0 ? '—' : String(score)} />
           <Stat label="Slopes" value={String(inspection.slopes.length)} />
@@ -546,6 +573,8 @@ const styles = StyleSheet.create({
   },
   collateralLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy },
   collateralChecked: { textDecorationLine: 'line-through', color: colors.slate },
+
+  stormCard: { borderLeftWidth: 4, borderLeftColor: colors.orange },
 
   editBadge: {
     position: 'absolute',
