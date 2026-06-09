@@ -15,6 +15,7 @@ type LeadStoreState = {
   create: (input: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'syncStatus'>) => Lead;
   upsert: (lead: Lead) => Lead;
   setStage: (id: string, stage: LeadStage) => void;
+  setFollowUp: (id: string, followUpAt: string | undefined) => void;
   markSynced: (ids: string[]) => void;
   remove: (id: string) => void;
   countByStage: () => Record<LeadStage, number>;
@@ -53,6 +54,20 @@ export const useLeadStore = create<LeadStoreState>()(
           leads: s.leads.map((l) =>
             l.id === id
               ? { ...l, stage, updatedAt: new Date().toISOString(), syncStatus: 'pending' }
+              : l,
+          ),
+        })),
+
+      setFollowUp: (id, followUpAt) =>
+        set((s) => ({
+          leads: s.leads.map((l) =>
+            l.id === id
+              ? {
+                  ...l,
+                  followUpAt,
+                  updatedAt: new Date().toISOString(),
+                  syncStatus: 'pending',
+                }
               : l,
           ),
         })),

@@ -109,7 +109,11 @@ export default function LeadsScreen() {
           </View>
         ) : (
           filtered.map((lead) => (
-            <View key={lead.id} style={styles.leadCard}>
+            <Pressable
+              key={lead.id}
+              style={styles.leadCard}
+              onPress={() => router.push(`/lead/${lead.id}` as any)}
+            >
               <View style={styles.leadHeader}>
                 <Text style={styles.leadName}>{lead.customerName}</Text>
                 <View style={[styles.stagePill, stageTone(lead.stage)]}>
@@ -131,7 +135,7 @@ export default function LeadsScreen() {
                 <Ionicons name="arrow-forward" size={16} color={colors.textInverse} />
                 <Text style={styles.convertBtnText}>Convert to inspection</Text>
               </Pressable>
-            </View>
+            </Pressable>
           ))
         )}
       </ScrollView>

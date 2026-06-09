@@ -141,7 +141,7 @@ export default function PlanScreen() {
                 <Pressable
                   key={lead.id}
                   style={[styles.row, i > 0 && styles.rowBorder]}
-                  onPress={() => router.push('/(tabs)/leads')}
+                  onPress={() => router.push(`/lead/${lead.id}` as any)}
                 >
                   <Ionicons
                     name={overdue ? 'alert-circle' : 'call-outline'}

@@ -1242,3 +1242,27 @@ background"):**
 **Still parked:** true background execution (dev build), mileage
 auto-tracking, voice input on free text, signed URLs / private bucket
 hardening for photos.
+
+---
+
+### [2026-06-09] #17 — Lead detail screen with contact actions
+
+**Prompt:** (continuation)
+
+- `leadStore.setFollowUp(id, iso | undefined)` — stamps updatedAt +
+  pending so the change syncs.
+- `app/lead/[id].tsx`:
+  - Contact action row — Call / Text / Email / Directions. Call and
+    Text deep-link via tel:/sms: and auto-bump a `new` lead to
+    `contacted`. Directions opens Apple Maps / geo: with a Google Maps
+    web fallback. Buttons grey out when the lead has no phone/email.
+  - Full stage chip selector (all 7 stages; Lost renders red).
+  - Follow-up section: shows the scheduled date banner; Clear /
+    Tomorrow / 3 days / 1 week chips reschedule the local reminder.
+  - Convert to inspection (prefill pipe) + Delete with confirm.
+- Leads list cards now open the detail screen (convert button still
+  works inline); Plan's "Follow-ups due" rows route to the lead
+  instead of the list.
+
+**Files touched:** `lib/stores/leadStore.ts`, `app/lead/[id].tsx`
+(created), `app/(tabs)/{leads,plan}.tsx`.
