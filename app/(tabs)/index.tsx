@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/auth/authStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { AICalibrationCard } from '@/components/AICalibrationCard';
 import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
 import {
   colors,
@@ -148,6 +149,8 @@ export default function HomeScreen() {
         <Kpi label="Open" value={String(inspections.length)} />
         <Kpi label="Pipeline" value="$0" />
       </View>
+
+      <AICalibrationCard />
 
       {/* Recent Jobs */}
       <SectionHeader title="Recent Jobs" />

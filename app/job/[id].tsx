@@ -146,7 +146,7 @@ export default function JobDetail() {
           </View>
         ) : (
           inspection.slopes.map((slope) => (
-            <SlopeBlock key={slope.id} slope={slope} />
+            <SlopeBlock key={slope.id} inspectionId={inspection.id} slope={slope} />
           ))
         )}
 
@@ -180,7 +180,14 @@ export default function JobDetail() {
   );
 }
 
-function SlopeBlock({ slope }: { slope: Slope }) {
+function SlopeBlock({
+  inspectionId,
+  slope,
+}: {
+  inspectionId: string;
+  slope: Slope;
+}) {
+  const router = useRouter();
   const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
   return (
     <View style={styles.card}>
@@ -193,11 +200,24 @@ function SlopeBlock({ slope }: { slope: Slope }) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             {slope.photoPaths.map((uri, i) => (
-              <Image
+              <Pressable
                 key={i}
-                source={{ uri }}
-                style={{ width: 140, height: 100, borderRadius: radii.md }}
-              />
+                onPress={() =>
+                  router.push({
+                    pathname: '/edit-detection',
+                    params: { inspectionId, slopeId: slope.id, photoIndex: String(i) },
+                  })
+                }
+                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+              >
+                <Image
+                  source={{ uri }}
+                  style={{ width: 140, height: 100, borderRadius: radii.md }}
+                />
+                <View style={styles.editBadge}>
+                  <Ionicons name="create-outline" size={12} color={colors.textInverse} />
+                </View>
+              </Pressable>
             ))}
           </View>
         </ScrollView>
@@ -296,6 +316,18 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   secondaryCtaText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+
+  editBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(12,24,60,0.78)',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
   emptyTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },

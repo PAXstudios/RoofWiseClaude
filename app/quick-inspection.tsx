@@ -38,6 +38,9 @@ import {
 import { isGeminiConfigured } from '@/lib/env';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
+import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
+import { userStylePromptPrefix } from '@/lib/services/learning/localLearningEngine';
 
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
@@ -118,9 +121,15 @@ export default function QuickInspection() {
     setError(null);
     setPhase('analyzing');
     try {
+      const profile = computeProfile(useCorrectionsStore.getState().corrections);
+      const prefix = userStylePromptPrefix(profile);
       const out: AnalysisResult[] = [];
       for (const p of photos) {
-        const r = await analyzePhoto({ imageBase64: p.base64, slope: p.slope });
+        const r = await analyzePhoto({
+          imageBase64: p.base64,
+          slope: p.slope,
+          userStylePrefix: prefix || undefined,
+        });
         out.push(r);
       }
       setResults(out);

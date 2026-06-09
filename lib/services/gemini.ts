@@ -15,9 +15,9 @@ import {
 } from '../models/types';
 import { env, isGeminiConfigured } from '../env';
 
-const MODEL = 'gemini-2.5-flash';
-const ENDPOINT =
-  `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+function endpoint(model: string): string {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+}
 
 export class GeminiNotConfiguredError extends Error {
   constructor() {
@@ -133,7 +133,7 @@ export async function analyzePhoto(opts: AnalyzeOptions): Promise<AnalysisResult
     },
   };
 
-  const url = `${ENDPOINT}?key=${env.GEMINI_API_KEY}`;
+  const url = `${endpoint(env.GEMINI_MODEL)}?key=${env.GEMINI_API_KEY}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

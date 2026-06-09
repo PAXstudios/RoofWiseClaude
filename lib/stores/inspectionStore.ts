@@ -79,6 +79,11 @@ type InspectionStoreState = {
   setStatus: (id: string, status: InspectionStatus) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
+  setSlopeMarkers: (
+    inspectionId: string,
+    slopeId: string,
+    markers: DamageMarker[],
+  ) => void;
 };
 
 export const useInspectionStore = create<InspectionStoreState>()(
@@ -165,6 +170,33 @@ export const useInspectionStore = create<InspectionStoreState>()(
           }),
         }));
       },
+
+      setSlopeMarkers: (inspectionId, slopeId, markers) =>
+        set((s) => ({
+          inspections: s.inspections.map((ins) => {
+            if (ins.id !== inspectionId) return ins;
+            return {
+              ...ins,
+              slopes: ins.slopes.map((sl) =>
+                sl.id === slopeId
+                  ? {
+                      ...sl,
+                      damage: markers,
+                      hailCount: markers.filter((m) => m.category === 'hail_hits').length,
+                      bruisingCount: markers.filter((m) => m.category === 'bruising').length,
+                      windLiftCount: markers.filter((m) =>
+                        ['wind_creasing', 'lifted_shingles', 'wind_damage'].includes(m.category),
+                      ).length,
+                      missingCount: markers.filter((m) => m.category === 'missing_shingles').length,
+                      wearCount: markers.filter((m) =>
+                        ['granule_loss', 'cracking', 'splitting'].includes(m.category),
+                      ).length,
+                    }
+                  : sl,
+              ),
+            };
+          }),
+        })),
     }),
     {
       name: 'roofwise.inspections.v1',
