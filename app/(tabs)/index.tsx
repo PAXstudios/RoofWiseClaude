@@ -122,6 +122,24 @@ export default function HomeScreen() {
         </Pressable>
       )}
 
+      {/* Hail Tracer + Estimator CTAs */}
+      <View style={styles.utilityRow}>
+        <Pressable style={styles.utilityCta} onPress={() => router.push('/hail-tracer')}>
+          <Ionicons name="thunderstorm" size={22} color={colors.orange} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.utilityTitle}>Hail Tracer</Text>
+            <Text style={styles.utilitySub}>NOAA heat map</Text>
+          </View>
+        </Pressable>
+        <Pressable style={styles.utilityCta} onPress={() => router.push('/estimator')}>
+          <Ionicons name="calculator-outline" size={22} color={colors.orange} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.utilityTitle}>Estimator</Text>
+            <Text style={styles.utilitySub}>Solar API + cost</Text>
+          </View>
+        </Pressable>
+      </View>
+
       {/* Hero CTAs */}
       <View style={styles.heroRow}>
         <Pressable
@@ -436,6 +454,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   debugStormText: { color: colors.slate, fontSize: fontSize.caption, fontWeight: fontWeight.medium },
+
+  utilityRow: { flexDirection: 'row', gap: spacing.md },
+  utilityCta: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    minHeight: touchTarget.preferred,
+    ...shadows.card,
+  },
+  utilityTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  utilitySub: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2 },
 
   recentRow: { gap: spacing.md, paddingRight: spacing.xl },
   recentCard: {

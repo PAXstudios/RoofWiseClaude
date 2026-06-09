@@ -10,12 +10,14 @@ import MapView, {
   Polyline,
   Polygon,
   Circle,
+  Heatmap,
   PROVIDER_GOOGLE,
   type Region,
   type MapMarkerProps,
   type MapPolylineProps,
   type MapPolygonProps,
   type MapCircleProps,
+  type MapHeatmapProps,
 } from 'react-native-maps';
 import { colors, radii } from '@/theme/tokens';
 
@@ -98,6 +100,10 @@ export function MapPolygon(props: MapPolygonProps) {
 
 export function MapCircle(props: MapCircleProps) {
   return <Circle {...props} />;
+}
+
+export function MapHeatmap(props: MapHeatmapProps) {
+  return <Heatmap {...props} />;
 }
 
 export function regionForLatLon(
