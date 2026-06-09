@@ -874,3 +874,104 @@ surface nearby suggestions first.
 - Mileage auto-tracking via geofencing / Bluetooth.
 - Camera HUD overlays (compass arrow + bullseye level + slope hint).
 - Photo edit (crop / rotate) before analysis.
+
+---
+
+### [2026-06-09] #12 — Camera HUD, onboarding, real KPIs, estimates, notes, safety check, photo previews
+
+**Prompt:**
+> Keep going.
+
+Multiple batches of polish + spec-aligned features.
+
+**Hero camera polish:**
+- `components/CameraHUD.tsx` — heads-up overlay on Quick Inspection.
+  Bullseye level driven by current roll (success/cream/orange tone),
+  compass needle + heading chip with auto-detected slope orientation
+  and a "matches"/"expected X" hint vs the user's selected slope,
+  pitch readout in degrees and X/12 ratio, GPS elevation. Backed by
+  the existing `useDeviceMotion` + `useAltitudeFeet` hooks.
+
+**Onboarding:**
+- `lib/stores/onboardingStore.ts` + `app/onboarding.tsx` — 4-slide
+  swipeable intro (forensic inspection, Storm Watch, claim packets,
+  recursive learning). Sticky "Next/Get started" CTA. Skip button.
+  `app/index.tsx` redirects signed-in but not-yet-onboarded users to
+  `/onboarding` before the tabs.
+
+**Score visualization:**
+- `components/DamageScoreBar.tsx` — filled progress bar (0–100) with
+  green/cream/orange/red tone tiers + Severity pill (No damage /
+  Minor / Moderate / Severe). Replaces the single-cell damage stat
+  on Job Detail; stats row keeps Slopes + Photos + Claim.
+
+**Photo edit:**
+- `expo-image-manipulator` installed.
+- `inspectionStore.removePhoto` drops the photo + markers and
+  renumbers higher photoIndex markers down by one.
+- `inspectionStore.replacePhoto` swaps the URI for a slope's photo.
+- AnalyzeView long-press → action sheet: Rotate 90° (manipulator
+  JPEG re-save) or Delete photo.
+
+**Estimate persistence:**
+- `lib/stores/estimateStore.ts` — persisted Zustand store, capped at
+  100 entries.
+- Estimator result step adds a Save button next to Convert to job.
+- Home gains a "Saved estimates" horizontal carousel above the
+  activity section.
+
+**Per-inspection notes + inspector data on the HAAG PDF:**
+- `Inspection.notes` field. Job Detail multiline TextInput card
+  persists on every keystroke via `inspectionStore.setNotes`.
+- HAAG PDF cover meta-grid now shows the inspector profile when
+  filled (name + HAAG cert + cert number). New section 4b
+  "Inspector notes" renders the free-form notes.
+
+**Photo quality + real KPIs + personalized greeting:**
+- `lib/services/photoQuality.ts` — coarse heuristics (dimensions +
+  on-disk size). AnalyzeView calls it before run and shows a
+  confirm sheet listing flags (low resolution, unusual aspect
+  ratio, very small file).
+- Home KPI tiles read real data: Revenue YTD = signed-proposal
+  totals this year; Leads = open leads; Pipeline = sent + viewed
+  proposal totals. Shorthand formatter (1.2K / 1.2M).
+- Welcome header uses the inspector profile name first, falling back
+  to email-derived first name.
+
+**Recent Jobs photo previews + safety check:**
+- Recent Jobs cards lead with the inspection's first captured photo
+  (or a placeholder when none).
+- `lib/stores/safetyStore.ts` — persisted `preFlightEnabled` +
+  `lastConfirmedAt`.
+- `app/safety-check.tsx` — navy hero, 6 HAAG-spec items, sticky
+  "I'm safe to climb" CTA unlocks only when all pass. "Stop showing
+  this before camera" link flips the flag off.
+- Quick Inspection redirects to /safety-check on mount when the
+  flag is on and the last confirmation is older than 4h. jobId
+  passed through.
+- Settings: Safety section with the toggle row.
+
+**Files touched (this entry):**
+- `components/{CameraHUD,DamageScoreBar}.tsx` — created.
+- `lib/stores/{onboardingStore,estimateStore,safetyStore}.ts` — created.
+- `lib/services/photoQuality.ts` — created.
+- `app/{onboarding,safety-check}.tsx` — created.
+- `app/index.tsx` — onboarding redirect.
+- `app/quick-inspection.tsx` — HUD + safety pre-flight.
+- `app/analyze.tsx` — photo long-press + photo quality pre-check.
+- `app/estimator.tsx` — Save / Convert pair.
+- `app/(tabs)/index.tsx` — real KPIs, inspector greeting, saved
+  estimates carousel, photo-preview recent jobs cards.
+- `app/(tabs)/settings.tsx` — safety toggle row.
+- `app/job/[id].tsx` — Damage Score bar + notes field.
+- `lib/services/haagPdf.ts` — inspector profile + notes.
+- `lib/stores/inspectionStore.ts` — `setNotes`, `removePhoto`,
+  `replacePhoto`.
+- `lib/models/types.ts` — `SavedEstimate`, `Inspection.notes`.
+
+**Still on the parking lot:**
+- Background analyze queue via `expo-task-manager`.
+- Mileage auto-tracking via geofencing / Bluetooth car-connect.
+- Voice input on free-text fields (still needs a native module beyond
+  Expo Go).
+- Bulk inspection export (PDFs in a ZIP).
