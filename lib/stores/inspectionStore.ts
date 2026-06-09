@@ -86,6 +86,7 @@ type InspectionStoreState = {
   setStatus: (id: string, status: InspectionStatus) => void;
   setEvent: (id: string, event: Inspection['event']) => void;
   setInspectorSignature: (id: string, svg: string) => void;
+  setCollateralItem: (id: string, key: string, value: boolean) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
   attachRawPhotos: (inspectionId: string, captures: RawCapture[]) => void;
@@ -176,6 +177,15 @@ export const useInspectionStore = create<InspectionStoreState>()(
           inspections: s.inspections.map((i) =>
             i.id === id
               ? { ...i, inspectorSignatureSvg: svg, signedAt: new Date().toISOString() }
+              : i,
+          ),
+        })),
+
+      setCollateralItem: (id, key, value) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id
+              ? { ...i, collateralChecklist: { ...i.collateralChecklist, [key]: value } }
               : i,
           ),
         })),

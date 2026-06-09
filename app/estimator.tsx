@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import {
   colors,
   fontSize,
@@ -70,6 +71,7 @@ const SCOPE_CHOICES: { id: DamageScope; label: string; sub: string }[] = [
 
 export default function CostEstimatorScreen() {
   const router = useRouter();
+  const setPrefill = useWizardPrefillStore((s) => s.set);
   const [step, setStep] = useState<Step>(0);
   const [draft, setDraft] = useState<Draft>({
     address: '',
@@ -78,6 +80,17 @@ export default function CostEstimatorScreen() {
   });
   const [measuring, setMeasuring] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const convertToJob = () => {
+    setPrefill({
+      source: 'estimate',
+      address: draft.address,
+      addressLat: draft.lat,
+      addressLng: draft.lng,
+      material: draft.material,
+    });
+    router.replace('/new-job');
+  };
 
   const totalSquares = draft.measurement?.totalSquares ?? draft.manualSquares ?? 0;
   const estimate: CostEstimate | null =
@@ -297,6 +310,11 @@ export default function CostEstimatorScreen() {
                   </View>
                 ))}
               </View>
+
+              <Pressable style={styles.convertBtn} onPress={convertToJob}>
+                <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
+                <Text style={styles.convertBtnText}>Convert to job</Text>
+              </Pressable>
             </View>
           )}
         </ScrollView>
@@ -463,4 +481,15 @@ const styles = StyleSheet.create({
   },
   primaryBtnDisabled: { opacity: 0.5 },
   primaryBtnText: { color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
+
+  convertBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.preferred,
+    borderRadius: radii.pill,
+    backgroundColor: colors.navy,
+  },
+  convertBtnText: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
 });

@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import type { LeadStage } from '@/lib/models/types';
 import {
   colors,
@@ -27,7 +28,26 @@ const STAGES: Array<{ id: LeadStage | 'all'; label: string }> = [
 export default function LeadsScreen() {
   const router = useRouter();
   const leads = useLeadStore((s) => s.leads);
+  const setStageOnLead = useLeadStore((s) => s.setStage);
+  const setPrefill = useWizardPrefillStore((s) => s.set);
   const [stage, setStage] = useState<(typeof STAGES)[number]['id']>('all');
+
+  const convertToInspection = (leadId: string) => {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return;
+    setPrefill({
+      source: 'lead',
+      sourceId: lead.id,
+      customerName: lead.customerName,
+      customerPhone: lead.customerPhone,
+      customerEmail: lead.customerEmail,
+      address: lead.address,
+      addressLat: lead.lat,
+      addressLng: lead.lng,
+    });
+    setStageOnLead(lead.id, 'inspection_scheduled');
+    router.push('/new-job');
+  };
 
   const filtered = useMemo(
     () => (stage === 'all' ? leads : leads.filter((l) => l.stage === stage)),
@@ -104,6 +124,13 @@ export default function LeadsScreen() {
                   Source: {lead.source.replace(/_/g, ' ')}
                 </Text>
               )}
+              <Pressable
+                style={styles.convertBtn}
+                onPress={() => convertToInspection(lead.id)}
+              >
+                <Ionicons name="arrow-forward" size={16} color={colors.textInverse} />
+                <Text style={styles.convertBtnText}>Convert to inspection</Text>
+              </Pressable>
             </View>
           ))
         )}
@@ -179,6 +206,18 @@ const styles = StyleSheet.create({
   leadMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
   stagePill: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radii.pill },
   stagePillText: { fontSize: fontSize.caption, color: colors.navy, fontWeight: fontWeight.semibold, textTransform: 'capitalize' },
+
+  convertBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.standard,
+    borderRadius: radii.pill,
+    backgroundColor: colors.orange,
+    marginTop: spacing.md,
+  },
+  convertBtnText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
   empty: {
     backgroundColor: colors.surface,

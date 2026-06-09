@@ -33,6 +33,15 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
+const COLLATERAL_ITEMS = [
+  { key: 'brittleness_observed', label: 'Brittleness observed on test shingles' },
+  { key: 'mat_exposed', label: 'Mat exposure visible on damaged slopes' },
+  { key: 'multi_layer', label: 'Multi-layer roof system (2+ layers)' },
+  { key: 'metal_collateral', label: 'Collateral damage on metal (vents, flashing, AC)' },
+  { key: 'window_screens', label: 'Hail damage on window screens / siding' },
+  { key: 'gutters_dented', label: 'Dents in gutters or downspouts' },
+];
+
 export default function JobDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -40,6 +49,7 @@ export default function JobDetail() {
   const remove = useInspectionStore((s) => s.remove);
   const setStatus = useInspectionStore((s) => s.setStatus);
   const setInspectorSignature = useInspectionStore((s) => s.setInspectorSignature);
+  const setCollateralItem = useInspectionStore((s) => s.setCollateralItem);
   const logActivity = useActivityStore((s) => s.log);
   const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const [generating, setGenerating] = useState(false);
@@ -227,6 +237,29 @@ export default function JobDetail() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.slate} />
         </Pressable>
+
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Collateral checklist</Text>
+          {COLLATERAL_ITEMS.map((item) => {
+            const checked = !!inspection.collateralChecklist[item.key];
+            return (
+              <Pressable
+                key={item.key}
+                style={styles.collateralRow}
+                onPress={() => setCollateralItem(inspection.id, item.key, !checked)}
+              >
+                <Ionicons
+                  name={checked ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={checked ? colors.success : colors.slate}
+                />
+                <Text style={[styles.collateralLabel, checked && styles.collateralChecked]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Inspector signature</Text>
@@ -503,6 +536,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   signedBadgeText: { color: colors.success, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
+
+  collateralRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: touchTarget.small,
+  },
+  collateralLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy },
+  collateralChecked: { textDecorationLine: 'line-through', color: colors.slate },
 
   editBadge: {
     position: 'absolute',

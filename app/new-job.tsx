@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,7 @@ import {
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { findMatchingStorm } from '@/lib/services/stormMatch';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
@@ -86,8 +87,39 @@ export default function NewJobWizard() {
   const setEvent = useInspectionStore((s) => s.setEvent);
   const logActivity = useActivityStore((s) => s.log);
   const toast = useToastStore((s) => s.show);
+  const consumePrefill = useWizardPrefillStore((s) => s.consume);
   const [step, setStep] = useState<Step>(0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
+
+  // Hydrate from the prefill store (e.g. Lead → Convert flow). One-shot.
+  useEffect(() => {
+    const prefill = consumePrefill();
+    if (!prefill) return;
+    setDraft({
+      ...EMPTY,
+      customerName: prefill.customerName ?? '',
+      customerPhone: prefill.customerPhone ?? '',
+      customerEmail: prefill.customerEmail ?? '',
+      address: prefill.address ?? '',
+      addressLat: prefill.addressLat,
+      addressLng: prefill.addressLng,
+      carrier: prefill.carrier ?? null,
+      policyNumber: prefill.policyNumber ?? '',
+      claimNumber: prefill.claimNumber ?? '',
+      adjusterName: prefill.adjusterName ?? '',
+      material: prefill.material ?? null,
+      ageYears: prefill.ageYears ?? 0,
+      geometry: prefill.geometry ?? null,
+      condition: prefill.condition ?? null,
+    });
+    if (prefill.source) {
+      toast({
+        tone: 'info',
+        title: prefill.source === 'lead' ? 'Lead prefilled' : 'Estimate prefilled',
+        body: prefill.customerName ?? prefill.address,
+      });
+    }
+  }, [consumePrefill, toast]);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(EMPTY);
 
