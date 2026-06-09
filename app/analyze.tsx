@@ -13,8 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useToastStore } from '@/lib/stores/toastStore';
 import { analyzeSlope } from '@/lib/services/analyzeSlope';
 import { isGeminiConfigured } from '@/lib/env';
 import {
@@ -36,10 +38,47 @@ export default function AnalyzeView() {
   const inspection = useInspectionStore((s) =>
     s.inspections.find((i) => i.id === inspectionId),
   );
+  const removePhoto = useInspectionStore((s) => s.removePhoto);
+  const replacePhoto = useInspectionStore((s) => s.replacePhoto);
   const logActivity = useActivityStore((s) => s.log);
+  const toast = useToastStore((s) => s.show);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const onPhotoLongPress = (photoIndex: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert('Edit photo', undefined, [
+      {
+        text: 'Rotate 90°',
+        onPress: async () => {
+          if (!inspection || !slope) return;
+          try {
+            const uri = slope.photoPaths[photoIndex];
+            const out = await ImageManipulator.manipulateAsync(
+              uri,
+              [{ rotate: 90 }],
+              { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
+            );
+            replacePhoto(inspection.id, slope.id, photoIndex, out.uri);
+            toast({ tone: 'success', title: 'Rotated' });
+          } catch {
+            toast({ tone: 'danger', title: 'Rotate failed' });
+          }
+        },
+      },
+      {
+        text: 'Delete photo',
+        style: 'destructive',
+        onPress: () => {
+          if (!inspection || !slope) return;
+          removePhoto(inspection.id, slope.id, photoIndex);
+          toast({ tone: 'warn', title: 'Photo deleted' });
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   const slope = inspection?.slopes.find((sl) => sl.id === slopeId);
 
@@ -144,6 +183,7 @@ export default function AnalyzeView() {
         )}
 
         <Text style={styles.section}>Photos</Text>
+        <Text style={styles.hint}>Tap to edit detections · Long-press to rotate or delete.</Text>
         <View style={styles.grid}>
           {slope.photoPaths.map((uri, i) => {
             const analyzed = slope.damage.some((m) => m.photoIndex === i);
@@ -161,6 +201,7 @@ export default function AnalyzeView() {
                     },
                   })
                 }
+                onLongPress={() => onPhotoLongPress(i)}
               >
                 <Image source={{ uri }} style={styles.thumbImg} />
                 <View
@@ -264,6 +305,7 @@ const styles = StyleSheet.create({
     color: colors.navy,
     marginTop: spacing.md,
   },
+  hint: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: -spacing.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   thumb: { width: 100, height: 100, borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.surfaceMuted },
   thumbImg: { width: '100%', height: '100%' },

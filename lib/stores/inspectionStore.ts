@@ -89,6 +89,8 @@ type InspectionStoreState = {
   setCollateralItem: (id: string, key: string, value: boolean) => void;
   addAudioNote: (id: string, note: { uri: string; durationSec: number; label?: string }) => void;
   removeAudioNote: (id: string, noteId: string) => void;
+  removePhoto: (inspectionId: string, slopeId: string, photoIndex: number) => void;
+  replacePhoto: (inspectionId: string, slopeId: string, photoIndex: number, uri: string) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
   attachRawPhotos: (inspectionId: string, captures: RawCapture[]) => void;
@@ -217,6 +219,47 @@ export const useInspectionStore = create<InspectionStoreState>()(
               ? { ...i, audioNotes: (i.audioNotes ?? []).filter((n) => n.id !== noteId) }
               : i,
           ),
+        })),
+
+      removePhoto: (inspectionId, slopeId, photoIndex) =>
+        set((s) => ({
+          inspections: s.inspections.map((ins) => {
+            if (ins.id !== inspectionId) return ins;
+            return {
+              ...ins,
+              slopes: ins.slopes.map((sl) => {
+                if (sl.id !== slopeId) return sl;
+                // Drop the photo + its markers; renumber markers above it
+                const photoPaths = sl.photoPaths.filter((_, i) => i !== photoIndex);
+                const damage = sl.damage
+                  .filter((m) => m.photoIndex !== photoIndex)
+                  .map((m) => {
+                    if (typeof m.photoIndex !== 'number') return m;
+                    return m.photoIndex > photoIndex
+                      ? { ...m, photoIndex: m.photoIndex - 1 }
+                      : m;
+                  });
+                return withRecount({ ...sl, photoPaths, damage });
+              }),
+            };
+          }),
+        })),
+
+      replacePhoto: (inspectionId, slopeId, photoIndex, uri) =>
+        set((s) => ({
+          inspections: s.inspections.map((ins) => {
+            if (ins.id !== inspectionId) return ins;
+            return {
+              ...ins,
+              slopes: ins.slopes.map((sl) => {
+                if (sl.id !== slopeId) return sl;
+                const photoPaths = sl.photoPaths.map((u, i) =>
+                  i === photoIndex ? uri : u,
+                );
+                return { ...sl, photoPaths };
+              }),
+            };
+          }),
         })),
 
       getById: (id) => get().inspections.find((i) => i.id === id),

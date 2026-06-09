@@ -9,6 +9,7 @@ import { useProposalStore } from '@/lib/stores/proposalStore';
 import { generateHaagReport } from '@/lib/services/haagPdf';
 import { SignaturePad } from '@/components/SignaturePad';
 import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
+import { DamageScoreBar } from '@/components/DamageScoreBar';
 import { thresholdFor } from '@/lib/services/haagThresholds';
 import {
   CLAIM_WORTHINESS_LABELS,
@@ -205,9 +206,13 @@ export default function JobDetail() {
           </View>
         )}
 
+        <View style={styles.card}>
+          <DamageScoreBar score={score} />
+        </View>
+
         <View style={styles.statsRow}>
-          <Stat label="Damage" value={score === 0 ? '—' : String(score)} />
           <Stat label="Slopes" value={String(inspection.slopes.length)} />
+          <Stat label="Photos" value={String(inspection.slopes.reduce((a, sl) => a + sl.photoPaths.length, 0))} />
           <Stat label="Claim" value={CLAIM_WORTHINESS_LABELS[worthiness]} />
         </View>
 
