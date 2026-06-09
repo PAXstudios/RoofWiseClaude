@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/authStore';
+import { AppleSignInButton } from '@/components/AppleSignInButton';
 import { colors, radii, spacing, fontSize, fontWeight, shadows } from '@/theme/tokens';
 
 type Mode = 'sign-in' | 'sign-up' | 'reset';
@@ -91,6 +92,17 @@ export default function WelcomeScreen() {
                 {mode === 'sign-up' && 'Create your account'}
                 {mode === 'reset' && 'Reset password'}
               </Text>
+
+              {mode !== 'reset' && (
+                <>
+                  <AppleSignInButton />
+                  <View style={styles.divider}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>or</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
+                </>
+              )}
 
               {error ? (
                 <View style={styles.banner}>
@@ -290,4 +302,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { color: colors.textMuted, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
 });

@@ -12,6 +12,7 @@ type AuthState = {
   initialize: () => Promise<() => void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signInWithAppleIdToken: (idToken: string, nonce?: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
@@ -49,6 +50,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signUpWithEmail: async (email, password) => {
     set({ loading: true, error: null });
     const { error } = await supabase.auth.signUp({ email, password });
+    set({ loading: false, error: error?.message ?? null });
+    if (error) throw error;
+  },
+
+  signInWithAppleIdToken: async (idToken, nonce) => {
+    set({ loading: true, error: null });
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: idToken,
+      nonce,
+    });
     set({ loading: false, error: error?.message ?? null });
     if (error) throw error;
   },

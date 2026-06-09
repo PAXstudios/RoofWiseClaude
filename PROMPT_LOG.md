@@ -737,3 +737,58 @@ at `gemini-2.5-flash`, Corrections endpoint, and feature flags.
 - Inspector signature on the camera flow during Quick Inspection (live
   capture before each slope).
 - Mileage auto-tracking via geofencing / Bluetooth car-connect.
+
+---
+
+### [2026-06-09] #10 — Editor pinch-zoom + Apple Sign In
+
+**Prompt:**
+> Do both.
+> (Referring to editor pinch-zoom + Apple Sign In from the #09 status report.)
+
+**Decisions:**
+- **DamageMarkerLayer** refactored from `onTouchStart/End` to
+  `GestureDetector` with Reanimated worklets. Photo + marker layer share
+  a single Animated.View transform so markers stay anchored when the
+  user zooms.
+  - Composed gesture: `Race(doubleTap, Simultaneous(pinch, pan), tap)`.
+  - Single tap → reverses the current transform to compute world coords,
+    hit-tests markers, falls back to onTapPhoto with normalized (0–1)
+    photo coords.
+  - Pinch: `MIN_SCALE = 1`, `MAX_SCALE = 4`, clamps translate so the
+    photo can't slide off-screen.
+  - Pan: only active when zoomed > 1.01x.
+  - Double-tap toggles between 1x and 2x (focal point = tap location).
+  - Spring snaps back to 1x / 0,0 when zoom returns to ≤1.
+- **Apple Sign In** wired end-to-end:
+  - `expo-apple-authentication` installed; `usesAppleSignIn: true` on
+    `ios` config and the plugin registered in `app.config.js`.
+  - `authStore.signInWithAppleIdToken(idToken, nonce?)` calls
+    `supabase.auth.signInWithIdToken({ provider: 'apple', token })`.
+  - `components/AppleSignInButton.tsx` is iOS-only; hides on Android
+    and when `AppleAuthentication.isAvailableAsync()` returns false.
+    Cancels (`ERR_REQUEST_CANCELED`) are silent; other errors toast a
+    clear "Apple Sign In failed — confirm provider enabled in
+    Supabase" message.
+  - Welcome screen shows the button above an "or" divider for the
+    sign-in and sign-up modes.
+
+**Files touched (this entry):**
+- `package.json`, `package-lock.json` — `expo-apple-authentication`.
+- `app.config.js` — `usesAppleSignIn` + plugin registration.
+- `components/DamageMarkerLayer.tsx` — rewritten on Reanimated +
+  GestureDetector.
+- `components/AppleSignInButton.tsx` — created.
+- `lib/auth/authStore.ts` — `signInWithAppleIdToken`.
+- `app/welcome.tsx` — Apple button + "or" divider.
+
+**Manual configuration still required for Apple Sign In:**
+- Apple Developer account → register the app's bundle ID with the
+  Sign in with Apple capability.
+- Create a Services ID and Apple key (`.p8`) for Supabase.
+- Supabase dashboard → Auth → Providers → Apple → paste the Services
+  ID + Key ID + private key. Add the bundle ID to the allowed
+  client IDs.
+- Once those are set, the button works on a real iOS build. Expo Go
+  cannot exercise Apple Sign In (no entitlement) — use `expo run:ios`
+  or EAS for live testing.

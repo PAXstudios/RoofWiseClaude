@@ -30,6 +30,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.roofwise.app',
+      usesAppleSignIn: true,
       config: {
         googleMapsApiKey,
       },
@@ -69,6 +70,7 @@ module.exports = {
     },
     plugins: [
       'expo-router',
+      'expo-apple-authentication',
       [
         'expo-camera',
         {
