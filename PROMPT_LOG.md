@@ -975,3 +975,72 @@ Multiple batches of polish + spec-aligned features.
 - Voice input on free-text fields (still needs a native module beyond
   Expo Go).
 - Bulk inspection export (PDFs in a ZIP).
+
+---
+
+### [2026-06-09] #13 — Share links, Reports, Backup, About, Homeowner preview, Global search
+
+**Prompt:** Keep going. (#11 → #12 → #13 are one autonomous arc.)
+
+**Tokenized share links:**
+- `lib/stores/proposalLinkStore.ts` mints 8-char alphanumeric tokens
+  and builds `https://roofwise.app/p/<token>` URLs. `markViewed` flips
+  once on first open.
+- Proposal screen surfaces a Share-link card: Generate → mints; Copy
+  (`expo-clipboard`); Share (native sheet); Preview as homeowner.
+
+**Homeowner preview at `/p/[token]`:**
+- Read-only proposal view. Hero photo (first inspection photo) tears
+  up into a white card with total + scope + line items + terms +
+  inspector card + sign-here block. SignaturePad on accept → flips
+  status to `signed`. After signing, swaps to a green confirmation.
+- `markViewed` records first visit so the contractor can see the
+  homeowner opened it.
+
+**Reports (`/reports`):** YTD revenue (signed proposals) + open
+pipeline (sent/viewed) + avg deal, funnel (inspections / proposals
+sent / signed / conversion / open leads), mileage (miles / IRS
+deductible / trips), AI calibration (overall accuracy / corrections /
+top-5 most-corrected categories). Linked from Settings Business
+section.
+
+**Backup & Restore (`/settings/backup`):**
+- `lib/services/backup.ts` snapshots every Zustand store (inspections,
+  leads, proposals, links, estimates, service areas, storm alerts,
+  knock sessions, mileage, activity, corrections, training queue,
+  inspector profile) into one versioned JSON blob.
+- Export writes to cache, shares via native sheet (`expo-sharing`).
+- Restore uses `expo-document-picker` + confirm sheet (destructive
+  warning) + per-store `setState` rehydration.
+
+**About (`/settings/about`):** brand card with `Constants.expoConfig.
+version`, feature list, external reference links (HAAG / NOAA /
+Google AI Studio).
+
+**Global search (`/search`):**
+- Inspection (customer / address / report ID / claim / policy), Lead
+  (customer / address), Proposal (joined to the underlying job +
+  status + total). Results scoped to 50.
+- Header gains a search icon (alongside profile) that routes here;
+  autofocus, clear-x, two-character minimum.
+
+**Files touched (this entry):**
+- `lib/stores/proposalLinkStore.ts` — created.
+- `lib/services/backup.ts` — created.
+- `app/p/[token].tsx` — created.
+- `app/reports.tsx` — created.
+- `app/search.tsx` — created.
+- `app/settings/backup.tsx`, `app/settings/about.tsx` — created.
+- `app/proposal/[jobId].tsx` — Share link card + Preview as homeowner.
+- `app/(tabs)/settings.tsx` — Business section with Reports, Backup,
+  About rows.
+- `app/(tabs)/index.tsx` — search icon in header.
+- `expo-document-picker`, `expo-sharing`, `expo-clipboard` installed.
+
+**Still on the parking lot:**
+- Background analyze queue via `expo-task-manager`.
+- Mileage auto-tracking via geofencing / Bluetooth car-connect.
+- Voice input on free-text fields.
+- Cloud sync of inspections to Supabase (requires backend schema
+  rollout).
+- Service area boundary overlay on Map (needs geocoded centroids).

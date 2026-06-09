@@ -101,11 +101,18 @@ export default function HomeScreen() {
           <Text style={styles.name}>{firstName}</Text>
         </View>
         <Pressable
-          style={styles.profileBtn}
+          style={styles.iconBtn}
+          onPress={() => router.push('/search')}
+          hitSlop={8}
+        >
+          <Ionicons name="search" size={22} color={colors.navy} />
+        </Pressable>
+        <Pressable
+          style={styles.iconBtn}
           onPress={() => router.push('/settings')}
           hitSlop={8}
         >
-          <Ionicons name="person-circle-outline" size={32} color={colors.navy} />
+          <Ionicons name="person-circle-outline" size={28} color={colors.navy} />
         </Pressable>
       </View>
 
@@ -429,6 +436,16 @@ const styles = StyleSheet.create({
   greeting: { fontSize: fontSize.bodyMd, color: colors.slate },
   name: { fontSize: fontSize.titleXl, fontWeight: fontWeight.semibold, color: colors.navy },
   profileBtn: { padding: spacing.sm },
+  iconBtn: {
+    width: touchTarget.small,
+    height: touchTarget.small,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.sm,
+    ...shadows.card,
+  },
 
   heroRow: { flexDirection: 'row', gap: spacing.md },
   heroCta: {
