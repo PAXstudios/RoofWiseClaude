@@ -1,14 +1,29 @@
-import { View, StyleSheet } from 'react-native';
-import { Slot } from 'expo-router';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { Slot, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Sidebar } from '@/components/shell/Sidebar';
 import { TopBar } from '@/components/shell/TopBar';
 import { BottomTabs } from '@/components/shell/BottomTabs';
 import { useResponsive } from '@/theme/useResponsive';
 import { colors } from '@/theme/tokens';
+import { useAuthStore } from '@/lib/auth/authStore';
 
 export default function TabsLayout() {
   const { isWide } = useResponsive();
+  const initialized = useAuthStore((s) => s.initialized);
+  const session = useAuthStore((s) => s.session);
+
+  if (!initialized) {
+    return (
+      <View style={[styles.mobile, styles.center]}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return <Redirect href="/welcome" />;
+  }
 
   if (isWide) {
     return (
@@ -44,4 +59,5 @@ const styles = StyleSheet.create({
   desktopContent: { flex: 1, backgroundColor: colors.bg },
   mobile: { flex: 1, backgroundColor: colors.bg },
   mobileContent: { flex: 1 },
+  center: { alignItems: 'center', justifyContent: 'center' },
 });

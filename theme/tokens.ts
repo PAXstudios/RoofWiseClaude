@@ -81,10 +81,6 @@ const cardShadow: ViewStyle = Platform.select({
   android: {
     elevation: 2,
   },
-  web: {
-    // @ts-expect-error react-native-web accepts boxShadow
-    boxShadow: '0 4px 14px rgba(14,17,22,0.06)',
-  },
   default: {},
 }) as ViewStyle;
 
@@ -96,10 +92,6 @@ const pressedShadow: ViewStyle = Platform.select({
     shadowOffset: { width: 0, height: 8 },
   },
   android: { elevation: 6 },
-  web: {
-    // @ts-expect-error react-native-web accepts boxShadow
-    boxShadow: '0 10px 24px rgba(14,17,22,0.1)',
-  },
   default: {},
 }) as ViewStyle;
 

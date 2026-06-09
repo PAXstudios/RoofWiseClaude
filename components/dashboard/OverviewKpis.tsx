@@ -62,8 +62,8 @@ export function OverviewKpis() {
       </View>
       {isWide ? (
         <View style={styles.grid}>
-          {cards.map((c) => (
-            <KpiCard key={c.key} {...c} style={styles.gridCard} />
+          {cards.map(({ key, ...c }) => (
+            <KpiCard key={key} {...c} style={styles.gridCard} />
           ))}
         </View>
       ) : (
@@ -72,8 +72,8 @@ export function OverviewKpis() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scroll}
         >
-          {cards.map((c) => (
-            <KpiCard key={c.key} {...c} />
+          {cards.map(({ key, ...c }) => (
+            <KpiCard key={key} {...c} />
           ))}
         </ScrollView>
       )}
