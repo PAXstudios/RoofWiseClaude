@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import StormHistoryMap from '@/components/map/StormHistoryMap';
 import { fetchStormHistory, rangeYearsAgo, STATE_CENTERS, type StormEvent } from '@/lib/noaa';
 import {
@@ -23,6 +24,7 @@ const FILTERS: Array<{ id: Filter; label: string; icon: keyof typeof import('@ex
 ];
 
 export default function MapScreen() {
+  const router = useRouter();
   const [filter, setFilter] = useState<Filter>('storms');
   const [events, setEvents] = useState<StormEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,6 +53,14 @@ export default function MapScreen() {
     <View style={styles.root}>
       <View style={styles.header}>
         <Text style={styles.title}>Map</Text>
+        <Pressable
+          style={styles.knockBtn}
+          onPress={() => router.push('/door-knocking')}
+          hitSlop={8}
+        >
+          <Ionicons name="walk-outline" size={18} color={colors.textInverse} />
+          <Text style={styles.knockBtnText}>Knock mode</Text>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -111,12 +121,29 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: { padding: spacing.xl, paddingBottom: spacing.md },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.xl,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
+  },
   title: {
+    flex: 1,
     fontSize: fontSize.titleXl,
     fontWeight: fontWeight.bold,
     color: colors.navy,
   },
+  knockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    height: touchTarget.small,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    backgroundColor: colors.orange,
+  },
+  knockBtnText: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   chipScroll: { maxHeight: 56 },
   chipScrollContent: { paddingHorizontal: spacing.xl, gap: spacing.sm },

@@ -1,12 +1,18 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/authStore';
+import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
+import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { isGeminiConfigured } from '@/lib/env';
 import { colors, fontSize, fontWeight, radii, spacing, shadows } from '@/theme/tokens';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
+  const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
+  const correctionsCount = useCorrectionsStore((s) => s.corrections.length);
 
   const confirmSignOut = () => {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -78,13 +84,39 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      <Text style={styles.sectionLabel}>Field</Text>
+      <View style={styles.card}>
+        <Pressable style={styles.row} onPress={() => router.push('/settings/service-area')}>
+          <Ionicons name="map-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Service Area</Text>
+            <Text style={styles.rowValue}>
+              {serviceAreaCount === 0
+                ? 'Not set — Storm Watch is off'
+                : `${serviceAreaCount} area${serviceAreaCount === 1 ? '' : 's'} configured`}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+      </View>
+
+      <Text style={styles.sectionLabel}>AI calibration</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Ionicons name="sparkles-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Corrections recorded</Text>
+            <Text style={styles.rowValue}>{correctionsCount}</Text>
+          </View>
+        </View>
+      </View>
+
       <Text style={styles.sectionLabel}>Coming soon</Text>
       <View style={styles.card}>
         {[
-          'Service area (ZIPs / cities) — Phase 6A',
-          'Storm watch + push notifications — Phase 6B/C',
           'AI thresholds: minimum confidence, auto-approve cutoffs',
           'Team & roles (Adjuster, Crew Lead, Owner)',
+          'CRM + accounting integrations (HubSpot, QuickBooks)',
         ].map((line) => (
           <Text key={line} style={styles.bullet}>
             • {line}

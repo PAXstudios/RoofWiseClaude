@@ -30,6 +30,9 @@ import {
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useToastStore } from '@/lib/stores/toastStore';
+import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
+import { overallAccuracy } from '@/lib/services/learning/localLearningEngine';
 import { DamageMarkerLayer } from '@/components/DamageMarkerLayer';
 
 let markerCounter = 0;
@@ -54,6 +57,7 @@ export default function EditDetectionView() {
   const replacePhotoMarkers = useInspectionStore((s) => s.replacePhotoMarkers);
   const recordCorrection = useCorrectionsStore((s) => s.record);
   const logActivity = useActivityStore((s) => s.log);
+  const toast = useToastStore((s) => s.show);
 
   const slope = inspection?.slopes.find((s) => s.id === slopeId);
   const photoUri = slope?.photoPaths[index];
@@ -177,6 +181,21 @@ export default function EditDetectionView() {
       kind: 'analysis_ran',
       inspectionId: inspection.id,
       message: `Edited detections on ${slope.orientation} slope (${added.length} added, ${removed.length} removed)`,
+    });
+
+    const profile = computeProfile(useCorrectionsStore.getState().corrections);
+    const accuracy = overallAccuracy(profile);
+    const primaryCat = categoriesAffected[0];
+    const catLabel = primaryCat
+      ? primaryCat.replace(/_/g, ' ')
+      : 'damage detection';
+    toast({
+      tone: 'success',
+      title: 'Thanks — calibrating AI',
+      body:
+        accuracy === null
+          ? `Improved ${catLabel} for you.`
+          : `${catLabel} accuracy is now ${accuracy}% on your jobs.`,
     });
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
