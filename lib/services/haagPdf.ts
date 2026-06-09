@@ -8,6 +8,7 @@
 // once the image-overlay pipeline is built.
 
 import * as Print from 'expo-print';
+import * as ImageManipulator from 'expo-image-manipulator';
 import type { Inspection } from '../models/types';
 import {
   DAMAGE_CATEGORY_LABELS,
@@ -29,12 +30,44 @@ export type GeneratedReport = {
 };
 
 export async function generateHaagReport(inspection: Inspection): Promise<GeneratedReport> {
-  const html = renderHtml(inspection);
+  const photoMap = await preparePhotoDataUris(inspection);
+  const html = renderHtml(inspection, photoMap);
   const { uri } = await Print.printToFileAsync({ html, base64: false });
   return { uri, inspection };
 }
 
-function renderHtml(ins: Inspection): string {
+const PHOTOS_PER_SLOPE = 3;
+
+/** Downscale up to 3 photos per slope and inline them as data URIs. */
+async function preparePhotoDataUris(
+  ins: Inspection,
+): Promise<Record<string, string[]>> {
+  const map: Record<string, string[]> = {};
+  for (const slope of ins.slopes) {
+    const uris = slope.photoPaths.slice(0, PHOTOS_PER_SLOPE);
+    const encoded: string[] = [];
+    for (const uri of uris) {
+      try {
+        const out = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 700 } }],
+          {
+            compress: 0.55,
+            format: ImageManipulator.SaveFormat.JPEG,
+            base64: true,
+          },
+        );
+        if (out.base64) encoded.push(`data:image/jpeg;base64,${out.base64}`);
+      } catch {
+        // Photo missing on disk (restored backup, other device) — skip.
+      }
+    }
+    if (encoded.length > 0) map[slope.id] = encoded;
+  }
+  return map;
+}
+
+function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): string {
   const decision = evaluate(ins);
   const score = damageScore(ins);
   const worthiness = claimWorthiness(decision, score);
@@ -89,6 +122,8 @@ function renderHtml(ins: Inspection): string {
 
   .slope-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 12px 0; }
   .slope-card h3 { margin-top: 0; }
+  .photo-row { display: flex; gap: 2%; margin: 10px 0; }
+  .slope-photo { width: 32%; border-radius: 8px; object-fit: cover; }
   .reasoning { font-style: italic; color: var(--slate); font-size: 12px; margin-top: 8px; }
 
   .footer { text-align: center; color: var(--slate); font-size: 10px; padding: 24px 0; border-top: 1px solid var(--border); margin-top: 40px; }
@@ -183,9 +218,11 @@ function renderHtml(ins: Inspection): string {
                 ? 'pill-cream'
                 : 'pill-slate';
             const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
+            const photos = photoMap[slope.id] ?? [];
             return `<div class="slope-card">
         <h3>Slope ${i + 1}: ${esc(slope.orientation)} <span class="pill ${pillClass}">${esc(formatVerdict(verdict))}</span></h3>
         <p>${slope.photoPaths.length} photos · Hail ${slope.hailCount} · Wind ${slope.windLiftCount} · Missing ${slope.missingCount} · Bruising ${slope.bruisingCount}</p>
+        ${photos.length > 0 ? `<div class="photo-row">${photos.map((src) => `<img class="slope-photo" src="${src}" />`).join('')}</div>` : ''}
         ${detected.length === 0 ? '<p class="reasoning">No findings detected on this slope.</p>' : `<table><thead><tr><th>Category</th><th>Severity</th><th>Confidence</th><th>Count</th></tr></thead><tbody>${detected.map((f) => `<tr><td>${esc(DAMAGE_CATEGORY_LABELS[f.label])}</td><td>${esc(f.severity)}</td><td>${f.confidence}%</td><td>${f.count}</td></tr>`).join('')}</tbody></table>`}
         <p class="reasoning">${esc(slopeResult?.reasoning ?? '')}</p>
       </div>`;

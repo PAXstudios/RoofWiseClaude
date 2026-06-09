@@ -92,6 +92,12 @@ type InspectionStoreState = {
   setAudioNoteLabel: (id: string, noteId: string, label: string) => void;
   removePhoto: (inspectionId: string, slopeId: string, photoIndex: number) => void;
   replacePhoto: (inspectionId: string, slopeId: string, photoIndex: number, uri: string) => void;
+  setPhotoUpload: (
+    inspectionId: string,
+    slopeId: string,
+    localUri: string,
+    remoteUrl: string,
+  ) => void;
   setNotes: (id: string, notes: string) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
@@ -279,6 +285,24 @@ export const useInspectionStore = create<InspectionStoreState>()(
                 );
                 return { ...sl, photoPaths };
               }),
+            };
+          }),
+        })),
+
+      setPhotoUpload: (inspectionId, slopeId, localUri, remoteUrl) =>
+        set((s) => ({
+          inspections: s.inspections.map((ins) => {
+            if (ins.id !== inspectionId) return ins;
+            return {
+              ...ins,
+              slopes: ins.slopes.map((sl) =>
+                sl.id === slopeId
+                  ? {
+                      ...sl,
+                      photoUploads: { ...(sl.photoUploads ?? {}), [localUri]: remoteUrl },
+                    }
+                  : sl,
+              ),
             };
           }),
         })),

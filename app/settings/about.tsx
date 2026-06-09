@@ -6,8 +6,9 @@ import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import { LEADS_SQL } from '@/lib/services/leadSync';
 import { INSPECTIONS_SQL } from '@/lib/services/inspectionSync';
+import { PHOTOS_SQL } from '@/lib/services/photoSync';
 
-const CLOUD_SQL = `${LEADS_SQL}\n${INSPECTIONS_SQL}`;
+const CLOUD_SQL = `${LEADS_SQL}\n${INSPECTIONS_SQL}\n${PHOTOS_SQL}`;
 import { useToastStore } from '@/lib/stores/toastStore';
 import {
   colors,

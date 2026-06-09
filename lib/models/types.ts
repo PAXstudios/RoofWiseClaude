@@ -201,6 +201,8 @@ export type Slope = {
   verifyWithInspector: boolean; // when confidence_avg < 0.5
   aiFindings?: InspectionFinding[];
   photoPaths: string[];
+  /** localUri → Supabase Storage public URL, written by photoSync. */
+  photoUploads?: Record<string, string>;
 };
 
 export type InspectionStatus = 'lead' | 'scheduled' | 'in_progress' | 'complete';

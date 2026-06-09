@@ -1200,3 +1200,45 @@ background"):**
 - Mileage auto-tracking via geofencing / Bluetooth car-connect.
 - Voice input on free-text fields (native module).
 - Photo binary sync (Supabase Storage upload pipeline).
+
+---
+
+### [2026-06-09] #16 — Photos in the HAAG PDF + photo binary upload to Supabase Storage
+
+**Prompt:** (continuation of #15's arc)
+
+**Photos embedded in the HAAG report (spec Half-A "photo references"):**
+- `generateHaagReport` now runs a prepare pass: up to 3 photos per
+  slope are downscaled to 700px / 0.55 JPEG via expo-image-manipulator
+  and inlined as base64 data URIs.
+- Section 4 slope cards render a 3-up photo row above the findings
+  table. Missing files (restored backups, other devices) are skipped
+  silently.
+
+**Photo binary sync (closes the "payload URIs are device-local" gap):**
+- `Slope.photoUploads?: Record<localUri, publicUrl>` — keyed by URI so
+  removePhoto's index renumbering can't corrupt it, and rotate
+  (replacePhoto → new URI) naturally re-uploads.
+- `inspectionStore.setPhotoUpload(...)` mutation — which also marks the
+  inspection dirty via the #15 watcher, so remote URLs ride along on
+  the next inspection sync to other devices.
+- `lib/services/photoSync.ts`:
+  - `syncInspectionPhotos()` walks all slopes, uploads photos that have
+    no remote URL yet — downscaled to 1600px / 0.7 JPEG — to the
+    `inspection-photos` bucket at `userId/inspectionId/slopeId/…jpg`,
+    capped at 8 uploads per run so a drain never hogs the foreground.
+  - Includes a dependency-free base64 → bytes decoder (no atob).
+  - Detects missing-bucket errors → "run the SQL snippet in About".
+  - `PHOTOS_SQL` creates the bucket + RLS (owner-insert by first path
+    segment = auth.uid(), public read).
+- Lifecycle: photo sync chains after each inspections sync.
+- Settings: "Upload photos to cloud" row with live pending count.
+- About: CLOUD_SQL = leads + inspections + photos in one Copy button.
+
+**Files touched:** `lib/services/{haagPdf,photoSync,lifecycleHooks}.ts`,
+`lib/stores/inspectionStore.ts`, `lib/models/types.ts`,
+`app/(tabs)/settings.tsx`, `app/settings/about.tsx`.
+
+**Still parked:** true background execution (dev build), mileage
+auto-tracking, voice input on free text, signed URLs / private bucket
+hardening for photos.

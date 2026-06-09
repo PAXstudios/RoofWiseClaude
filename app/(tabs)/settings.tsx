@@ -10,6 +10,8 @@ import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
 import { syncLeads } from '@/lib/services/leadSync';
 import { syncInspections } from '@/lib/services/inspectionSync';
+import { syncInspectionPhotos } from '@/lib/services/photoSync';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useInspectionSyncStore } from '@/lib/stores/inspectionSyncStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { syncCorrections } from '@/lib/services/correctionsSync';
@@ -31,6 +33,18 @@ export default function SettingsScreen() {
     (s) => Object.keys(s.dirty).length + s.deleted.length,
   );
   const [inspectionsSyncing, setInspectionsSyncing] = useState(false);
+  const pendingPhotos = useInspectionStore((s) =>
+    s.inspections.reduce(
+      (sum, i) =>
+        sum +
+        i.slopes.reduce(
+          (s2, sl) => s2 + sl.photoPaths.filter((p) => !(sl.photoUploads?.[p])).length,
+          0,
+        ),
+      0,
+    ),
+  );
+  const [photosSyncing, setPhotosSyncing] = useState(false);
   const pendingCorrections = useCorrectionsStore((s) => s.corrections.filter((c) => c.syncStatus === 'pending').length);
   const toast = useToastStore((s) => s.show);
   const [syncing, setSyncing] = useState(false);
@@ -297,6 +311,39 @@ export default function SettingsScreen() {
             </Text>
           </View>
           {inspectionsSyncing ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : (
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          )}
+        </Pressable>
+
+        <Pressable
+          style={[styles.row, styles.rowBorder, photosSyncing && { opacity: 0.5 }]}
+          onPress={async () => {
+            setPhotosSyncing(true);
+            try {
+              const r = await syncInspectionPhotos();
+              toast({
+                tone: r.error ? 'warn' : 'success',
+                title: r.error
+                  ? 'Photo upload issue'
+                  : `${r.uploaded} uploaded · ${r.remaining} remaining`,
+                body: r.error,
+              });
+            } finally {
+              setPhotosSyncing(false);
+            }
+          }}
+          disabled={photosSyncing}
+        >
+          <Ionicons name="images-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Upload photos to cloud</Text>
+            <Text style={styles.rowValue}>
+              {pendingPhotos === 0 ? 'Up to date' : `${pendingPhotos} pending`}
+            </Text>
+          </View>
+          {photosSyncing ? (
             <ActivityIndicator color={colors.accent} />
           ) : (
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />

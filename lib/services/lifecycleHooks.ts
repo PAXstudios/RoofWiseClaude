@@ -8,6 +8,7 @@ import { checkStormWatch } from './stormWatch';
 import { syncCorrections } from './correctionsSync';
 import { syncLeads } from './leadSync';
 import { syncInspections, startInspectionWatcher } from './inspectionSync';
+import { syncInspectionPhotos } from './photoSync';
 import { drainAnalysisQueue } from './analysisQueue';
 import { useServiceAreaStore } from '../stores/serviceAreaStore';
 import { useAuthStore } from '../auth/authStore';
@@ -52,7 +53,9 @@ export function useBackgroundJobs() {
           now - lastInspectionsSync.current > INSPECTIONS_INTERVAL_MS
         ) {
           lastInspectionsSync.current = now;
-          syncInspections().catch(() => {});
+          syncInspections()
+            .then(() => syncInspectionPhotos())
+            .catch(() => {});
         }
         // Resume any queued AI analysis the moment the app is usable again.
         drainAnalysisQueue().catch(() => {});
