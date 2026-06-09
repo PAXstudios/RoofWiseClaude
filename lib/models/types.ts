@@ -416,6 +416,8 @@ export type Proposal = {
   viewedAt?: string;
   signedAt?: string;
   signaturePng?: string;
+  /** Serialized SVG path string of the homeowner signature ("M x y L x y …"). */
+  homeownerSignatureSvg?: string;
 };
 
 // -----------------------------------------------------------------------------

@@ -125,7 +125,12 @@ function renderHtml(p: Proposal, ins: Inspection): string {
   <h2>Signatures</h2>
   <div class="sig-row">
     <div class="sig-box">Inspector signature</div>
-    <div class="sig-box">Homeowner signature</div>
+    <div class="sig-box">
+      ${p.homeownerSignatureSvg
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet"><path d="${esc(p.homeownerSignatureSvg)}" stroke="#0C183C" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg><br/>`
+        : ''}
+      Homeowner signature
+    </div>
   </div>
 
   <div class="footer">

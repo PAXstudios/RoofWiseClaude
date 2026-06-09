@@ -17,6 +17,7 @@ import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { generateProposalDraft } from '@/lib/services/proposalGenerator';
 import { generateProposalPdf } from '@/lib/services/proposalPdf';
+import { SignaturePad } from '@/components/SignaturePad';
 import {
   colors,
   fontSize,
@@ -167,6 +168,31 @@ export default function ProposalView() {
           <Text style={styles.body}>{proposal.termsText}</Text>
         </View>
 
+        <View style={styles.card}>
+          <Text style={styles.section}>Homeowner signature</Text>
+          <Text style={styles.body}>
+            Have the homeowner sign below before sending the proposal.
+          </Text>
+          <SignaturePad
+            onChange={(svg) => {
+              if (svg) {
+                upsert({
+                  ...proposal,
+                  homeownerSignatureSvg: svg,
+                  status: 'signed',
+                  signedAt: new Date().toISOString(),
+                });
+              }
+            }}
+          />
+          {proposal.homeownerSignatureSvg && (
+            <View style={styles.signedBadge}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+              <Text style={styles.signedText}>Signed</Text>
+            </View>
+          )}
+        </View>
+
         <Pressable style={styles.secondaryBtn} onPress={onRegenerate}>
           <Ionicons name="refresh-outline" size={18} color={colors.navy} />
           <Text style={styles.secondaryBtnText}>Regenerate from inspection</Text>
@@ -259,6 +285,19 @@ const styles = StyleSheet.create({
   grandTotal: { borderTopWidth: 2, borderTopColor: colors.navy, marginTop: spacing.sm, paddingTop: spacing.md },
   grandLabel: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.navy },
   grandValue: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.orange },
+
+  signedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    marginTop: spacing.sm,
+  },
+  signedText: { color: colors.success, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   secondaryBtn: {
     flexDirection: 'row',
