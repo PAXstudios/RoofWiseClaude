@@ -33,6 +33,7 @@ import {
 } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 type Step = 0 | 1 | 2 | 3;
 
@@ -41,6 +42,8 @@ type Draft = {
   customerPhone: string;
   customerEmail: string;
   address: string;
+  addressLat?: number;
+  addressLng?: number;
 
   carrier: InsuranceCarrier | null;
   policyNumber: string;
@@ -58,6 +61,8 @@ const EMPTY: Draft = {
   customerPhone: '',
   customerEmail: '',
   address: '',
+  addressLat: undefined,
+  addressLng: undefined,
   carrier: null,
   policyNumber: '',
   claimNumber: '',
@@ -109,6 +114,8 @@ export default function NewJobWizard() {
       customerPhone: draft.customerPhone.trim() || undefined,
       customerEmail: draft.customerEmail.trim() || undefined,
       address: draft.address.trim(),
+      lat: draft.addressLat,
+      lng: draft.addressLng,
       carrier: draft.carrier ?? undefined,
       policyNumber: draft.policyNumber.trim() || undefined,
       claimNumber: draft.claimNumber.trim() || undefined,
@@ -219,18 +226,19 @@ function Step1({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => void
         autoCapitalize="none"
         placeholder="customer@example.com"
       />
-      <Field
+      <AddressAutocomplete
         label="Property address *"
         value={draft.address}
-        onChangeText={(t) => setDraft({ ...draft, address: t })}
-        placeholder="123 Main St, Plano TX 75024"
-        multiline
+        onChangeText={(t) => setDraft({ ...draft, address: t, addressLat: undefined, addressLng: undefined })}
+        onPlaceSelected={(p) =>
+          setDraft({
+            ...draft,
+            address: p.description,
+            addressLat: p.lat,
+            addressLng: p.lng,
+          })
+        }
       />
-
-      <Pressable style={styles.secondaryBtn} onPress={() => {/* TODO geolocation */}}>
-        <Ionicons name="locate-outline" size={20} color={colors.navy} />
-        <Text style={styles.secondaryBtnText}>Use my current location</Text>
-      </Pressable>
     </View>
   );
 }
