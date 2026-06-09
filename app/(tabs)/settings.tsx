@@ -1,9 +1,12 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
+import { useToastStore } from '@/lib/stores/toastStore';
+import { syncCorrections } from '@/lib/services/correctionsSync';
 import { isGeminiConfigured } from '@/lib/env';
 import { colors, fontSize, fontWeight, radii, spacing, shadows } from '@/theme/tokens';
 
@@ -13,6 +16,31 @@ export default function SettingsScreen() {
   const signOut = useAuthStore((s) => s.signOut);
   const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
   const correctionsCount = useCorrectionsStore((s) => s.corrections.length);
+  const pendingCorrections = useCorrectionsStore((s) => s.corrections.filter((c) => c.syncStatus === 'pending').length);
+  const toast = useToastStore((s) => s.show);
+  const [syncing, setSyncing] = useState(false);
+
+  const onSyncNow = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncCorrections();
+      toast({
+        tone: result.failed === 0 ? 'success' : 'warn',
+        title:
+          result.attempted === 0
+            ? 'Nothing to sync'
+            : `${result.accepted} accepted · ${result.failed} failed`,
+      });
+    } catch (e) {
+      toast({
+        tone: 'danger',
+        title: 'Sync failed',
+        body: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const confirmSignOut = () => {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -109,6 +137,27 @@ export default function SettingsScreen() {
             <Text style={styles.rowValue}>{correctionsCount}</Text>
           </View>
         </View>
+
+        <Pressable
+          style={[styles.row, styles.rowBorder, syncing && { opacity: 0.5 }]}
+          onPress={onSyncNow}
+          disabled={syncing}
+        >
+          <Ionicons name="cloud-upload-outline" size={22} color={colors.accent} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Sync now</Text>
+            <Text style={styles.rowValue}>
+              {pendingCorrections === 0
+                ? 'Up to date'
+                : `${pendingCorrections} pending`}
+            </Text>
+          </View>
+          {syncing ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : (
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          )}
+        </Pressable>
       </View>
 
       <Text style={styles.sectionLabel}>Coming soon</Text>

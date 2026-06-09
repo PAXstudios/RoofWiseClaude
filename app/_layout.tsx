@@ -5,10 +5,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { colors } from '@/theme/tokens';
 import { useAuthStore } from '@/lib/auth/authStore';
+import { useBackgroundJobs } from '@/lib/services/lifecycleHooks';
 import { ToastHost } from '@/components/ToastHost';
 
 export default function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
+  useBackgroundJobs();
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;

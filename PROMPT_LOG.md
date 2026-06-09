@@ -528,3 +528,91 @@ at `gemini-2.5-flash`, Corrections endpoint, and feature flags.
 - Mileage tracker.
 - Voice commands.
 - Offline sync queue + corrections backend deployment.
+
+---
+
+### [2026-06-09] #07 — Capture/Analyze split, Service Area + Storm Watch + Push, Door Knocking, Proposals, Toasts, Auto-polling
+
+**Prompt:**
+> Do what you think is best. Finish the job and continue building.
+> Don't stop to ask question[s].
+
+**Decisions:**
+- Per-photo marker tagging is now first-class: `DamageMarker.photoIndex`,
+  `replacePhotoMarkers()` mutates only one photo's markers, and the
+  editor filters to the active photo. Untagged legacy markers still
+  surface so existing inspections aren't broken.
+- Quick Inspection refactored to capture-only (no inline Gemini). Photos
+  are stored as raw URIs via `attachRawPhotos`. AI analysis moved to a
+  per-slope screen `/analyze`, with onProgress, retry, "AI not connected"
+  banner, and Re-analyze-all / Analyze-new CTAs.
+- `lib/services/analyzeSlope.ts` reads photos from disk via expo-file-
+  system, runs Gemini with the user-style prefix from the learning
+  engine, attaches markers tagged with `photoIndex`, and updates findings.
+- Toast queue (`lib/stores/toastStore.ts` + `components/ToastHost.tsx`)
+  mounted at the root. EditDetectionView fires a calibration toast on
+  every save once 5+ corrections exist.
+- Service Area store + screen + Storm Watch service. Adding the first
+  area triggers `requestPushPermission()` and schedules a weekly
+  calibration push every Monday 9am. "Scan storms now" CTA fires the
+  foreground sweep.
+- Auto polling: `lib/services/lifecycleHooks.ts` re-runs Storm Watch
+  every 30 min and corrections sync every 5 min on app foreground,
+  wired from the root layout via `useBackgroundJobs()`.
+- Push notifications via `expo-notifications` (foreground + local
+  scheduled).
+- Door Knocking Mode (`app/door-knocking.tsx`): live route stats
+  (knocks / interested % / minutes), Google Map with color-coded knock
+  pins, 5 outcome chips in the thumb zone (Interested, Inspection,
+  Follow up, Not home, No interest), Wrap-route confirm with summary
+  toast. Backed by `lib/stores/knockSessionStore.ts` with active session
+  + archive.
+- Proposals end-to-end:
+  - `lib/services/proposalGenerator.ts` turns an Inspection into a draft
+    via Decision Engine + Cost Estimator + Solar squares (when available).
+  - `lib/stores/proposalStore.ts` keyed by jobId with status transitions.
+  - `lib/services/proposalPdf.ts` renders the branded HTML proposal to
+    a PDF via expo-print.
+  - `app/proposal/[jobId].tsx` renders the proposal, lets the inspector
+    regenerate from inspection, then "Generate PDF & share" via native
+    share sheet → status flips to `sent`.
+  - Job Detail has a tap card surfacing status + total.
+- Settings: Service Area entry, AI-calibration corrections count + a
+  "Sync now" row that fires the backend POST and shows the result via
+  toast.
+
+**Files touched (this entry):**
+- `lib/models/types.ts` — `photoIndex?` on DamageMarker.
+- `lib/stores/{inspectionStore,correctionsStore,serviceAreaStore,knockSessionStore,proposalStore,toastStore}.ts`.
+- `lib/services/{analyzeSlope,stormWatch,pushNotifications,proposalGenerator,proposalPdf,lifecycleHooks}.ts`.
+- `components/{ToastHost,DamageMarkerLayer}.tsx`.
+- `app/_layout.tsx` — ToastHost + useBackgroundJobs.
+- `app/quick-inspection.tsx` — capture-only refactor.
+- `app/analyze.tsx`, `app/edit-detection.tsx`, `app/door-knocking.tsx`,
+  `app/proposal/[jobId].tsx`, `app/settings/service-area.tsx`.
+- `app/(tabs)/{settings,map}.tsx` — knock-mode pill, service-area row,
+  sync row.
+- `app/job/[id].tsx` — proposal card + analyze CTA + verdict pills.
+
+**Drift Warning changes:**
+- None. The 13-category damage taxonomy, HAAG thresholds, Decision
+  Engine, dashboard CTAs, and Quick Inspection hero ordering are all
+  intact.
+
+**Still parked (deliberate v1 simplifications):**
+- Editor pinch-zoom + marker drag (gesture handler + Reanimated worklets
+  with shared transforms).
+- Background analysis via `expo-task-manager` — foreground analyze is
+  already on-demand, which covers most of the value.
+- Apple Sign In — needs provisioning + Supabase Apple provider config.
+- Mileage tracker.
+- Voice command mode.
+- Brittleness test field in NewJobWizard Step 3.
+
+**Open questions / Follow-ups:**
+- Rotate the Google Maps key into the 3 platform-restricted keys
+  (iOS / Android / Web) per the env file's "Production hardening
+  checklist" before any public TestFlight.
+- Deploy a real corrections backend at
+  `EXPO_PUBLIC_CORRECTIONS_ENDPOINT` — today the sync POSTs to a
+  Vercel placeholder and tolerates failure gracefully.
