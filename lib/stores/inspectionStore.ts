@@ -70,6 +70,11 @@ export type PhotoCapture = {
   markers: DamageMarker[];
 };
 
+export type RawCapture = {
+  uri: string;
+  slope: SlopeOrientation;
+};
+
 type InspectionStoreState = {
   inspections: Inspection[];
   nextOrdinal: number;
@@ -79,12 +84,35 @@ type InspectionStoreState = {
   setStatus: (id: string, status: InspectionStatus) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
+  attachRawPhotos: (inspectionId: string, captures: RawCapture[]) => void;
   setSlopeMarkers: (
     inspectionId: string,
     slopeId: string,
     markers: DamageMarker[],
   ) => void;
+  replacePhotoMarkers: (
+    inspectionId: string,
+    slopeId: string,
+    photoIndex: number,
+    photoMarkers: DamageMarker[],
+  ) => void;
 };
+
+function withRecount(slope: Slope): Slope {
+  const m = slope.damage;
+  return {
+    ...slope,
+    hailCount: m.filter((x) => x.category === 'hail_hits').length,
+    bruisingCount: m.filter((x) => x.category === 'bruising').length,
+    windLiftCount: m.filter((x) =>
+      ['wind_creasing', 'lifted_shingles', 'wind_damage'].includes(x.category),
+    ).length,
+    missingCount: m.filter((x) => x.category === 'missing_shingles').length,
+    wearCount: m.filter((x) =>
+      ['granule_loss', 'cracking', 'splitting'].includes(x.category),
+    ).length,
+  };
+}
 
 export const useInspectionStore = create<InspectionStoreState>()(
   persist(
@@ -136,7 +164,7 @@ export const useInspectionStore = create<InspectionStoreState>()(
 
       getById: (id) => get().inspections.find((i) => i.id === id),
 
-      attachPhotos: (inspectionId, captures) => {
+      attachRawPhotos: (inspectionId, captures) => {
         if (captures.length === 0) return;
         set((s) => ({
           inspections: s.inspections.map((ins) => {
@@ -149,7 +177,28 @@ export const useInspectionStore = create<InspectionStoreState>()(
                 slopes.push(slope);
               }
               slope.photoPaths = [...slope.photoPaths, cap.uri];
-              slope.damage = [...slope.damage, ...cap.markers];
+            }
+            return { ...ins, slopes };
+          }),
+        }));
+      },
+
+      attachPhotos: (inspectionId, captures) => {
+        if (captures.length === 0) return;
+        set((s) => ({
+          inspections: s.inspections.map((ins) => {
+            if (ins.id !== inspectionId) return ins;
+            const slopes = [...ins.slopes];
+            for (const cap of captures) {
+              let slope = slopes.find((sl) => sl.orientation === cap.slope);
+              if (!slope) {
+                slope = makeSlope(cap.slope);
+                slopes.push(slope);
+              }
+              const photoIndex = slope.photoPaths.length;
+              slope.photoPaths = [...slope.photoPaths, cap.uri];
+              const tagged = cap.markers.map((m) => ({ ...m, photoIndex }));
+              slope.damage = [...slope.damage, ...tagged];
               slope.aiFindings = [...(slope.aiFindings ?? []), ...cap.findings];
               for (const f of cap.findings) {
                 if (!f.detected) continue;
@@ -179,21 +228,25 @@ export const useInspectionStore = create<InspectionStoreState>()(
               ...ins,
               slopes: ins.slopes.map((sl) =>
                 sl.id === slopeId
-                  ? {
-                      ...sl,
-                      damage: markers,
-                      hailCount: markers.filter((m) => m.category === 'hail_hits').length,
-                      bruisingCount: markers.filter((m) => m.category === 'bruising').length,
-                      windLiftCount: markers.filter((m) =>
-                        ['wind_creasing', 'lifted_shingles', 'wind_damage'].includes(m.category),
-                      ).length,
-                      missingCount: markers.filter((m) => m.category === 'missing_shingles').length,
-                      wearCount: markers.filter((m) =>
-                        ['granule_loss', 'cracking', 'splitting'].includes(m.category),
-                      ).length,
-                    }
+                  ? withRecount({ ...sl, damage: markers })
                   : sl,
               ),
+            };
+          }),
+        })),
+
+      replacePhotoMarkers: (inspectionId, slopeId, photoIndex, photoMarkers) =>
+        set((s) => ({
+          inspections: s.inspections.map((ins) => {
+            if (ins.id !== inspectionId) return ins;
+            return {
+              ...ins,
+              slopes: ins.slopes.map((sl) => {
+                if (sl.id !== slopeId) return sl;
+                const other = sl.damage.filter((m) => m.photoIndex !== photoIndex);
+                const tagged = photoMarkers.map((m) => ({ ...m, photoIndex }));
+                return withRecount({ ...sl, damage: [...other, ...tagged] });
+              }),
             };
           }),
         })),

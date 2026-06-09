@@ -142,6 +142,8 @@ export type DamageMarker = {
   radius: number;
   confidence: number;       // 0-100
   note?: string;
+  /** Index into Slope.photoPaths that this marker belongs to. */
+  photoIndex?: number;
 };
 
 export type InspectionFinding = {

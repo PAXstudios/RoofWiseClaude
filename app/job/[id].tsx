@@ -217,6 +217,19 @@ function SlopeBlock({
         <VerdictPill verdict={verdict} />
       </View>
 
+      <Pressable
+        style={styles.analyzeBtn}
+        onPress={() =>
+          router.push({
+            pathname: '/analyze',
+            params: { inspectionId: inspection.id, slopeId: slope.id },
+          })
+        }
+      >
+        <Ionicons name="analytics-outline" size={18} color={colors.navy} />
+        <Text style={styles.analyzeBtnText}>Analyze photos</Text>
+      </Pressable>
+
       {slope.photoPaths.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -406,6 +419,20 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
   },
   verdictText: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  analyzeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.standard,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: spacing.md,
+  },
+  analyzeBtnText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
   reasoning: {
     fontSize: fontSize.bodySm,

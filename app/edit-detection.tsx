@@ -51,7 +51,7 @@ export default function EditDetectionView() {
   const inspection = useInspectionStore((s) =>
     s.inspections.find((i) => i.id === inspectionId),
   );
-  const setSlopeMarkers = useInspectionStore((s) => s.setSlopeMarkers);
+  const replacePhotoMarkers = useInspectionStore((s) => s.replacePhotoMarkers);
   const recordCorrection = useCorrectionsStore((s) => s.record);
   const logActivity = useActivityStore((s) => s.log);
 
@@ -60,7 +60,9 @@ export default function EditDetectionView() {
 
   const photoMarkers = useMemo(() => {
     if (!slope) return [];
-    return slope.damage.filter((m) => belongsToPhoto(m, slope, index));
+    return slope.damage.filter(
+      (m) => m.photoIndex === index || m.photoIndex === undefined,
+    );
   }, [slope, index]);
 
   const [draftMarkers, setDraftMarkers] = useState<DamageMarker[]>(photoMarkers);
@@ -147,7 +149,7 @@ export default function EditDetectionView() {
         ? 'add_marker'
         : 'edit';
 
-    setSlopeMarkers(inspection.id, slope.id, correctedMarkers);
+    replacePhotoMarkers(inspection.id, slope.id, index, correctedMarkers);
 
     recordCorrection({
       inspectionId: inspection.id,
@@ -265,13 +267,6 @@ export default function EditDetectionView() {
       </View>
     </SafeAreaView>
   );
-}
-
-function belongsToPhoto(_marker: DamageMarker, _slope: any, _idx: number): boolean {
-  // Slope.damage is a flat list; markers from earlier captures aren't yet
-  // tagged with a photoIndex. For v1 we surface every marker on the slope
-  // when editing any photo on it. Phase X: add `photoIndex` to DamageMarker.
-  return true;
 }
 
 function uniqueCategories(markers: DamageMarker[]): DamageCategory[] {
