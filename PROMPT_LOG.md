@@ -616,3 +616,73 @@ at `gemini-2.5-flash`, Corrections endpoint, and feature flags.
 - Deploy a real corrections backend at
   `EXPO_PUBLIC_CORRECTIONS_ENDPOINT` — today the sync POSTs to a
   Vercel placeholder and tolerates failure gracefully.
+
+---
+
+### [2026-06-09] #08 — Leads, mileage, brittleness, training queue + swipe review, damage explainer
+
+**Prompt:**
+> Okay. Seems like you've stopped?
+
+(Continuation of #07's autonomous build.)
+
+**Decisions:**
+- Knock outcomes (`interested`, `inspection_scheduled`) now auto-create
+  a Lead, stamping `Knock.createdLeadId` and emitting
+  `ActivityEvent(knock_converted_to_lead)`. Closes the door-knock →
+  CRM loop.
+- Leads tab fully wired to `leadStore` with stage chip filter, tone-
+  coded stage pills, and source attribution.
+- Mileage tracker: full trip log with live GPS sampling (10 m noise
+  filter), purpose chips, big live odometer in active mode, recent
+  trip list with IRS deductible ($0.67/mi 2026 rate). Home utility row
+  surfaced alongside Hail Tracer + Estimator.
+- Brittleness test field is now first-class in NewJobWizard Step 3
+  (not_tested / passed / failed), and propagates to Decision Engine +
+  HAAG PDF.
+- Plan tab rebuilt: today / week toggle, stats row (inspections +
+  knocks + active route count), today's inspection cards routing to
+  Job Detail, quick-action shortcuts.
+- Training queue + auto-enqueue: `analyzeSlope` enqueues any photo
+  whose AI markers average confidence < 60 OR have count > 10
+  (suspicious uniformity).
+- Train tab tiles now read real queue + accuracy data.
+- SwipeReview screen: full Tinder card stack with Reanimated +
+  GestureDetector. Right=accept, left=edit, up=skip, down=not_damage.
+  Every swipe also has a 88pt button equivalent (glove rule: tap
+  alternative for every gesture). Accept/Not-damage write structured
+  Corrections so the learning engine sees them.
+- DamageExplainer screen walks the 13 HAAG categories with visual
+  characteristics, what-not-to-confuse-with, and coverage notes.
+  Spec-aligned content the inspector can flip through on a roof.
+
+**Files touched (this entry):**
+- `lib/stores/{leadStore,mileageStore,trainingQueueStore}.ts` — created.
+- `lib/models/types.ts` — `MileageTrip` type.
+- `lib/stores/inspectionStore.ts` — accept `brittlenessTest` on create.
+- `lib/services/analyzeSlope.ts` — auto-enqueue low-confidence outputs.
+- `app/door-knocking.tsx` — lead creation + activity event on positive
+  outcomes.
+- `app/mileage.tsx` — new tracker screen.
+- `app/new-job.tsx` — brittleness chips on Step 3.
+- `app/(tabs)/{index,leads,plan,train}.tsx` — wired to real stores,
+  utility row gains Mileage, leads list rebuilt, plan rebuilt with
+  real stats + quick actions.
+- `app/swipe-review.tsx` — created.
+- `app/damage-explainer.tsx` — created.
+
+**Still parked:**
+- Editor pinch-zoom + marker drag (worklets refactor).
+- Voice input on free-text fields (requires native module beyond Expo
+  Go).
+- Apple Sign In (needs provisioning).
+- Signature canvas (needs `react-native-signature-canvas` or similar
+  dep).
+- Background analyze queue via `expo-task-manager`.
+
+**Open questions / Follow-ups:**
+- Hook SwipeReview's "edit" path to a richer single-photo editor that
+  takes the marker history into account (today it routes to the
+  existing EditDetectionView, which is fine but generic).
+- Surface "lead converted from knock" badge on the Leads list when the
+  source is `door_knock`.
