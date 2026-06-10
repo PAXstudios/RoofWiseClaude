@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoxelCraft — Phase 1 Prototype</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="crosshair"></div>
+  <div id="water-tint"></div>
+  <div id="debug-info"></div>
+
+  <div id="hotbar-wrap">
+    <div id="hotbar-label"></div>
+    <div id="hotbar"></div>
+  </div>
+
+  <div id="overlay">
+    <div class="panel">
+      <h1>VoxelCraft</h1>
+      <p class="subtitle">Phase 1 &middot; chunked voxel engine prototype</p>
+      <button id="play-button">Click to Play</button>
+      <div class="controls">
+        <div><span>Move</span><span>W A S D</span></div>
+        <div><span>Jump / Swim up</span><span>Space</span></div>
+        <div><span>Look</span><span>Mouse</span></div>
+        <div><span>Break block</span><span>Left Click</span></div>
+        <div><span>Place block</span><span>Right Click</span></div>
+        <div><span>Select block</span><span>1&ndash;6 / Scroll</span></div>
+        <div><span>Release mouse</span><span>Esc</span></div>
+      </div>
+      <p class="hint">Tip: append <code>?seed=42</code> or <code>?rd=7</code> (render distance) to the URL.</p>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
