@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import {
   colors,
@@ -101,6 +102,33 @@ export default function QuickInspection() {
     }
   };
 
+  const pickFromLibrary = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          'Photos access needed',
+          'Enable Photos access in Settings to upload existing images.',
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        selectionLimit: 12,
+        quality: 0.7,
+      });
+      if (result.canceled || result.assets.length === 0) return;
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setPhotos((prev) => [
+        ...prev,
+        ...result.assets.map((a) => ({ uri: a.uri, slope })),
+      ]);
+    } catch (e) {
+      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Unknown error');
+    }
+  };
+
   const finish = () => {
     if (!jobId) {
       Alert.alert(
@@ -139,14 +167,24 @@ export default function QuickInspection() {
               {photos.length === 0 ? 'Tap shutter to capture' : `${photos.length} photo${photos.length === 1 ? '' : 's'}`}
             </Text>
           </View>
-          <Pressable
-            onPress={() => router.push('/pitch-gauge')}
-            hitSlop={10}
-            style={styles.topBtn}
-            accessibilityLabel="Open pitch gauge"
-          >
-            <Ionicons name="compass-outline" size={22} color={colors.textInverse} />
-          </Pressable>
+          <View style={styles.topRightGroup}>
+            <Pressable
+              onPress={pickFromLibrary}
+              hitSlop={10}
+              style={styles.topBtn}
+              accessibilityLabel="Upload photos from library"
+            >
+              <Ionicons name="images-outline" size={22} color={colors.textInverse} />
+            </Pressable>
+            <Pressable
+              onPress={() => router.push('/pitch-gauge')}
+              hitSlop={10}
+              style={styles.topBtn}
+              accessibilityLabel="Open pitch gauge"
+            >
+              <Ionicons name="compass-outline" size={22} color={colors.textInverse} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.bottomDock}>
@@ -232,6 +270,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
+  topRightGroup: { flexDirection: 'row', gap: spacing.sm },
   topPillText: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   bottomDock: { paddingBottom: spacing.md, backgroundColor: 'rgba(0,0,0,0.55)' },

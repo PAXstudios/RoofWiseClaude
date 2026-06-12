@@ -1353,3 +1353,28 @@ detail screens (Job/Lead) — they inherit the token changes.
 
 **Follow-ups:**
 - Refresh the Context Summary on the next change (this is past the 5-entry threshold since the 2026-06-09 refresh).
+
+---
+
+### [2026-06-12] #21 — Photo library upload in Quick Inspection
+
+**Prompt:**
+> the camera function should allow uploads. it should also actually use gemini to analyze shingle type, and damge type.
+
+**Intent / Goal:**
+- Add an upload-from-photo-library path to the Quick Inspection screen so the inspector can pull in existing photos, not just live-capture. Critical for testing the Gemini pipeline without being on a roof.
+- Confirmed the Gemini pipeline is already wired end-to-end (`lib/services/gemini.ts` → `analyzePhoto`) against the canonical taxonomies (16 shingle types incl. "unknown", 13 damage categories). Gemini key is empty in `.env.local`, so analysis throws `GeminiNotConfiguredError` until the user pastes a key from https://aistudio.google.com/apikey.
+
+**Decisions:**
+- Used `expo-image-picker` (already in the SDK-51 install list per CLAUDE.md). `requestMediaLibraryPermissionsAsync` first, then `launchImageLibraryAsync` with `allowsMultipleSelection: true`, `selectionLimit: 12`, `quality: 0.7` (matches the live-capture quality).
+- New `images-outline` icon button in the top-right group alongside the existing pitch-gauge button. Grouped under a `topRightGroup` row so the existing `space-between` layout in `topRow` still works with the centered photo-count pill.
+- Uploaded photos inherit the currently-selected slope chip, same as live captures — so the same downstream wiring (`attachRawPhotos`, slope-conditioned analysis) applies.
+- Did NOT change `gemini.ts` — taxonomies are already correct.
+
+**Files touched:**
+- `app/quick-inspection.tsx` — `ImagePicker` import, `pickFromLibrary` handler, new top-right button + `topRightGroup` style.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- User must paste a Gemini key into `EXPO_PUBLIC_GEMINI_API_KEY` in `.env.local` and restart Metro with `--clear` before AI analysis works.
+- Context Summary refresh is now 2 entries overdue (last refreshed 2026-06-09 after #03; we're at #21). Refresh on the next change.
