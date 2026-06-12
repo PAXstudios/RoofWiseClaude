@@ -1496,3 +1496,30 @@ detail screens (Job/Lead) — they inherit the token changes.
 
 **Follow-ups:**
 - Full picker crash/read saga is now four entries (#23 OOM → #24 Current mode → #25 single-select/SIGABRT → #26 Compatible). The clean end state: single-select + Compatible + JS-side downscale. Batch upload returns only with a custom dev build that can patch expo-image-picker's double-reject.
+
+---
+
+### [2026-06-12] #27 — Actionable photo-read error + jump straight to Gemini analysis
+
+**Prompt:**
+> i am getting the same error mesage. i need you to redo the code that takes a photo and analyzes the photo for damage using the gemini
+
+**Intent / Goal:**
+- After #26 the library upload still failed on the simulator with "Cannot load representation of type public.heic". Make the failure understandable, and make the capture→analyze→Gemini loop a single continuous flow so it's testable the moment a readable photo exists.
+
+**Decisions / root cause (confirmed from native source):**
+- `ImagePickerModule.swift:94` routes every photo-library pick to `launchMultiSelectPicker` (PHPickerViewController) unless `allowsEditing == true`. PHPicker reads via `MediaHandler.swift:126` `loadDataRepresentation(forTypeIdentifier: UTType.image.identifier)`. The iOS **Simulator's** stock photos are HEIC placeholders that can't be materialized this way, so the read throws regardless of `preferredAssetRepresentationMode` (Current OR Compatible). This is an Apple Simulator limitation, not app code — the same code reads fine on a real device and for fully-downloaded iCloud photos.
+- The only picker path that avoids it is the legacy `UIImagePickerController`, reachable solely via `allowsEditing: true`, which forces a square crop — unacceptable for roof photos (corner/edge damage lives at the margins). So we do NOT force editing. Kept PHPicker + `Compatible` + single-select (the production-correct combination).
+- Verified `lib/services/gemini.ts` is correct and complete (Gemini 2.5 Flash, base64 inlineData, strict-JSON schema, 13-category normalize). No change needed — the AI half of the loop was never the problem.
+- Changes made instead:
+  1. The `pickFromLibrary` catch now detects read failures (`/load representation|failed to read/i`) and shows an actionable message naming the simulator/iCloud cause and the fixes (screenshot test image, different photo, real device) instead of the cryptic native string.
+  2. `finish()` now navigates straight to `/analyze` for the slope that just received photos (was `/job/[id]`), making capture→analyze one continuous flow. Falls back to the job screen if no slope has photos.
+  3. Updated the capture hint to "Capture or upload, then tap Done to run AI damage analysis."
+
+**Files touched:**
+- `app/quick-inspection.tsx` — actionable read-failure alert; `finish()` routes to `/analyze`; hint text.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Immediate simulator unblock for the user (no code): take a screenshot in the simulator (Device ▸ Trigger Screenshot, saved as PNG) and pick THAT — PNGs read fine through PHPicker. Or drag a JPEG onto the simulator. Or run on a real iPhone via the Expo Go QR.
+- Batch upload + guaranteed simulator HEIC read both require leaving Expo Go for a custom dev build (patch expo-image-picker or use PHPicker directly). v2.

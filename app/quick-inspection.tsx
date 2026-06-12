@@ -151,7 +151,14 @@ export default function QuickInspection() {
       const small = await downscale(result.assets[0].uri);
       setPhotos((prev) => [...prev, { uri: small, slope }]);
     } catch (e) {
-      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Unknown error');
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      const readFail = /load representation|failed to read/i.test(msg);
+      Alert.alert(
+        readFail ? "Couldn't read that photo" : 'Upload failed',
+        readFail
+          ? "iOS couldn't load this image's data. This is common with the iOS Simulator's built-in photos (they're HEIC placeholders) and with iCloud photos that haven't fully downloaded to the device. Try a screenshot as a test image, pick a different photo, or run on a real iPhone."
+          : msg,
+      );
     }
   };
 
@@ -189,7 +196,20 @@ export default function QuickInspection() {
       message: `Captured ${photos.length} photo${photos.length === 1 ? '' : 's'} for inspection`,
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace({ pathname: `/job/${targetId}` as any });
+
+    // Jump straight into AI analysis for the slope we just filled so the
+    // capture -> analyze loop is one continuous flow. Fall back to the job
+    // screen only if no slope ended up with photos.
+    const ins = useInspectionStore.getState().inspections.find((i) => i.id === targetId);
+    const slopeWithPhotos = ins?.slopes.find((s) => s.photoPaths.length > 0);
+    if (slopeWithPhotos) {
+      router.replace({
+        pathname: '/analyze',
+        params: { inspectionId: targetId, slopeId: slopeWithPhotos.id },
+      });
+    } else {
+      router.replace({ pathname: `/job/${targetId}` as any });
+    }
   };
 
   return (
@@ -266,7 +286,7 @@ export default function QuickInspection() {
           </View>
 
           <Text style={styles.captureHint}>
-            Photos save to the job. Run AI analysis after — Job Detail → Analyze.
+            Capture or upload, then tap Done to run AI damage analysis.
           </Text>
         </View>
       </SafeAreaView>
