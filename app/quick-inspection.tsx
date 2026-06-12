@@ -132,33 +132,24 @@ export default function QuickInspection() {
         );
         return;
       }
-      // Two crash-avoidance constraints here, both from Expo Go's native
-      // ImagePickerModule:
-      // 1. NO `quality` param. It makes iOS transcode every selected asset to
-      //    JPEG inside the picker; for iCloud/HEIC photos that transcode fails
-      //    ("Cannot load representation of type public.jpeg") and when several
-      //    assets fail the module rejects its promise twice -> native abort
-      //    (SIGABRT), killing the app with no JS error.
-      // 2. preferredAssetRepresentationMode: Current hands back each photo's
-      //    original file without any conversion, which is the documented fix
-      //    for that "Cannot load representation" failure. downscale() below
-      //    then converts to JPEG one image at a time in JS, where errors are
-      //    catchable.
+      // Single-selection ONLY. Expo Go's MediaHandler.handleMultipleMedia has
+      // a Swift bug: on a per-asset failure it calls completion(.failure) and
+      // does NOT short-circuit the others. Two failures -> promise.reject is
+      // invoked twice -> uncatchable iOS exception -> SIGABRT (app closes).
+      // iCloud-backed photos in the Apple Photos album hit this constantly.
+      // The single-media code path (didPickMedia/handleMedia) only calls the
+      // completion once, so it's crash-safe. The UX cost is one extra tap per
+      // photo; the upside is the app never dies mid-flow.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsMultipleSelection: true,
-        selectionLimit: 5,
+        allowsMultipleSelection: false,
         preferredAssetRepresentationMode:
           ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
       });
       if (result.canceled || result.assets.length === 0) return;
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const processed: CapturedPhoto[] = [];
-      for (const a of result.assets) {
-        const small = await downscale(a.uri);
-        processed.push({ uri: small, slope });
-      }
-      setPhotos((prev) => [...prev, ...processed]);
+      const small = await downscale(result.assets[0].uri);
+      setPhotos((prev) => [...prev, { uri: small, slope }]);
     } catch (e) {
       Alert.alert('Upload failed', e instanceof Error ? e.message : 'Unknown error');
     }
@@ -221,7 +212,7 @@ export default function QuickInspection() {
               onPress={pickFromLibrary}
               hitSlop={10}
               style={styles.topBtn}
-              accessibilityLabel="Upload photos from library"
+              accessibilityLabel="Add a photo from library (tap again for more)"
             >
               <Ionicons name="images-outline" size={22} color={colors.textInverse} />
             </Pressable>

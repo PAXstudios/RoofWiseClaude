@@ -1448,3 +1448,28 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - `Current` mode can return HEIC originals; expo-image-manipulator converts them to JPEG. If a format ever fails conversion, `downscale()` falls back to the original URI — Gemini analysis of that photo may then fail, but it's caught per-photo in `analyzeSlope` (counted as `failed`), not fatal.
 - The double-reject crash is an Expo Go native bug; a custom dev build with a patched expo-image-picker would remove the constraint entirely.
+
+---
+
+### [2026-06-12] #25 — Force single-selection picker to dodge expo-image-picker's double-reject bug
+
+**Prompt:**
+> nope the app crashed again
+
+**Intent / Goal:**
+- After #24's `preferredAssetRepresentationMode: Current` fix, Expo Go still hard-killed when picking iCloud-album photos. Make library upload genuinely uncrashable, even at the cost of UX taps.
+
+**Decisions:**
+- Root-caused the SIGABRT by reading `node_modules/expo-image-picker/ios/MediaHandler.swift`. `handleMultipleMedia`'s per-asset failure branch is `return completion(.failure(exception))` — it fires the JS-bridge completion on every failure, never short-circuits the remaining loads, and never debounces. Two failures → `promise.reject(error)` is invoked twice in `ImagePickerModule.swift:225` → uncatchable Obj-C++ exception in `expo::callPromiseSetupWithBlock` → SIGABRT. This matches the crash report stack frame-for-frame.
+- `preferredAssetRepresentationMode: Current` reduces the failure rate but does not fix the underlying double-reject bug. As long as multi-select is on AND ≥2 assets fail to load, the process dies.
+- Switched to `allowsMultipleSelection: false`. That routes the picker to `didPickMedia` → `handleMedia`, which only ever calls completion once. Removed `selectionLimit` (irrelevant when multi-select is off). The picker now returns at most one asset per invocation; the user taps the library button again to add another.
+- Kept `preferredAssetRepresentationMode: Current` belt-and-suspenders for the iCloud "Cannot load representation of type public.jpeg" path on single picks.
+- Updated the button's accessibility label to "Add a photo from library (tap again for more)" so the new flow is discoverable.
+
+**Files touched:**
+- `app/quick-inspection.tsx` — `pickFromLibrary` switched to single selection; library button accessibility label updated.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- If/when we ship a custom dev build, we can either patch `expo-image-picker` (debounce the multi-select completion call in `handleMultipleMedia` after first failure) or use the PHPicker directly via a small Swift module — then re-enable batch selection. Filed mentally as a v2 polish, not a blocker.
+- This is the third photo-picker crash mitigation in one day; the underlying lesson is that **Expo Go's bundled native modules are not patchable from JS, and any native double-resolve bug WILL be fatal until we leave Expo Go**.
