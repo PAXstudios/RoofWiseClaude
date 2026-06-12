@@ -132,14 +132,16 @@ export default function QuickInspection() {
         );
         return;
       }
-      // No `quality` here on purpose: passing it makes the picker re-encode
-      // every selected full-res asset in memory at once, which OOM-crashes
-      // Expo Go on large HEIC photos. We downscale each result sequentially
-      // below instead (one image in memory at a time).
+      // quality: 0.3 forces the picker to transcode/download iCloud photos
+      // before returning URIs (without it, iCloud-only assets fail with
+      // "Cannot load representation of type public.jpeg"). We keep selectionLimit
+      // low (5) to bound the simultaneous in-memory footprint; downscale() then
+      // compresses each result further before it touches the Gemini payload.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
-        selectionLimit: 10,
+        selectionLimit: 5,
+        quality: 0.3,
       });
       if (result.canceled || result.assets.length === 0) return;
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
