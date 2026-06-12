@@ -1,6 +1,8 @@
 import { ScrollView, View, Text, Pressable, StyleSheet, Image, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useMemo, useState } from 'react';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { syncLeads } from '@/lib/services/leadSync';
@@ -16,16 +18,22 @@ import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { AICalibrationCard } from '@/components/AICalibrationCard';
 import { WeatherTile } from '@/components/WeatherTile';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
+import { PressableScale } from '@/components/PressableScale';
 import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
 import {
   colors,
   fontSize,
   fontWeight,
+  motion,
   radii,
   shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
+
+function enter(index: number) {
+  return FadeInDown.duration(360).delay(index * motion.staggerDelayMs);
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -127,64 +135,85 @@ export default function HomeScreen() {
         />
       }
     >
-      {/* Welcome header */}
-      <View style={styles.headerRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.greeting}>{greeting},</Text>
-          <Text style={styles.name}>{firstName}</Text>
-        </View>
-        <Pressable
-          style={styles.iconBtn}
-          onPress={() => router.push('/search')}
-          hitSlop={8}
+      {/* Navy hero header card — greeting + KPIs */}
+      <Animated.View entering={enter(0)}>
+        <LinearGradient
+          colors={[colors.navy, '#16275f']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerCard}
         >
-          <Ionicons name="search" size={22} color={colors.navy} />
-        </Pressable>
-        <Pressable
-          style={styles.iconBtn}
-          onPress={() => router.push('/settings')}
-          hitSlop={8}
-        >
-          <Ionicons name="person-circle-outline" size={28} color={colors.navy} />
-        </Pressable>
-      </View>
+          <View style={styles.headerRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.greeting}>{greeting},</Text>
+              <Text style={styles.name}>{firstName}</Text>
+            </View>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => router.push('/search')}
+              hitSlop={8}
+            >
+              <Ionicons name="search" size={20} color={colors.cream} />
+            </Pressable>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => router.push('/settings')}
+              hitSlop={8}
+            >
+              <Ionicons name="person" size={20} color={colors.cream} />
+            </Pressable>
+          </View>
 
-      <WeatherTile />
-      <AnalysisQueueChip />
+          <View style={styles.kpiRow}>
+            <Kpi label="Revenue YTD" value={revenueYTD > 0 ? `$${formatShort(revenueYTD)}` : '$0'} />
+            <View style={styles.kpiDivider} />
+            <Kpi label="Leads" value={String(openLeads)} />
+            <View style={styles.kpiDivider} />
+            <Kpi label="Pipeline" value={pipelineValue > 0 ? `$${formatShort(pipelineValue)}` : '$0'} />
+          </View>
+        </LinearGradient>
+      </Animated.View>
+
+      <Animated.View entering={enter(1)} style={styles.section}>
+        <WeatherTile />
+        <AnalysisQueueChip />
+      </Animated.View>
 
       {/* Storm Alert hero — hides when no active alert (Drift #4). */}
       {activeAlert && (
-        <Pressable
-          onPress={() =>
-            router.push({ pathname: '/storm-alert/[id]', params: { id: activeAlert.id } } as any)
-          }
-          style={styles.stormHero}
-        >
-          <View style={styles.stormHeroChipRow}>
-            <View style={styles.stormHeroChip}>
-              <Ionicons name="thunderstorm" size={14} color={colors.textInverse} />
-              <Text style={styles.stormHeroChipText}>
-                {activeAlert.eventKind === 'hail' ? 'Severe Hail' : 'Severe Wind'}
-              </Text>
+        <Animated.View entering={enter(1)}>
+          <PressableScale
+            onPress={() =>
+              router.push({ pathname: '/storm-alert/[id]', params: { id: activeAlert.id } } as any)
+            }
+            style={styles.stormHero}
+          >
+            <View style={styles.stormHeroChipRow}>
+              <View style={styles.stormHeroChip}>
+                <Ionicons name="thunderstorm" size={14} color={colors.textInverse} />
+                <Text style={styles.stormHeroChipText}>
+                  {activeAlert.eventKind === 'hail' ? 'Severe Hail' : 'Severe Wind'}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => dismissAlert(activeAlert.id)}
+                hitSlop={10}
+              >
+                <Ionicons name="close" size={20} color={colors.cream} />
+              </Pressable>
             </View>
-            <Pressable
-              onPress={() => dismissAlert(activeAlert.id)}
-              hitSlop={10}
-            >
-              <Ionicons name="close" size={20} color={colors.cream} />
-            </Pressable>
-          </View>
-          <Text style={styles.stormHeroTitle}>{activeAlert.areaLabel}</Text>
-          <Text style={styles.stormHeroSub}>
-            {activeAlert.propertyCount} propert{activeAlert.propertyCount === 1 ? 'y' : 'ies'} in range
-            {activeAlert.hailSizeInches ? ` · ${activeAlert.hailSizeInches}" hail` : ''}
-            {activeAlert.windSpeedMph ? ` · ${activeAlert.windSpeedMph} mph` : ''}
-          </Text>
-          <View style={styles.stormHeroCta}>
-            <Text style={styles.stormHeroCtaText}>View impacted properties</Text>
-            <Ionicons name="arrow-forward" size={20} color={colors.navy} />
-          </View>
-        </Pressable>
+            <Text style={styles.stormHeroTitle}>{activeAlert.areaLabel}</Text>
+            <Text style={styles.stormHeroSub}>
+              {activeAlert.propertyCount} propert{activeAlert.propertyCount === 1 ? 'y' : 'ies'} in range
+              {activeAlert.hailSizeInches ? ` · ${activeAlert.hailSizeInches}" hail` : ''}
+              {activeAlert.windSpeedMph ? ` · ${activeAlert.windSpeedMph} mph` : ''}
+            </Text>
+            <View style={styles.stormHeroCta}>
+              <Text style={styles.stormHeroCtaText}>View impacted properties</Text>
+              <Ionicons name="arrow-forward" size={20} color={colors.navy} />
+            </View>
+          </PressableScale>
+        </Animated.View>
       )}
 
       {!activeAlert && __DEV__ && (
@@ -204,146 +233,140 @@ export default function HomeScreen() {
         </Pressable>
       )}
 
-      {/* Hail Tracer + Estimator + Mileage CTAs */}
-      <View style={styles.utilityRow}>
-        <Pressable style={styles.utilityCta} onPress={() => router.push('/hail-tracer')}>
-          <Ionicons name="thunderstorm" size={22} color={colors.orange} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.utilityTitle}>Hail Tracer</Text>
-            <Text style={styles.utilitySub}>NOAA map</Text>
-          </View>
-        </Pressable>
-        <Pressable style={styles.utilityCta} onPress={() => router.push('/estimator')}>
-          <Ionicons name="calculator-outline" size={22} color={colors.orange} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.utilityTitle}>Estimator</Text>
-            <Text style={styles.utilitySub}>Solar + cost</Text>
-          </View>
-        </Pressable>
-        <Pressable style={styles.utilityCta} onPress={() => router.push('/mileage')}>
-          <Ionicons name="car-outline" size={22} color={colors.orange} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.utilityTitle}>Mileage</Text>
-            <Text style={styles.utilitySub}>Tax log</Text>
-          </View>
-        </Pressable>
-      </View>
-
       {/* Hero CTAs */}
-      <View style={styles.heroRow}>
-        <Pressable
-          style={[styles.heroCta, styles.heroPrimary]}
+      <Animated.View entering={enter(2)} style={styles.heroRow}>
+        <PressableScale
+          style={styles.heroCta}
           onPress={() => router.push('/quick-inspection')}
         >
-          <Ionicons name="scan-outline" size={28} color={colors.textInverse} />
-          <Text style={styles.heroPrimaryText}>Quick Inspection</Text>
-          <Text style={styles.heroPrimarySub}>Camera → AI → Claim packet</Text>
-        </Pressable>
+          <LinearGradient
+            colors={[colors.orange, '#FF8A3D']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroPrimaryInner}
+          >
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="scan-outline" size={26} color={colors.textInverse} />
+            </View>
+            <Text style={styles.heroPrimaryText}>Quick{'\n'}Inspection</Text>
+            <Text style={styles.heroPrimarySub}>Camera → AI → Claim packet</Text>
+          </LinearGradient>
+        </PressableScale>
 
-        <Pressable
+        <PressableScale
           style={[styles.heroCta, styles.heroSecondary]}
           onPress={() => router.push('/new-job')}
         >
-          <Ionicons name="briefcase-outline" size={28} color={colors.navy} />
-          <Text style={styles.heroSecondaryText}>New Job</Text>
+          <View style={[styles.heroIconWrap, styles.heroIconWrapNavy]}>
+            <Ionicons name="briefcase-outline" size={26} color={colors.navy} />
+          </View>
+          <Text style={styles.heroSecondaryText}>New{'\n'}Job</Text>
           <Text style={styles.heroSecondarySub}>Customer · Insurance · Roof</Text>
-        </Pressable>
-      </View>
+        </PressableScale>
+      </Animated.View>
 
-      {/* KPI tiles */}
-      <View style={styles.kpiRow}>
-        <Kpi label="Revenue YTD" value={revenueYTD > 0 ? `$${formatShort(revenueYTD)}` : '$0'} />
-        <Kpi label="Leads" value={String(openLeads)} />
-        <Kpi label="Pipeline" value={pipelineValue > 0 ? `$${formatShort(pipelineValue)}` : '$0'} />
-      </View>
+      {/* Field tools */}
+      <Animated.View entering={enter(3)} style={styles.utilityRow}>
+        <UtilityCta icon="thunderstorm" title="Hail Tracer" sub="NOAA map" onPress={() => router.push('/hail-tracer')} />
+        <UtilityCta icon="calculator-outline" title="Estimator" sub="Solar + cost" onPress={() => router.push('/estimator')} />
+        <UtilityCta icon="car-outline" title="Mileage" sub="Tax log" onPress={() => router.push('/mileage')} />
+      </Animated.View>
 
-      <AICalibrationCard />
+      <Animated.View entering={enter(4)}>
+        <AICalibrationCard />
+      </Animated.View>
 
       {/* Recent Jobs */}
-      <Pressable onPress={() => router.push('/inspections')} hitSlop={6}>
-        <View style={styles.activityHeaderRow}>
-          <Text style={styles.sectionTitle}>Recent Jobs</Text>
-          {inspections.length > 0 && (
-            <Text style={styles.viewAll}>View all</Text>
-          )}
-        </View>
-      </Pressable>
-      {inspections.length === 0 ? (
-        <EmptyCard
-          icon="hammer-outline"
-          message="No jobs yet. Tap New Job above to create your first."
-        />
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.recentRow}
-        >
-          {inspections.slice(0, 8).map((ins) => {
-            const firstPhoto = ins.slopes.flatMap((sl) => sl.photoPaths)[0];
-            return (
-              <Pressable
-                key={ins.id}
-                style={styles.recentCard}
-                onPress={() => router.push(`/job/${ins.id}` as any)}
-              >
-                {firstPhoto ? (
-                  <Image source={{ uri: firstPhoto }} style={styles.recentImage} />
-                ) : (
-                  <View style={styles.recentImagePlaceholder}>
-                    <Ionicons name="image-outline" size={28} color={colors.slate} />
-                  </View>
-                )}
-                <View style={styles.recentBody}>
-                  <View style={styles.recentTopRow}>
-                    <Text style={styles.recentReport}>{ins.reportId}</Text>
-                    <View style={styles.statusPill}>
-                      <Text style={styles.statusText}>{ins.status.replace('_', ' ')}</Text>
+      <Animated.View entering={enter(5)}>
+        <Pressable onPress={() => router.push('/inspections')} hitSlop={6}>
+          <View style={styles.sectionHeaderRow}>
+            <SectionTitle title="Recent Jobs" />
+            {inspections.length > 0 && (
+              <Text style={styles.viewAll}>View all</Text>
+            )}
+          </View>
+        </Pressable>
+        {inspections.length === 0 ? (
+          <EmptyCard
+            icon="hammer-outline"
+            message="No jobs yet. Tap New Job above to create your first."
+          />
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.recentRow}
+          >
+            {inspections.slice(0, 8).map((ins) => {
+              const firstPhoto = ins.slopes.flatMap((sl) => sl.photoPaths)[0];
+              return (
+                <PressableScale
+                  key={ins.id}
+                  style={styles.recentCard}
+                  onPress={() => router.push(`/job/${ins.id}` as any)}
+                >
+                  {firstPhoto ? (
+                    <Image source={{ uri: firstPhoto }} style={styles.recentImage} />
+                  ) : (
+                    <View style={styles.recentImagePlaceholder}>
+                      <Ionicons name="image-outline" size={28} color={colors.slate} />
                     </View>
+                  )}
+                  <View style={styles.recentBody}>
+                    <View style={styles.recentTopRow}>
+                      <Text style={styles.recentReport}>{ins.reportId}</Text>
+                      <View style={styles.statusPill}>
+                        <Text style={styles.statusText}>{ins.status.replace('_', ' ')}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.recentCustomer} numberOfLines={1}>
+                      {ins.customerName}
+                    </Text>
+                    <Text style={styles.recentAddress} numberOfLines={1}>
+                      {ins.address}
+                    </Text>
+                    <Text style={styles.recentMeta}>{ROOF_MATERIAL_LABELS[ins.material]} · {ins.ageYears}yr</Text>
                   </View>
-                  <Text style={styles.recentCustomer} numberOfLines={1}>
-                    {ins.customerName}
-                  </Text>
-                  <Text style={styles.recentAddress} numberOfLines={1}>
-                    {ins.address}
-                  </Text>
-                  <Text style={styles.recentMeta}>{ROOF_MATERIAL_LABELS[ins.material]} · {ins.ageYears}yr</Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      )}
+                </PressableScale>
+              );
+            })}
+          </ScrollView>
+        )}
+      </Animated.View>
 
       {/* Pipeline mini-Kanban */}
-      <SectionHeader title="Pipeline" />
-      <View style={styles.pipelineRow}>
-        {(Object.entries(pipelineCounts) as [string, number][]).map(([stage, count]) => (
-          <View key={stage} style={styles.pipelineCard}>
-            <Text style={styles.pipelineCount}>{count}</Text>
-            <Text style={styles.pipelineLabel}>{stage}</Text>
-          </View>
-        ))}
-      </View>
+      <Animated.View entering={enter(6)}>
+        <SectionTitle title="Pipeline" />
+        <View style={styles.pipelineRow}>
+          {(Object.entries(pipelineCounts) as [string, number][]).map(([stage, count]) => (
+            <View key={stage} style={[styles.pipelineCard, count > 0 && styles.pipelineCardActive]}>
+              <Text style={[styles.pipelineCount, count === 0 && styles.pipelineCountZero]}>{count}</Text>
+              <Text style={styles.pipelineLabel}>{stage}</Text>
+            </View>
+          ))}
+        </View>
+      </Animated.View>
 
       {/* Today's Plan */}
-      <SectionHeader title="Today's Plan" />
-      <EmptyCard
-        icon="calendar-outline"
-        message="Nothing scheduled. Add jobs to your plan to see them here."
-      />
+      <Animated.View entering={enter(7)}>
+        <SectionTitle title="Today's Plan" />
+        <EmptyCard
+          icon="calendar-outline"
+          message="Nothing scheduled. Add jobs to your plan to see them here."
+        />
+      </Animated.View>
 
       {/* Saved Estimates */}
       {estimates.length > 0 && (
-        <>
-          <SectionHeader title="Saved estimates" />
+        <View>
+          <SectionTitle title="Saved estimates" />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.recentRow}
           >
             {estimates.map((est) => (
-              <Pressable
+              <PressableScale
                 key={est.id}
                 style={styles.estimateCard}
                 onPress={() => router.push('/estimator')}
@@ -360,49 +383,53 @@ export default function HomeScreen() {
                 <Text style={styles.estimateMeta}>
                   {est.totalSquares.toFixed(1)} sq · {est.scope.replace('_', ' ')}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </ScrollView>
-        </>
+        </View>
       )}
 
       {/* Activity */}
-      <Pressable onPress={() => router.push('/activity')} hitSlop={6}>
-        <View style={styles.activityHeaderRow}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          {recentActivity.length > 0 && (
-            <Text style={styles.viewAll}>View all</Text>
-          )}
-        </View>
-      </Pressable>
-      {recentActivity.length === 0 ? (
-        <EmptyCard
-          icon="time-outline"
-          message="Inspections, knocks, and saves will show up here."
-        />
-      ) : (
-        <View style={styles.activityCard}>
-          {recentActivity.map((evt, i) => (
-            <View
-              key={evt.id}
-              style={[styles.activityRow, i > 0 && styles.activityRowBorder]}
-            >
-              <Ionicons name={iconFor(evt.kind)} size={18} color={colors.orange} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.activityMsg}>{evt.message}</Text>
-                <Text style={styles.activityTime}>{formatRelative(evt.createdAt)}</Text>
+      <View>
+        <Pressable onPress={() => router.push('/activity')} hitSlop={6}>
+          <View style={styles.sectionHeaderRow}>
+            <SectionTitle title="Recent Activity" />
+            {recentActivity.length > 0 && (
+              <Text style={styles.viewAll}>View all</Text>
+            )}
+          </View>
+        </Pressable>
+        {recentActivity.length === 0 ? (
+          <EmptyCard
+            icon="time-outline"
+            message="Inspections, knocks, and saves will show up here."
+          />
+        ) : (
+          <View style={styles.activityCard}>
+            {recentActivity.map((evt, i) => (
+              <View
+                key={evt.id}
+                style={[styles.activityRow, i > 0 && styles.activityRowBorder]}
+              >
+                <View style={styles.activityIconWrap}>
+                  <Ionicons name={iconFor(evt.kind)} size={16} color={colors.orange} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.activityMsg}>{evt.message}</Text>
+                  <Text style={styles.activityTime}>{formatRelative(evt.createdAt)}</Text>
+                </View>
               </View>
-            </View>
-          ))}
-        </View>
-      )}
+            ))}
+          </View>
+        )}
+      </View>
 
-      <View style={{ height: spacing.xxxl }} />
+      <View style={{ height: spacing.xxxl * 2 }} />
     </ScrollView>
 
-    <Pressable style={styles.fab} onPress={onQuickAdd}>
-      <Ionicons name="add" size={28} color={colors.textInverse} />
-    </Pressable>
+    <PressableScale style={styles.fab} pressedScale={0.92} onPress={onQuickAdd}>
+      <Ionicons name="add" size={30} color={colors.textInverse} />
+    </PressableScale>
     </View>
   );
 }
@@ -439,15 +466,42 @@ function formatRelative(iso: string): string {
 
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.kpiCard}>
+    <View style={styles.kpiCell}>
       <Text style={styles.kpiValue}>{value}</Text>
       <Text style={styles.kpiLabel}>{label}</Text>
     </View>
   );
 }
 
-function SectionHeader({ title }: { title: string }) {
-  return <Text style={styles.sectionTitle}>{title}</Text>;
+function SectionTitle({ title }: { title: string }) {
+  return (
+    <View style={styles.sectionTitleRow}>
+      <View style={styles.sectionTick} />
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
+}
+
+function UtilityCta({
+  icon,
+  title,
+  sub,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  sub: string;
+  onPress: () => void;
+}) {
+  return (
+    <PressableScale style={styles.utilityCta} onPress={onPress}>
+      <View style={styles.utilityIconWrap}>
+        <Ionicons name={icon} size={20} color={colors.orange} />
+      </View>
+      <Text style={styles.utilityTitle}>{title}</Text>
+      <Text style={styles.utilitySub}>{sub}</Text>
+    </PressableScale>
+  );
 }
 
 function EmptyCard({
@@ -459,7 +513,9 @@ function EmptyCard({
 }) {
   return (
     <View style={styles.emptyCard}>
-      <Ionicons name={icon} size={32} color={colors.slate} />
+      <View style={styles.emptyIconWrap}>
+        <Ionicons name={icon} size={24} color={colors.orange} />
+      </View>
       <Text style={styles.emptyText}>{message}</Text>
     </View>
   );
@@ -471,100 +527,149 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingBottom: spacing.xxxl,
   },
+
+  headerCard: {
+    borderRadius: radii.xl,
+    padding: spacing.xl,
+    gap: spacing.xl,
+    ...shadows.pressed,
+  },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
-  greeting: { fontSize: fontSize.bodyMd, color: colors.slate },
-  name: { fontSize: fontSize.titleXl, fontWeight: fontWeight.semibold, color: colors.navy },
-  profileBtn: { padding: spacing.sm },
+  greeting: { fontSize: fontSize.bodyMd, color: 'rgba(240,240,228,0.72)' },
+  name: {
+    fontSize: fontSize.titleXl,
+    fontWeight: fontWeight.bold,
+    color: colors.cream,
+    letterSpacing: -0.5,
+  },
   iconBtn: {
     width: touchTarget.small,
     height: touchTarget.small,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: spacing.sm,
-    ...shadows.card,
   },
-  fab: {
-    position: 'absolute',
-    right: spacing.xl,
-    bottom: spacing.xl,
-    width: touchTarget.sticky,
-    height: touchTarget.sticky,
-    borderRadius: touchTarget.sticky / 2,
-    backgroundColor: colors.orange,
+
+  kpiRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.pressed,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: radii.card,
+    paddingVertical: spacing.lg,
   },
+  kpiCell: { flex: 1, alignItems: 'center' },
+  kpiDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.14)' },
+  kpiValue: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.orange,
+  },
+  kpiLabel: {
+    fontSize: fontSize.caption,
+    color: 'rgba(240,240,228,0.72)',
+    marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  section: { gap: spacing.lg },
 
   heroRow: { flexDirection: 'row', gap: spacing.md },
   heroCta: {
     flex: 1,
-    minHeight: 120,
-    borderRadius: radii.card,
+    minHeight: 150,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    ...shadows.pressed,
+  },
+  heroPrimaryInner: {
+    flex: 1,
     padding: spacing.lg,
     justifyContent: 'space-between',
-    ...shadows.card,
   },
-  heroPrimary: { backgroundColor: colors.orange },
+  heroIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroIconWrapNavy: { backgroundColor: colors.brandSoft },
   heroPrimaryText: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.textInverse,
+    lineHeight: 24,
     marginTop: spacing.sm,
   },
   heroPrimarySub: {
-    fontSize: fontSize.bodySm,
+    fontSize: fontSize.caption,
     color: 'rgba(255,255,255,0.92)',
   },
   heroSecondary: {
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.navy,
+    padding: spacing.lg,
+    justifyContent: 'space-between',
   },
   heroSecondaryText: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.navy,
+    lineHeight: 24,
     marginTop: spacing.sm,
   },
-  heroSecondarySub: { fontSize: fontSize.bodySm, color: colors.slate },
+  heroSecondarySub: { fontSize: fontSize.caption, color: colors.slate },
 
-  kpiRow: { flexDirection: 'row', gap: spacing.md },
-  kpiCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    ...shadows.card,
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
-  kpiValue: {
-    fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
-    color: colors.navy,
+  sectionTick: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: colors.orange,
   },
-  kpiLabel: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: spacing.xs },
-
   sectionTitle: {
     fontSize: fontSize.titleMd,
-    fontWeight: fontWeight.semibold,
+    fontWeight: fontWeight.bold,
     color: colors.navy,
-    marginTop: spacing.md,
+    letterSpacing: -0.3,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  viewAll: { color: colors.orange, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   emptyCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
     padding: spacing.xl,
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.md,
     ...shadows.card,
+  },
+  emptyIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
     fontSize: fontSize.bodyMd,
     color: colors.slate,
     textAlign: 'center',
+    lineHeight: 20,
   },
 
   pipelineRow: { flexDirection: 'row', gap: spacing.sm },
@@ -578,19 +683,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
+  pipelineCardActive: {
+    borderBottomWidth: 3,
+    borderBottomColor: colors.orange,
+  },
   pipelineCount: {
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
     color: colors.orange,
   },
+  pipelineCountZero: { color: colors.borderStrong },
   pipelineLabel: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
 
   stormHero: {
     backgroundColor: colors.navy,
-    borderRadius: radii.card,
+    borderRadius: radii.lg,
     padding: spacing.lg,
     gap: spacing.sm,
-    ...shadows.card,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.orange,
+    ...shadows.pressed,
   },
   stormHeroChipRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   stormHeroChip: {
@@ -632,37 +744,45 @@ const styles = StyleSheet.create({
   utilityRow: { flexDirection: 'row', gap: spacing.md },
   utilityCta: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: 4,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    padding: spacing.lg,
-    minHeight: touchTarget.preferred,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.sm,
     ...shadows.card,
   },
-  utilityTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
-  utilitySub: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2 },
+  utilityIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  utilityTitle: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.navy },
+  utilitySub: { fontSize: fontSize.caption, color: colors.slate },
 
   recentRow: { gap: spacing.md, paddingRight: spacing.xl },
   recentCard: {
     width: 260,
     backgroundColor: colors.surface,
-    borderRadius: radii.card,
+    borderRadius: radii.lg,
     overflow: 'hidden',
     ...shadows.card,
   },
-  recentImage: { width: '100%', height: 110, backgroundColor: colors.surfaceMuted },
+  recentImage: { width: '100%', height: 120, backgroundColor: colors.surfaceMuted },
   recentImagePlaceholder: {
     width: '100%',
-    height: 110,
-    backgroundColor: colors.surfaceMuted,
+    height: 120,
+    backgroundColor: colors.brandSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   recentBody: { padding: spacing.lg, gap: spacing.xs },
   recentTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  recentReport: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.semibold },
+  recentReport: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold, letterSpacing: 0.3 },
   statusPill: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
@@ -680,20 +800,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     padding: spacing.lg,
     gap: 4,
+    borderTopWidth: 3,
+    borderTopColor: colors.orange,
     ...shadows.card,
   },
   estimateAmount: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.orange },
   estimateRange: { fontSize: fontSize.caption, color: colors.slate },
   estimateAddress: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium, marginTop: spacing.xs },
   estimateMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2, textTransform: 'capitalize' },
-
-  activityHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: spacing.md,
-  },
-  viewAll: { color: colors.orange, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   activityCard: {
     backgroundColor: colors.surface,
@@ -708,6 +822,27 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   activityRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
+  activityIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   activityMsg: { fontSize: fontSize.bodyMd, color: colors.navy },
   activityTime: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2 },
+
+  fab: {
+    position: 'absolute',
+    right: spacing.xl,
+    bottom: spacing.xl,
+    width: touchTarget.sticky,
+    height: touchTarget.sticky,
+    borderRadius: touchTarget.sticky / 2,
+    backgroundColor: colors.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.pressed,
+  },
 });

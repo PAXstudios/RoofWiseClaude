@@ -22,7 +22,7 @@ export default function TabsLayout() {
   }
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.content}>
         <Slot />
       </View>

@@ -1266,3 +1266,49 @@ hardening for photos.
 
 **Files touched:** `lib/stores/leadStore.ts`, `app/lead/[id].tsx`
 (created), `app/(tabs)/{leads,plan}.tsx`.
+
+---
+
+### [2026-06-09] #18 — Visual polish pass
+
+**Prompt:**
+> Make the app look better.
+
+(Another container reset to 915348c at turn start — fast-forwarded to
+origin b6e13cf before working; nothing lost.)
+
+**Decisions:**
+- `components/PressableScale.tsx` — reusable spring-press wrapper
+  (Reanimated, scale 0.97 in / bouncy spring out per the spec's motion
+  tokens). Applied to the storm hero, hero CTAs, field-tool tiles,
+  recent-job cards, estimate cards, and the FAB.
+- **Home rebuilt visually** (all behavior preserved — refresh, FAB,
+  quick-add sheet, debug storm inject, queue chip):
+  - Navy gradient hero header card: greeting + name in cream,
+    translucent icon buttons, and the three KPIs inside a frosted
+    band with dividers (orange numbers).
+  - Quick Inspection CTA is now an orange gradient card with an icon
+    chip; New Job mirrors it in white + navy. Both 150pt with press
+    springs.
+  - Field tools row became vertical icon-chip tiles.
+  - Section titles get a 4pt orange tick bar.
+  - Pipeline chips underline orange when non-zero; zeros render muted.
+  - Empty states show the icon inside a soft-orange circle.
+  - Activity rows get tinted icon circles.
+  - Estimate cards get an orange top border.
+  - Top-level sections stagger in with FadeInDown (60ms per index).
+- **Floating navy tab bar**: rounded-pill navy bar with margin instead
+  of the full-width white strip. Active tab = filled icon variant +
+  orange tint + soft orange pill behind it; selection haptic on tap.
+  Tabs layout now pads the bottom safe-area edge.
+- **Welcome screen** moved from the orange gradient to the brand navy
+  gradient; logo mark is now solid orange, primary button orange pill.
+  Light status bar on Welcome + Onboarding (navy backgrounds).
+
+**Files touched:** `components/PressableScale.tsx` (new),
+`components/shell/BottomTabs.tsx`, `app/(tabs)/{index,_layout}.tsx`,
+`app/{welcome,onboarding}.tsx`.
+
+**Deliberately untouched:** per-screen headers on Leads/Plan/Train
+(consistent but plain — candidate for a shared ScreenHeader later),
+detail screens (Job/Lead) — they inherit the token changes.

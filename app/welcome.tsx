@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/authStore';
@@ -61,11 +62,12 @@ export default function WelcomeScreen() {
 
   return (
     <LinearGradient
-      colors={[colors.accent, '#FF8A47']}
+      colors={[colors.navy, '#16275f']}
       style={styles.gradient}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
+      <StatusBar style="light" />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           style={styles.flex}
@@ -210,10 +212,11 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: radii.lg,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.lg,
+    ...shadows.pressed,
   },
   logoText: {
     color: colors.textInverse,
@@ -278,8 +281,8 @@ const styles = StyleSheet.create({
   },
   primaryBtn: {
     height: 56,
-    borderRadius: radii.md,
-    backgroundColor: colors.text,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing.md,
