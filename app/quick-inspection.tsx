@@ -40,6 +40,7 @@ export default function QuickInspection() {
   const router = useRouter();
   const { jobId } = useLocalSearchParams<{ jobId?: string }>();
   const attachRawPhotos = useInspectionStore((s) => s.attachRawPhotos);
+  const createInspection = useInspectionStore((s) => s.create);
   const logActivity = useActivityStore((s) => s.log);
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
@@ -130,26 +131,40 @@ export default function QuickInspection() {
   };
 
   const finish = () => {
-    if (!jobId) {
-      Alert.alert(
-        'Not linked to a job',
-        'Photos were captured but no job is set. Open a Job and tap Start Quick Inspection to attach.',
-        [{ text: 'OK', onPress: () => router.back() }],
-      );
-      return;
-    }
     if (photos.length === 0) {
       router.back();
       return;
     }
-    attachRawPhotos(jobId, photos);
+
+    // Standalone capture (no job set) auto-creates a lightweight inspection so
+    // photos are never lost. Customer/address/roof details default to
+    // placeholders the inspector can edit later on the Job screen.
+    let targetId = jobId;
+    if (!targetId) {
+      const ins = createInspection({
+        customerName: 'Quick inspection',
+        address: 'Address pending',
+        material: 'architectural_asphalt',
+        ageYears: 0,
+        geometry: 'gable',
+        condition: 'good',
+      });
+      targetId = ins.id;
+      logActivity({
+        kind: 'job_created',
+        inspectionId: ins.id,
+        message: `Created quick inspection ${ins.reportId}`,
+      });
+    }
+
+    attachRawPhotos(targetId, photos);
     logActivity({
       kind: 'photo_captured',
-      inspectionId: jobId,
+      inspectionId: targetId,
       message: `Captured ${photos.length} photo${photos.length === 1 ? '' : 's'} for inspection`,
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace({ pathname: `/job/${jobId}` as any });
+    router.replace({ pathname: `/job/${targetId}` as any });
   };
 
   return (

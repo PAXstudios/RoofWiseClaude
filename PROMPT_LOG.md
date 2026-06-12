@@ -1378,3 +1378,28 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - User must paste a Gemini key into `EXPO_PUBLIC_GEMINI_API_KEY` in `.env.local` and restart Metro with `--clear` before AI analysis works.
 - Context Summary refresh is now 2 entries overdue (last refreshed 2026-06-09 after #03; we're at #21). Refresh on the next change.
+
+---
+
+### [2026-06-12] #22 — Standalone Quick Inspection (no job required)
+
+**Prompt:**
+> you need to fix the app so that the camera and uploaded photos can be saved and dont have to be linked to a new job
+
+**Intent / Goal:**
+- Remove the hard requirement that Quick Inspection be launched from inside an existing Job. Previously, capturing/uploading from the Home shortcut hit a dead end ("Not linked to a job" alert) and the photos were discarded.
+- Photos captured or uploaded standalone must be saved, never lost, and must flow into the same Analyze pipeline.
+
+**Decisions:**
+- On `finish()` with no `jobId`, auto-create a lightweight inspection via `inspectionStore.create` with placeholder defaults the inspector can edit later on the Job screen: customerName `Quick inspection`, address `Address pending`, material `architectural_asphalt` (most common modern covering), geometry `gable`, condition `good`, age 0. Then attach photos and navigate to that job's detail.
+- Kept the existing path intact when `jobId` IS present (launched from a Job).
+- Logs a `job_created` activity for the auto-created inspection so it shows in the activity feed, same as the wizard path.
+- Did NOT touch the 4-step New Job wizard — user reported it "flips to a new page," which is the expected Step 1→2→3→4 advance on Next, not a bug. Standalone capture means the wizard is no longer on the critical path for testing AI.
+
+**Files touched:**
+- `app/quick-inspection.tsx` — `finish()` auto-creates an inspection when unlinked; added `create` selector.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Consider an inline "edit details" affordance on the auto-created Quick inspection so the placeholder customer/address can be corrected without the full wizard.
+- Context Summary refresh now 3 entries overdue (last 2026-06-09 after #03; now at #22).
