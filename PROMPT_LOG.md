@@ -1331,3 +1331,25 @@ detail screens (Job/Lead) — they inherit the token changes.
   ScreenHeader → ScrollView.
 
 **Next:** same treatment on Job / Lead / Proposal detail screens.
+
+### [2026-06-12] #20 — CLAUDE.md fast-path onboarding file
+
+**Prompt:**
+> generate an updated: generate a CLAUDE.md
+
+**Intent / Goal:**
+- Add a top-level `CLAUDE.md` so any Claude Code (or other agent) session opening this repo gets fast onboarding without re-deriving stack, IA, drift warnings, secrets policy, and branch policy from scratch.
+- Keep it short. Defer to the canonical sources (`PROMPT_LOG.md`, `docs/SPEC.md`, `CONTRIBUTING.md`) rather than duplicating them.
+
+**Decisions:**
+- File is the *short* contract; `CONTRIBUTING.md` + `PROMPT_LOG.md` remain the *long* contracts. If they disagree, the log wins.
+- Captured the 13 Drift Warnings in short form (canonical list stays in `PROMPT_LOG.md`).
+- Documented branch policy (`claude/wonderful-franklin-HuSTl` only), secrets policy (no hardcoded keys; `app.config.js` reads `process.env`; service-role key is server-only), and the `npx expo install` vs plain `npm install` rule for native modules (root cause of the AsyncStorage crash in entry #?).
+- Listed parked items (Apple Sign In needs dev build, no LiDAR/ARKit, no background execution in Expo Go) so a future agent doesn't quietly resurrect them.
+
+**Files touched:**
+- `CLAUDE.md` — new.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Refresh the Context Summary on the next change (this is past the 5-entry threshold since the 2026-06-09 refresh).
