@@ -2,6 +2,7 @@ import { ScrollView, View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { useTrainingQueueStore } from '@/lib/stores/trainingQueueStore';
 import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
@@ -29,12 +30,9 @@ export default function TrainScreen() {
   const accuracy = overallAccuracy(profile);
 
   return (
+    <View style={styles.root}>
+    <ScreenHeader title="Train" subtitle="Inspector review queue + AI calibration" />
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Train</Text>
-        <Text style={styles.sub}>Inspector review queue + AI calibration</Text>
-      </View>
-
       <View style={styles.tilesRow}>
         <Pressable
           style={[styles.tile, styles.tilePrimary]}
@@ -108,6 +106,7 @@ export default function TrainScreen() {
 
       <View style={{ height: spacing.xxxl }} />
     </ScrollView>
+    </View>
   );
 }
 

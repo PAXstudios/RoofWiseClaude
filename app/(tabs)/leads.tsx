@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { PressableScale } from '@/components/PressableScale';
 import type { LeadStage } from '@/lib/models/types';
 import {
   colors,
@@ -56,19 +58,20 @@ export default function LeadsScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Leads</Text>
-          <Text style={styles.sub}>{leads.length} total</Text>
-        </View>
-        <Pressable
-          style={styles.fab}
-          onPress={() => router.push('/new-job')}
-          hitSlop={8}
-        >
-          <Ionicons name="add" size={24} color={colors.textInverse} />
-        </Pressable>
-      </View>
+      <ScreenHeader
+        title="Leads"
+        subtitle={`${leads.length} total`}
+        right={
+          <PressableScale
+            style={styles.fab}
+            pressedScale={0.92}
+            onPress={() => router.push('/new-lead')}
+            hitSlop={8}
+          >
+            <Ionicons name="add" size={24} color={colors.textInverse} />
+          </PressableScale>
+        }
+      />
 
       <ScrollView
         horizontal
@@ -109,7 +112,7 @@ export default function LeadsScreen() {
           </View>
         ) : (
           filtered.map((lead) => (
-            <Pressable
+            <PressableScale
               key={lead.id}
               style={styles.leadCard}
               onPress={() => router.push(`/lead/${lead.id}` as any)}
@@ -135,7 +138,7 @@ export default function LeadsScreen() {
                 <Ionicons name="arrow-forward" size={16} color={colors.textInverse} />
                 <Text style={styles.convertBtnText}>Convert to inspection</Text>
               </Pressable>
-            </Pressable>
+            </PressableScale>
           ))
         )}
       </ScrollView>

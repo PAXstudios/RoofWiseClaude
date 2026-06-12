@@ -1312,3 +1312,22 @@ origin b6e13cf before working; nothing lost.)
 **Deliberately untouched:** per-screen headers on Leads/Plan/Train
 (consistent but plain — candidate for a shared ScreenHeader later),
 detail screens (Job/Lead) — they inherit the token changes.
+
+---
+
+### [2026-06-09] #19 — Shared ScreenHeader on Leads / Plan / Train
+
+**Prompt:** Yes (extend the polish pass).
+
+- `components/ScreenHeader.tsx` — unified header: orange tick accent +
+  titleLg navy title + optional subtitle, optional back chevron in a
+  white circle, right-slot for actions. Tab screens use it without
+  back; detail screens can pass `back`.
+- Leads: header replaced; the + button now routes to /new-lead (was
+  /new-job — a lead list should mint leads) and is a PressableScale.
+  Lead cards also press-spring.
+- Plan + Train: headers replaced and lifted OUT of the padded
+  ScrollViews (ScreenHeader carries its own padding) — root View →
+  ScreenHeader → ScrollView.
+
+**Next:** same treatment on Job / Lead / Proposal detail screens.

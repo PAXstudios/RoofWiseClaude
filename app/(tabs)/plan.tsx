@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import {
   colors,
   fontSize,
@@ -72,12 +73,9 @@ export default function PlanScreen() {
   });
 
   return (
+    <View style={styles.root}>
+    <ScreenHeader title="Plan" subtitle={today} />
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Plan</Text>
-        <Text style={styles.sub}>{today}</Text>
-      </View>
-
       <View style={styles.statsRow}>
         <StatTile label="Inspections" value={String(todayInspections.length)} />
         <StatTile label="Knocks today" value={String(todayKnocks)} />
@@ -186,6 +184,7 @@ export default function PlanScreen() {
 
       <View style={{ height: spacing.xxxl }} />
     </ScrollView>
+    </View>
   );
 }
 
