@@ -1403,3 +1403,28 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - Consider an inline "edit details" affordance on the auto-created Quick inspection so the placeholder customer/address can be corrected without the full wizard.
 - Context Summary refresh now 3 entries overdue (last 2026-06-09 after #03; now at #22).
+
+---
+
+### [2026-06-12] #23 — Fix Expo Go OOM crash on photo selection; downscale all photos
+
+**Prompt:**
+> when i go to quick inspection and select photos from my apple photo album, expo go crashes and the app closes
+
+**Intent / Goal:**
+- Stop Expo Go from being killed by iOS when selecting library photos. Root cause: `launchImageLibraryAsync` with `quality: 0.7` + `allowsMultipleSelection` forces a full-resolution re-encode of every selected HEIC asset in memory simultaneously → out-of-memory → native crash (app closes, no JS redbox).
+
+**Decisions:**
+- Removed `quality` from the picker call so the native picker returns original asset URIs without an in-memory re-encode pass. Lowered `selectionLimit` 12 → 10.
+- Added a `downscale()` helper (expo-image-manipulator, already a dependency) that resizes to max 1600px width + JPEG compress 0.7. Applied to BOTH camera captures and each picked library asset, processed sequentially in a `for` loop so only one image is in memory at a time.
+- Bonus: smaller stored images mean smaller base64 payloads to Gemini (`analyzeSlope` reads each file as base64), so analysis is faster and avoids request-size limits.
+- `downscale` falls back to the original URI on failure so a photo is never silently dropped.
+- Also flagged to the user: there are TWO project clones + two Metro instances on their Mac (`~/Documents/RoofWiseClaude` new vs `~/RoofWiseClaude` old on port 8081) — source of "which code is running" confusion.
+
+**Files touched:**
+- `app/quick-inspection.tsx` — `ImageManipulator` import, `downscale()` helper, capture + pickFromLibrary downscale each photo, dropped `quality` from picker.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- If the crash persists after this, capture is likely iCloud-photo download or a deeper native issue — would need the device crash log.
+- Context Summary refresh now 4 entries overdue.

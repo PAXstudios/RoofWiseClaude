@@ -13,6 +13,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 import {
   colors,
@@ -30,6 +31,23 @@ import { useSafetyStore } from '@/lib/stores/safetyStore';
 import { CameraHUD } from '@/components/CameraHUD';
 
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+// Downscale to a max 1600px edge + JPEG compress. Keeps memory low (large
+// HEIC library photos otherwise OOM-crash Expo Go) and shrinks the base64
+// payload sent to Gemini. Falls back to the original URI if manipulation
+// fails so a photo is never silently dropped.
+async function downscale(uri: string): Promise<string> {
+  try {
+    const out = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1600 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    return out.uri;
+  } catch {
+    return uri;
+  }
+}
 
 type CapturedPhoto = {
   uri: string;
@@ -97,7 +115,8 @@ export default function QuickInspection() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const photo = await camRef.current.takePictureAsync({ quality: 0.7 });
       if (!photo?.uri) throw new Error('No photo data');
-      setPhotos((prev) => [...prev, { uri: photo.uri, slope }]);
+      const small = await downscale(photo.uri);
+      setPhotos((prev) => [...prev, { uri: small, slope }]);
     } catch (e) {
       Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
     }
@@ -113,18 +132,23 @@ export default function QuickInspection() {
         );
         return;
       }
+      // No `quality` here on purpose: passing it makes the picker re-encode
+      // every selected full-res asset in memory at once, which OOM-crashes
+      // Expo Go on large HEIC photos. We downscale each result sequentially
+      // below instead (one image in memory at a time).
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
-        selectionLimit: 12,
-        quality: 0.7,
+        selectionLimit: 10,
       });
       if (result.canceled || result.assets.length === 0) return;
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setPhotos((prev) => [
-        ...prev,
-        ...result.assets.map((a) => ({ uri: a.uri, slope })),
-      ]);
+      const processed: CapturedPhoto[] = [];
+      for (const a of result.assets) {
+        const small = await downscale(a.uri);
+        processed.push({ uri: small, slope });
+      }
+      setPhotos((prev) => [...prev, ...processed]);
     } catch (e) {
       Alert.alert('Upload failed', e instanceof Error ? e.message : 'Unknown error');
     }
