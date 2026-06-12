@@ -132,16 +132,24 @@ export default function QuickInspection() {
         );
         return;
       }
-      // quality: 0.3 forces the picker to transcode/download iCloud photos
-      // before returning URIs (without it, iCloud-only assets fail with
-      // "Cannot load representation of type public.jpeg"). We keep selectionLimit
-      // low (5) to bound the simultaneous in-memory footprint; downscale() then
-      // compresses each result further before it touches the Gemini payload.
+      // Two crash-avoidance constraints here, both from Expo Go's native
+      // ImagePickerModule:
+      // 1. NO `quality` param. It makes iOS transcode every selected asset to
+      //    JPEG inside the picker; for iCloud/HEIC photos that transcode fails
+      //    ("Cannot load representation of type public.jpeg") and when several
+      //    assets fail the module rejects its promise twice -> native abort
+      //    (SIGABRT), killing the app with no JS error.
+      // 2. preferredAssetRepresentationMode: Current hands back each photo's
+      //    original file without any conversion, which is the documented fix
+      //    for that "Cannot load representation" failure. downscale() below
+      //    then converts to JPEG one image at a time in JS, where errors are
+      //    catchable.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         selectionLimit: 5,
-        quality: 0.3,
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
       });
       if (result.canceled || result.assets.length === 0) return;
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

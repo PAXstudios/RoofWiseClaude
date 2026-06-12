@@ -37,7 +37,7 @@ The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captur
 
 ## Context Summary
 
-> Last refreshed: 2026-06-09 (after entry #03).
+> Last refreshed: 2026-06-12 (after entry #24).
 
 **Product in one line:** RoofWise is the objective layer between roofing contractors and insurance carriers — AI vision + HAAG-protocol-compliant claim packets on a mobile device.
 
@@ -45,27 +45,22 @@ The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captur
 
 **Persona we build for:** A roofer in gloves on a hot roof. Every UI decision respects glove-friendly touch targets (≥56pt, sticky 88pt CTAs in thumb zone), high contrast for outdoor sun, voice input on free text, confirm sheets on destructive actions, no precision-only gestures.
 
-**Where we are today (entry #03):**
-- Brand theme tokens (navy / orange / cream / slate) with type ramp + motion tokens in `theme/tokens.ts`.
-- Auth foundation: Supabase client (`lib/supabase.ts`), env reader (`lib/env.ts`), Zustand auth store (`lib/auth/authStore.ts`), Welcome sign-in/up/reset screen (`app/welcome.tsx`), auth gate (`app/index.tsx` + `app/(tabs)/_layout.tsx`), Settings account row.
-- Old 8-tab scaffold (Dashboard, Leads, Map, Inspections, Jobs, Storm Intel, Reports, Settings) being replaced with the 5-tab spec IA (Home, Leads, Map, Plan, Train).
+**Where we are today (entry #24):**
+- Tier 1 MVP is built. 5-tab IA (Home / Leads / Map / Plan / Train) via expo-router; Settings is a route. Flows in place: New Job wizard, Quick Inspection camera + photo-library upload, Analyze (Gemini 2.5 Flash via `lib/services/gemini.ts`), edit-detection, swipe review, proposals/estimator/PDFs, storm tools, door knocking, mileage, Train loop with corrections. Pure logic in `lib/services/{decisionEngine,haagThresholds}.ts`; per-feature Zustand stores with persist under `lib/stores/`.
+- Auth: Supabase email/password works against project `yyzjosttvpleehzmhhxy` (keys in `.env.local`, gitignored). `requireAuth` flag wired, false in dev. Apple Sign In parked (needs dev build).
+- AI pipeline verified end-to-end in session 2026-06-12: Quick Inspection (standalone — auto-creates a lightweight inspection when launched without a job, #22) → Job detail → Analyze → `analyzeSlope` reads photos as base64 → Gemini 13-category findings + markers.
+- Photo handling hardened against two native Expo Go crashes: every photo is downscaled to ≤1600px JPEG 0.7 via expo-image-manipulator, picker has NO `quality` param (multi-HEIC re-encode OOM, #23), and uses `preferredAssetRepresentationMode: Current` (iCloud "Cannot load representation of type public.jpeg" → double promise rejection → SIGABRT, #24).
 
-**What's next (Tier 1 MVP build):**
-1. Data model types (Inspection, Slope, DamageMarker, StormEvent, Customer, Lead, Job, Estimate, Proposal, Knock, ServiceArea, StormAlert, TrainingItem, Correction, UserCorrectionProfile, ActivityEvent).
-2. Damage taxonomy + HAAG threshold lookup.
-3. 5-tab nav (Home, Leads, Map, Plan, Train).
-4. Home dashboard per spec (Storm Alert hero, Quick Inspection + New Job hero CTAs, KPI tiles, Recent Jobs carousel, Pipeline mini-Kanban, Today's Plan).
-5. New Job Wizard (4 steps: Customer/Property → Insurance → Roof System → Review).
-6. Quick Inspection camera scaffold (expo-camera, slope selector, photo strip, Gemini service stub that errors clearly when no key configured).
-7. Decision Engine (HAAG threshold rules engine).
-8. Map tab scaffold (react-native-maps + NOAA storm pins).
-9. Plan, Train tab scaffolds with empty-state cards.
+**Known environment gotchas:**
+- `lib/env.ts` Supabase fallback still points to the old project `mzsabjegtxmzlfpxmmfm` — devices without `.env.local` hit "network request failed" at login. Open follow-up (a fix commit was blocked by credential-scanning; needs a non-hardcoded approach).
+- User's Mac: working clone is `~/Documents/RoofWiseClaude`; a stale clone at `~/RoofWiseClaude` may still have Metro on port 8081 — kill it (`pkill -f expo`) before testing or Expo Go loads old code.
+- All API keys pasted in chat during sessions (Gemini, Supabase anon, Maps) are exposed — rotate before production.
 
 **What's mocked / placeholder:**
-- `lib/mock/` data still present but no longer flowing through tabs. Per spec: empty state always — no seeded sample data.
+- Nothing. App boots empty per Drift Warning #5.
 
-**What's parked (Drift Warning #10):**
-- LiDAR + ARKit (no good RN binding; iOS Pro-only). Live AR overlay is parked.
+**What's parked:**
+- LiDAR + ARKit (Drift Warning #10), Apple Sign In, true background execution, geofenced mileage auto-tracking, native voice-to-text — full list in `CLAUDE.md` "Known parked items".
 
 ---
 
@@ -1428,3 +1423,28 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - If the crash persists after this, capture is likely iCloud-photo download or a deeper native issue — would need the device crash log.
 - Context Summary refresh now 4 entries overdue.
+
+---
+
+### [2026-06-12] #24 — Fix SIGABRT picking iCloud album photos (preferredAssetRepresentationMode)
+
+**Prompt:**
+> nope the app shut down when i selected photos from my apple photo album and pressed the blue checkmark. please fix this. [attached full Expo Go crash report: SIGABRT, Thread 19, NSItemProvider-callback-queue]
+
+**Intent / Goal:**
+- After #23's OOM fix, picking photos that live in the Apple Photos album (iCloud-backed) still hard-killed Expo Go with no JS error. Make library upload reliable for iCloud assets.
+
+**Decisions:**
+- Crash-report diagnosis: the abort is a native C++ exception thrown in expo-modules-core `callPromiseSetupWithBlock`, reached from `ImagePickerModule.didPickMultipleMedia` → `MediaHandler.handleImage` → PhotosUI `loadDataRepresentationForTypeIdentifier`. iOS fails to produce a JPEG representation of iCloud/HEIC assets ("Cannot load representation of type public.jpeg"); when more than one selected asset fails, the native module settles its promise twice and the second rejection throws an uncatchable exception → SIGABRT.
+- An interim attempt (commit 2ca7a20) added `quality: 0.3` to force iCloud download — wrong call: `quality` is exactly what forces the failing native JPEG transcode, so it reproduced the crash. Reverted in the same file.
+- Real fix: `preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current` — the documented PHPicker remedy for this error. The picker hands back each photo's original file with no native conversion. JS-side `downscale()` (#23) then converts each to ≤1600px JPEG sequentially, where failures are catchable per-photo instead of fatal.
+- Kept `selectionLimit: 5` (was 10) to bound concurrent NSItemProvider loads.
+- Standing rule reaffirmed: never pass `quality` to `launchImageLibraryAsync` in Expo Go — it triggers both the OOM (#23) and the double-reject abort (#24) failure modes.
+
+**Files touched:**
+- `app/quick-inspection.tsx` — picker options: removed `quality: 0.3`, added `preferredAssetRepresentationMode: Current`, rewrote the rationale comment.
+- `PROMPT_LOG.md` — this entry + Context Summary refreshed (rule 3; was 5 entries overdue).
+
+**Follow-ups:**
+- `Current` mode can return HEIC originals; expo-image-manipulator converts them to JPEG. If a format ever fails conversion, `downscale()` falls back to the original URI — Gemini analysis of that photo may then fail, but it's caught per-photo in `analyzeSlope` (counted as `failed`), not fatal.
+- The double-reject crash is an Expo Go native bug; a custom dev build with a patched expo-image-picker would remove the constraint entirely.
