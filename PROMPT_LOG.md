@@ -1473,3 +1473,26 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - If/when we ship a custom dev build, we can either patch `expo-image-picker` (debounce the multi-select completion call in `handleMultipleMedia` after first failure) or use the PHPicker directly via a small Swift module — then re-enable batch selection. Filed mentally as a v2 polish, not a blocker.
 - This is the third photo-picker crash mitigation in one day; the underlying lesson is that **Expo Go's bundled native modules are not patchable from JS, and any native double-resolve bug WILL be fatal until we leave Expo Go**.
+
+---
+
+### [2026-06-12] #26 — Fix HEIC read failure on library upload (Compatible representation mode)
+
+**Prompt:**
+> the camera upload photo from album still fails see attached error. clean up the code and fix the bug
+> [screenshot: "Upload failed / Failed to read picked image → Caused by: Cannot load representation of type public.heic"]
+
+**Intent / Goal:**
+- #25 stopped the SIGABRT (single-selection), turning the fatal crash into a catchable "Upload failed" alert. But the picked photo still couldn't be read. Make the read actually succeed.
+
+**Decisions:**
+- Read `MediaHandler.swift:126`: Expo reads the asset via `itemProvider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier)`. With `preferredAssetRepresentationMode: Current` (set in #24), iOS hands back the **original HEIC bytes**; the simulator (and not-yet-downloaded iCloud photos) can't materialize them → `FailedToReadImageException` caused by "Cannot load representation of type public.heic".
+- Switched `Current` → `Compatible`. That makes iOS transcode HEIC → JPEG on its own side before handing the data over; iOS's image pipeline can decode the HEIC even when passing raw HEIC to a third party fails. This is the documented fix for that exact error string. Single-selection (#25) means the one-photo transcode has no OOM risk.
+- Cleaned up `pickFromLibrary`: trimmed the multi-paragraph archaeology comment down to two focused notes (why single-select, why Compatible). No behavior change beyond the representation-mode swap.
+
+**Files touched:**
+- `app/quick-inspection.tsx` — `preferredAssetRepresentationMode: Compatible`; comment cleanup in `pickFromLibrary`.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Full picker crash/read saga is now four entries (#23 OOM → #24 Current mode → #25 single-select/SIGABRT → #26 Compatible). The clean end state: single-select + Compatible + JS-side downscale. Batch upload returns only with a custom dev build that can patch expo-image-picker's double-reject.

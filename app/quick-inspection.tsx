@@ -132,19 +132,19 @@ export default function QuickInspection() {
         );
         return;
       }
-      // Single-selection ONLY. Expo Go's MediaHandler.handleMultipleMedia has
-      // a Swift bug: on a per-asset failure it calls completion(.failure) and
-      // does NOT short-circuit the others. Two failures -> promise.reject is
-      // invoked twice -> uncatchable iOS exception -> SIGABRT (app closes).
-      // iCloud-backed photos in the Apple Photos album hit this constantly.
-      // The single-media code path (didPickMedia/handleMedia) only calls the
-      // completion once, so it's crash-safe. The UX cost is one extra tap per
-      // photo; the upside is the app never dies mid-flow.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        // Single-select only. Expo Go's multi-select native handler rejects its
+        // promise once per failed asset; two failures = double-reject = SIGABRT
+        // (app dies, no JS error). The single path settles exactly once. The
+        // user taps the library button again to add more photos.
         allowsMultipleSelection: false,
+        // Compatible (not Current) makes iOS transcode HEIC / iCloud originals
+        // to a readable JPEG before handing them over. Current returns raw HEIC
+        // bytes, which fail with "Cannot load representation of type public.heic"
+        // — especially on the simulator and for not-yet-downloaded iCloud photos.
         preferredAssetRepresentationMode:
-          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       });
       if (result.canceled || result.assets.length === 0) return;
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
