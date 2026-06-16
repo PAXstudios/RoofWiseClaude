@@ -1606,3 +1606,38 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - Tracks the same fundamental issue as #28 (Google provider) and #23–26 (image picker): Expo Go's bundled native modules have brittle iOS Simulator behavior we can't patch from JS. Custom dev build resolves these — re-evaluate once the user is ready to leave Expo Go.
 - If the Map tab is the active tab on first launch (cold boot), the gate doesn't help — the focus event fires basically simultaneously with mount. Hasn't been reported, but if it crashes on cold-boot to the Map tab, we'd need to add a brief `useEffect`-based delay or a "Tap to load map" placeholder.
+
+---
+
+### [2026-06-16] #31 — Stop Gemini damage-marker grid hallucinations (prompt rewrite + post-filter)
+
+**Prompt:**
+> [screenshot of /edit-detection: shingles photo with 19 hail-hits markers at 90–95% confidence stair-stepped down the shingle joints in a clearly artificial vertical grid pattern]
+> i dont like the way that this is populating. this isnt accurately spotting the hail damage its just a generic line of damage. i need you to think and ensure the damage overlay actually only goes over where deamge is found.
+
+**Intent / Goal:**
+- The model was hallucinating spatial coordinates: many high-confidence markers (90–95%) placed in evenly-spaced vertical columns tracing the architectural shingle's shadow joints, not the actual roof damage. Make markers correspond to real damage at real pixel locations, with zero markers being a valid common answer.
+
+**Decisions / root cause:**
+- LLMs are weak at producing precise normalized image coordinates from freeform JSON. Gemini in particular drifts into "grid bias": rounded numbers (.1, .2, .3...), evenly-spaced sequences, alignment to image structure (shingle joints, edges, courses). The previous prompt asked the model to "mark each visible damage instance individually" — under that instruction the model pattern-matches on the shingle layout instead of the actual damage and produces a stair-step grid.
+- Two-layer fix: tighten the prompt to forbid the failure mode; backstop with a client-side filter that rejects suspicious spatial outputs even when the prompt fails.
+
+**Files touched:**
+- `lib/services/gemini.ts`
+  - **SYSTEM_PROMPT rewrite.** Demands a unique pixel-level observation in each marker's `note` field ("what color/shape/texture at THIS pixel"). Explicitly forbids: evenly-spaced grids, alignment to shingle edges/joints/tabs, stacking markers vertically/horizontally at the same coordinate, round-number coordinates. States that zero markers is the most common correct answer and >6 is almost certainly a hallucination. Adds an explicit "shingle features are NOT damage" callout for architectural asphalt shadow bands. Raises the confidence-floor below which the model must not emit a marker (50 → 50 with stricter rubric).
+  - **Lower temperature** 0.2 → 0.1. Spatial coordinate generation is the failure-prone path; high determinism dampens grid drift.
+  - **`sanitizeMarkers()` post-filter** in `normalize()`. Four-stage:
+    1. Drop markers below 60% confidence (hard client floor).
+    2. **`isGridHallucination()` reject**: if ≥3 markers cluster on the same x column or y row within ±3% tolerance, OR ≥50% of markers land on round (.0/.1/.2/.5) coordinates, throw out the WHOLE batch and emit zero markers — better than misleading the inspector.
+    3. **`dedupNearbyMarkers()`**: collapse same-category markers within ±4% spatial distance, keeping the highest-confidence one.
+    4. Cap at 6 markers per photo, ranked by confidence.
+- `PROMPT_LOG.md` — this entry.
+
+**Trade-offs noted:**
+- The grid-reject heuristic will occasionally false-positive on a genuinely close-cluster of real impacts (a tight hail concentration). The product tradeoff favors zero markers over fake markers on inspector trust grounds. If we see real false-reject, we can relax the cluster threshold.
+- The 6-marker cap is conservative. Real severe-storm photos can show >6 distinct impacts; for those we'd rely on the second photo or an inspector adding markers manually in /edit-detection (already supported).
+- For long-term spatial accuracy, Gemini's native bounding-box detection mode (`return bounding boxes [ymin, xmin, ymax, xmax] normalized 0–1000`) outperforms freeform coordinate JSON. That's a deeper rewrite parked for a later iteration.
+
+**Follow-ups:**
+- Tell the user to re-analyze the existing slope (Analyze → Re-analyze all) after pulling — the photos already in the store won't be re-evaluated automatically.
+- Consider adding an inspector-visible "AI flagged this batch as low-confidence / suspicious pattern" toast when `sanitizeMarkers` rejects everything, so the user knows the AI ran but produced nothing trustworthy (currently it'd look indistinguishable from a clean roof).
