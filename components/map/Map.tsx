@@ -6,6 +6,7 @@
 import { forwardRef, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { useIsFocused } from '@react-navigation/native';
 import MapView, {
   Marker,
   Polyline,
@@ -57,26 +58,36 @@ export const Map = forwardRef(function Map(
   }: MapProps,
   ref: Ref<MapView>,
 ) {
+  // The Map tab is one of the 5 tab roots and gets pre-mounted by the tab
+  // navigator. On iOS Simulator the underlying MKMapView (Apple Maps) fires
+  // -mapViewWillStartRenderingMap: into react-native-maps' AIRMapManager
+  // during init, hits a stale pointer, and SIGSEGVs — killing whichever
+  // screen the user is actually on. Gate the native MapView on screen
+  // focus so it only mounts when its host screen is visible.
+  const isFocused = useIsFocused();
+
   return (
     <View style={[styles.wrap, style]}>
-      <MapView
-        ref={ref}
-        provider={MAP_PROVIDER}
-        style={StyleSheet.absoluteFill}
-        showsUserLocation={showsUserLocation}
-        showsCompass={showsCompass}
-        initialRegion={initialRegion}
-        region={region}
-        onMapReady={onMapReady}
-        onLongPress={(e) =>
-          onLongPress?.({
-            latitude: e.nativeEvent.coordinate.latitude,
-            longitude: e.nativeEvent.coordinate.longitude,
-          })
-        }
-      >
-        {children}
-      </MapView>
+      {isFocused ? (
+        <MapView
+          ref={ref}
+          provider={MAP_PROVIDER}
+          style={StyleSheet.absoluteFill}
+          showsUserLocation={showsUserLocation}
+          showsCompass={showsCompass}
+          initialRegion={initialRegion}
+          region={region}
+          onMapReady={onMapReady}
+          onLongPress={(e) =>
+            onLongPress?.({
+              latitude: e.nativeEvent.coordinate.latitude,
+              longitude: e.nativeEvent.coordinate.longitude,
+            })
+          }
+        >
+          {children}
+        </MapView>
+      ) : null}
     </View>
   );
 });

@@ -1578,3 +1578,31 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - Cost change: 2.5-pro is roughly 5× per call vs 2.5-flash and ~2× slower. For batch slope analysis (a slope can be 8–20 photos) this is material. If billing becomes a concern, override back via `EXPO_PUBLIC_GEMINI_MODEL=gemini-2.5-flash` in `.env.local` without any code change.
 - Decide whether `docs/SPEC.md` should be edited to reflect 2.5-pro as the deployed default, or whether the spec stays generation-agnostic and only CLAUDE.md/.env track the active choice.
+
+---
+
+### [2026-06-16] #30 — Defer native MapView mount until host screen is focused (AIRMapManager SIGSEGV)
+
+**Prompt:**
+> it cant analyze and when any button is press, the app shuts down expo: [crash report attached]
+> EXC_BAD_ACCESS at 0x10, Thread 0:
+>   -[AIRMapManager mapViewWillStartRenderingMap:] + 64
+>   -[MKMapView mapLayerDidChangeSceneState:withState:] + 408
+
+**Intent / Goal:**
+- User reports "any button press" shuts down Expo. Crash report shows the actual fault is in react-native-maps' AIRMapManager delegate callback firing while the JS-side manager has a stale reference. This happens during app init / tab pre-mount, not when the user touches the Map tab. So the Map tab is killing whatever foreground screen the user is on.
+
+**Decisions / root cause:**
+- The Map tab (`app/(tabs)/map.tsx`) is one of the 5 tab roots. React Navigation pre-mounts tab routes so the screens are ready when the user swipes/taps to them. On iOS Simulator with `PROVIDER_DEFAULT` (Apple Maps, the fallback we set in #28 because Expo Go has no Google SDK), MKMapView fires `mapViewWillStartRenderingMap` into AIRMapManager almost immediately on init. AIRMapManager dereferences a not-yet-fully-attached pointer → KERN_INVALID_ADDRESS at 0x10 → SIGSEGV → the whole process dies, taking the analyze screen (or whatever was foreground) with it.
+- This is a well-known react-native-maps + iOS Simulator bug. It's also reproducible in tabbed Expo apps on real devices when the Map tab is pre-mounted.
+- Three call sites import the unified `Map` component: `app/(tabs)/map.tsx`, `app/door-knocking.tsx`, `app/hail-tracer.tsx`. Patching at the source = one edit fixes all three.
+- Added a `useIsFocused()` gate inside `components/map/Map.tsx`. The native `<MapView>` only renders when its host screen is focused. When the Map tab is pre-mounted but the user is on Home/etc., the placeholder View renders instead — the crashy native delegate never fires.
+- This is also the right long-term behavior: the native map is memory-heavy, and not mounting it on pre-mounted tab routes saves RAM. Re-mount on focus is sub-second and fine UX-wise.
+
+**Files touched:**
+- `components/map/Map.tsx` — `useIsFocused` gate on the native `<MapView>`.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Tracks the same fundamental issue as #28 (Google provider) and #23–26 (image picker): Expo Go's bundled native modules have brittle iOS Simulator behavior we can't patch from JS. Custom dev build resolves these — re-evaluate once the user is ready to leave Expo Go.
+- If the Map tab is the active tab on first launch (cold boot), the gate doesn't help — the focus event fires basically simultaneously with mount. Hasn't been reported, but if it crashes on cold-boot to the Map tab, we'd need to add a brief `useEffect`-based delay or a "Tap to load map" placeholder.
