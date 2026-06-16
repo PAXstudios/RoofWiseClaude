@@ -4,7 +4,8 @@
 // is a one-file change.
 
 import { forwardRef, type ReactNode, type Ref } from 'react';
-import { StyleSheet, View, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import MapView, {
   Marker,
   Polyline,
@@ -12,6 +13,7 @@ import MapView, {
   Circle,
   Heatmap,
   PROVIDER_GOOGLE,
+  PROVIDER_DEFAULT,
   type Region,
   type MapMarkerProps,
   type MapPolylineProps,
@@ -20,6 +22,14 @@ import MapView, {
   type MapHeatmapProps,
 } from 'react-native-maps';
 import { colors, radii } from '@/theme/tokens';
+
+// Expo Go on iOS does not bundle the Google Maps SDK — requesting
+// PROVIDER_GOOGLE there throws "AirGoogleMaps dir must be added to your
+// xCode project". Use Google on Android (default native provider) and in
+// custom dev builds; fall back to Apple Maps in Expo Go on iOS.
+const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+const MAP_PROVIDER =
+  Platform.OS === 'ios' && inExpoGo ? PROVIDER_DEFAULT : PROVIDER_GOOGLE;
 
 export type MapCoordinate = { latitude: number; longitude: number };
 
@@ -51,7 +61,7 @@ export const Map = forwardRef(function Map(
     <View style={[styles.wrap, style]}>
       <MapView
         ref={ref}
-        provider={PROVIDER_GOOGLE}
+        provider={MAP_PROVIDER}
         style={StyleSheet.absoluteFill}
         showsUserLocation={showsUserLocation}
         showsCompass={showsCompass}

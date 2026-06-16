@@ -1523,3 +1523,28 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - Immediate simulator unblock for the user (no code): take a screenshot in the simulator (Device ▸ Trigger Screenshot, saved as PNG) and pick THAT — PNGs read fine through PHPicker. Or drag a JPEG onto the simulator. Or run on a real iPhone via the Expo Go QR.
 - Batch upload + guaranteed simulator HEIC read both require leaving Expo Go for a custom dev build (patch expo-image-picker or use PHPicker directly). v2.
+
+---
+
+### [2026-06-12] #28 — Don't request PROVIDER_GOOGLE in Expo Go on iOS (AirGoogleMaps redbox)
+
+**Prompt:**
+> [screenshot of redbox: "react-native-maps: AirGoogleMaps dir must be added to your xCode project to support GoogleMaps on iOS. Component Stack:" ... ExceptionsManager.js:11:14 ... decorateMapComponent.js:25:18]
+> this is the error message i am getting when the app tries to analyze damage on a shingle/roof photo.
+
+**Intent / Goal:**
+- Diagnosis: the redbox is NOT the analyze pipeline failing. It's `components/map/Map.tsx` hardcoding `provider={PROVIDER_GOOGLE}`. Expo Go's iOS shell does not bundle the AirGoogleMaps SDK, so any mount of MapView with PROVIDER_GOOGLE throws. The Map tab is one of the 5 tab roots and gets pre-mounted by the tab navigator, so the redbox can surface during any later navigation (including the analyze flow).
+- Make the app run cleanly in Expo Go on iOS without removing Google Maps for the production build.
+
+**Decisions:**
+- `Map.tsx` now picks the provider at module load: `PROVIDER_DEFAULT` (Apple Maps / MapKit) when running in Expo Go on iOS; `PROVIDER_GOOGLE` everywhere else (Android always uses Google natively; iOS custom dev builds will bundle AirGoogleMaps via the `react-native-maps` config plugin and get Google there too).
+- Detection: `Constants.executionEnvironment === ExecutionEnvironment.StoreClient` from `expo-constants` — the documented way to detect Expo Go vs a dev/standalone build. Combined with `Platform.OS === 'ios'`.
+- Single-file change as documented in the `Map.tsx` header — every feature screen (HailTracer, DoorKnocking, Leads, Jobs, JobDetail, Map tab) is fixed by this one edit.
+- Did NOT add a runtime warning or a "Google Maps requires a dev build" banner: it would be noise for the contractor's eventual production app where Google IS available, and the silent MapKit fallback is functionally fine for testing every feature in Expo Go.
+
+**Files touched:**
+- `components/map/Map.tsx` — provider chosen via `expo-constants` + `Platform.OS`.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- For Apple-Maps-vs-Google-Maps parity testing of features that lean on Google-specific styling (e.g. hybrid imagery for roof outlines), the user must build a custom dev client. Add to "Known parked items" in `CLAUDE.md` next time we touch that file.
