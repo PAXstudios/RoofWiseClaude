@@ -1641,3 +1641,34 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - Tell the user to re-analyze the existing slope (Analyze → Re-analyze all) after pulling — the photos already in the store won't be re-evaluated automatically.
 - Consider adding an inspector-visible "AI flagged this batch as low-confidence / suspicious pattern" toast when `sanitizeMarkers` rejects everything, so the user knows the AI ran but produced nothing trustworthy (currently it'd look indistinguishable from a clean roof).
+
+---
+
+### [2026-06-16] #32 — Switch Gemini damage detection to native bounding-box mode
+
+**Prompt:**
+> is claude better at analyzing damaged shingles and overlaying the correct damage?
+> [follow-up] yes. please futher explain. and why wouldnt you automatically come to this solution yourself withoiut me asking?
+
+**Intent / Goal:**
+- Solve the actual root cause of the grid-hallucination problem (entry #31) by changing the request shape to the format Gemini was specifically trained on for spatial grounding. Prompt-tightening + post-filter (#31) was a backstop; this is the real fix.
+
+**Self-critique (the second user question):**
+- Bbox mode was listed as a "follow-up parked for a later iteration" in #31. That was the wrong call — I picked the smaller change because the user had been through a lot of crash-debugging that day and I wanted a fast ship. Spatial accuracy IS the product for the overlay; should have surfaced both options explicitly in #31 and let the user choose. Going forward: when a problem has a known-better architectural fix, propose it alongside the patch — not buried as a follow-up.
+
+**Decisions:**
+- Restructured the Gemini request to use the documented native bounding-box detection format. The model now returns `detections: [{ box_2d: [ymin, xmin, ymax, xmax], label, severity, confidence, note }]` on the 0–1000 integer scale. This is the data path Gemini's vision training reinforces for object localization; freeform decimal (x,y) coords aren't.
+- The integer 0–1000 scale also defeats the rounded-number bias (the model can't lazy-default to .1/.2/.3 anymore — it has to commit to "437" vs "438").
+- Kept the existing `DamageMarker` (center + radius) data model and the overlay renderer unchanged. `normalize()` converts each box to `(x = center, y = center, radius = max(width,height)/2)` so the whole detection fits inside the rendered circle. Trade-off: we lose the rectangle shape information; circles still convey "damage here" but a future overlay rewrite to draw real rectangles would be more faithful.
+- Kept `damage_markers` as a fallback parse path so an in-flight stale response or a model regression doesn't drop the data on the floor. If the new `detections` field is populated we use it; otherwise fall back to legacy.
+- `sanitizeMarkers()` (#31) still runs over the bbox-derived markers. Less likely to fire on bbox output (the integer scale + native training kill most grid patterns), but it's harmless and remains a belt-and-suspenders for any remaining hallucinations.
+- Strengthened the user-message text alongside the system prompt — bbox mode performs noticeably better when the user message also frames the task as detection with bounding boxes.
+
+**Files touched:**
+- `lib/services/gemini.ts` — system prompt schema swap (damage_markers → detections with box_2d on 0–1000); user message rewrite; new `bboxFrom()` validator + `bboxToCircle()` converter; `normalize()` now reads `detections` first and falls back to `damage_markers` only if missing.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Render detections as actual rectangles (or oriented to the bbox aspect ratio) instead of converting to circles. Requires a `DamageMarker` model addition (`width, height` or `bbox`) and a `DamageMarkerLayer` update. Defer until we see how the bbox accuracy compares.
+- A/B Claude vision as a second provider remains the parked follow-up if bbox results are still unsatisfactory.
+- Re-analyze: the user must run "Re-analyze all" on existing slopes — old markers won't auto-replace.

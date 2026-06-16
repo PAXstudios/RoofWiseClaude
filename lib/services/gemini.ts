@@ -44,7 +44,7 @@ export type AnalysisResult = {
 
 const SYSTEM_PROMPT = `You are a forensic roof inspector trained on HAAG (Haag Engineering) standards. You are reviewing a single roof photograph.
 
-Your output drives an overlay drawn on top of the photo. Each marker becomes a circle the inspector sees. WRONG markers waste an inspector's day; missing borderline ones does not. Bias hard toward "no marker" when uncertain.
+Your output drives an overlay drawn on top of the photo. Each detection becomes a marker the inspector sees. WRONG detections waste an inspector's day; missing borderline ones does not. Bias hard toward "no detection" when uncertain.
 
 Return STRICT JSON only (no markdown wrapper), with this exact schema:
 
@@ -65,53 +65,50 @@ Return STRICT JSON only (no markdown wrapper), with this exact schema:
       "note": "<short pixel evidence>"
     }
   ],
-  "damage_markers": [
+  "detections": [
     {
-      "type": "hail_hits|bruising|granule_loss|wind_damage|wind_creasing|blistering|cracking|flashing_damage|algae_moss|missing_shingles|splitting|lifted_shingles|structural_sagging",
-      "x": 0.0-1.0,
-      "y": 0.0-1.0,
-      "radius": 0.0-1.0,
+      "box_2d": [ymin, xmin, ymax, xmax],
+      "label": "hail_hits|bruising|granule_loss|wind_damage|wind_creasing|blistering|cracking|flashing_damage|algae_moss|missing_shingles|splitting|lifted_shingles|structural_sagging",
       "severity": "minor|moderate|severe",
       "confidence": 0-100,
-      "note": "<specific feature at THIS exact pixel — color, shape, size, what makes it damage>"
+      "note": "<specific pixel feature you see inside the box — color, shape, size, what makes it damage>"
     }
   ]
 }
 
-COORDINATE SYSTEM
-x and y are normalized fractions of the image where (0,0) is top-left and (1,1) is bottom-right. Radius is normalized to min(width, height). A real hail strike radius is typically 0.02–0.05.
+BOUNDING-BOX COORDINATE SYSTEM (critical — use the integer 0–1000 scale, NOT decimal fractions)
+"box_2d" is a 4-integer array [ymin, xmin, ymax, xmax] where each value is on a 0–1000 scale relative to the image (ymin=0 is the top edge, ymax=1000 is the bottom edge; xmin=0 is the left, xmax=1000 is the right). Boxes tightly enclose the damage instance — no padding. A real hail-strike bounding box is typically 20–60 wide and 20–60 tall on the 0–1000 scale. ymin < ymax and xmin < xmax always.
 
-DAMAGE MARKERS — STRICT RULES (the most common failure mode is producing fake spatial patterns)
+DETECTION RULES (the most common failure mode is fabricating spatial patterns instead of finding real damage)
 
-1. Each marker MUST point at a single, named, visible feature you can describe at THAT pixel. Your "note" must answer: "what color/shape/texture difference at (x,y) tells me this is damage?" If you cannot answer that with a unique observation, do NOT output the marker.
+1. Each detection MUST point at a single, named, visible feature inside the box. Your "note" must answer: "what color/shape/texture inside this box tells me this is damage?" If you cannot answer that with a unique observation, do NOT output the detection.
 
-2. ZERO MARKERS IS A VALID AND COMMON ANSWER. A weathered roof with no actual storm damage gets 0 markers. A roof with one impact gets 1 marker. Most real photos have 0–3 markers, not 10+. If you produce more than 6 markers, you are almost certainly hallucinating — stop and reconsider.
+2. ZERO DETECTIONS IS A VALID AND COMMON ANSWER. A weathered roof with no actual storm damage gets 0 detections. A roof with one impact gets 1 detection. Most real photos have 0–3 detections, not 10+. If you produce more than 6 detections, you are almost certainly hallucinating — stop and reconsider.
 
-3. NEVER place markers in a regular pattern. Forbidden behaviors:
-   - Evenly-spaced columns or rows (x or y values progressing by a fixed step like 0.1, 0.2, 0.3)
-   - Aligning markers to shingle edges, shingle tabs, or shingle joints (the dark horizontal lines between courses are NOT damage)
-   - Stacking 2+ markers vertically with the same x value (±0.03)
-   - Stacking 2+ markers horizontally with the same y value (±0.03)
-   - Round/clustered numbers (more than half your markers ending in 0 or 5)
+3. NEVER place detections in a regular pattern. Forbidden behaviors:
+   - Evenly-spaced columns or rows (box centers progressing by a fixed step)
+   - Aligning boxes to shingle edges, shingle tabs, or shingle joints (the dark horizontal lines between courses are NOT damage)
+   - Stacking 2+ boxes vertically with the same x-center
+   - Stacking 2+ boxes horizontally with the same y-center
    Real hail impacts are randomly distributed across the slope. If your output looks like a grid, you're pattern-matching the shingle layout instead of finding damage.
 
-4. SHINGLE FEATURES ARE NOT DAMAGE. Architectural asphalt shingles have intentional dark shadow bands, dimensional cutouts, and color variation between tabs. These are design elements, not impacts, bruising, or missing shingles. Do not mark them.
+4. SHINGLE FEATURES ARE NOT DAMAGE. Architectural asphalt shingles have intentional dark shadow bands, dimensional cutouts, and color variation between tabs. These are design elements, not impacts, bruising, or missing shingles. Do not box them.
 
-5. GRANULE LOSS exception: if you see a TRUE granule-loss patch (asphalt substrate visible as a darker irregular blotch, not a manufacturer shadow line), mark its center once with a radius that covers the whole patch. Do not place multiple markers inside one patch.
+5. GRANULE LOSS exception: if you see a TRUE granule-loss patch (asphalt substrate visible as a darker irregular blotch, not a manufacturer shadow line), output ONE box covering the whole patch. Do not output multiple boxes inside one patch.
 
 FINDINGS (the 13-row summary table)
-Include all 13 damage categories in "findings". "detected": true only if you have HIGH confidence that category is genuinely present. Count is the number of distinct instances visible — not the number of markers you generated.
+Include all 13 damage categories in "findings". "detected": true only if you have HIGH confidence that category is genuinely present. Count is the number of distinct instances visible — not the number of detections you generated.
 
 NOT-A-ROOF DETECTION
-If the image is not a roof (grass, sky, indoors, person, vehicle, blank screenshot), set "analyzed": false, return empty "damage_markers", and add ONE finding with label "no_roof_detected".
+If the image is not a roof (grass, sky, indoors, person, vehicle, blank screenshot), set "analyzed": false, return empty "detections", and add ONE finding with label "no_roof_detected".
 
-CONFIDENCE RUBRIC (apply per-marker)
-- 90–100: unique impact/bruise unmistakable AT THIS PIXEL with substrate or fracture pattern visible. Used rarely.
-- 70–89: clear damage feature at this pixel, single definitive indicator.
-- 50–69: probable damage at this pixel but lighting/angle/partial view introduces ambiguity.
-- Below 50: DO NOT EMIT A MARKER.
+CONFIDENCE RUBRIC (apply per-detection)
+- 90–100: unique impact/bruise unmistakable inside the box with substrate or fracture pattern visible. Used rarely.
+- 70–89: clear damage feature inside the box, single definitive indicator.
+- 50–69: probable damage but lighting/angle/partial view introduces ambiguity.
+- Below 50: DO NOT EMIT A DETECTION.
 
-When in doubt, return fewer markers (or none). Inspector trust is the product.`;
+When in doubt, return fewer detections (or none). Inspector trust is the product.`;
 
 export type AnalyzeOptions = {
   /** Base64-encoded JPEG image bytes (no data URI prefix). */
@@ -143,7 +140,9 @@ export async function analyzePhoto(opts: AnalyzeOptions): Promise<AnalysisResult
               data: opts.imageBase64,
             },
           },
-          { text: 'Analyze this photo and return the JSON schema.' },
+          {
+            text: 'Analyze this roof photograph. Identify the shingle type, evaluate all 13 damage categories in findings, and detect each individual damage instance with a tight bounding box on the 0–1000 integer scale (box_2d). Return zero detections if no damage is visible — that is the correct answer for an undamaged or clean-weathered roof.',
+          },
         ],
       },
     ],
@@ -202,12 +201,39 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
     })
     .filter(Boolean) as InspectionFinding[];
 
-  const rawMarkers: DamageMarker[] = (parsed?.damage_markers ?? [])
+  // Primary path: Gemini's native bounding-box detection mode. Boxes are
+  // [ymin, xmin, ymax, xmax] on the 0–1000 integer scale; we convert each
+  // to the existing DamageMarker shape (center + radius) so the overlay
+  // renderer doesn't need to change.
+  const detections: DamageMarker[] = (parsed?.detections ?? [])
+    .map((d: any, i: number): DamageMarker | null => {
+      const cat = mapMarkerType(d?.label);
+      if (!cat) return null;
+      const box = bboxFrom(d?.box_2d);
+      if (!box) return null;
+      const { x, y, radius } = bboxToCircle(box);
+      return {
+        id: `mk_${Date.now()}_${i}`,
+        category: cat,
+        severity: coerceSeverity(d.severity),
+        x,
+        y,
+        radius,
+        confidence: clamp(Number(d.confidence ?? 0), 0, 100),
+        note: typeof d.note === 'string' ? d.note : undefined,
+      };
+    })
+    .filter(Boolean) as DamageMarker[];
+
+  // Fallback path: a stale response that still uses the legacy
+  // damage_markers shape. Keep parsing it so the app doesn't lose data
+  // if Gemini ever ignores the new schema.
+  const legacyMarkers: DamageMarker[] = (parsed?.damage_markers ?? [])
     .map((m: any, i: number): DamageMarker | null => {
       const cat = mapMarkerType(m?.type);
       if (!cat) return null;
       return {
-        id: `mk_${Date.now()}_${i}`,
+        id: `mk_${Date.now()}_legacy_${i}`,
         category: cat,
         severity: coerceSeverity(m.severity),
         x: clamp(Number(m.x ?? 0), 0, 1),
@@ -219,7 +245,7 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
     })
     .filter(Boolean) as DamageMarker[];
 
-  const markers = sanitizeMarkers(rawMarkers);
+  const markers = sanitizeMarkers(detections.length > 0 ? detections : legacyMarkers);
 
   const shingleType: ShingleTypeClassification | undefined = parsed?.shingle_type?.type
     ? {
@@ -260,6 +286,37 @@ function coerceSeverity(s: unknown): Severity {
 function clamp(n: number, min: number, max: number): number {
   if (!Number.isFinite(n)) return min;
   return Math.max(min, Math.min(max, n));
+}
+
+// Validate and normalize a Gemini box_2d into 0–1 fractions.
+// Input: [ymin, xmin, ymax, xmax] on the 0–1000 integer scale.
+function bboxFrom(
+  raw: unknown,
+): { ymin: number; xmin: number; ymax: number; xmax: number } | null {
+  if (!Array.isArray(raw) || raw.length !== 4) return null;
+  const [ymin, xmin, ymax, xmax] = raw.map((v) => Number(v));
+  if (![ymin, xmin, ymax, xmax].every(Number.isFinite)) return null;
+  if (ymax <= ymin || xmax <= xmin) return null;
+  return {
+    ymin: clamp(ymin / 1000, 0, 1),
+    xmin: clamp(xmin / 1000, 0, 1),
+    ymax: clamp(ymax / 1000, 0, 1),
+    xmax: clamp(xmax / 1000, 0, 1),
+  };
+}
+
+// Render a rectangular detection as a circle overlay: center of the box,
+// radius covers the box's longer side so the whole detection is inside.
+function bboxToCircle(b: {
+  ymin: number;
+  xmin: number;
+  ymax: number;
+  xmax: number;
+}): { x: number; y: number; radius: number } {
+  const x = (b.xmin + b.xmax) / 2;
+  const y = (b.ymin + b.ymax) / 2;
+  const radius = Math.max(b.xmax - b.xmin, b.ymax - b.ymin) / 2;
+  return { x, y, radius };
 }
 
 // Hard backstop for the most common Gemini failure: hallucinating a regular
