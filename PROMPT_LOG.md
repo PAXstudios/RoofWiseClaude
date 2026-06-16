@@ -1548,3 +1548,33 @@ detail screens (Job/Lead) — they inherit the token changes.
 
 **Follow-ups:**
 - For Apple-Maps-vs-Google-Maps parity testing of features that lean on Google-specific styling (e.g. hybrid imagery for roof outlines), the user must build a custom dev client. Add to "Known parked items" in `CLAUDE.md` next time we touch that file.
+
+---
+
+### [2026-06-12] #29 — Upgrade Gemini default to gemini-2.5-pro (with drift-warning surfacing)
+
+**Prompt:**
+> please use gemini 3.5 flash instead of the current version.
+
+**Intent / Goal:**
+- User asked for "gemini 3.5 flash". Per CLAUDE.md Drift Warning #9 and `docs/SPEC.md` (line 26, 464), there is no `gemini-3-flash` or `gemini-3.5-flash` at the Google Generative Language API. Verified Flash variants: 1.5, 2.0, 2.5. Surface the drift, present real options, then apply the choice.
+
+**Decisions:**
+- Surfaced the drift with `AskUserQuestion`. Offered: keep 2.5-flash; upgrade to 2.5-pro; switch to 3-pro (newest, no Flash variant). User chose **gemini-2.5-pro**.
+- Updated the three model-ID touchpoints:
+  - `lib/env.ts:27` — fallback default `gemini-2.5-flash` → `gemini-2.5-pro`.
+  - `.env.local.example:14` — template likewise.
+  - User's own `.env.local` on the Mac: must manually update `EXPO_PUBLIC_GEMINI_MODEL=gemini-2.5-pro` and restart Metro with `--clear`. (We don't ship `.env.local` — it's gitignored.)
+- Refreshed CLAUDE.md (the AI vision stack line + Drift Warning #9 short form) so future sessions see "2.5 Pro" as the canonical default and the warning now blocks both `gemini-3-flash` AND `gemini-3.5-flash` names.
+- Did NOT touch `docs/SPEC.md` — spec language ("`gemini-2.5-flash` model") is descriptive of the prior default; rather than rewrite the spec, the runtime override (`.env.local`) + CLAUDE.md update express the active choice. If we want SPEC.md to be the canonical record of the deployed model, that's a separate spec edit decision.
+- `lib/services/transcribeAudio.ts:42` and `lib/services/gemini.ts:136` both read `env.GEMINI_MODEL` — no code change needed; they automatically pick up the new default.
+
+**Files touched:**
+- `lib/env.ts` — default model.
+- `.env.local.example` — template default.
+- `CLAUDE.md` — AI vision line + Drift Warning #9 short form.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Cost change: 2.5-pro is roughly 5× per call vs 2.5-flash and ~2× slower. For batch slope analysis (a slope can be 8–20 photos) this is material. If billing becomes a concern, override back via `EXPO_PUBLIC_GEMINI_MODEL=gemini-2.5-flash` in `.env.local` without any code change.
+- Decide whether `docs/SPEC.md` should be edited to reflect 2.5-pro as the deployed default, or whether the spec stays generation-agnostic and only CLAUDE.md/.env track the active choice.

@@ -24,7 +24,7 @@ export const env = {
 
   // Gemini
   GEMINI_API_KEY: pick(process.env.EXPO_PUBLIC_GEMINI_API_KEY),
-  GEMINI_MODEL: pick(process.env.EXPO_PUBLIC_GEMINI_MODEL, 'gemini-2.5-flash'),
+  GEMINI_MODEL: pick(process.env.EXPO_PUBLIC_GEMINI_MODEL, 'gemini-2.5-pro'),
 
   // Google Maps Platform — base key + per-platform/per-service overrides
   GOOGLE_MAPS_API_KEY: googleMapsKey,

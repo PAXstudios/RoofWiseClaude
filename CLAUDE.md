@@ -32,7 +32,7 @@ A denied claim costs the contractor $5–20K; an approved one is worth $10–50K
 - **Framework:** Expo SDK 51, React Native 0.74, TypeScript, expo-router (file-based).
 - **State:** Zustand stores with `persist` + AsyncStorage. Per-feature store under `lib/stores/`.
 - **Backend:** Supabase (auth + Postgres + Storage). Client at `lib/supabase.ts`. Auth store at `lib/auth/authStore.ts`.
-- **AI vision:** Gemini **2.5 Flash** via Google AI Studio direct REST (`lib/services/gemini.ts`). **There is no `gemini-3-flash`** — Drift Warning #9.
+- **AI vision:** Gemini **2.5 Pro** via Google AI Studio direct REST (`lib/services/gemini.ts`). Higher accuracy for ambiguous damage than the previous 2.5 Flash default; trade-off is ~5× cost + slower latency per call. **There is no `gemini-3-flash` / `gemini-3.5-flash`** — Drift Warning #9.
 - **Maps:** `react-native-maps` with `PROVIDER_GOOGLE` (iOS + Android). Unified abstraction in `components/map/Map.tsx`.
 - **Native modules in use:** expo-camera, expo-location, expo-sensors, expo-haptics, expo-image, expo-image-manipulator, expo-image-picker, expo-print, expo-file-system, expo-notifications, expo-av, expo-apple-authentication, expo-clipboard, expo-document-picker, expo-sharing, react-native-reanimated, react-native-gesture-handler, react-native-svg.
 - **Theme:** `theme/tokens.ts` — `colors`, `fontSize`, `fontWeight`, `radii`, `spacing`, `shadows`, `touchTarget`, `motion`. **Never inline hex / font sizes.** (Drift Warning #11.)
@@ -65,7 +65,7 @@ Pulled from `PROMPT_LOG.md`. The full list is canonical there; this is the short
 6. Damage taxonomy is the **13 canonical categories** (`docs/SPEC.md`). Each finding has severity + 0–100 confidence.
 7. HAAG functional-damage thresholds are **material-specific** — table in `lib/services/haagThresholds.ts`.
 8. Decision Engine is **pure logic** — no I/O. Lives in `lib/services/decisionEngine.ts`.
-9. Gemini model: `gemini-2.5-flash` via Google AI Studio direct REST. No `gemini-3-flash`.
+9. Gemini model: `gemini-2.5-pro` via Google AI Studio direct REST. No `gemini-3-flash` / `gemini-3.5-flash` (neither exists).
 10. **No LiDAR / ARKit in v1.** Camera-only.
 11. Theme tokens everywhere — no inline hex / font sizes.
 12. `requireAuth` flag wired from day one; false during dev.
