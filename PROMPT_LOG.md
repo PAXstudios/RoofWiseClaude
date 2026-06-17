@@ -1672,3 +1672,40 @@ detail screens (Job/Lead) — they inherit the token changes.
 - Render detections as actual rectangles (or oriented to the bbox aspect ratio) instead of converting to circles. Requires a `DamageMarker` model addition (`width, height` or `bbox`) and a `DamageMarkerLayer` update. Defer until we see how the bbox accuracy compares.
 - A/B Claude vision as a second provider remains the parked follow-up if bbox results are still unsatisfactory.
 - Re-analyze: the user must run "Re-analyze all" on existing slopes — old markers won't auto-replace.
+
+---
+
+### [2026-06-16] #33 — Re-calibrate damage detection: stop under-detecting, cover all 13 categories
+
+**Prompt:**
+> this int a victory. the app failed to assess the opther da,age some, that are clearly hail da,age. be sure the app is picking up al ypes of damage. i need the confidence level and accuracy to be increased
+
+**Intent / Goal:**
+- #31's anti-grid prompt language ("zero markers is common; >6 is hallucinating") plus #31's aggressive client filter (cap 6, min confidence 60, batch reject if 3+ aligned) had over-corrected: bbox-mode output came back sparse, uniformly 75% confident, and visibly missing real damage. Re-tune for honest comprehensive detection now that bbox mode solves the spatial accuracy problem at the model level.
+
+**Self-critique:**
+- I tuned for the failure mode in the screenshot in front of me (grid hallucination) instead of the production goal (find every real impact). The prompt language explicitly biased the model toward zero — the model dutifully complied. Lesson: when a structural fix (bbox mode) addresses a failure mode, remove the prompt-side scar tissue that was compensating for it.
+
+**Decisions:**
+- **System prompt rewrite.**
+  - Removed "zero detections is common" / ">6 is hallucinating" framing. Replaced with calibrated volume guidance: 0–2 for clean, 2–6 for light weathering, 5–20 for confirmed storm damage, 15–30 for severe.
+  - Added an explicit "ALL 13 DAMAGE CATEGORIES ARE IN SCOPE" section listing each category by name. The model was treating it as a hail-only detector by inference.
+  - Calibrated bbox size expectations per category (hail strikes 20–60 on 0–1000 scale, granule patches 80–250, missing shingles 100–300).
+  - Confidence rubric explicitly says "use 90+ freely when warranted" and "do not default every detection to 75 — uniform confidences mean you are hedging, which is itself dishonest." Direct fix for the uniform-75 output in the previous screenshot.
+  - Soft anti-grid language preserved but de-escalated: "real damage is mostly random; a few coincidental alignments are fine."
+  - Added hail-bruise diagnostic checklist (circular shape, exposed mat, granule displacement, faint sheen) — gives the model a positive identification template instead of just don'ts.
+  - Strengthened user message to explicitly enumerate all 13 categories and say "the inspector trusts you to flag everything they would."
+- **Client-side filter relaxed.**
+  - `MARKER_MIN_CONFIDENCE`: 60 → 45 (matches the prompt floor; lets the inspector see borderline calls and judge).
+  - `MARKER_HARD_CAP`: 6 → 30 (severe-hail roofs legitimately exceed 6 visible impacts).
+  - `DUP_DISTANCE`: 0.04 → 0.02 (don't collapse multiple real impacts that happen to fall near each other).
+  - `isGridHallucination()`: now requires ≥10 markers in the batch AND ≥6 aligned on a single axis within 1.5% (was 4-marker minimum, 3 aligned within 3%). Round-number bias check removed — bbox mode uses integer 0–1000 scale, so the lazy-decimal failure mode doesn't apply.
+
+**Files touched:**
+- `lib/services/gemini.ts` — SYSTEM_PROMPT rewrite, user-message rewrite, `sanitizeMarkers` + `isGridHallucination` re-tune.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Re-analyze: user must run "Re-analyze all" on the existing slope. Old markers won't auto-replace.
+- Watch for the inverse failure mode returning. If we see another grid hallucination in the wild, the right next move is to draw real rectangles in `DamageMarkerLayer.tsx` instead of converting to circles — bbox shape is informative for distinguishing real damage (irregular shapes) from grid hallucinations (uniform squares).
+- Context Summary in PROMPT_LOG is 9 entries overdue (last refreshed at #24, now at #33). Refresh next change.

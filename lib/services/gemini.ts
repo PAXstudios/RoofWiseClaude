@@ -44,7 +44,7 @@ export type AnalysisResult = {
 
 const SYSTEM_PROMPT = `You are a forensic roof inspector trained on HAAG (Haag Engineering) standards. You are reviewing a single roof photograph.
 
-Your output drives an overlay drawn on top of the photo. Each detection becomes a marker the inspector sees. WRONG detections waste an inspector's day; missing borderline ones does not. Bias hard toward "no detection" when uncertain.
+Your output drives an overlay drawn on top of the photo. The inspector trusts you to flag every real damage instance — under-detection is just as bad as over-detection. Detect comprehensively, then describe the evidence honestly so the inspector can verify.
 
 Return STRICT JSON only (no markdown wrapper), with this exact schema:
 
@@ -71,44 +71,50 @@ Return STRICT JSON only (no markdown wrapper), with this exact schema:
       "label": "hail_hits|bruising|granule_loss|wind_damage|wind_creasing|blistering|cracking|flashing_damage|algae_moss|missing_shingles|splitting|lifted_shingles|structural_sagging",
       "severity": "minor|moderate|severe",
       "confidence": 0-100,
-      "note": "<specific pixel feature you see inside the box — color, shape, size, what makes it damage>"
+      "note": "<specific pixel feature inside the box — color, shape, size, what makes it damage>"
     }
   ]
 }
 
-BOUNDING-BOX COORDINATE SYSTEM (critical — use the integer 0–1000 scale, NOT decimal fractions)
-"box_2d" is a 4-integer array [ymin, xmin, ymax, xmax] where each value is on a 0–1000 scale relative to the image (ymin=0 is the top edge, ymax=1000 is the bottom edge; xmin=0 is the left, xmax=1000 is the right). Boxes tightly enclose the damage instance — no padding. A real hail-strike bounding box is typically 20–60 wide and 20–60 tall on the 0–1000 scale. ymin < ymax and xmin < xmax always.
+ALL 13 DAMAGE CATEGORIES ARE IN SCOPE
+You are not a hail-only detector. Look for and emit detections for every category visible: hail_hits AND bruising AND granule_loss AND wind_damage AND wind_creasing AND blistering AND cracking AND flashing_damage AND algae_moss AND missing_shingles AND splitting AND lifted_shingles AND structural_sagging. Multiple categories can and often do appear in the same photo.
 
-DETECTION RULES (the most common failure mode is fabricating spatial patterns instead of finding real damage)
+BOUNDING-BOX COORDINATE SYSTEM (critical — use the integer 0–1000 scale, NOT decimal fractions)
+"box_2d" is a 4-integer array [ymin, xmin, ymax, xmax] where each value is on a 0–1000 scale relative to the image (ymin=0 is the top edge, ymax=1000 is the bottom edge; xmin=0 is the left, xmax=1000 is the right). Boxes tightly enclose the damage instance — no padding. A real hail-strike bounding box is typically 20–60 wide and 20–60 tall on the 0–1000 scale; a granule-loss patch can be 80–250 across; a missing shingle can be 100–300 across. ymin < ymax and xmin < xmax always.
+
+DETECTION VOLUME GUIDANCE (calibrate to what you see)
+- Clean roof, no storm: 0–2 detections (most likely 0).
+- Light weathering with a few age-related blemishes: 2–6 detections, mostly granule_loss / minor cracking.
+- Confirmed hail or wind storm damage: 5–20 detections is normal.
+- Severe widespread storm damage: 15–30 detections is appropriate.
+Detect every distinct damage instance you can see. Do not artificially cap yourself.
+
+ANTI-HALLUCINATION RULES (avoid these specific failure modes)
 
 1. Each detection MUST point at a single, named, visible feature inside the box. Your "note" must answer: "what color/shape/texture inside this box tells me this is damage?" If you cannot answer that with a unique observation, do NOT output the detection.
 
-2. ZERO DETECTIONS IS A VALID AND COMMON ANSWER. A weathered roof with no actual storm damage gets 0 detections. A roof with one impact gets 1 detection. Most real photos have 0–3 detections, not 10+. If you produce more than 6 detections, you are almost certainly hallucinating — stop and reconsider.
+2. NEVER produce a perfect grid. Real damage is mostly randomly distributed across the slope. A few impacts may coincidentally line up — that's fine. But if you find yourself outputting 6+ boxes with the same x-center or evenly-stepped y values, you are pattern-matching the shingle layout. Stop and rebuild from actual pixel evidence.
 
-3. NEVER place detections in a regular pattern. Forbidden behaviors:
-   - Evenly-spaced columns or rows (box centers progressing by a fixed step)
-   - Aligning boxes to shingle edges, shingle tabs, or shingle joints (the dark horizontal lines between courses are NOT damage)
-   - Stacking 2+ boxes vertically with the same x-center
-   - Stacking 2+ boxes horizontally with the same y-center
-   Real hail impacts are randomly distributed across the slope. If your output looks like a grid, you're pattern-matching the shingle layout instead of finding damage.
+3. SHINGLE FEATURES ARE NOT DAMAGE. Architectural asphalt shingles have intentional dark shadow bands, dimensional cutouts, and color variation between tabs. The dark horizontal line between courses is a shadow joint, not missing shingles or wind damage. The dimensional cutouts on each tab are by design, not impacts.
 
-4. SHINGLE FEATURES ARE NOT DAMAGE. Architectural asphalt shingles have intentional dark shadow bands, dimensional cutouts, and color variation between tabs. These are design elements, not impacts, bruising, or missing shingles. Do not box them.
+4. GRANULE LOSS — output ONE box per patch covering the whole visible patch, not multiple boxes inside one patch.
 
-5. GRANULE LOSS exception: if you see a TRUE granule-loss patch (asphalt substrate visible as a darker irregular blotch, not a manufacturer shadow line), output ONE box covering the whole patch. Do not output multiple boxes inside one patch.
+5. HAIL HITS — each strike is its own box. A hail bruise has: a circular/oval shape, exposed darker substrate (mat) in the center, granule displacement at the edges, often with a faint shiny appearance from compressed asphalt.
 
 FINDINGS (the 13-row summary table)
-Include all 13 damage categories in "findings". "detected": true only if you have HIGH confidence that category is genuinely present. Count is the number of distinct instances visible — not the number of detections you generated.
+Include all 13 damage categories in "findings". "detected": true when that category is genuinely present. "count" is the number of distinct instances visible (should roughly match the number of boxes you output for that category).
 
 NOT-A-ROOF DETECTION
 If the image is not a roof (grass, sky, indoors, person, vehicle, blank screenshot), set "analyzed": false, return empty "detections", and add ONE finding with label "no_roof_detected".
 
-CONFIDENCE RUBRIC (apply per-detection)
-- 90–100: unique impact/bruise unmistakable inside the box with substrate or fracture pattern visible. Used rarely.
-- 70–89: clear damage feature inside the box, single definitive indicator.
-- 50–69: probable damage but lighting/angle/partial view introduces ambiguity.
-- Below 50: DO NOT EMIT A DETECTION.
+CONFIDENCE RUBRIC (apply per-detection — be willing to commit to high confidence when the evidence is clear)
+- 90–100: Unmistakable. Multiple definitive indicators visible (e.g. for hail: circular shape + exposed mat + granule displacement). Use this freely when warranted.
+- 75–89: Clear damage with one strong indicator. Most real detections land here.
+- 60–74: Probable damage but partial view, glare, or angle leaves some ambiguity.
+- 45–59: Possible damage, worth flagging for inspector review.
+- Below 45: Do not emit a detection.
 
-When in doubt, return fewer detections (or none). Inspector trust is the product.`;
+Calibrate honestly. If you see clear hail bruising, score 90+. Do not default every detection to 75 — uniform confidences mean you are hedging, which is itself dishonest.`;
 
 export type AnalyzeOptions = {
   /** Base64-encoded JPEG image bytes (no data URI prefix). */
@@ -141,7 +147,7 @@ export async function analyzePhoto(opts: AnalyzeOptions): Promise<AnalysisResult
             },
           },
           {
-            text: 'Analyze this roof photograph. Identify the shingle type, evaluate all 13 damage categories in findings, and detect each individual damage instance with a tight bounding box on the 0–1000 integer scale (box_2d). Return zero detections if no damage is visible — that is the correct answer for an undamaged or clean-weathered roof.',
+            text: 'Analyze this roof photograph. Identify the shingle type, evaluate all 13 damage categories in findings, and detect every distinct damage instance you can see with a tight bounding box on the 0–1000 integer scale (box_2d). Cover ALL damage categories present — hail, wind, granule loss, missing shingles, cracking, blistering, lifted shingles, flashing, algae, structural sagging, splitting, bruising, wind creasing. If real storm damage is present you should output many detections; the inspector trusts you to flag everything they would.',
           },
         ],
       },
@@ -319,31 +325,36 @@ function bboxToCircle(b: {
   return { x, y, radius };
 }
 
-// Hard backstop for the most common Gemini failure: hallucinating a regular
-// grid of markers stair-stepping down shingle joints instead of finding
-// actual damage. Even when the prompt forbids this, the model still does it
-// sometimes — so we detect grid patterns post-hoc and reject the whole batch
-// rather than trust suspicious spatial output.
-const MARKER_MIN_CONFIDENCE = 60;
-const MARKER_HARD_CAP = 6;
-const ALIGN_TOLERANCE = 0.03; // markers within ±3% of an axis count as aligned
-const DUP_DISTANCE = 0.04; // markers within ±4% of each other collapse to one
+// Client-side guardrails. Bbox mode (#32) made spatial output much more
+// honest, so these are now tuned to let real high-volume detections through
+// (a severe-hail roof can legitimately show 20+ markers) while still catching
+// the worst grid-hallucination case.
+const MARKER_MIN_CONFIDENCE = 45; // matches the prompt's "do not emit below 45"
+const MARKER_HARD_CAP = 30;
+const DUP_DISTANCE = 0.02; // collapse same-category markers within ±2%
+
+// Grid-detection thresholds (deliberately loose — only catch egregious cases)
+const GRID_MIN_BATCH = 10; // don't run the heuristic at all on small batches
+const GRID_ALIGN_TOLERANCE = 0.015; // 1.5%, tighter than before
+const GRID_MIN_CLUSTER = 6; // need 6+ markers on one line to call it a grid
 
 function sanitizeMarkers(markers: DamageMarker[]): DamageMarker[] {
   if (markers.length === 0) return markers;
 
-  // 1. Drop low confidence (the prompt asks the model not to emit these, but
-  //    enforce it client-side so a rogue value doesn't paint the overlay).
+  // 1. Drop sub-threshold confidence.
   let kept = markers.filter((m) => m.confidence >= MARKER_MIN_CONFIDENCE);
   if (kept.length === 0) return [];
 
-  // 2. Reject the entire response if it looks like a grid hallucination.
+  // 2. Only nuke the batch if it's an egregious grid — small batches and
+  //    even moderately-aligned batches now pass through, because real
+  //    storm damage can naturally land near horizontal courses.
   if (isGridHallucination(kept)) return [];
 
-  // 3. Collapse near-duplicates (same category + close in space).
+  // 3. Collapse near-duplicates (same category, tightly overlapping).
   kept = dedupNearbyMarkers(kept);
 
-  // 4. Keep at most MARKER_HARD_CAP, ranked by confidence.
+  // 4. Hard cap by confidence (severe roofs can legitimately exceed this;
+  //    we trust the model up to MARKER_HARD_CAP).
   if (kept.length > MARKER_HARD_CAP) {
     kept = [...kept].sort((a, b) => b.confidence - a.confidence).slice(0, MARKER_HARD_CAP);
   }
@@ -351,37 +362,30 @@ function sanitizeMarkers(markers: DamageMarker[]): DamageMarker[] {
 }
 
 function isGridHallucination(markers: DamageMarker[]): boolean {
-  if (markers.length < 4) return false; // need a sample to detect a pattern
+  // Don't penalize small batches — they're more likely to coincidentally
+  // line up than to be a pattern hallucination.
+  if (markers.length < GRID_MIN_BATCH) return false;
 
-  // Heuristic A: are many markers stacked on a small set of x columns or
-  // y rows? Real damage is randomly distributed; grid hallucinations cluster
-  // onto 2–3 vertical lines tracing shingle joints.
+  // Are 6+ markers stacked on a single x column or y row within 1.5%?
+  // That's an unambiguous grid, not natural clustering.
   const xs = markers.map((m) => m.x).sort((a, b) => a - b);
   const ys = markers.map((m) => m.y).sort((a, b) => a - b);
-  const xClusterCount = countAlignedAxisValues(xs);
-  const yClusterCount = countAlignedAxisValues(ys);
-  if (xClusterCount >= 3 || yClusterCount >= 3) return true;
+  if (countAlignedAxisValues(xs) >= GRID_MIN_CLUSTER) return true;
+  if (countAlignedAxisValues(ys) >= GRID_MIN_CLUSTER) return true;
 
-  // Heuristic B: do many coordinates land on round decimal values (.0, .1,
-  // .2, .5 — the model's lazy default when it's not actually looking)?
-  const roundCount = markers.reduce((n, m) => {
-    const rx = Math.abs((m.x * 10) - Math.round(m.x * 10)) < 0.01;
-    const ry = Math.abs((m.y * 10) - Math.round(m.y * 10)) < 0.01;
-    return n + (rx && ry ? 1 : 0);
-  }, 0);
-  if (roundCount >= Math.ceil(markers.length * 0.5)) return true;
-
+  // Round-number bias check is no longer needed: bbox mode uses 0–1000
+  // integer scale and the lazy-decimal failure mode doesn't apply.
   return false;
 }
 
-// Count how many markers share an axis value (within tolerance) with at
-// least 2 others — returns the size of the largest such cluster.
+// Find the size of the largest cluster of values within GRID_ALIGN_TOLERANCE
+// of each other. A high return value means the markers are aligned on an axis.
 function countAlignedAxisValues(sortedValues: number[]): number {
   let best = 0;
   for (let i = 0; i < sortedValues.length; i++) {
     let n = 1;
     for (let j = i + 1; j < sortedValues.length; j++) {
-      if (sortedValues[j] - sortedValues[i] <= ALIGN_TOLERANCE) n++;
+      if (sortedValues[j] - sortedValues[i] <= GRID_ALIGN_TOLERANCE) n++;
       else break;
     }
     if (n > best) best = n;
