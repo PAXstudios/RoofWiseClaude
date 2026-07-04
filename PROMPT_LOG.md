@@ -37,7 +37,7 @@ The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captur
 
 ## Context Summary
 
-> Last refreshed: 2026-06-12 (after entry #24).
+> Last refreshed: 2026-07-04 (after entry #34).
 
 **Product in one line:** RoofWise is the objective layer between roofing contractors and insurance carriers — AI vision + HAAG-protocol-compliant claim packets on a mobile device.
 
@@ -45,11 +45,12 @@ The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captur
 
 **Persona we build for:** A roofer in gloves on a hot roof. Every UI decision respects glove-friendly touch targets (≥56pt, sticky 88pt CTAs in thumb zone), high contrast for outdoor sun, voice input on free text, confirm sheets on destructive actions, no precision-only gestures.
 
-**Where we are today (entry #24):**
-- Tier 1 MVP is built. 5-tab IA (Home / Leads / Map / Plan / Train) via expo-router; Settings is a route. Flows in place: New Job wizard, Quick Inspection camera + photo-library upload, Analyze (Gemini 2.5 Flash via `lib/services/gemini.ts`), edit-detection, swipe review, proposals/estimator/PDFs, storm tools, door knocking, mileage, Train loop with corrections. Pure logic in `lib/services/{decisionEngine,haagThresholds}.ts`; per-feature Zustand stores with persist under `lib/stores/`.
+**Where we are today (entry #34):**
+- Tier 1 MVP is built. 5-tab IA (Home / Leads / Map / Plan / Train) via expo-router; Settings is a route. Flows in place: New Job wizard, Quick Inspection camera + photo-library upload, Analyze (Gemini via `lib/services/gemini.ts`), edit-detection, swipe review, proposals/estimator/PDFs, storm tools, door knocking, mileage, Train loop with corrections. Pure logic in `lib/services/{decisionEngine,haagThresholds}.ts`; per-feature Zustand stores with persist under `lib/stores/`.
+- **Gemini pipeline (entries #29–#33):** default model is `gemini-2.5-pro` (user-approved drift from 2.5-flash, ~5× cost for higher ambiguous-damage accuracy, #29). Damage detection uses Gemini's **native bounding-box mode** — `detections[].box_2d` on the 0–1000 integer scale, converted to the legacy center+radius `DamageMarker` shape in `normalize()` (#32). Prompt calibrated for comprehensive 13-category detection with per-category bbox size expectations and an honest-confidence rubric (#33). Client-side `sanitizeMarkers()` backstop: min confidence 45, hard cap 30, near-dup collapse at 2%, grid-hallucination reject only on egregious batches (≥10 markers, ≥6 axis-aligned within 1.5%) (#31→#33).
+- **Photo + native-crash hardening (entries #23–#28, #30):** photos downscaled ≤1600px JPEG 0.7; picker single-selection, no `quality` param, `preferredAssetRepresentationMode: Compatible` for HEIC; Apple Maps fallback in Expo Go on iOS; native MapView mounts only while its host screen is focused (AIRMapManager SIGSEGV, #30).
+- **Motion layer (entry #34):** `components/motion/` — `FadeSlideIn` (staggered entrances), `AnimatedCounter` (KPI roll-ups), `PulseRing` (live indicators), `SkeletonBlock` (loading shimmer). All five tab screens animate in with the same rhythm; BottomTabs has spring icon pop + pill fade; DamageScoreBar fill springs to score. New motion tokens: `enterMs`, `countUpMs`, `pulseMs`, `shimmerMs`.
 - Auth: Supabase email/password works against project `yyzjosttvpleehzmhhxy` (keys in `.env.local`, gitignored). `requireAuth` flag wired, false in dev. Apple Sign In parked (needs dev build).
-- AI pipeline verified end-to-end in session 2026-06-12: Quick Inspection (standalone — auto-creates a lightweight inspection when launched without a job, #22) → Job detail → Analyze → `analyzeSlope` reads photos as base64 → Gemini 13-category findings + markers.
-- Photo handling hardened against two native Expo Go crashes: every photo is downscaled to ≤1600px JPEG 0.7 via expo-image-manipulator, picker has NO `quality` param (multi-HEIC re-encode OOM, #23), and uses `preferredAssetRepresentationMode: Current` (iCloud "Cannot load representation of type public.jpeg" → double promise rejection → SIGABRT, #24).
 
 **Known environment gotchas:**
 - `lib/env.ts` Supabase fallback still points to the old project `mzsabjegtxmzlfpxmmfm` — devices without `.env.local` hit "network request failed" at login. Open follow-up (a fix commit was blocked by credential-scanning; needs a non-hardcoded approach).
@@ -76,7 +77,7 @@ The following constraints are hardened and **must not silently drift**. If a pro
 6. **Damage taxonomy is 13 canonical categories** per `docs/SPEC.md` "13-Category AI Damage Taxonomy": Hail Hits, Bruising, Granule Loss, Wind Damage, Wind Creasing, Blistering, Cracking, Flashing Damage, Algae/Moss, Missing Shingles, Splitting, Lifted Shingles, Structural Sagging. Each finding has severity (None/Minor/Moderate/Severe) and confidence (0-100).
 7. **HAAG functional-damage thresholds are material-specific.** Lookup table in `lib/services/haagThresholds.ts`. 3-tab asphalt = 8 hits per test square; architectural = 10; metal = penetration only; tile = any crack qualifies; etc.
 8. **Decision Engine is pure logic.** Given a populated Inspection, it returns per-slope + roof-level verdict + reasoning. No I/O.
-9. **Gemini model:** `gemini-2.5-flash` via Google AI Studio direct REST call. **There is no `gemini-3-flash`** (per spec, prior attempt was a hallucination). Do not change the model or provider without an explicit prompt that acknowledges this constraint.
+9. **Gemini model:** `gemini-2.5-pro` via Google AI Studio direct REST call (upgraded from `gemini-2.5-flash` with explicit user approval, entry #29). **There is no `gemini-3-flash` / `gemini-3.5-flash`** (neither exists; prior attempt was a hallucination). Do not change the model or provider without an explicit prompt that acknowledges this constraint.
 10. **No LiDAR / ARKit in v1.** Camera-only Quick Inspection. Live AR overlay parked until a custom native module is justified by user need (and Android equivalents are sorted).
 11. **Theme tokens everywhere.** Never inline hex. Never inline font sizes. Always go through `colors.<token>`, `fontSize.<token>`, `radii.<token>`, `spacing.<token>`, `motion.<token>`.
 12. **Auth bypass flag** is wired from day one. `requireAuth` is false during dev so the app is usable without sign-in; flip to true when ready to ship.
@@ -1709,3 +1710,47 @@ detail screens (Job/Lead) — they inherit the token changes.
 - Re-analyze: user must run "Re-analyze all" on the existing slope. Old markers won't auto-replace.
 - Watch for the inverse failure mode returning. If we see another grid hallucination in the wild, the right next move is to draw real rectangles in `DamageMarkerLayer.tsx` instead of converting to circles — bbox shape is informative for distinguishing real damage (irregular shapes) from grid hallucinations (uniform squares).
 - Context Summary in PROMPT_LOG is 9 entries overdue (last refreshed at #24, now at #33). Refresh next change.
+
+---
+
+### [2026-07-04] #34 — App-wide motion layer: animations, count-ups, live pulses, skeletons
+
+**Prompt:**
+> Revamp this entire app to be maximally attractive, efficient, and so all of its components work. Add additional components that you think of. You are the master of this app. Make it an award winning app. Also I need lots of animations.
+
+**Intent / Goal:**
+- Bring the whole app up to the dashboard's polish level with a cohesive, token-driven motion system — "award-winning" interpreted through the Drift #1 lens: gorgeous *and* usable by a gloved roofer in sun. No animation reduces a touch target, hides state, or requires precision.
+
+**Decisions:**
+- **New `components/motion/` library** (4 primitives + barrel):
+  - `FadeSlideIn` — the app-standard entrance (fade + slide-up, staggered by index × `motion.staggerDelayMs`). Replaces the dashboard's local `enter()` helper so every screen enters with the same rhythm.
+  - `AnimatedCounter` — rAF-driven ease-out count-up for KPIs/stat tiles; counts from 0 on mount and re-rolls on value change. Accepts a `format` fn (e.g. `$12.3K`).
+  - `PulseRing` — dot + endlessly expanding halo, the "live" indicator. Mounted ONLY when the thing it announces is live (storm hero chip when an alert is active — Drift #4 intact; Plan's "Active route" tile when a knock session is running).
+  - `SkeletonBlock` — shimmer placeholder for async tiles.
+- **New motion tokens** (Drift #11): `enterMs: 360`, `countUpMs: 800`, `pulseMs: 1600`, `shimmerMs: 1100`. All new animation timing goes through tokens; zero inline durations/hex.
+- **BottomTabs**: active tab icon pops with a two-stage spring (`quick` → `bouncy`); active pill cross-fades instead of snapping. Haptics already present, kept.
+- **DamageScoreBar**: fill now springs from 0 to score (`motion.gentle`) and the number counts up — the analysis payoff moment.
+- **WeatherTile**: skeleton state while the fetch is in flight, so the tile no longer pops the layout when weather lands. Error/unconfigured still hides entirely (friendly-absent per Drift #5).
+- **Dashboard**: KPIs + pipeline counts use `AnimatedCounter`; storm chip gets `PulseRing`; FAB enters with `FadeInUp` after the sections; light haptic on the two hero CTAs and FAB. Hero CTAs unchanged in content/position (Drift #3).
+- **Leads / Plan / Train**: staggered `FadeSlideIn` entrances on all sections/cards; every plain `Pressable` row/chip/segment upgraded to `PressableScale` for consistent press feedback; Plan stat tiles count up; Train tiles count up. All touch-target dimensions untouched (Drift #1).
+- **Map tab deliberately untouched** — #30 just stabilized the native MapView lifecycle; not stacking animation churn on it this pass.
+- Maintenance: Drift Warning #9 text in this log was stale (`gemini-2.5-flash`) vs. the user-approved upgrade documented in #29 and already reflected in CLAUDE.md — updated to `gemini-2.5-pro` citing #29. Fixed pre-existing lint error in `metro.config.js` (`/* eslint-env node */`).
+
+**Files touched:**
+- `theme/tokens.ts` — 4 new motion tokens.
+- `components/motion/{FadeSlideIn,AnimatedCounter,PulseRing,SkeletonBlock,index}.ts(x)` — new.
+- `components/shell/BottomTabs.tsx` — spring icon pop + pill fade.
+- `components/DamageScoreBar.tsx` — animated fill + count-up.
+- `components/WeatherTile.tsx` — skeleton loading state.
+- `app/(tabs)/{index,leads,plan,train}.tsx` — entrances, counters, pulses, PressableScale sweep, FAB entrance + haptics.
+- `metro.config.js` — eslint env fix.
+- `PROMPT_LOG.md` — this entry + Context Summary refresh (was 10 entries overdue) + Drift #9 text sync.
+
+**Verification:**
+- `npm run typecheck` — clean. `npm run lint` — 0 errors (14 pre-existing warnings in unrelated files left as-is).
+- Constraint Verification Protocol: Drift #1/#3/#4/#5/#11 checked — touch targets preserved, hero CTAs intact, PulseRing only renders inside the `activeAlert` branch, no mocks introduced, all styling/timing via tokens.
+
+**Follow-ups:**
+- Device pass in Expo Go: confirm 60fps on the dashboard stagger with a long inspection list, and that `AnimatedCounter`'s per-frame `setState` stays cheap (it's bounded at ~48 frames per roll-up; if it ever shows up in profiling, move to reanimated + `runOnJS` batching).
+- Settings tab and detail screens (Job/Lead/Analyze) not yet on the motion system — same `FadeSlideIn` treatment is a mechanical follow-up.
+- Consider a reduced-motion accessibility toggle (respect `AccessibilityInfo.isReduceMotionEnabled`) that zeroes `enterMs`/`countUpMs` — parked until a user asks.

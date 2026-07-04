@@ -1,8 +1,16 @@
+import { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+import { AnimatedCounter } from '@/components/motion';
 import {
   colors,
   fontSize,
   fontWeight,
+  motion,
   radii,
   spacing,
 } from '@/theme/tokens';
@@ -18,14 +26,23 @@ export function DamageScoreBar({ score }: Props) {
   const label =
     clamped >= 70 ? 'Severe' : clamped >= 40 ? 'Moderate' : clamped === 0 ? 'No damage' : 'Minor';
 
+  // Fill springs from empty to the score — the analysis payoff moment.
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withSpring(clamped, motion.gentle);
+  }, [clamped, progress]);
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${progress.value}%`,
+  }));
+
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
         <Text style={styles.label}>Damage score</Text>
-        <Text style={[styles.value, { color: tone }]}>{clamped}</Text>
+        <AnimatedCounter value={clamped} style={[styles.value, { color: tone }]} />
       </View>
       <View style={styles.track}>
-        <View style={[styles.fill, { width: `${clamped}%`, backgroundColor: tone }]} />
+        <Animated.View style={[styles.fill, { backgroundColor: tone }, fillStyle]} />
       </View>
       <View style={styles.legendRow}>
         <Text style={styles.legend}>0</Text>

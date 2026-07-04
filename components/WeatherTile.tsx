@@ -7,6 +7,7 @@ import {
   WeatherNotConfiguredError,
   type CurrentWeather,
 } from '@/lib/services/weather';
+import { SkeletonBlock } from '@/components/motion';
 import {
   colors,
   fontSize,
@@ -19,6 +20,7 @@ import {
 export function WeatherTile() {
   const [weather, setWeather] = useState<CurrentWeather | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +42,8 @@ export function WeatherTile() {
         if (cancelled) return;
         if (e instanceof WeatherNotConfiguredError) setError('Weather offline');
         else setError(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
@@ -48,6 +52,21 @@ export function WeatherTile() {
   }, []);
 
   if (error) return null; // Just hide rather than show a noisy error
+
+  // Shimmer while the fetch is in flight so the tile doesn't pop the
+  // layout when weather lands.
+  if (loading) {
+    return (
+      <View style={styles.tile}>
+        <SkeletonBlock style={styles.skelIcon} />
+        <View style={{ flex: 1, gap: spacing.sm }}>
+          <SkeletonBlock style={styles.skelLine} />
+          <SkeletonBlock style={styles.skelLineShort} />
+        </View>
+      </View>
+    );
+  }
+
   if (!weather) return null;
 
   return (
@@ -80,6 +99,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     ...shadows.card,
   },
+  skelIcon: { width: 28, height: 28, borderRadius: radii.pill },
+  skelLine: { height: fontSize.titleMd, width: '55%' },
+  skelLineShort: { height: fontSize.bodySm, width: '35%' },
   temp: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.navy },
   feels: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.regular },
   desc: { fontSize: fontSize.bodyMd, color: colors.slate, marginTop: 2 },

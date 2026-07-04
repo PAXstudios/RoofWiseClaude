@@ -140,6 +140,10 @@ export const motion = {
   gentle: { mass: 1, damping: 16, stiffness: 130 },
   bouncy: { mass: 1, damping: 11, stiffness: 200 },
   staggerDelayMs: 60,
+  enterMs: 360,     // screen-element entrance (FadeSlideIn)
+  countUpMs: 800,   // KPI counter roll-up
+  pulseMs: 1600,    // live-indicator halo loop
+  shimmerMs: 1100,  // skeleton shimmer loop
 };
 
 export const theme = {

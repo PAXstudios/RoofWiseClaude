@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -6,6 +6,7 @@ import { useLeadStore } from '@/lib/stores/leadStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
+import { FadeSlideIn } from '@/components/motion';
 import type { LeadStage } from '@/lib/models/types';
 import {
   colors,
@@ -80,21 +81,22 @@ export default function LeadsScreen() {
         contentContainerStyle={styles.chipScrollContent}
       >
         {STAGES.map((s) => (
-          <Pressable
+          <PressableScale
             key={s.id}
+            pressedScale={0.94}
             style={[styles.chip, stage === s.id && styles.chipActive]}
             onPress={() => setStage(s.id)}
           >
             <Text style={[styles.chipText, stage === s.id && styles.chipTextActive]}>
               {s.label}
             </Text>
-          </Pressable>
+          </PressableScale>
         ))}
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.content}>
         {filtered.length === 0 ? (
-          <View style={styles.empty}>
+          <FadeSlideIn style={styles.empty}>
             <Ionicons name="people-outline" size={40} color={colors.slate} />
             <Text style={styles.emptyTitle}>
               {leads.length === 0 ? 'No leads yet' : 'No leads in this stage'}
@@ -105,40 +107,42 @@ export default function LeadsScreen() {
                 : 'Try a different stage filter.'}
             </Text>
             {leads.length === 0 && (
-              <Pressable style={styles.cta} onPress={() => router.push('/new-job')}>
+              <PressableScale style={styles.cta} onPress={() => router.push('/new-job')}>
                 <Text style={styles.ctaText}>Start a new job</Text>
-              </Pressable>
+              </PressableScale>
             )}
-          </View>
+          </FadeSlideIn>
         ) : (
-          filtered.map((lead) => (
-            <PressableScale
-              key={lead.id}
-              style={styles.leadCard}
-              onPress={() => router.push(`/lead/${lead.id}` as any)}
-            >
-              <View style={styles.leadHeader}>
-                <Text style={styles.leadName}>{lead.customerName}</Text>
-                <View style={[styles.stagePill, stageTone(lead.stage)]}>
-                  <Text style={styles.stagePillText}>
-                    {lead.stage.replace(/_/g, ' ')}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.leadAddress}>{lead.address}</Text>
-              {lead.source && (
-                <Text style={styles.leadMeta}>
-                  Source: {lead.source.replace(/_/g, ' ')}
-                </Text>
-              )}
-              <Pressable
-                style={styles.convertBtn}
-                onPress={() => convertToInspection(lead.id)}
+          filtered.map((lead, i) => (
+            <FadeSlideIn key={lead.id} index={Math.min(i, 8)}>
+              <PressableScale
+                style={styles.leadCard}
+                onPress={() => router.push(`/lead/${lead.id}` as any)}
               >
-                <Ionicons name="arrow-forward" size={16} color={colors.textInverse} />
-                <Text style={styles.convertBtnText}>Convert to inspection</Text>
-              </Pressable>
-            </PressableScale>
+                <View style={styles.leadHeader}>
+                  <Text style={styles.leadName}>{lead.customerName}</Text>
+                  <View style={[styles.stagePill, stageTone(lead.stage)]}>
+                    <Text style={styles.stagePillText}>
+                      {lead.stage.replace(/_/g, ' ')}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.leadAddress}>{lead.address}</Text>
+                {lead.source && (
+                  <Text style={styles.leadMeta}>
+                    Source: {lead.source.replace(/_/g, ' ')}
+                  </Text>
+                )}
+                <PressableScale
+                  pressedScale={0.96}
+                  style={styles.convertBtn}
+                  onPress={() => convertToInspection(lead.id)}
+                >
+                  <Ionicons name="arrow-forward" size={16} color={colors.textInverse} />
+                  <Text style={styles.convertBtnText}>Convert to inspection</Text>
+                </PressableScale>
+              </PressableScale>
+            </FadeSlideIn>
           ))
         )}
       </ScrollView>

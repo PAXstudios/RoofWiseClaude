@@ -2,7 +2,8 @@ import { ScrollView, View, Text, Pressable, StyleSheet, Image, RefreshControl, A
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import { useMemo, useState } from 'react';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { syncLeads } from '@/lib/services/leadSync';
@@ -19,6 +20,7 @@ import { AICalibrationCard } from '@/components/AICalibrationCard';
 import { WeatherTile } from '@/components/WeatherTile';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { PressableScale } from '@/components/PressableScale';
+import { AnimatedCounter, FadeSlideIn, PulseRing } from '@/components/motion';
 import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
 import {
   colors,
@@ -31,8 +33,8 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-function enter(index: number) {
-  return FadeInDown.duration(360).delay(index * motion.staggerDelayMs);
+function tap() {
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 }
 
 export default function HomeScreen() {
@@ -136,7 +138,7 @@ export default function HomeScreen() {
       }
     >
       {/* Navy hero header card — greeting + KPIs */}
-      <Animated.View entering={enter(0)}>
+      <FadeSlideIn index={0}>
         <LinearGradient
           colors={[colors.navy, '#16275f']}
           start={{ x: 0, y: 0 }}
@@ -165,23 +167,23 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.kpiRow}>
-            <Kpi label="Revenue YTD" value={revenueYTD > 0 ? `$${formatShort(revenueYTD)}` : '$0'} />
+            <Kpi label="Revenue YTD" value={revenueYTD} format={(n) => `$${formatShort(n)}`} />
             <View style={styles.kpiDivider} />
-            <Kpi label="Leads" value={String(openLeads)} />
+            <Kpi label="Leads" value={openLeads} />
             <View style={styles.kpiDivider} />
-            <Kpi label="Pipeline" value={pipelineValue > 0 ? `$${formatShort(pipelineValue)}` : '$0'} />
+            <Kpi label="Pipeline" value={pipelineValue} format={(n) => `$${formatShort(n)}`} />
           </View>
         </LinearGradient>
-      </Animated.View>
+      </FadeSlideIn>
 
-      <Animated.View entering={enter(1)} style={styles.section}>
+      <FadeSlideIn index={1} style={styles.section}>
         <WeatherTile />
         <AnalysisQueueChip />
-      </Animated.View>
+      </FadeSlideIn>
 
       {/* Storm Alert hero — hides when no active alert (Drift #4). */}
       {activeAlert && (
-        <Animated.View entering={enter(1)}>
+        <FadeSlideIn index={1}>
           <PressableScale
             onPress={() =>
               router.push({ pathname: '/storm-alert/[id]', params: { id: activeAlert.id } } as any)
@@ -190,6 +192,7 @@ export default function HomeScreen() {
           >
             <View style={styles.stormHeroChipRow}>
               <View style={styles.stormHeroChip}>
+                <PulseRing size={8} color={colors.textInverse} />
                 <Ionicons name="thunderstorm" size={14} color={colors.textInverse} />
                 <Text style={styles.stormHeroChipText}>
                   {activeAlert.eventKind === 'hail' ? 'Severe Hail' : 'Severe Wind'}
@@ -213,7 +216,7 @@ export default function HomeScreen() {
               <Ionicons name="arrow-forward" size={20} color={colors.navy} />
             </View>
           </PressableScale>
-        </Animated.View>
+        </FadeSlideIn>
       )}
 
       {!activeAlert && __DEV__ && (
@@ -234,10 +237,13 @@ export default function HomeScreen() {
       )}
 
       {/* Hero CTAs */}
-      <Animated.View entering={enter(2)} style={styles.heroRow}>
+      <FadeSlideIn index={2} style={styles.heroRow}>
         <PressableScale
           style={styles.heroCta}
-          onPress={() => router.push('/quick-inspection')}
+          onPress={() => {
+            tap();
+            router.push('/quick-inspection');
+          }}
         >
           <LinearGradient
             colors={[colors.orange, '#FF8A3D']}
@@ -255,7 +261,10 @@ export default function HomeScreen() {
 
         <PressableScale
           style={[styles.heroCta, styles.heroSecondary]}
-          onPress={() => router.push('/new-job')}
+          onPress={() => {
+            tap();
+            router.push('/new-job');
+          }}
         >
           <View style={[styles.heroIconWrap, styles.heroIconWrapNavy]}>
             <Ionicons name="briefcase-outline" size={26} color={colors.navy} />
@@ -263,21 +272,21 @@ export default function HomeScreen() {
           <Text style={styles.heroSecondaryText}>New{'\n'}Job</Text>
           <Text style={styles.heroSecondarySub}>Customer · Insurance · Roof</Text>
         </PressableScale>
-      </Animated.View>
+      </FadeSlideIn>
 
       {/* Field tools */}
-      <Animated.View entering={enter(3)} style={styles.utilityRow}>
+      <FadeSlideIn index={3} style={styles.utilityRow}>
         <UtilityCta icon="thunderstorm" title="Hail Tracer" sub="NOAA map" onPress={() => router.push('/hail-tracer')} />
         <UtilityCta icon="calculator-outline" title="Estimator" sub="Solar + cost" onPress={() => router.push('/estimator')} />
         <UtilityCta icon="car-outline" title="Mileage" sub="Tax log" onPress={() => router.push('/mileage')} />
-      </Animated.View>
+      </FadeSlideIn>
 
-      <Animated.View entering={enter(4)}>
+      <FadeSlideIn index={4}>
         <AICalibrationCard />
-      </Animated.View>
+      </FadeSlideIn>
 
       {/* Recent Jobs */}
-      <Animated.View entering={enter(5)}>
+      <FadeSlideIn index={5}>
         <Pressable onPress={() => router.push('/inspections')} hitSlop={6}>
           <View style={styles.sectionHeaderRow}>
             <SectionTitle title="Recent Jobs" />
@@ -332,29 +341,32 @@ export default function HomeScreen() {
             })}
           </ScrollView>
         )}
-      </Animated.View>
+      </FadeSlideIn>
 
       {/* Pipeline mini-Kanban */}
-      <Animated.View entering={enter(6)}>
+      <FadeSlideIn index={6}>
         <SectionTitle title="Pipeline" />
         <View style={styles.pipelineRow}>
           {(Object.entries(pipelineCounts) as [string, number][]).map(([stage, count]) => (
             <View key={stage} style={[styles.pipelineCard, count > 0 && styles.pipelineCardActive]}>
-              <Text style={[styles.pipelineCount, count === 0 && styles.pipelineCountZero]}>{count}</Text>
+              <AnimatedCounter
+                value={count}
+                style={[styles.pipelineCount, count === 0 && styles.pipelineCountZero]}
+              />
               <Text style={styles.pipelineLabel}>{stage}</Text>
             </View>
           ))}
         </View>
-      </Animated.View>
+      </FadeSlideIn>
 
       {/* Today's Plan */}
-      <Animated.View entering={enter(7)}>
+      <FadeSlideIn index={7}>
         <SectionTitle title="Today's Plan" />
         <EmptyCard
           icon="calendar-outline"
           message="Nothing scheduled. Add jobs to your plan to see them here."
         />
-      </Animated.View>
+      </FadeSlideIn>
 
       {/* Saved Estimates */}
       {estimates.length > 0 && (
@@ -427,9 +439,21 @@ export default function HomeScreen() {
       <View style={{ height: spacing.xxxl * 2 }} />
     </ScrollView>
 
-    <PressableScale style={styles.fab} pressedScale={0.92} onPress={onQuickAdd}>
-      <Ionicons name="add" size={30} color={colors.textInverse} />
-    </PressableScale>
+    <Animated.View
+      entering={FadeInUp.duration(motion.enterMs).delay(motion.staggerDelayMs * 8)}
+      style={styles.fabWrap}
+    >
+      <PressableScale
+        style={styles.fab}
+        pressedScale={0.92}
+        onPress={() => {
+          tap();
+          onQuickAdd();
+        }}
+      >
+        <Ionicons name="add" size={30} color={colors.textInverse} />
+      </PressableScale>
+    </Animated.View>
     </View>
   );
 }
@@ -464,10 +488,18 @@ function formatRelative(iso: string): string {
   return `${d}d ago`;
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function Kpi({
+  label,
+  value,
+  format,
+}: {
+  label: string;
+  value: number;
+  format?: (n: number) => string;
+}) {
   return (
     <View style={styles.kpiCell}>
-      <Text style={styles.kpiValue}>{value}</Text>
+      <AnimatedCounter value={value} format={format} style={styles.kpiValue} />
       <Text style={styles.kpiLabel}>{label}</Text>
     </View>
   );
@@ -833,10 +865,12 @@ const styles = StyleSheet.create({
   activityMsg: { fontSize: fontSize.bodyMd, color: colors.navy },
   activityTime: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2 },
 
-  fab: {
+  fabWrap: {
     position: 'absolute',
     right: spacing.xl,
     bottom: spacing.xl,
+  },
+  fab: {
     width: touchTarget.sticky,
     height: touchTarget.sticky,
     borderRadius: touchTarget.sticky / 2,

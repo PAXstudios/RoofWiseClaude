@@ -1,8 +1,10 @@
-import { ScrollView, View, Text, StyleSheet, Pressable } from 'react-native';
+import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { PressableScale } from '@/components/PressableScale';
+import { AnimatedCounter, FadeSlideIn } from '@/components/motion';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { useTrainingQueueStore } from '@/lib/stores/trainingQueueStore';
 import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
@@ -33,14 +35,14 @@ export default function TrainScreen() {
     <View style={styles.root}>
     <ScreenHeader title="Train" subtitle="Inspector review queue + AI calibration" />
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.tilesRow}>
-        <Pressable
+      <FadeSlideIn index={0} style={styles.tilesRow}>
+        <PressableScale
           style={[styles.tile, styles.tilePrimary]}
           onPress={() => router.push('/swipe-review')}
         >
           <View style={styles.tileTopRow}>
             <Ionicons name="layers-outline" size={20} color={colors.textInverse} />
-            <Text style={styles.tilePrimaryCount}>{pendingCount}</Text>
+            <AnimatedCounter value={pendingCount} style={styles.tilePrimaryCount} />
           </View>
           <Text style={styles.tilePrimaryLabel}>Pending review</Text>
           <Text style={styles.tilePrimarySub}>
@@ -48,14 +50,20 @@ export default function TrainScreen() {
               ? 'All caught up.'
               : 'Photos waiting on your verdict'}
           </Text>
-        </Pressable>
+        </PressableScale>
 
         <View style={[styles.tile, styles.tileSecondary]}>
           <View style={styles.tileTopRow}>
             <Ionicons name="bar-chart-outline" size={20} color={colors.navy} />
-            <Text style={styles.tileSecondaryCount}>
-              {accuracy === null ? '—' : `${accuracy}%`}
-            </Text>
+            {accuracy === null ? (
+              <Text style={styles.tileSecondaryCount}>—</Text>
+            ) : (
+              <AnimatedCounter
+                value={accuracy}
+                format={(n) => `${Math.round(n)}%`}
+                style={styles.tileSecondaryCount}
+              />
+            )}
           </View>
           <Text style={styles.tileSecondaryLabel}>Calibration accuracy</Text>
           <Text style={styles.tileSecondarySub}>
@@ -64,9 +72,9 @@ export default function TrainScreen() {
               : `From ${corrections.length} corrections`}
           </Text>
         </View>
-      </View>
+      </FadeSlideIn>
 
-      <Section title="AI Calibration">
+      <Section title="AI Calibration" index={1}>
         <View style={styles.row}>
           <Ionicons name="git-branch-outline" size={20} color={colors.slate} />
           <View style={{ flex: 1 }}>
@@ -76,7 +84,7 @@ export default function TrainScreen() {
         </View>
       </Section>
 
-      <Section title="Field tools">
+      <Section title="Field tools" index={2}>
         <Row
           icon="compass-outline"
           label="Pitch gauge"
@@ -97,7 +105,7 @@ export default function TrainScreen() {
         />
       </Section>
 
-      <Section title="Lessons">
+      <Section title="Lessons" index={3}>
         <View style={styles.empty}>
           <Ionicons name="school-outline" size={32} color={colors.slate} />
           <Text style={styles.emptyText}>Lessons will appear here. Coming soon.</Text>
@@ -110,12 +118,20 @@ export default function TrainScreen() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  index = 0,
+  children,
+}: {
+  title: string;
+  index?: number;
+  children: React.ReactNode;
+}) {
   return (
-    <View style={{ gap: spacing.sm }}>
+    <FadeSlideIn index={index} style={{ gap: spacing.sm }}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <View style={styles.card}>{children}</View>
-    </View>
+    </FadeSlideIn>
   );
 }
 
@@ -131,14 +147,14 @@ function Row({
   onPress?: () => void;
 }) {
   return (
-    <Pressable style={styles.row} onPress={onPress}>
+    <PressableScale style={styles.row} onPress={onPress}>
       <Ionicons name={icon} size={22} color={colors.slate} />
       <View style={{ flex: 1 }}>
         <Text style={styles.rowLabel}>{label}</Text>
         <Text style={styles.rowSub}>{sub}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.slate} />
-    </Pressable>
+    </PressableScale>
   );
 }
 

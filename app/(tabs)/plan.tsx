@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -6,6 +6,8 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { PressableScale } from '@/components/PressableScale';
+import { AnimatedCounter, FadeSlideIn, PulseRing } from '@/components/motion';
 import {
   colors,
   fontSize,
@@ -76,41 +78,43 @@ export default function PlanScreen() {
     <View style={styles.root}>
     <ScreenHeader title="Plan" subtitle={today} />
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.statsRow}>
-        <StatTile label="Inspections" value={String(todayInspections.length)} />
-        <StatTile label="Knocks today" value={String(todayKnocks)} />
+      <FadeSlideIn index={0} style={styles.statsRow}>
+        <StatTile label="Inspections" value={todayInspections.length} />
+        <StatTile label="Knocks today" value={todayKnocks} />
         <StatTile
           label="Active route"
-          value={active ? `${active.knocks.length}` : '—'}
+          value={active ? active.knocks.length : null}
+          live={!!active}
         />
-      </View>
+      </FadeSlideIn>
 
-      <View style={styles.segmented}>
+      <FadeSlideIn index={1} style={styles.segmented}>
         {(['today', 'week'] as const).map((v) => (
-          <Pressable
+          <PressableScale
             key={v}
+            pressedScale={0.96}
             style={[styles.seg, view === v && styles.segActive]}
             onPress={() => setView(v)}
           >
             <Text style={[styles.segText, view === v && styles.segTextActive]}>
               {v === 'today' ? 'Today' : 'This week'}
             </Text>
-          </Pressable>
+          </PressableScale>
         ))}
-      </View>
+      </FadeSlideIn>
 
       {todayInspections.length === 0 ? (
-        <View style={styles.empty}>
+        <FadeSlideIn index={2} style={styles.empty}>
           <Ionicons name="calendar-outline" size={40} color={colors.slate} />
           <Text style={styles.emptyTitle}>Nothing scheduled</Text>
           <Text style={styles.emptyBody}>
             Inspections, installs, and meetings will appear here once you add jobs.
           </Text>
-        </View>
+        </FadeSlideIn>
       ) : (
-        <View style={styles.card}>
+        <FadeSlideIn index={2} style={styles.card}>
           {todayInspections.map((ins, i) => (
-            <Pressable
+            <PressableScale
               key={ins.id}
               style={[styles.row, i > 0 && styles.rowBorder]}
               onPress={() => router.push(`/job/${ins.id}` as any)}
@@ -122,21 +126,21 @@ export default function PlanScreen() {
                 <Text style={styles.rowMeta}>{ins.reportId}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.slate} />
-            </Pressable>
+            </PressableScale>
           ))}
-        </View>
+        </FadeSlideIn>
       )}
 
       {followUpsDue.length > 0 && (
-        <>
+        <FadeSlideIn index={3}>
           <Text style={styles.sectionLabel}>Follow-ups due</Text>
-          <View style={styles.card}>
+          <View style={[styles.card, { marginTop: spacing.sm }]}>
             {followUpsDue.map((lead, i) => {
               const overdue =
                 new Date(lead.followUpAt!).getTime() <
                 new Date(new Date().setHours(0, 0, 0, 0)).getTime();
               return (
-                <Pressable
+                <PressableScale
                   key={lead.id}
                   style={[styles.row, i > 0 && styles.rowBorder]}
                   onPress={() => router.push(`/lead/${lead.id}` as any)}
@@ -156,31 +160,33 @@ export default function PlanScreen() {
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.slate} />
-                </Pressable>
+                </PressableScale>
               );
             })}
           </View>
-        </>
+        </FadeSlideIn>
       )}
 
-      <Text style={styles.sectionLabel}>Quick actions</Text>
-      <View style={styles.card}>
-        <Pressable style={styles.actionRow} onPress={() => router.push('/door-knocking')}>
-          <Ionicons name="walk-outline" size={20} color={colors.orange} />
-          <Text style={styles.actionText}>Start door-knocking route</Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.slate} />
-        </Pressable>
-        <Pressable style={[styles.actionRow, styles.rowBorder]} onPress={() => router.push('/mileage')}>
-          <Ionicons name="car-outline" size={20} color={colors.orange} />
-          <Text style={styles.actionText}>Start mileage tracking</Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.slate} />
-        </Pressable>
-        <Pressable style={[styles.actionRow, styles.rowBorder]} onPress={() => router.push('/new-job')}>
-          <Ionicons name="add-circle-outline" size={20} color={colors.orange} />
-          <Text style={styles.actionText}>New job</Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.slate} />
-        </Pressable>
-      </View>
+      <FadeSlideIn index={4}>
+        <Text style={styles.sectionLabel}>Quick actions</Text>
+        <View style={[styles.card, { marginTop: spacing.sm }]}>
+          <PressableScale style={styles.actionRow} onPress={() => router.push('/door-knocking')}>
+            <Ionicons name="walk-outline" size={20} color={colors.orange} />
+            <Text style={styles.actionText}>Start door-knocking route</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+          </PressableScale>
+          <PressableScale style={[styles.actionRow, styles.rowBorder]} onPress={() => router.push('/mileage')}>
+            <Ionicons name="car-outline" size={20} color={colors.orange} />
+            <Text style={styles.actionText}>Start mileage tracking</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+          </PressableScale>
+          <PressableScale style={[styles.actionRow, styles.rowBorder]} onPress={() => router.push('/new-job')}>
+            <Ionicons name="add-circle-outline" size={20} color={colors.orange} />
+            <Text style={styles.actionText}>New job</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+          </PressableScale>
+        </View>
+      </FadeSlideIn>
 
       <View style={{ height: spacing.xxxl }} />
     </ScrollView>
@@ -188,10 +194,23 @@ export default function PlanScreen() {
   );
 }
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({
+  label,
+  value,
+  live = false,
+}: {
+  label: string;
+  value: number | null;
+  live?: boolean;
+}) {
   return (
     <View style={styles.statTile}>
-      <Text style={styles.statValue}>{value}</Text>
+      {live && <PulseRing size={8} color={colors.success} style={styles.statLiveDot} />}
+      {value === null ? (
+        <Text style={styles.statValue}>—</Text>
+      ) : (
+        <AnimatedCounter value={value} style={styles.statValue} />
+      )}
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
@@ -213,6 +232,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...shadows.card,
   },
+  statLiveDot: { position: 'absolute', top: spacing.sm, right: spacing.sm },
   statValue: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.orange },
   statLabel: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: spacing.xs, textAlign: 'center' },
 
