@@ -1,6 +1,19 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../supabase';
+import { supabase, isSupabaseConfigured } from '../supabase';
+
+const NOT_CONFIGURED_MESSAGE =
+  'Backend not configured on this machine. In the project folder: copy ' +
+  '.env.local.example to .env.local, fill in the Supabase URL + anon key, ' +
+  'then restart with `npx expo start --clear`.';
+
+// Central gate — every network-touching auth action calls this first so a
+// missing .env.local reads as clear guidance, not "network request failed".
+function assertConfigured(set: (partial: Partial<AuthState>) => void) {
+  if (isSupabaseConfigured) return;
+  set({ loading: false, error: NOT_CONFIGURED_MESSAGE });
+  throw new Error(NOT_CONFIGURED_MESSAGE);
+}
 
 type AuthState = {
   session: Session | null;
@@ -41,6 +54,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signInWithEmail: async (email, password) => {
+    assertConfigured(set);
     set({ loading: true, error: null });
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     set({ loading: false, error: error?.message ?? null });
@@ -48,6 +62,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signUpWithEmail: async (email, password) => {
+    assertConfigured(set);
     set({ loading: true, error: null });
     const { error } = await supabase.auth.signUp({ email, password });
     set({ loading: false, error: error?.message ?? null });
@@ -55,6 +70,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signInWithAppleIdToken: async (idToken, nonce) => {
+    assertConfigured(set);
     set({ loading: true, error: null });
     const { error } = await supabase.auth.signInWithIdToken({
       provider: 'apple',
@@ -66,6 +82,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   sendPasswordReset: async (email) => {
+    assertConfigured(set);
     set({ loading: true, error: null });
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     set({ loading: false, error: error?.message ?? null });

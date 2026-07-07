@@ -53,7 +53,7 @@ The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captur
 - Auth: Supabase email/password works against project `yyzjosttvpleehzmhhxy` (keys in `.env.local`, gitignored). `requireAuth` flag wired, false in dev. Apple Sign In parked (needs dev build).
 
 **Known environment gotchas:**
-- `lib/env.ts` Supabase fallback still points to the old project `mzsabjegtxmzlfpxmmfm` — devices without `.env.local` hit "network request failed" at login. Open follow-up (a fix commit was blocked by credential-scanning; needs a non-hardcoded approach).
+- ~~`lib/env.ts` Supabase dead-project fallback~~ — **fixed in #35**: no credential fallbacks remain; unconfigured machines get a friendly ".env.local missing" message from the auth store instead of "network request failed".
 - User's Mac: working clone is `~/Documents/RoofWiseClaude`; a stale clone at `~/RoofWiseClaude` may still have Metro on port 8081 — kill it (`pkill -f expo`) before testing or Expo Go loads old code.
 - All API keys pasted in chat during sessions (Gemini, Supabase anon, Maps) are exposed — rotate before production.
 
@@ -1754,3 +1754,33 @@ detail screens (Job/Lead) — they inherit the token changes.
 - Device pass in Expo Go: confirm 60fps on the dashboard stagger with a long inspection list, and that `AnimatedCounter`'s per-frame `setState` stays cheap (it's bounded at ~48 frames per roll-up; if it ever shows up in profiling, move to reanimated + `runOnJS` batching).
 - Settings tab and detail screens (Job/Lead/Analyze) not yet on the motion system — same `FadeSlideIn` treatment is a mechanical follow-up.
 - Consider a reduced-motion accessibility toggle (respect `AccessibilityInfo.isReduceMotionEnabled`) that zeroes `enterMs`/`countUpMs` — parked until a user asks.
+
+---
+
+### [2026-07-04] #35 — Remove dead-project Supabase fallback; friendly "not configured" gate
+
+**Prompt:**
+> network request failed
+> [follow-up] wait i think it was working
+
+**Intent / Goal:**
+- User hit the documented "network request failed" symptom on simulator launch. Root cause has been an open follow-up since the Context Summary of #24: `lib/env.ts` fell back to the deleted Supabase project `mzsabjegtxmzlfpxmmfm` whenever `.env.local` was missing, so auth calls died with a bare network error. The previously attempted fix (hardcoding the new project's keys) was correctly blocked by credential scanning — this is the non-hardcoded approach.
+
+**Decisions:**
+- `lib/env.ts`: deleted the fallback URL + anon key outright. `SUPABASE_URL`/`SUPABASE_ANON_KEY` are empty when unset. New export `isSupabaseConfigured`.
+- `lib/supabase.ts`: when unconfigured, the client is constructed with a syntactically-valid `.invalid`-TLD placeholder so module import never throws; real calls are gated upstream.
+- `lib/auth/authStore.ts`: central `assertConfigured()` at the top of the four network-touching auth actions (sign in / sign up / Apple token / password reset) — sets and throws a friendly, actionable message ("copy .env.local.example to .env.local … restart with npx expo start --clear"). `initialize()` untouched — `getSession()` reads local AsyncStorage only, no network.
+- Configured machines see zero behavior change: same client, same keys, same flows. Verified only `lib/supabase.ts` consumes the env pair (grep), so no other call site can reach the placeholder.
+- User followed up that the app may in fact have been working (their Mac likely has `.env.local`); the transient error was possibly a stale-bundle first load. The fix lands regardless — it closes the open follow-up and can't regress a configured device.
+
+**Files touched:**
+- `lib/env.ts`, `lib/supabase.ts`, `lib/auth/authStore.ts`
+- `PROMPT_LOG.md` — this entry + Context Summary gotcha bullet marked fixed.
+
+**Verification:**
+- `npm run typecheck` clean; `npm run lint` 0 errors (14 pre-existing warnings unchanged).
+- Drift check: no mocks (Drift #5 — placeholder is unreachable and non-synthesizing), no credentials in source (secrets policy), auth flag wiring untouched (Drift #12).
+
+**Follow-ups:**
+- Welcome screen could pre-check `isSupabaseConfigured` and show a banner before the user types anything — currently the message appears on first submit.
+- Sync services (`leadSync`, `correctionsSync`, `backup`) still swallow errors silently on unconfigured machines; acceptable (they're background), but a settings-screen "backend: not configured" indicator would make field debugging faster.

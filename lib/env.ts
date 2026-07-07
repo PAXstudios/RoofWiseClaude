@@ -1,15 +1,12 @@
 // Single source of truth for client-side env vars.
 //
 // At build time Expo loads `.env.local` (gitignored) into `process.env.*`
-// for any var prefixed with `EXPO_PUBLIC_`. The fallbacks below let the app
-// keep building even when `.env.local` is missing, but every fallback that
-// touches a billable API should be considered exposed and rotated before
-// production. See the `.env.local.example` template for the canonical list
-// of variables and the rotation plan.
-
-const FALLBACK_SUPABASE_URL = 'https://mzsabjegtxmzlfpxmmfm.supabase.co';
-const FALLBACK_SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16c2FiamVndHhtemxmcHhtbWZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMDQyNzIsImV4cCI6MjA5NDg4MDI3Mn0.llzXp4wYKeR1DjBTah7YzVQEaQALla3UI5TmvU2QGJc';
+// for any var prefixed with `EXPO_PUBLIC_`. There are NO credential
+// fallbacks here — a missing `.env.local` must produce a friendly
+// "not configured" state, never a request against a stale project.
+// (A dead-project fallback used to live here and produced the infamous
+// "network request failed" at login on any machine without env keys.)
+// See `.env.local.example` for the canonical variable list.
 
 function pick(value: string | undefined, fallback = ''): string {
   return value && value.length > 0 ? value : fallback;
@@ -19,8 +16,8 @@ const googleMapsKey = pick(process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY);
 
 export const env = {
   // Supabase
-  SUPABASE_URL: pick(process.env.EXPO_PUBLIC_SUPABASE_URL, FALLBACK_SUPABASE_URL),
-  SUPABASE_ANON_KEY: pick(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY, FALLBACK_SUPABASE_ANON_KEY),
+  SUPABASE_URL: pick(process.env.EXPO_PUBLIC_SUPABASE_URL),
+  SUPABASE_ANON_KEY: pick(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
 
   // Gemini
   GEMINI_API_KEY: pick(process.env.EXPO_PUBLIC_GEMINI_API_KEY),
@@ -54,6 +51,8 @@ export const env = {
   REQUIRE_AUTH: pick(process.env.EXPO_PUBLIC_REQUIRE_AUTH, 'false') === 'true',
 };
 
+export const isSupabaseConfigured =
+  env.SUPABASE_URL.length > 0 && env.SUPABASE_ANON_KEY.length > 0;
 export const isGeminiConfigured = env.GEMINI_API_KEY.length > 0;
 export const isGoogleMapsConfigured = env.GOOGLE_MAPS_API_KEY.length > 0;
 export const isGooglePlacesConfigured = env.GOOGLE_PLACES_API_KEY.length > 0;
