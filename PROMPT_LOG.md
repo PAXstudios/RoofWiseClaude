@@ -1811,3 +1811,27 @@ detail screens (Job/Lead) — they inherit the token changes.
 - Replace the stylized CSS roof in hero/scenes with real inspection photography once field-trial photos are cleared for marketing use.
 - Register/point roofwise.app domain and host `website/` (Vercel/Netlify static).
 - If real MP4s with sound are needed, screen-record the two players (QuickTime ⌘⇧5) or hand the storyboards to an editor; scenes are timed to broadcast pacing already.
+
+---
+
+### [2026-07-07] #37 — Founder video: speaking animated avatar + script + photoreal path
+
+**Prompt:**
+> Do a founder video. Use a reslitic face as the avatar speaking.
+
+**Intent / Goal:**
+- A founder-message video with a speaking avatar. Photorealistic human video generation isn't possible in this environment (no HeyGen/Synthesia/D-ID connected; Canva MCP is static-only) — stated plainly to the user rather than faking it.
+
+**Decisions:**
+- `website/founder-60s.html`: a speaking founder player — illustrated SVG founder portrait (cap with RW mark, work shirt; deliberately stylized, labeled as such) that actually TALKS: Web Speech API reads the 8-segment script aloud with a viseme-cycling mouth (rest/small/open/press/round), blink loop, brow emphasis on key lines, word-synced karaoke captions, segment progress dots, voice picker, and a timed-caption fallback when TTS is unavailable. Lower-third with founder name placeholder.
+- **No fabricated biography.** Script lines about the founder's personal history are [BRACKETED] placeholders with an edit note; product claims in the script are spec-true (13 categories, HAAG thresholds, $5–20K denial cost, one-approval economics).
+- Photoreal path documented on-page and in chat: paste the same script into HeyGen/Synthesia, render, swap the MP4 in.
+- Artifact: https://claude.ai/code/artifact/22f83580-1c8a-42f0-9ef8-5d19101f270d
+
+**Files touched:**
+- `website/founder-60s.html` — new.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Replace [BRACKETED] story lines with the founder's real one-liner before any public use.
+- If publishing an AI-avatar version (HeyGen/Synthesia), disclose it's AI-generated — platform policies increasingly require synthetic-media labels, and B2B contractor trust favors the real founder on camera anyway.
