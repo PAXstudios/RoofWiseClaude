@@ -1784,3 +1784,30 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - Welcome screen could pre-check `isSupabaseConfigured` and show a banner before the user types anything — currently the message appears on first submit.
 - Sync services (`leadSync`, `correctionsSync`, `backup`) still swallow errors silently on unconfigured machines; acceptable (they're background), but a settings-screen "backend: not configured" indicator would make field debugging faster.
+
+---
+
+### [2026-07-07] #36 — Marketing site + 30s ad + 15s social video (animated, brand-token derived)
+
+**Prompt:**
+> Build the website for RoofWise with animation. Build a ad video as well. And a social media video
+
+**Intent / Goal:**
+- Marketing collateral, not app code. Three pieces sharing one visual identity derived from `theme/tokens.ts` (navy/orange/cream/slate): an animated single-page marketing site, a 30-second ad spot, and a 15-second vertical social cut.
+
+**Decisions:**
+- All three live in `website/` as fully self-contained HTML (no external assets/CDNs) and are published as Claude Artifacts for immediate preview/sharing.
+- **Identity:** "forensic evidence document" direction — mono-type annotations, AI bounding boxes, HAAG threshold tables, stamped verdicts — because the product's story IS evidence. Alternating navy (storm/field) and cream (document/office) bands mirror the two worlds the product bridges.
+- **Website (`website/index.html`):** hero with live animated detection phone mock (bounding boxes + confidence tags + verdict chip), radar sweep backdrop, count-up economics stats ($5–20K denial / $10–50K approval / 13 categories / 1 approval pays), 13-category marquee (real taxonomy), 4-step how-it-works, HAAG threshold table with slam-in CLAIM-WORTHY stamp (real material thresholds from the spec), field-kit grid, glove-first design section (real spec constraints), early-access CTA via mailto:contact@roofwise.app. IntersectionObserver reveals; prefers-reduced-motion respected. No fabricated testimonials/logos/customers (Drift #5 spirit).
+- **Ad (`website/ad-30s.html`):** 16:9 six-scene ~30s kinetic-typography spot — storm intro (radar + hailfall + lightning flash) → denial pain → AI detection burst → HAAG verdict stamp → economics → end card. Self-playing scene engine with progress bar, click-pause, replay. Screen-record-to-MP4 instructions included (no video rendering available in this environment; verified Canva MCP generation is static-only, no video design type).
+- **Social (`website/social-15s.html`):** 9:16 five-scene ~15s hook-first cut ("Another claim just got… DENIED") for Reels/TikTok/Shorts. Same engine + export note.
+- Artifacts: website https://claude.ai/code/artifact/e17d0926-969d-4832-b81f-c6184e09f381 · ad https://claude.ai/code/artifact/cf2120b7-efb2-4352-b9cb-feea3ff536f1 · social https://claude.ai/code/artifact/f1923695-d137-4ef6-a749-308d3d390f3b
+
+**Files touched:**
+- `website/{index,ad-30s,social-15s}.html` — new.
+- `PROMPT_LOG.md` — this entry.
+
+**Follow-ups:**
+- Replace the stylized CSS roof in hero/scenes with real inspection photography once field-trial photos are cleared for marketing use.
+- Register/point roofwise.app domain and host `website/` (Vercel/Netlify static).
+- If real MP4s with sound are needed, screen-record the two players (QuickTime ⌘⇧5) or hand the storyboards to an editor; scenes are timed to broadcast pacing already.
