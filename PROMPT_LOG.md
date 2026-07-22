@@ -1835,3 +1835,35 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Follow-ups:**
 - Replace [BRACKETED] story lines with the founder's real one-liner before any public use.
 - If publishing an AI-avatar version (HeyGen/Synthesia), disclose it's AI-generated — platform policies increasingly require synthetic-media labels, and B2B contractor trust favors the real founder on camera anyway.
+
+---
+
+### [2026-07-22] #38 — Web preview support: run the real app headless from a Claude session
+
+**Prompt:**
+> okay i want to coniue building the roofwise app and i want to see a similator of the app. i know you now have that capability
+
+**Intent / Goal:**
+- No iOS Simulator exists in the cloud session (Linux, no Xcode) — but the container has headless Chromium + Playwright. Wire Expo web support so the REAL app runs in a browser, drive it, and screenshot every tab. This becomes the standing "see the app from a Claude session" path.
+
+**Decisions:**
+- `npx expo install react-dom react-native-web @expo/metro-runtime` (SDK-51-pinned).
+- `npm i @opentelemetry/api` — Supabase-js's `.mjs` (web) build references it as an optional dep; Metro web resolution fails without it. Native path never touched it.
+- **`components/map/Map.web.tsx`** — web fallback mirroring Map.tsx's full export surface (Map, MapPin, MapPolyline, MapPolygon, MapCircle, MapHeatmap, regionForLatLon, Region). react-native-maps has no web implementation; web renders a friendly "Map runs on the mobile app" panel (Drift #5: absent, never synthesized). Follows the existing `.native.tsx` split precedent (StormHistoryMap).
+- **Auth-gate bug found & fixed (Drift #12):** `app/index.tsx` and `app/(tabs)/_layout.tsx` redirected to /welcome whenever session was null, ignoring `env.REQUIRE_AUTH` entirely — the flag was wired in env but never consulted at the gates. With requireAuth=false (dev default) the app is now usable signed-out, per the documented contract. On devices this was masked by persisted sessions.
+- Headless drive: Playwright (scratchpad-installed; Chromium pre-provisioned) at 390×844 iPhone viewport, onboarding pre-seeded via localStorage (`roofwise.onboarding.v1`), all 5 tabs + welcome screenshotted and delivered to the user. Only console error: expo-camera's web QR worker fetching jsQR from CDN (blocked by container proxy; harmless, camera flows are device-only anyway).
+- Verified in shots: motion layer live (WeatherTile skeleton, count-up KPIs), hero CTAs intact (Drift #3), empty-state boot (Drift #5).
+
+**Files touched:**
+- `package.json` / `package-lock.json` — web deps + @opentelemetry/api.
+- `components/map/Map.web.tsx` — new.
+- `app/index.tsx`, `app/(tabs)/_layout.tsx` — gate on `env.REQUIRE_AUTH && !session`.
+- `PROMPT_LOG.md` — this entry.
+
+**Verification:**
+- typecheck clean; lint 0 errors. All 6 routes rendered and screenshotted.
+
+**Follow-ups:**
+- Recommend `/run-skill-generator` next session to capture the launch recipe (expo web + Playwright driver) as a project skill.
+- `REQUIRE_AUTH=true` path re-test before ship: welcome gate confirmed still working (screenshotted) but sign-in E2E needs the Supabase project awake.
+- Web is a PREVIEW target only — camera, maps, sensors, PDF flows remain device-only. Don't ship web.

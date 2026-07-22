@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BottomTabs } from '@/components/shell/BottomTabs';
 import { colors } from '@/theme/tokens';
 import { useAuthStore } from '@/lib/auth/authStore';
+import { env } from '@/lib/env';
 
 export default function TabsLayout() {
   const initialized = useAuthStore((s) => s.initialized);
@@ -17,7 +18,8 @@ export default function TabsLayout() {
     );
   }
 
-  if (!session) {
+  // Drift #12: redirect only when auth is actually required.
+  if (!session && env.REQUIRE_AUTH) {
     return <Redirect href="/welcome" />;
   }
 
