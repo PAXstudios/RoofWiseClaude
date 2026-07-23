@@ -144,6 +144,12 @@ export type DamageMarker = {
   note?: string;
   /** Index into Slope.photoPaths that this marker belongs to. */
   photoIndex?: number;
+  /**
+   * Normalized 0-1 bounding box from Gemini's native bbox detection.
+   * When present the overlay draws a true rectangle; absent (manual or
+   * legacy markers) it falls back to the center+radius circle.
+   */
+  box?: { xmin: number; ymin: number; xmax: number; ymax: number };
 };
 
 export type InspectionFinding = {

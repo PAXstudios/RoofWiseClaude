@@ -10,6 +10,7 @@ import {
 import { useInspectionStore } from '../stores/inspectionStore';
 import { useCorrectionsStore } from '../stores/correctionsStore';
 import { useTrainingQueueStore } from '../stores/trainingQueueStore';
+import { useToastStore } from '../stores/toastStore';
 import { computeProfile } from './learning/userCorrectionProfile';
 import { userStylePromptPrefix } from './learning/localLearningEngine';
 import type { Slope } from '../models/types';
@@ -52,6 +53,7 @@ export async function analyzeSlope(
   const results: AnalysisResult[] = [];
   let attached = 0;
   let failed = 0;
+  let withheldPhotos = 0;
 
   for (let i = 0; i < todoIndexes.length; i++) {
     const photoIndex = todoIndexes[i];
@@ -91,12 +93,32 @@ export async function analyzeSlope(
         });
       }
 
+      // #31 follow-up: when the client filter withheld everything the model
+      // produced, that photo would otherwise be indistinguishable from a
+      // clean roof. Count it so the inspector gets told below.
+      const audit = r.detectionAudit;
+      if (audit.gridRejected || (audit.rawCount > 0 && audit.keptCount === 0)) {
+        withheldPhotos++;
+      }
+
       attached++;
     } catch {
       failed++;
     }
   }
   opts.onProgress?.({ done: todoIndexes.length, total: todoIndexes.length });
+
+  if (withheldPhotos > 0) {
+    useToastStore.getState().show({
+      tone: 'warn',
+      title: 'AI withheld unreliable detections',
+      body:
+        `${withheldPhotos} photo${withheldPhotos === 1 ? '' : 's'} produced detections ` +
+        'the AI couldn’t trust, so nothing was marked. Re-shoot in better light ' +
+        'or add markers manually in Edit Detection.',
+    });
+  }
+
   return { results, attached, failed };
 }
 

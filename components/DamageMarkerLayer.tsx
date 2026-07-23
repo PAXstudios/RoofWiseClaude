@@ -99,16 +99,34 @@ export function DamageMarkerLayer({
     const ly = sy - r.top;
     if (lx < 0 || ly < 0 || lx > r.width || ly > r.height) return;
 
-    // Hit-test markers first
+    // Hit-test markers first. Bbox markers use point-in-rect (padded to a
+    // glove-friendly minimum); circle markers use center distance.
+    const MIN_HIT = 18;
     for (const m of markers) {
-      const px = r.left + m.x * r.width;
-      const py = r.top + m.y * r.height;
-      const radius = Math.max(18, m.radius * Math.min(r.width, r.height));
-      const dx = sx - px;
-      const dy = sy - py;
-      if (Math.sqrt(dx * dx + dy * dy) <= radius) {
-        onSelectMarker(m.id);
-        return;
+      if (m.box) {
+        const bx = r.left + m.box.xmin * r.width;
+        const by = r.top + m.box.ymin * r.height;
+        const bw = (m.box.xmax - m.box.xmin) * r.width;
+        const bh = (m.box.ymax - m.box.ymin) * r.height;
+        const padX = Math.max(0, (MIN_HIT * 2 - bw) / 2);
+        const padY = Math.max(0, (MIN_HIT * 2 - bh) / 2);
+        if (
+          sx >= bx - padX && sx <= bx + bw + padX &&
+          sy >= by - padY && sy <= by + bh + padY
+        ) {
+          onSelectMarker(m.id);
+          return;
+        }
+      } else {
+        const px = r.left + m.x * r.width;
+        const py = r.top + m.y * r.height;
+        const radius = Math.max(MIN_HIT, m.radius * Math.min(r.width, r.height));
+        const dx = sx - px;
+        const dy = sy - py;
+        if (Math.sqrt(dx * dx + dy * dy) <= radius) {
+          onSelectMarker(m.id);
+          return;
+        }
       }
     }
     onTapPhoto(lx / r.width, ly / r.height);
@@ -218,11 +236,48 @@ export function DamageMarkerLayer({
           <Image source={{ uri: photoUri }} style={styles.image} resizeMode="contain" />
 
           {markers.map((m) => {
+            const tint = SEVERITY_COLORS[m.severity];
+            const selected = m.id === selectedMarkerId;
+
+            // Bbox markers (#32 follow-up) draw the model's actual rectangle
+            // — shape is diagnostic: real damage is irregular, grid
+            // hallucinations are uniform. Manual/legacy markers keep circles.
+            if (m.box) {
+              const MIN_DRAW = 24;
+              let left = rect.left + m.box.xmin * rect.width;
+              let top = rect.top + m.box.ymin * rect.height;
+              let w = (m.box.xmax - m.box.xmin) * rect.width;
+              let h = (m.box.ymax - m.box.ymin) * rect.height;
+              if (w < MIN_DRAW) { left -= (MIN_DRAW - w) / 2; w = MIN_DRAW; }
+              if (h < MIN_DRAW) { top -= (MIN_DRAW - h) / 2; h = MIN_DRAW; }
+              return (
+                <View
+                  key={m.id}
+                  pointerEvents="none"
+                  style={[
+                    styles.marker,
+                    styles.markerBox,
+                    {
+                      left,
+                      top,
+                      width: w,
+                      height: h,
+                      borderColor: tint,
+                      backgroundColor: `${tint}26`,
+                    },
+                    selected && styles.markerSelected,
+                  ]}
+                >
+                  <View style={[styles.confidenceBubble, { backgroundColor: tint }]}>
+                    <Text style={styles.confidenceText}>{m.confidence}</Text>
+                  </View>
+                </View>
+              );
+            }
+
             const px = rect.left + m.x * rect.width;
             const py = rect.top + m.y * rect.height;
             const size = Math.max(36, m.radius * Math.min(rect.width, rect.height) * 2);
-            const tint = SEVERITY_COLORS[m.severity];
-            const selected = m.id === selectedMarkerId;
             return (
               <View
                 key={m.id}
@@ -262,6 +317,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  markerBox: { borderRadius: radii.sm },
   markerSelected: { borderWidth: 4 },
   confidenceBubble: {
     position: 'absolute',

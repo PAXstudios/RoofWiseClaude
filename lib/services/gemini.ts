@@ -33,12 +33,24 @@ export class GeminiAnalysisError extends Error {
   }
 }
 
+export type DetectionAudit = {
+  /** Parseable detections the model returned, before client filtering. */
+  rawCount: number;
+  /** Detections that survived sanitizeMarkers. */
+  keptCount: number;
+  /** True when the whole batch was rejected as a grid hallucination. */
+  gridRejected: boolean;
+};
+
 export type AnalysisResult = {
   analyzed: boolean;
   noRoofDetected: boolean;
   shingleType?: ShingleTypeClassification;
   findings: InspectionFinding[];
   markers: DamageMarker[];
+  /** Why markers may differ from what the model produced — drives the
+   *  "AI withheld detections" inspector toast. */
+  detectionAudit: DetectionAudit;
   raw: unknown;
 };
 
@@ -225,6 +237,7 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
         x,
         y,
         radius,
+        box,
         confidence: clamp(Number(d.confidence ?? 0), 0, 100),
         note: typeof d.note === 'string' ? d.note : undefined,
       };
@@ -251,7 +264,8 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
     })
     .filter(Boolean) as DamageMarker[];
 
-  const markers = sanitizeMarkers(detections.length > 0 ? detections : legacyMarkers);
+  const candidates = detections.length > 0 ? detections : legacyMarkers;
+  const { markers, gridRejected } = sanitizeMarkers(candidates);
 
   const shingleType: ShingleTypeClassification | undefined = parsed?.shingle_type?.type
     ? {
@@ -270,6 +284,11 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
     shingleType,
     findings,
     markers,
+    detectionAudit: {
+      rawCount: candidates.length,
+      keptCount: markers.length,
+      gridRejected,
+    },
     raw,
   };
 }
@@ -338,17 +357,20 @@ const GRID_MIN_BATCH = 10; // don't run the heuristic at all on small batches
 const GRID_ALIGN_TOLERANCE = 0.015; // 1.5%, tighter than before
 const GRID_MIN_CLUSTER = 6; // need 6+ markers on one line to call it a grid
 
-function sanitizeMarkers(markers: DamageMarker[]): DamageMarker[] {
-  if (markers.length === 0) return markers;
+function sanitizeMarkers(markers: DamageMarker[]): {
+  markers: DamageMarker[];
+  gridRejected: boolean;
+} {
+  if (markers.length === 0) return { markers, gridRejected: false };
 
   // 1. Drop sub-threshold confidence.
   let kept = markers.filter((m) => m.confidence >= MARKER_MIN_CONFIDENCE);
-  if (kept.length === 0) return [];
+  if (kept.length === 0) return { markers: [], gridRejected: false };
 
   // 2. Only nuke the batch if it's an egregious grid — small batches and
   //    even moderately-aligned batches now pass through, because real
   //    storm damage can naturally land near horizontal courses.
-  if (isGridHallucination(kept)) return [];
+  if (isGridHallucination(kept)) return { markers: [], gridRejected: true };
 
   // 3. Collapse near-duplicates (same category, tightly overlapping).
   kept = dedupNearbyMarkers(kept);
@@ -358,7 +380,7 @@ function sanitizeMarkers(markers: DamageMarker[]): DamageMarker[] {
   if (kept.length > MARKER_HARD_CAP) {
     kept = [...kept].sort((a, b) => b.confidence - a.confidence).slice(0, MARKER_HARD_CAP);
   }
-  return kept;
+  return { markers: kept, gridRejected: false };
 }
 
 function isGridHallucination(markers: DamageMarker[]): boolean {

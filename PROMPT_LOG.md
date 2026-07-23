@@ -1867,3 +1867,32 @@ detail screens (Job/Lead) — they inherit the token changes.
 - Recommend `/run-skill-generator` next session to capture the launch recipe (expo web + Playwright driver) as a project skill.
 - `REQUIRE_AUTH=true` path re-test before ship: welcome gate confirmed still working (screenshotted) but sign-in E2E needs the Supabase project awake.
 - Web is a PREVIEW target only — camera, maps, sensors, PDF flows remain device-only. Don't ship web.
+
+---
+
+### [2026-07-22] #39 — Withheld-detections toast + rectangle overlays + BACKLOG.md ledger
+
+**Prompt:**
+> Do 2 then 3. It don't forget to do the others. I've notice that if I don't go back and tell you to do stuff we decide not to do immediately, that you never bring them back uk to do.
+
+**Intent / Goal:**
+- Ship the two trust-loop features picked from the priority list (#31's toast follow-up, #32's rectangle follow-up), AND fix the process failure the user called out: deferred work was tracked only in per-entry follow-up notes, which nothing forces future sessions to re-read.
+
+**Decisions:**
+- **Withheld-detections toast (closes #31 follow-up).** `AnalysisResult` gains `detectionAudit: { rawCount, keptCount, gridRejected }`; `sanitizeMarkers()` now returns `{ markers, gridRejected }`. `analyzeSlope()` counts photos where the client filter withheld everything the model produced (`gridRejected || rawCount>0 && keptCount===0`) and fires ONE warn toast per slope run ("AI withheld unreliable detections… re-shoot or add markers manually"). Without this, a rejected batch was indistinguishable from a clean roof — an inspector-trust hole. analyzePhoto has a single call path (analyzeSlope), verified by grep.
+- **Rectangle overlays (closes #32 follow-up).** `DamageMarker` gains optional `box {xmin,ymin,xmax,ymax}` (normalized 0-1); gemini's bbox path stores it (bboxFrom output reused). `DamageMarkerLayer` draws true rectangles for boxed markers (24px min draw size, radii.sm corners, severity tint, confidence bubble) and keeps circles for manual/legacy markers. Hit-testing is now shape-aware: padded point-in-rect for boxes (36px glove minimum), center-distance for circles. Box shape is diagnostic — real damage is irregular, hallucinated grids are uniform (#33 follow-up rationale).
+- **BACKLOG.md (new root file) + CLAUDE.md backlog rule.** Single ledger aggregating every open follow-up from entries #24–#38, organized Now / Next / Before-ship / Marketing / Parked / Done with source-entry refs. CLAUDE.md now instructs every session: read it after the Context Summary, add deferrals in the same commit, close items with the entry number. This is the structural fix for "you never bring them back up."
+
+**Files touched:**
+- `lib/models/types.ts` — DamageMarker.box.
+- `lib/services/gemini.ts` — DetectionAudit type, sanitizeMarkers signature, box passthrough, audit in normalize return.
+- `lib/services/analyzeSlope.ts` — withheld counting + toast via toastStore.
+- `components/DamageMarkerLayer.tsx` — rect rendering + shape-aware hit-test.
+- `BACKLOG.md` — new. `CLAUDE.md` — backlog rule.
+- `PROMPT_LOG.md` — this entry.
+
+**Verification:**
+- typecheck clean; lint 0 errors. NOT yet verified against live Gemini output (no API key in this container) — BACKLOG "Now" carries a device-verification item. Existing persisted markers (no box) render as circles unchanged; only fresh analyses get rectangles — users must Re-analyze to see boxes (same caveat as #31–#33).
+
+**Follow-ups:**
+- Tracked in BACKLOG.md — that's the point. Top of "Now": motion layer for Settings + Job/Lead details, HAAG PDF polish, device verification of this entry's features.

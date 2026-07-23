@@ -25,6 +25,12 @@ A denied claim costs the contractor $5–20K; an approved one is worth $10–50K
 2. **Append an entry after every change** using the template in `PROMPT_LOG.md`. Append-only — never edit/delete past entries.
 3. **Refresh the Context Summary every 5+ new entries.**
 
+**Plus the backlog rule:** `BACKLOG.md` is the single ledger of deferred work.
+Read it right after the Context Summary. When you defer something, add it there
+*in the same commit* — a follow-up note inside a PROMPT_LOG entry alone is how
+work gets lost. When you finish something, move it to Done with the closing
+entry number. When the user asks "what's next," answer from BACKLOG.md.
+
 ---
 
 ## Stack
