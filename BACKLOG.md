@@ -13,6 +13,9 @@ entry does not count as tracked.
 
 ## Now (committed next steps, in order)
 
+- [ ] **Resolve the bundle ID** — `app.config.js` says `com.roofwise.app`, other notes say `com.paxconsulting.roofwise`. Must be settled BEFORE adding iOS restrictions to any Google key, or Maps/Places/Solar break in the shipped app with an unhelpful error — 2026-07-22 · see `docs/SETUP_ACCOUNTS.md`
+- [ ] **Full-resolution analyze path** — capture stores ONE 1600px/0.7 JPEG (`app/quick-inspection.tsx`) and Gemini analyzes that same file, so a ~1in hail strike is only ~30px. Restore the two-profile pipeline: keep 1600px for storage/display, generate a higher-res (2400–3072px) transient copy for analysis only. **Constraint:** the 1600px cap exists to prevent the Expo Go OOM/SIGABRT crashes from #23/#24 — raise it in the analyze path only, never in the multi-photo picker path — 2026-07-22 · detection accuracy is the product
+
 - [ ] Extend motion layer to Settings tab + Job/Lead detail screens — #34 · last un-animated surfaces; mechanical with `components/motion/`
 - [ ] HAAG claim packet PDF polish (`lib/services/haagPdf.ts`) — user priority list 2026-07-22 · the money artifact; layout, annotated photos, threshold citations, signatures
 - [ ] Verify rectangle overlays + withheld-detections toast on a real device with a real analysis — #39 · built and typechecked, but not yet seen with live Gemini output
@@ -25,6 +28,8 @@ entry does not count as tracked.
 - [ ] Capture web-preview launch recipe as a project skill via `/run-skill-generator` — #38 · so future sessions don't rediscover the expo-web + Playwright dance
 - [ ] Refresh the stale Feature Backlog table in PROMPT_LOG (rows don't reflect built features like proposals/PDFs/door-knocking) — noticed #38
 - [ ] Configure EAS (`eas.json` + EAS Secrets for the `EXPO_PUBLIC_*` keys) for TestFlight distribution — asked 2026-07-22 · required to put builds in contractors' hands for field trials; needs Apple Developer Program ($99/yr). Expo Go is fine for solo testing until then.
+- [ ] Apple Developer Program enrollment ($99/yr) — 2026-07-22 · gates TestFlight, Apple Sign In, background execution, geofenced mileage
+- [ ] Enable + restrict Google APIs (Maps iOS/Android, Places, Geocoding, Solar, Weather) on project `gen-lang-client-0432200648`; link billing; set a Solar budget alert — 2026-07-22 · see `docs/SETUP_ACCOUNTS.md`
 
 ## Before ship (release blockers)
 

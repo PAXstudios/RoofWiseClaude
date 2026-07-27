@@ -137,35 +137,44 @@ The recursive learning loop (Phase 9). Tinder-swipe inspector review → correct
 
 Aligned to spec phases. Status is current state in *this* Expo repo, not the rork Swift repo.
 
-| Phase | Feature | Status |
-|---|---|---|
-| 0 | Brand theme tokens | Implemented |
-| 0 | Supabase auth + Welcome screen + gate | Implemented |
-| 0 | 5-tab IA migration | In progress |
-| 1 | Home dashboard (Storm Alert hero, hero CTAs, KPI, Recent Jobs, Pipeline, Today's Plan) | In progress |
-| 2A | Data foundation (Inspection model + InspectionStore + NewJobWizard) | In progress |
-| 2B | Quick Inspection camera + Gemini + DecisionEngine | In progress |
-| 3 | HAAG PDF report + signatures | Not started |
-| 4A | Map (react-native-maps + NOAA pins + filters + Storm Detail) | In progress |
-| 4B | Weather tile (Google Weather API) | Not started |
-| 4C | NOAA auto-event-fill on inspection save | Not started |
-| 4D | Solar API roof measurement | Not started |
-| 4E | Cost Estimator wizard | Not started |
-| 5A | Inspection.originEstimateId traceability | Not started |
-| 5B | Activity Feed | Not started |
-| 5C | AI Training Queue | Not started |
-| 6A | Service Area (zips/cities) | Not started |
-| 6B | Storm Watch background polling | Not started |
-| 6C | Push notifications for storm alerts | Not started |
-| 6D | Dynamic Storm Alert hero (consumes alert store) | Not started |
-| 6E | Door Knocking Mode | Not started |
-| 7 | Proposals + PDF export + send sheet | Not started |
-| 8 | Structured Gemini confidence (flag-gated) | Not started |
-| 9 | Recursive Learning Loop (SwipeReview + OverlayEditor + LocalLearningEngine + corrections sync) | Not started |
-| 10 | Corrections backend (separate Next.js project) | N/A here |
-| - | Voice command service | Not started |
-| - | Offline mode + sync queue | Not started |
-| - | Photo Quality scoring | Not started |
+> **Status audited 2026-07-22 (entry #40).** The previous version of this table
+> was ~15 entries stale and listed shipped features as "Not started" — it caused
+> a real near-miss where Phases 6 and 9 were about to be re-commissioned. "Built"
+> below means the code exists and typechecks; it does **not** mean field-verified.
+
+| Phase | Feature | Status | Where |
+|---|---|---|---|
+| 0 | Brand theme tokens | Built | `theme/tokens.ts` |
+| 0 | Supabase auth + Welcome screen + gate | Built | `lib/auth/`, `app/welcome.tsx` |
+| 0 | 5-tab IA migration | Built | `app/(tabs)/`, `components/shell/` |
+| 1 | Home dashboard (Storm hero, hero CTAs, KPI, Recent Jobs, Pipeline, Plan) | Built | `app/(tabs)/index.tsx` |
+| 2A | Data foundation (Inspection model + store + NewJobWizard) | Built | `lib/models/types.ts`, `app/new-job.tsx` |
+| 2B | Quick Inspection camera + Gemini + DecisionEngine | Built | `app/quick-inspection.tsx`, `lib/services/{gemini,decisionEngine}.ts` |
+| 3 | HAAG PDF report + signatures | Built | `lib/services/haagPdf.ts`, `components/SignaturePad.tsx` |
+| 4A | Map (react-native-maps + NOAA pins + filters + Storm Detail) | Built | `app/(tabs)/map.tsx`, `components/map/` |
+| 4B | Weather tile (Google Weather API) | Built | `lib/services/weather.ts`, `components/WeatherTile.tsx` |
+| 4C | NOAA auto-event-fill on inspection save | Built | `lib/services/stormMatch.ts` |
+| 4D | Solar API roof measurement | Built | `lib/services/solar.ts` |
+| 4E | Cost Estimator wizard | Built | `app/estimator.tsx`, `lib/services/costEstimator.ts` |
+| 5A | Inspection.originEstimateId traceability | Built | `lib/models/types.ts` |
+| 5B | Activity Feed | Built | `app/activity.tsx`, `lib/stores/activityStore.ts` |
+| 5C | AI Training Queue | Built | `lib/stores/trainingQueueStore.ts` |
+| 6A | Service Area (zips/cities) | Built | `app/settings/service-area.tsx`, `lib/stores/serviceAreaStore.ts` |
+| 6B | Storm Watch polling | Built | `lib/services/stormWatch.ts` |
+| 6C | Push notifications for storm alerts | Built | `lib/services/pushNotifications.ts` |
+| 6D | Dynamic Storm Alert hero (consumes alert store) | Built | `app/(tabs)/index.tsx` + `lib/stores/stormAlertStore.ts` |
+| 6E | Door Knocking Mode | Built | `app/door-knocking.tsx`, `lib/stores/knockSessionStore.ts` |
+| 7 | Proposals + PDF export + send sheet | Built | `lib/services/{proposalGenerator,proposalPdf}.ts`, `app/proposal/` |
+| 8 | Structured Gemini confidence (flag-gated) | Built | `gemini.ts`; `EXPO_PUBLIC_USE_STRUCTURED_CONFIDENCE` |
+| 9 | Recursive Learning Loop (SwipeReview + OverlayEditor + LocalLearningEngine + sync) | Built | `app/{swipe-review,edit-detection}.tsx`, `lib/services/learning/`, `correctionsSync.ts` |
+| 10 | Corrections backend (separate Next.js project) | N/A here | out of repo |
+| — | Voice notes (expo-av recording) | Built | `components/VoiceNoteRecorder.tsx` |
+| — | Voice *commands* / native speech-to-text | Parked | needs dev build |
+| — | Offline mode + sync queue | Partial | `lib/services/analysisQueue.ts` + `*Sync.ts`; no full offline story |
+| — | Photo Quality scoring | Not started | — |
+
+**Open work is tracked in `BACKLOG.md`, not here.** This table records what
+exists; the backlog records what's next.
 
 ---
 
@@ -1896,3 +1905,33 @@ detail screens (Job/Lead) — they inherit the token changes.
 
 **Follow-ups:**
 - Tracked in BACKLOG.md — that's the point. Top of "Now": motion layer for Settings + Job/Lead details, HAAG PDF polish, device verification of this entry's features.
+
+---
+
+### [2026-07-22] #40 — Audit stale status table; capture account/API setup; flag Swift-era guidance
+
+**Prompt:**
+> [Long TO-DO dump: Apple Developer application, WeatherKit entitlement steps, Google Maps/Solar API enablement + key restriction console links, "Storm-Triggered Sales Acceleration" phases 6A–6E described as queued in Rork, "Recursive Learning Loop" phases 9A–9F described as queued in Rork, and a request to restore full-resolution analysis.]
+> im putiing this in as a reminder
+
+**Intent / Goal:**
+- Capture the user's reminder durably, but first separate what actually applies to this Expo codebase from Swift/Rork-era guidance, and verify the phase claims before anyone re-commissions built work.
+
+**Findings (the reason this entry matters):**
+1. **Phases 6A–6E and 9A–9F are already built here.** The dump described them as newly queued in Rork. Verified on disk: `stormWatch.ts`, `stormMatch.ts`, `pushNotifications.ts`, `serviceAreaStore.ts`, `stormAlertStore.ts`, `app/door-knocking.tsx`, `app/settings/service-area.tsx`, `app/storm-alert/[id].tsx`; and `learning/{userCorrectionProfile,localLearningEngine}.ts`, `app/swipe-review.tsx`, `app/edit-detection.tsx`, `correctionsStore.ts`, `correctionsSync.ts`, `AICalibrationCard.tsx`. Re-building would have been weeks of duplicated spend.
+2. **Root cause: the Feature Backlog & Status table in this log was ~15 entries stale**, marking shipped features "Not started". Audited and rewritten with per-row source paths (Drift #13 protects Prompt *History*; this status table is not history, so correcting it is in-contract). Added a header note explaining the audit and pointing open work at BACKLOG.md.
+3. **Much of the dump targets the archived Swift repo** — `APIKeys.swift`, `USE_MOCKS = false`, `#if canImport(GoogleMaps/WeatherKit)`, Xcode Swift Package adds, MOCK/LIVE pill. None exist here. `USE_MOCKS` directly contradicts Drift #5 (this app has no mocks). Recorded the distinction at the top of the new setup doc so it doesn't resurface.
+4. **Bundle ID conflict.** `app.config.js` declares `com.roofwise.app`; the dump's key-restriction step says `com.paxconsulting.roofwise`. Restricting a Google key to the wrong bundle ID breaks Maps/Places/Solar in the shipped app with an unhelpful error. Flagged as the top BACKLOG "Now" item — it blocks the key-restriction work the user wants to do.
+5. **WeatherKit is the wrong call here.** `lib/services/weather.ts` is already a live Google Weather client sharing the Maps key. Adopting Apple WeatherKit would require paid enrollment + entitlement + a custom Expo config plugin + a dev build, and cannot run in Expo Go. Documented the recommendation to skip it.
+6. **Full-resolution analysis: the user's instinct is correct.** `app/quick-inspection.tsx` stores ONE 1600px/0.7 JPEG and `analyzeSlope.ts` sends that same file to Gemini — there is no separate analyze profile. A ~1in hail strike in a ~4ft frame lands around 30px, marginal for characterizing mat exposure and granule displacement. **Constraint:** the 1600px cap is load-bearing — it exists to prevent the Expo Go OOM/SIGABRT crashes from #23/#24. The fix is a two-profile pipeline (1600px stored for display; a transient 2400–3072px copy for analysis only), never a blanket raise of the picker path. Queued in BACKLOG "Now", not implemented in this entry.
+
+**Files touched:**
+- `docs/SETUP_ACCOUNTS.md` — new. Corrected, Expo-specific account/API checklist with the Swift-guidance warning, bundle-ID warning, per-service key mapping, Solar cost math, and the WeatherKit recommendation. Deliberately excludes the console deep-links containing key resource IDs (secrets policy) — those stay in the user's password manager.
+- `PROMPT_LOG.md` — Feature Backlog & Status table audited/rewritten; this entry.
+- `BACKLOG.md` — added bundle-ID resolution and full-res analyze path to "Now"; Apple Developer enrollment and Google API enable/restrict to "Next".
+
+**Verification:**
+- Existence of every phase deliverable confirmed by direct file checks, not assumption. No app code changed in this entry, so typecheck/lint state is unchanged from #39.
+
+**Follow-ups:**
+- All in BACKLOG.md. Highest-leverage next code change is the two-profile analyze pipeline (finding 6) — it directly moves detection accuracy, which is the product.
