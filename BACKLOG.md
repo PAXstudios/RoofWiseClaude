@@ -24,6 +24,7 @@ entry does not count as tracked.
 - [ ] Device pass on motion layer: confirm 60fps dashboard stagger with long lists; profile `AnimatedCounter` setState cost — #34
 - [ ] Capture web-preview launch recipe as a project skill via `/run-skill-generator` — #38 · so future sessions don't rediscover the expo-web + Playwright dance
 - [ ] Refresh the stale Feature Backlog table in PROMPT_LOG (rows don't reflect built features like proposals/PDFs/door-knocking) — noticed #38
+- [ ] Configure EAS (`eas.json` + EAS Secrets for the `EXPO_PUBLIC_*` keys) for TestFlight distribution — asked 2026-07-22 · required to put builds in contractors' hands for field trials; needs Apple Developer Program ($99/yr). Expo Go is fine for solo testing until then.
 
 ## Before ship (release blockers)
 
