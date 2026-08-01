@@ -207,6 +207,15 @@ export type Slope = {
   verifyWithInspector: boolean; // when confidence_avg < 0.5
   aiFindings?: InspectionFinding[];
   photoPaths: string[];
+  /**
+   * Indices into photoPaths that have been run through Gemini — the
+   * authoritative "was this photo analyzed" record. Older persisted
+   * inspections predate this field (undefined); read sites fall back to
+   * treating every captured photo as analyzed rather than showing none.
+   * Deliberately independent of `damage`: a photo that was analyzed and
+   * found clean has zero markers but must still count as analyzed.
+   */
+  analyzedPhotoIndices?: number[];
   /** localUri → Supabase Storage public URL, written by photoSync. */
   photoUploads?: Record<string, string>;
 };

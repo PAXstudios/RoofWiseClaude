@@ -37,15 +37,30 @@ export async function generateHaagReport(inspection: Inspection): Promise<Genera
   return { uri, inspection };
 }
 
-const PHOTOS_PER_SLOPE = 3;
+/**
+ * Every analyzed photo belongs in a claim packet — a carrier can (and does)
+ * question findings with no visible evidence, and a missing photo reads as
+ * a missing finding. No cap here; `analyzedIndicesFor` is the only filter.
+ */
+function analyzedIndicesFor(slope: Inspection['slopes'][number]): number[] {
+  if (slope.analyzedPhotoIndices && slope.analyzedPhotoIndices.length > 0) {
+    return [...slope.analyzedPhotoIndices].sort((a, b) => a - b);
+  }
+  // Back-compat: inspections captured before analyzedPhotoIndices existed
+  // have no record of which photos were analyzed. Fall back to every
+  // captured photo rather than silently dropping them from the report.
+  return slope.photoPaths.map((_, i) => i);
+}
 
-/** Downscale up to 3 photos per slope and inline them as data URIs. */
+/** Downscale every analyzed photo per slope and inline as data URIs. */
 async function preparePhotoDataUris(
   ins: Inspection,
 ): Promise<Record<string, string[]>> {
   const map: Record<string, string[]> = {};
   for (const slope of ins.slopes) {
-    const uris = slope.photoPaths.slice(0, PHOTOS_PER_SLOPE);
+    const uris = analyzedIndicesFor(slope)
+      .map((i) => slope.photoPaths[i])
+      .filter((uri): uri is string => typeof uri === 'string');
     const encoded: string[] = [];
     for (const uri of uris) {
       try {
@@ -123,8 +138,11 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
 
   .slope-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 12px 0; }
   .slope-card h3 { margin-top: 0; }
-  .photo-row { display: flex; gap: 2%; margin: 10px 0; }
-  .slope-photo { width: 32%; border-radius: 8px; object-fit: cover; }
+  /* Grid, not flex — a slope can carry any number of analyzed photos (no
+     cap), so this must wrap to additional rows instead of squeezing every
+     photo into one row as they're added. */
+  .photo-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3%; margin: 10px 0; }
+  .slope-photo { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; object-fit: cover; }
   .reasoning { font-style: italic; color: var(--slate); font-size: 12px; margin-top: 8px; }
 
   @media print {
@@ -237,9 +255,14 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
                 : 'pill-slate';
             const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
             const photos = photoMap[slope.id] ?? [];
+            const analyzedCount = analyzedIndicesFor(slope).length;
+            const photoCaption =
+              analyzedCount === slope.photoPaths.length
+                ? `${slope.photoPaths.length} photo${slope.photoPaths.length === 1 ? '' : 's'}`
+                : `${slope.photoPaths.length} photo${slope.photoPaths.length === 1 ? '' : 's'} · ${analyzedCount} analyzed`;
             return `<div class="slope-card">
         <h3>Slope ${i + 1}: ${esc(slope.orientation)} <span class="pill ${pillClass}">${esc(formatVerdict(verdict))}</span></h3>
-        <p>${slope.photoPaths.length} photos · Hail ${slope.hailCount} · Wind ${slope.windLiftCount} · Missing ${slope.missingCount} · Bruising ${slope.bruisingCount}</p>
+        <p>${photoCaption} · Hail ${slope.hailCount} · Wind ${slope.windLiftCount} · Missing ${slope.missingCount} · Bruising ${slope.bruisingCount}</p>
         ${photos.length > 0 ? `<div class="photo-row">${photos.map((src) => `<img class="slope-photo" src="${src}" />`).join('')}</div>` : ''}
         ${detected.length === 0 ? '<p class="reasoning">No findings detected on this slope.</p>' : `<table><thead><tr><th>Category</th><th>Severity</th><th>Confidence</th><th>Count</th></tr></thead><tbody>${detected.map((f) => `<tr><td>${esc(DAMAGE_CATEGORY_LABELS[f.label])}</td><td>${esc(f.severity)}</td><td>${f.confidence}%</td><td>${f.count}</td></tr>`).join('')}</tbody></table>`}
         <p class="reasoning">${esc(slopeResult?.reasoning ?? '')}</p>

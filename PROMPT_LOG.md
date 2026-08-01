@@ -2051,3 +2051,27 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Deliverable:** Published sample report as a Claude Artifact (not committed — demo output, not app code) showing the full 9-section packet: cover, Methodology block, Summary stats, Weather Verification, Roof System, Slope-by-Slope Findings (all three verdict pill colors), Inspector Notes, Collateral Checklist, Insurance-Grade Narrative, Homeowner Summary, and Signatures with a live inspector signature stroke.
 
 **Follow-ups:** none new — this was a one-line-class fix caught in passing, not a new backlog item.
+
+---
+
+### [2026-08-01] #45 — Every analyzed photo included in the HAAG report (was capped at 3/slope)
+
+**Prompt:**
+> Ensure that every photo that is analyzed for damage, is included in the report.
+
+**Root cause — two layers deep:**
+1. `haagPdf.ts` hard-capped photo embedding at `PHOTOS_PER_SLOPE = 3` (`slope.photoPaths.slice(0, 3)`) — a slope with 6 analyzed photos only shipped 3 to the carrier.
+2. Deeper problem found while fixing it: the app had **no explicit record of which photos were analyzed at all.** Both `analyzeSlope.ts`'s `pickPhotos()` (drives "analyze new only") and `app/analyze.tsx`'s per-photo checkmark inferred "analyzed" from `slope.damage.some(m => m.photoIndex === i)` — presence of a damage *marker*. A photo analyzed and found clean produces zero markers, so it was indistinguishable from a photo never analyzed at all. This meant "analyze new only" would silently re-send clean photos to Gemini forever, and the Analyze screen would show a clean photo as still needing review.
+
+**Decisions:**
+- **New `Slope.analyzedPhotoIndices?: number[]`** (`lib/models/types.ts`) — the authoritative, marker-independent record. Optional so pre-existing AsyncStorage-persisted inspections (which predate this field) degrade safely rather than crash; every read site falls back to treating all captured photos as analyzed rather than showing none.
+- `inspectionStore.ts`: `replacePhotoMarkers` (the one call site that means "this photo was analyzed," fired once per photo from `analyzeSlope.ts` regardless of whether markers were found) now adds the index (deduped, sorted). `removePhoto` keeps the index list aligned with `photoPaths` the same way it already realigns `damage` — drops the removed index, decrements everything above it.
+- `analyzeSlope.ts` `pickPhotos()` and `app/analyze.tsx` (both the `unanalyzed` memo and the per-thumbnail checkmark) now read `analyzedPhotoIndices` directly instead of inferring from markers — fixes the "clean photo re-analyzed forever" bug and the wrong checkmark as a byproduct of building the correct primitive.
+- `haagPdf.ts`: new `analyzedIndicesFor()` helper (same back-compat fallback), `preparePhotoDataUris` now embeds every analyzed photo, no cap. Slope caption shows `"{captured} photos · {analyzed} analyzed"` when they differ, so the report is explicit rather than implying every captured photo was reviewed.
+- **CSS fix required by removing the cap:** `.photo-row` was `display: flex` with no `flex-wrap` and children at `width: 32%` — fine for ≤3 images, but ≥4 would overflow or squeeze onto one line. Switched to a 3-column CSS grid (wraps to additional rows for any count) with `aspect-ratio: 4/3` on thumbnails so mixed portrait/landscape roof photos lay out evenly.
+
+**Files touched:** `lib/models/types.ts`, `lib/stores/inspectionStore.ts`, `lib/services/analyzeSlope.ts`, `lib/services/haagPdf.ts`, `app/analyze.tsx`. `PROMPT_LOG.md` — this entry.
+
+**Verification:** typecheck clean, lint 0 problems. Re-rendered the sample report from #44 with a 6-captured/5-analyzed slope — grid wrapped correctly (3 + 2 photos, two rows, no overflow), caption read "6 photos · 5 analyzed" as designed. Full 35-route audit re-run to confirm no regression on `/analyze` or `/edit-detection`.
+
+**Follow-ups:** none new. `preparePhotoDataUris` still silently skips a photo whose file is missing from disk (restored backup, different device) — pre-existing behavior, unchanged by this fix, orthogonal to the analyzed-vs-captured distinction added here.

@@ -88,11 +88,10 @@ export default function AnalyzeView() {
 
   const unanalyzed = useMemo(() => {
     if (!slope) return [] as number[];
-    const seen = new Set(
-      slope.damage
-        .map((m) => m.photoIndex)
-        .filter((i): i is number => typeof i === 'number'),
-    );
+    // analyzedPhotoIndices, not `damage` markers — a clean photo (analyzed,
+    // zero findings) has no markers, and inferring from markers would show
+    // it as still "waiting for analysis" forever.
+    const seen = new Set(slope.analyzedPhotoIndices ?? []);
     return slope.photoPaths.map((_, i) => i).filter((i) => !seen.has(i));
   }, [slope]);
 
@@ -209,7 +208,7 @@ export default function AnalyzeView() {
         <Text style={styles.hint}>Tap to edit detections · Long-press to rotate or delete.</Text>
         <View style={styles.grid}>
           {slope.photoPaths.map((uri, i) => {
-            const analyzed = slope.damage.some((m) => m.photoIndex === i);
+            const analyzed = (slope.analyzedPhotoIndices ?? []).includes(i);
             return (
               <Pressable
                 key={i}

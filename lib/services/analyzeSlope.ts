@@ -129,11 +129,11 @@ function avgMarkerConfidence(markers: AnalysisResult['markers']): number {
 
 function pickPhotos(slope: Slope, onlyNew: boolean): number[] {
   if (!onlyNew) return slope.photoPaths.map((_, i) => i);
-  const analyzed = new Set(
-    slope.damage
-      .map((m) => m.photoIndex)
-      .filter((i): i is number => typeof i === 'number'),
-  );
+  // Uses the explicit analyzed-index record, not `damage` markers — a photo
+  // analyzed and found clean has no markers, and inferring "analyzed" from
+  // marker presence would re-send it to Gemini on every "analyze new only"
+  // pass forever.
+  const analyzed = new Set(slope.analyzedPhotoIndices ?? []);
   return slope.photoPaths.map((_, i) => i).filter((i) => !analyzed.has(i));
 }
 

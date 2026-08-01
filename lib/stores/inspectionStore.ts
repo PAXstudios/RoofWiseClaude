@@ -40,6 +40,7 @@ function makeSlope(orientation: SlopeOrientation): Slope {
     verifyWithInspector: false,
     aiFindings: [],
     photoPaths: [],
+    analyzedPhotoIndices: [],
   };
 }
 
@@ -251,7 +252,9 @@ export const useInspectionStore = create<InspectionStoreState>()(
               ...ins,
               slopes: ins.slopes.map((sl) => {
                 if (sl.id !== slopeId) return sl;
-                // Drop the photo + its markers; renumber markers above it
+                // Drop the photo + its markers; renumber markers and the
+                // analyzed-index record above it so both stay aligned with
+                // the shifted photoPaths array.
                 const photoPaths = sl.photoPaths.filter((_, i) => i !== photoIndex);
                 const damage = sl.damage
                   .filter((m) => m.photoIndex !== photoIndex)
@@ -261,7 +264,10 @@ export const useInspectionStore = create<InspectionStoreState>()(
                       ? { ...m, photoIndex: m.photoIndex - 1 }
                       : m;
                   });
-                return withRecount({ ...sl, photoPaths, damage });
+                const analyzedPhotoIndices = (sl.analyzedPhotoIndices ?? [])
+                  .filter((i) => i !== photoIndex)
+                  .map((i) => (i > photoIndex ? i - 1 : i));
+                return withRecount({ ...sl, photoPaths, damage, analyzedPhotoIndices });
               }),
             };
           }),
@@ -390,7 +396,19 @@ export const useInspectionStore = create<InspectionStoreState>()(
                 if (sl.id !== slopeId) return sl;
                 const other = sl.damage.filter((m) => m.photoIndex !== photoIndex);
                 const tagged = photoMarkers.map((m) => ({ ...m, photoIndex }));
-                return withRecount({ ...sl, damage: [...other, ...tagged] });
+                // This call is the definition of "analyzed" — it fires once
+                // per photo regardless of whether Gemini found any damage,
+                // so a clean photo still gets marked (unlike inferring from
+                // `damage`, which would make it indistinguishable from
+                // never-analyzed).
+                const analyzedPhotoIndices = Array.from(
+                  new Set([...(sl.analyzedPhotoIndices ?? []), photoIndex]),
+                ).sort((a, b) => a - b);
+                return withRecount({
+                  ...sl,
+                  damage: [...other, ...tagged],
+                  analyzedPhotoIndices,
+                });
               }),
             };
           }),
