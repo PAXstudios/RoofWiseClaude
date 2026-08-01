@@ -1,12 +1,13 @@
 // Pure HAAG decision engine. No I/O.
 // Spec section "Decision Engine Rule Set" (lines ~570).
 
-import type {
-  Inspection,
-  RoofMaterial,
-  RoofRecommendation,
-  Slope,
-  SlopeVerdict,
+import {
+  ROOF_MATERIAL_LABELS,
+  type Inspection,
+  type RoofMaterial,
+  type RoofRecommendation,
+  type Slope,
+  type SlopeVerdict,
 } from '../models/types';
 import { thresholdFor } from './haagThresholds';
 
@@ -71,7 +72,7 @@ function evaluateSlope(slope: Slope, material: RoofMaterial, ageYears: number): 
   } else if (hailCount > 0 || slope.windLiftCount > 0 || slope.missingCount > 0) {
     verdict = 'repair';
     reasoning =
-      `Slope shows damage below the ${material} HAAG threshold (${threshold.rule}). ` +
+      `Slope shows damage below the ${ROOF_MATERIAL_LABELS[material]} HAAG threshold (${threshold.rule}). ` +
       `Recommend itemized repair scope.`;
   } else {
     verdict = 'repair';
@@ -116,7 +117,7 @@ export function evaluate(inspection: Inspection): DecisionEngineResult {
     roofRecommendation = 'full_replacement';
     roofVerdictReasoning =
       `${qualifyingSlopes.length} slope(s) qualify under HAAG. ` +
-      `Material (${inspection.material}) follows all-or-nothing matching — full roof replacement recommended.`;
+      `Material (${ROOF_MATERIAL_LABELS[inspection.material]}) follows all-or-nothing matching — full roof replacement recommended.`;
   } else if (qualifyingSlopes.length >= 2) {
     roofRecommendation = 'full_replacement';
     roofVerdictReasoning =

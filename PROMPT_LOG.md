@@ -2028,3 +2028,26 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Verification:** typecheck + lint clean; `/map` and `/hail-tracer` re-driven in the browser harness, both render with no page errors.
 
 **Follow-ups:** Service Area labels are free text; a state picker in `app/settings/service-area.tsx` would make resolution deterministic instead of parsed. Tracked in BACKLOG.
+
+---
+
+### [2026-08-01] #44 — Fix raw snake_case material leak in decision-engine reasoning
+
+**Prompt:**
+> Show me what a haaag report looks like.
+
+**Method:**
+- Rather than describe the report, rendered the real `renderHtml()` template from `lib/services/haagPdf.ts` with a realistic post-hailstorm inspection (4 slopes, all three verdict states: full_replace, repair, verify_with_inspector), using the actual `decisionEngine.ts` + `haagThresholds.ts` logic ported verbatim to a standalone script (native deps — expo-print, expo-image-manipulator, AsyncStorage — can't resolve outside the app; the pure logic and template are copied 1:1, same branches, same copy). Screenshotted the full report in a real browser to confirm it renders clean.
+
+**Bug found while building the demo:**
+- Two reasoning strings in `decisionEngine.ts` interpolated the raw `RoofMaterial` key instead of its label — `"Material (architectural_asphalt) follows all-or-nothing matching"` and `"Slope shows damage below the architectural_asphalt HAAG threshold"`. A database key leaking into a document meant to read as a professional report to an insurance adjuster. The prior ship-readiness pass (#42) reviewed `haagPdf.ts`'s template but not the reasoning strings generated one layer down in `decisionEngine.ts`, so this slipped through.
+- Fix: `decisionEngine.ts` now imports `ROOF_MATERIAL_LABELS` (a value import, not I/O — Drift #8 purity intact) and both strings render the human label ("Architectural Asphalt").
+- Grepped the rest of the codebase for the same raw-interpolation pattern; no other occurrences.
+
+**Files touched:** `lib/services/decisionEngine.ts`. `PROMPT_LOG.md` — this entry.
+
+**Verification:** typecheck clean, lint 0 problems. Confirmed no other `${...material}` raw interpolations app-wide.
+
+**Deliverable:** Published sample report as a Claude Artifact (not committed — demo output, not app code) showing the full 9-section packet: cover, Methodology block, Summary stats, Weather Verification, Roof System, Slope-by-Slope Findings (all three verdict pill colors), Inspector Notes, Collateral Checklist, Insurance-Grade Narrative, Homeowner Summary, and Signatures with a live inspector signature stroke.
+
+**Follow-ups:** none new — this was a one-line-class fix caught in passing, not a new backlog item.
