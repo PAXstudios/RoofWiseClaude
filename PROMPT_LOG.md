@@ -2075,3 +2075,26 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Verification:** typecheck clean, lint 0 problems. Re-rendered the sample report from #44 with a 6-captured/5-analyzed slope — grid wrapped correctly (3 + 2 photos, two rows, no overflow), caption read "6 photos · 5 analyzed" as designed. Full 35-route audit re-run to confirm no regression on `/analyze` or `/edit-detection`.
 
 **Follow-ups:** none new. `preparePhotoDataUris` still silently skips a photo whose file is missing from disk (restored backup, different device) — pre-existing behavior, unchanged by this fix, orthogonal to the analyzed-vs-captured distinction added here.
+
+---
+
+### [2026-08-01] #46 — Include EVERY captured photo in the report, labelled by analysis status
+
+**Prompt:**
+> I need every photo that's taken to be in that report by slope
+
+**Intent / Goal:**
+- Correction to #45. That entry filtered the claim packet to *analyzed* photos only. The user's actual requirement: every photo the inspector captured belongs in the packet, grouped by slope. A photo taken on the roof is evidence regardless of whether Gemini reviewed it — an absent photo reads to an adjuster as an absent observation.
+
+**Decisions:**
+- **Analysis status is a label, never a filter.** `preparePhotoDataUris` now embeds every entry in `slope.photoPaths` with no cap and no filtering. Whether Gemini reviewed a given photo is rendered as a per-photo caption ("Photo 3 · AI-analyzed" vs "Photo 6 · reference"). This keeps the packet complete without implying AI review of a photo that never got it — an important distinction in a document a carrier relies on.
+- **New `ReportPhoto` record type** (`{ index, dataUri, analyzed }`) replaces the flat `string[]` photoMap. Motivation is a real latent bug: photos unreadable from disk (restored backup, different device) were silently skipped from a positional array, so every *subsequent* photo's number and analyzed-label would shift out of alignment with the actual capture order. Carrying the index makes labels immune to gaps.
+- `wasAnalyzed()` replaces `analyzedIndicesFor()`. Same back-compat stance: inspections predating `analyzedPhotoIndices` (#45) have no record either way, so their photos are labelled analyzed rather than mislabelling genuinely-reviewed work as "reference" in a claim packet.
+- **Slope caption is now fully honest about gaps:** `"6 photos · 5 AI-analyzed · 1 unavailable"`, with each clause omitted when it doesn't apply. The "unavailable" count (captured-but-unreadable) was previously invisible — the report would just show fewer photos than the count claimed.
+- CSS: photos wrapped in `<figure>` with `figcaption`; grid gap switched from a percentage to a fixed `12px` so captions don't crowd at narrow print widths.
+
+**Files touched:** `lib/services/haagPdf.ts`. `PROMPT_LOG.md` — this entry.
+
+**Verification:** typecheck clean, lint 0 problems. Re-rendered the sample report with a 6-photo slope (5 analyzed + 1 captured after the last analysis run): all 6 render in a wrapping 3-column grid, captions read "Photo 1–5 · AI-analyzed" and "Photo 6 · reference", slope header reads "6 photos · 5 AI-analyzed". A second slope with photos in `photoPaths` but none supplied to the renderer correctly reported "2 photos · 2 unavailable", exercising the gap path. Full 35-route audit re-run.
+
+**Follow-up caught during this work:** a bad `re.sub` in the *demo* script silently failed (SVG data URIs contain `;`, which the `[^;]` pattern couldn't cross) and produced a stale render. Caught because the rendered caption disagreed with expected values — worth noting that verifying the *output* rather than trusting the edit is what surfaced it. Demo script only; no production impact.

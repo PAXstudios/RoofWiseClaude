@@ -37,32 +37,45 @@ export async function generateHaagReport(inspection: Inspection): Promise<Genera
   return { uri, inspection };
 }
 
-/**
- * Every analyzed photo belongs in a claim packet — a carrier can (and does)
- * question findings with no visible evidence, and a missing photo reads as
- * a missing finding. No cap here; `analyzedIndicesFor` is the only filter.
- */
-function analyzedIndicesFor(slope: Inspection['slopes'][number]): number[] {
-  if (slope.analyzedPhotoIndices && slope.analyzedPhotoIndices.length > 0) {
-    return [...slope.analyzedPhotoIndices].sort((a, b) => a - b);
-  }
-  // Back-compat: inspections captured before analyzedPhotoIndices existed
-  // have no record of which photos were analyzed. Fall back to every
-  // captured photo rather than silently dropping them from the report.
-  return slope.photoPaths.map((_, i) => i);
+export type ReportPhoto = {
+  /** Index into slope.photoPaths — the photo's number on that slope. */
+  index: number;
+  dataUri: string;
+  /** Whether Gemini actually reviewed this photo. */
+  analyzed: boolean;
+};
+
+/** Was this photo run through Gemini? */
+function wasAnalyzed(slope: Inspection['slopes'][number], index: number): boolean {
+  // Back-compat: inspections captured before `analyzedPhotoIndices` existed
+  // have no record either way. Treat their photos as analyzed rather than
+  // labelling a genuinely-reviewed photo "not analyzed" in a claim packet.
+  if (!slope.analyzedPhotoIndices) return true;
+  return slope.analyzedPhotoIndices.includes(index);
 }
 
-/** Downscale every analyzed photo per slope and inline as data URIs. */
+/**
+ * Downscale EVERY captured photo per slope and inline as data URIs.
+ *
+ * All photos ship, not just analyzed ones: a photo the inspector took is
+ * evidence, and a carrier questioning a finding wants the documentation —
+ * an absent photo reads as an absent observation. Whether Gemini reviewed
+ * a given photo is a per-photo label (see ReportPhoto.analyzed), never a
+ * filter. There is no cap.
+ *
+ * Returns index-carrying records rather than a flat URI array so a photo
+ * that's missing from disk can't shift every subsequent photo's number and
+ * analyzed-label out of alignment.
+ */
 async function preparePhotoDataUris(
   ins: Inspection,
-): Promise<Record<string, string[]>> {
-  const map: Record<string, string[]> = {};
+): Promise<Record<string, ReportPhoto[]>> {
+  const map: Record<string, ReportPhoto[]> = {};
   for (const slope of ins.slopes) {
-    const uris = analyzedIndicesFor(slope)
-      .map((i) => slope.photoPaths[i])
-      .filter((uri): uri is string => typeof uri === 'string');
-    const encoded: string[] = [];
-    for (const uri of uris) {
+    const encoded: ReportPhoto[] = [];
+    for (let index = 0; index < slope.photoPaths.length; index++) {
+      const uri = slope.photoPaths[index];
+      if (typeof uri !== 'string') continue;
       try {
         const out = await ImageManipulator.manipulateAsync(
           uri,
@@ -73,7 +86,13 @@ async function preparePhotoDataUris(
             base64: true,
           },
         );
-        if (out.base64) encoded.push(`data:image/jpeg;base64,${out.base64}`);
+        if (out.base64) {
+          encoded.push({
+            index,
+            dataUri: `data:image/jpeg;base64,${out.base64}`,
+            analyzed: wasAnalyzed(slope, index),
+          });
+        }
       } catch {
         // Photo missing on disk (restored backup, other device) — skip.
       }
@@ -83,7 +102,7 @@ async function preparePhotoDataUris(
   return map;
 }
 
-function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): string {
+function renderHtml(ins: Inspection, photoMap: Record<string, ReportPhoto[]> = {}): string {
   const decision = evaluate(ins);
   const score = damageScore(ins);
   const worthiness = claimWorthiness(decision, score);
@@ -141,8 +160,10 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
   /* Grid, not flex — a slope can carry any number of analyzed photos (no
      cap), so this must wrap to additional rows instead of squeezing every
      photo into one row as they're added. */
-  .photo-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3%; margin: 10px 0; }
-  .slope-photo { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; object-fit: cover; }
+  .photo-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 10px 0; }
+  .photo-fig { margin: 0; }
+  .slope-photo { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; object-fit: cover; display: block; }
+  .photo-fig figcaption { font-size: 9.5px; color: var(--slate); margin-top: 4px; letter-spacing: 0.2px; }
   .reasoning { font-style: italic; color: var(--slate); font-size: 12px; margin-top: 8px; }
 
   @media print {
@@ -255,15 +276,20 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
                 : 'pill-slate';
             const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
             const photos = photoMap[slope.id] ?? [];
-            const analyzedCount = analyzedIndicesFor(slope).length;
+            const total = slope.photoPaths.length;
+            const analyzedCount = photos.filter((p) => p.analyzed).length;
+            // Photos that exist in the record but couldn't be read off disk
+            // (restored backup, different device) — say so rather than let
+            // the count quietly disagree with what's on the page.
+            const unreadable = total - photos.length;
             const photoCaption =
-              analyzedCount === slope.photoPaths.length
-                ? `${slope.photoPaths.length} photo${slope.photoPaths.length === 1 ? '' : 's'}`
-                : `${slope.photoPaths.length} photo${slope.photoPaths.length === 1 ? '' : 's'} · ${analyzedCount} analyzed`;
+              `${total} photo${total === 1 ? '' : 's'}` +
+              (analyzedCount < photos.length ? ` · ${analyzedCount} AI-analyzed` : '') +
+              (unreadable > 0 ? ` · ${unreadable} unavailable` : '');
             return `<div class="slope-card">
         <h3>Slope ${i + 1}: ${esc(slope.orientation)} <span class="pill ${pillClass}">${esc(formatVerdict(verdict))}</span></h3>
         <p>${photoCaption} · Hail ${slope.hailCount} · Wind ${slope.windLiftCount} · Missing ${slope.missingCount} · Bruising ${slope.bruisingCount}</p>
-        ${photos.length > 0 ? `<div class="photo-row">${photos.map((src) => `<img class="slope-photo" src="${src}" />`).join('')}</div>` : ''}
+        ${photos.length > 0 ? `<div class="photo-row">${photos.map((p) => `<figure class="photo-fig"><img class="slope-photo" src="${p.dataUri}" /><figcaption>Photo ${p.index + 1}${p.analyzed ? ' · AI-analyzed' : ' · reference'}</figcaption></figure>`).join('')}</div>` : ''}
         ${detected.length === 0 ? '<p class="reasoning">No findings detected on this slope.</p>' : `<table><thead><tr><th>Category</th><th>Severity</th><th>Confidence</th><th>Count</th></tr></thead><tbody>${detected.map((f) => `<tr><td>${esc(DAMAGE_CATEGORY_LABELS[f.label])}</td><td>${esc(f.severity)}</td><td>${f.confidence}%</td><td>${f.count}</td></tr>`).join('')}</tbody></table>`}
         <p class="reasoning">${esc(slopeResult?.reasoning ?? '')}</p>
       </div>`;
