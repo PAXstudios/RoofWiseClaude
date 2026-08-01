@@ -68,6 +68,8 @@ export default function LeadsScreen() {
             pressedScale={0.92}
             onPress={() => router.push('/new-lead')}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Add lead"
           >
             <Ionicons name="add" size={24} color={colors.textInverse} />
           </PressableScale>

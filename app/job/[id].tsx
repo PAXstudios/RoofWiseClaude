@@ -1,6 +1,7 @@
+import { PressableScale } from '@/components/PressableScale';
 import { formatDate } from '@/lib/format/date';
 import { useState } from 'react';
-import { ScrollView, View, Text, Pressable, StyleSheet, Alert, Image, Share, TextInput } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, Alert, Image, Share, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -72,9 +73,9 @@ export default function JobDetail() {
         <View style={styles.empty}>
           <Ionicons name="alert-circle-outline" size={36} color={colors.slate} />
           <Text style={styles.emptyTitle}>Job not found</Text>
-          <Pressable style={styles.secondaryBtn} onPress={() => router.back()}>
+          <PressableScale style={styles.secondaryBtn} onPress={() => router.back()}>
             <Text style={styles.secondaryBtnText}>Back</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </SafeAreaView>
     );
@@ -102,14 +103,14 @@ export default function JobDetail() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
+        <PressableScale onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
+        </PressableScale>
         <View style={{ flex: 1 }}>
           <Text style={styles.reportId}>{inspection.reportId}</Text>
           <Text style={styles.customer}>{inspection.customerName}</Text>
         </View>
-        <Pressable
+        <PressableScale
           onPress={() => {
             const next =
               inspection.status === 'complete'
@@ -152,10 +153,10 @@ export default function JobDetail() {
           >
             {inspection.status === 'complete' ? 'Complete' : 'Mark complete'}
           </Text>
-        </Pressable>
-        <Pressable onPress={onDelete} hitSlop={10} style={styles.headerBtn}>
+        </PressableScale>
+        <PressableScale onPress={onDelete} hitSlop={10} style={styles.headerBtn}>
           <Ionicons name="trash-outline" size={22} color={colors.danger} />
-        </Pressable>
+        </PressableScale>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -227,7 +228,7 @@ export default function JobDetail() {
           <Text style={styles.cardSub}>{decision.roofVerdictReasoning}</Text>
         </View>
 
-        <Pressable
+        <PressableScale
           style={styles.primaryBtn}
           onPress={() =>
             router.push({ pathname: '/quick-inspection', params: { jobId: inspection.id } })
@@ -235,7 +236,7 @@ export default function JobDetail() {
         >
           <Ionicons name="scan-outline" size={20} color={colors.textInverse} />
           <Text style={styles.primaryBtnText}>Start Quick Inspection</Text>
-        </Pressable>
+        </PressableScale>
 
         {inspection.slopes.length === 0 ? (
           <View style={styles.placeholderBox}>
@@ -260,7 +261,7 @@ export default function JobDetail() {
           })
         )}
 
-        <Pressable
+        <PressableScale
           style={styles.proposalCard}
           onPress={() => router.push(`/proposal/${inspection.id}` as any)}
         >
@@ -274,14 +275,14 @@ export default function JobDetail() {
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.slate} />
-        </Pressable>
+        </PressableScale>
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Collateral checklist</Text>
           {COLLATERAL_ITEMS.map((item) => {
             const checked = !!inspection.collateralChecklist[item.key];
             return (
-              <Pressable
+              <PressableScale
                 key={item.key}
                 style={styles.collateralRow}
                 onPress={() => setCollateralItem(inspection.id, item.key, !checked)}
@@ -294,7 +295,7 @@ export default function JobDetail() {
                 <Text style={[styles.collateralLabel, checked && styles.collateralChecked]}>
                   {item.label}
                 </Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>
@@ -359,7 +360,7 @@ export default function JobDetail() {
           )}
         </View>
 
-        <Pressable
+        <PressableScale
           style={[styles.secondaryCta, generating && { opacity: 0.5 }]}
           disabled={generating}
           onPress={async () => {
@@ -383,7 +384,7 @@ export default function JobDetail() {
           <Text style={styles.secondaryCtaText}>
             {generating ? 'Generating…' : 'Generate HAAG report (PDF)'}
           </Text>
-        </Pressable>
+        </PressableScale>
       </ScrollView>
     </SafeAreaView>
   );
@@ -413,7 +414,7 @@ function SlopeBlock({
         <VerdictPill verdict={verdict} />
       </View>
 
-      <Pressable
+      <PressableScale
         style={styles.analyzeBtn}
         onPress={() =>
           router.push({
@@ -424,13 +425,13 @@ function SlopeBlock({
       >
         <Ionicons name="analytics-outline" size={18} color={colors.navy} />
         <Text style={styles.analyzeBtnText}>Analyze photos</Text>
-      </Pressable>
+      </PressableScale>
 
       {slope.photoPaths.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             {slope.photoPaths.map((uri, i) => (
-              <Pressable
+              <PressableScale
                 key={i}
                 onPress={() =>
                   router.push({
@@ -438,7 +439,6 @@ function SlopeBlock({
                     params: { inspectionId: inspection.id, slopeId: slope.id, photoIndex: String(i) },
                   })
                 }
-                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
               >
                 <Image
                   source={{ uri }}
@@ -447,7 +447,7 @@ function SlopeBlock({
                 <View style={styles.editBadge}>
                   <Ionicons name="create-outline" size={12} color={colors.textInverse} />
                 </View>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
         </ScrollView>

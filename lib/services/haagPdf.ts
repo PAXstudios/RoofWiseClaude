@@ -127,6 +127,13 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
   .slope-photo { width: 32%; border-radius: 8px; object-fit: cover; }
   .reasoning { font-style: italic; color: var(--slate); font-size: 12px; margin-top: 8px; }
 
+  @media print {
+    .slope-card, table, .sig-row { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+    .cover { page-break-after: avoid; }
+  }
+  .slope-card, table, .sig-row { break-inside: avoid; }
+  .standards { background: var(--cream); border-left: 4px solid var(--orange); padding: 14px 16px; border-radius: 8px; margin: 16px 0 4px; font-size: 12px; line-height: 1.6; color: var(--slate); }
   .footer { text-align: center; color: var(--slate); font-size: 10px; padding: 24px 0; border-top: 1px solid var(--border); margin-top: 40px; }
   .sig-row { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 28px; }
   .sig-box { border-top: 1px solid var(--navy); padding-top: 8px; font-size: 11px; color: var(--slate); }
@@ -168,6 +175,16 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
     </div>
   </div>
 
+  <div class="standards">
+    <strong>Methodology.</strong> This inspection was conducted under Haag Engineering
+    functional-damage criteria for ${esc(ROOF_MATERIAL_LABELS[ins.material])}
+    (${esc(threshold.rule)}). Damage was documented photographically per slope and
+    assessed against that material-specific threshold. Each finding carries an
+    explicit severity and a 0–100 confidence value; findings below the reporting
+    confidence floor are excluded rather than reported as fact. Photographic
+    evidence for every finding is included in Section 4.
+  </div>
+
   <h2>1. Summary</h2>
   <div class="summary-grid">
     <div class="summary-stat">
@@ -192,7 +209,7 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
         ins.event.hailSizeInches ? ` — ${ins.event.hailSizeInches}\" hail` : ''}${
         ins.event.windSpeedMph ? ` — ${ins.event.windSpeedMph} mph wind` : ''}${
         ins.event.distanceMiles ? ` — ${ins.event.distanceMiles.toFixed(1)} mi from property` : ''}.</p>`
-    : '<p class="reasoning">No storm event matched to this inspection. NOAA auto-fill comes online in Phase 4C.</p>'}
+    : '<p class="reasoning">No verified storm event is attached to this inspection. Attach the NOAA event for the date of loss to strengthen causation.</p>'}
 
   <h2>3. Roof System</h2>
   <table>
@@ -207,7 +224,7 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
   <h2>4. Slope-by-Slope Findings</h2>
   ${
     ins.slopes.length === 0
-      ? '<p class="reasoning">No slopes captured. Run Quick Inspection to populate this section.</p>'
+      ? '<p class="reasoning">No slopes were captured for this inspection.</p>'
       : ins.slopes
           .map((slope, i) => {
             const slopeResult = decision.perSlope.find((r) => r.slopeId === slope.id);
@@ -232,26 +249,26 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
   }
 
   ${ins.notes && ins.notes.trim() ? `
-    <h2>4b. Inspector notes</h2>
+    <h2>5. Inspector Notes</h2>
     <p>${esc(ins.notes.trim())}</p>
   ` : ''}
 
-  <h2>5. Collateral Checklist</h2>
+  <h2>6. Collateral Checklist</h2>
   ${
     Object.keys(ins.collateralChecklist).length === 0
       ? '<p class="reasoning">No collateral checklist recorded yet.</p>'
       : `<table>${Object.entries(ins.collateralChecklist)
-          .map(([k, v]) => `<tr><th>${esc(k)}</th><td>${v ? 'Yes' : 'No'}</td></tr>`)
+          .map(([k, v]) => `<tr><th>${esc(collateralLabel(k))}</th><td>${v ? 'Yes' : 'No'}</td></tr>`)
           .join('')}</table>`
   }
 
-  <h2>6. Insurance-Grade Narrative</h2>
+  <h2>7. Insurance-Grade Narrative</h2>
   <p>${esc(narrative(ins, decision, score, worthiness))}</p>
 
-  <h2>7. Homeowner Summary</h2>
+  <h2>8. Homeowner Summary</h2>
   <p>${esc(homeownerSummary(decision, worthiness))}</p>
 
-  <h2>8. Signatures</h2>
+  <h2>9. Signatures</h2>
   <div class="sig-row">
     <div class="sig-box">
       ${ins.inspectorSignatureSvg
@@ -273,6 +290,21 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
 </div>
 </body>
 </html>`;
+}
+
+// The collateral checklist is keyed by internal snake_case ids. Carriers see
+// this table, so render the same wording the inspector saw in the app.
+const COLLATERAL_LABELS: Record<string, string> = {
+  brittleness_observed: 'Brittleness observed on test shingles',
+  mat_exposed: 'Mat exposure visible on damaged slopes',
+  multi_layer: 'Multi-layer roof system (2+ layers)',
+  metal_collateral: 'Collateral damage on metal (vents, flashing, AC)',
+  window_screens: 'Hail damage on window screens / siding',
+  gutters_dented: 'Dents in gutters or downspouts',
+};
+
+function collateralLabel(key: string): string {
+  return COLLATERAL_LABELS[key] ?? key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }
 
 function formatRecommendation(r: string): string {

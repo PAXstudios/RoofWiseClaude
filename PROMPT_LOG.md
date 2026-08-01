@@ -1972,3 +1972,38 @@ detail screens (Job/Lead) — they inherit the token changes.
 
 **Follow-ups:**
 - Consider logging which profile won into the ActivityStore, so a device silently falling back to SAFE is visible rather than a mystery accuracy regression.
+
+---
+
+### [2026-07-22] #42 — Ship-readiness pass: full 35-route audit, crash net, real-defect fixes
+
+**Prompt:**
+> finish the app. go through all the components and make sure they work. make it ship ready. dont ask me any questions. just execute let me know when youre done. i exopect this to take hours
+
+**Method:**
+- Built a headless-browser route audit harness (`audit.js` in the session scratchpad) that drives **all 35 routes** against the Expo web target with seeded store data, capturing page errors, console errors, blank screens, and wrong-route renders, and screenshotting each. This is the first time every screen in the app has been exercised in one pass.
+- **First run was contaminated** and reported 29/35 broken. Cause: `expo-camera`'s web build lazily fetches jsQR from a CDN the container sandbox blocks; I filtered that from console errors but not page errors, so one benign network failure masked every route. Fixed the filter and re-ran. Recording this because a 29/35 "failure" report that is actually a harness bug is exactly the kind of result that would send a future session rewriting working screens.
+- Clean result: **35 routes, 34 clean, 1 real defect.** After fixes, re-audited.
+
+**Real defects found and fixed:**
+1. **setState during render (`app/proposal/[jobId].tsx`).** `create()` — a Zustand setter — was called inside `useMemo`, i.e. in the render phase. React flags this as "Cannot update a component while rendering a different component"; it can double-create a proposal or drop the write. Moved to an effect with a guard ref that survives StrictMode's double-invoke, plus a reset keyed on `jobId` for same-screen navigation.
+2. **Cold-launch navigation crash.** `router.replace` fired before the root navigator mounted → "Attempted to navigate before mounting the Root Layout component", leaving a dead screen. Two sites: the Quick Inspection pre-flight safety redirect (surfaced by the audit) and — found by inspection, same class — the notification-tap deep-link handler in `_layout.tsx`, which is *more* dangerous because a cold launch from a storm-alert notification delivers the pending response immediately. Both now gate on `useRootNavigationState()?.key`.
+3. **"Invalid Date" leaking to users.** 19 unguarded `new Date(x).toLocale*()` sites across 13 files. Any malformed or missing persisted date (old schema, restored backup, bad NOAA payload) renders the literal string "Invalid Date" — including **inside the HAAG claim packet and the customer proposal PDF**, the two documents the product's credibility rests on. New `lib/format/date.ts` (`formatDate` / `formatDateShort` / `formatDateTime` / `formatRelative` / `isValidDate`) never throws and never emits "Invalid Date"; applied to both PDF generators and the storm-alert, job, and lead detail screens.
+
+**Ship-readiness additions:**
+- **`components/ErrorBoundary.tsx`**, wrapping the navigator in `_layout.tsx`. Previously any render crash produced a white screen with no way back — the worst possible failure for a roofer mid-inspection on a roof. Now: a themed recovery screen, plain-language reassurance that stored work is safe (Zustand lives outside React, so it genuinely is), a selectable error + component stack for support, and an 88pt Try again that remounts the tree.
+- **HAAG PDF polish** (`lib/services/haagPdf.ts`): removed internal roadmap language leaking into a carrier-facing document ("NOAA auto-fill comes online in Phase 4C" → a real instruction about attaching the date-of-loss event); added a **Methodology** block citing the material-specific Haag threshold and the confidence-floor policy, which is what makes an adjuster read it as a methodology-backed report rather than a contractor's opinion; fixed the section numbering (a stray "4b" renumbered 1–9); collateral checklist now renders human labels instead of raw `snake_case` keys; added `page-break-inside: avoid` so slope cards, tables, and the signature block never split across printed pages.
+- **Motion layer completed** — Settings (7 staggered sections) and the Job/Lead detail screens now match the rest of the app; all remaining plain `Pressable`s on those screens became `PressableScale`.
+- **Accessibility**: icon-only controls had no screen-reader labels. Labeled the 5 tab buttons (with `accessibilityRole="tab"` + selected state), the shared back button, dashboard search/settings, the quick-add FAB, and the Leads add button.
+- **Bundle ID settled: `com.roofwise.app`** — both platforms in `app.config.js` already agreed; `com.paxconsulting.roofwise` was never in the code. Documented in `docs/SETUP_ACCOUNTS.md`. Unblocks the Google API key restrictions.
+- **Lint to zero** (was 14 warnings): autofix for the mechanical `Array<T>` cases, manual removal of unused bindings.
+
+**Files touched:**
+- New: `components/ErrorBoundary.tsx`, `lib/format/date.ts`.
+- Fixed: `app/proposal/[jobId].tsx`, `app/quick-inspection.tsx`, `app/_layout.tsx`, `app/storm-alert/[id].tsx`, `app/job/[id].tsx`, `app/lead/[id].tsx`, `lib/services/{haagPdf,proposalPdf}.ts`, `app/(tabs)/{index,leads,settings}.tsx`, `components/{ScreenHeader,DamageMarkerLayer,VoiceNoteRecorder}.tsx`, `components/shell/BottomTabs.tsx`, `app/{damage-explainer,swipe-review}.tsx`, `docs/SETUP_ACCOUNTS.md`.
+
+**Verification:**
+- typecheck clean; lint **0 problems**; 35/35 routes audited post-fix.
+- **Not verified here:** anything native. The PDF's rendered output, the camera pipeline, maps, and sensors need a device. `/pitch-gauge` fails on web only (`expo-sensors` has no browser accelerometer) — expected, not a defect.
+
+**Follow-ups:** in BACKLOG.md. The device pass is now the single highest-value remaining item — it gates verification of #39, #41, and this entry's PDF changes.

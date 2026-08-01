@@ -74,7 +74,14 @@ function TabButton({
   const pillStyle = useAnimatedStyle(() => ({ opacity: pillOpacity.value }));
 
   return (
-    <Pressable style={styles.tab} onPress={onPress} hitSlop={6}>
+    <Pressable
+      style={styles.tab}
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+    >
       <View style={styles.tabInner}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.tabPill, pillStyle]} />
         <Animated.View style={iconStyle}>

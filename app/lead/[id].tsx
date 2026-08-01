@@ -1,5 +1,6 @@
+import { PressableScale } from '@/components/PressableScale';
 import { formatDateShort } from '@/lib/format/date';
-import { ScrollView, View, Text, Pressable, StyleSheet, Alert, Linking, Platform } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,9 +46,9 @@ export default function LeadDetail() {
         <View style={styles.empty}>
           <Ionicons name="alert-circle-outline" size={36} color={colors.slate} />
           <Text style={styles.emptyText}>Lead not found.</Text>
-          <Pressable style={styles.secondaryBtn} onPress={() => router.back()}>
+          <PressableScale style={styles.secondaryBtn} onPress={() => router.back()}>
             <Text style={styles.secondaryBtnText}>Back</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </SafeAreaView>
     );
@@ -131,9 +132,9 @@ export default function LeadDetail() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
+        <PressableScale onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
+        </PressableScale>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{lead.customerName}</Text>
           <Text style={styles.sub}>
@@ -141,9 +142,9 @@ export default function LeadDetail() {
             {formatDateShort(lead.createdAt)}
           </Text>
         </View>
-        <Pressable onPress={onDelete} hitSlop={10} style={styles.headerBtn}>
+        <PressableScale onPress={onDelete} hitSlop={10} style={styles.headerBtn}>
           <Ionicons name="trash-outline" size={22} color={colors.danger} />
-        </Pressable>
+        </PressableScale>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -190,7 +191,7 @@ export default function LeadDetail() {
         <Text style={styles.sectionLabel}>Stage</Text>
         <View style={styles.chipWrap}>
           {STAGES.map((s) => (
-            <Pressable
+            <PressableScale
               key={s.id}
               style={[
                 styles.chip,
@@ -207,7 +208,7 @@ export default function LeadDetail() {
               >
                 {s.label}
               </Text>
-            </Pressable>
+            </PressableScale>
           ))}
         </View>
 
@@ -227,20 +228,20 @@ export default function LeadDetail() {
             { label: '3 days', days: 3 },
             { label: '1 week', days: 7 },
           ] as const).map((opt) => (
-            <Pressable
+            <PressableScale
               key={opt.label}
               style={styles.chip}
               onPress={() => onSetFollowUp(opt.days)}
             >
               <Text style={styles.chipText}>{opt.label}</Text>
-            </Pressable>
+            </PressableScale>
           ))}
         </View>
 
-        <Pressable style={styles.primaryBtn} onPress={onConvert}>
+        <PressableScale style={styles.primaryBtn} onPress={onConvert}>
           <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
           <Text style={styles.primaryBtnText}>Convert to inspection</Text>
-        </Pressable>
+        </PressableScale>
       </ScrollView>
     </SafeAreaView>
   );
@@ -258,14 +259,14 @@ function ActionButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressableScale
       style={[styles.actionBtn, disabled && { opacity: 0.35 }]}
       disabled={disabled}
       onPress={onPress}
     >
       <Ionicons name={icon} size={22} color={colors.navy} />
       <Text style={styles.actionLabel}>{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 

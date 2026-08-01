@@ -34,7 +34,13 @@ export function ScreenHeader({ title, subtitle, back, right, accent = true }: Pr
   return (
     <View style={styles.row}>
       {onBack && (
-        <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
+        <Pressable
+          onPress={onBack}
+          hitSlop={10}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={24} color={colors.navy} />
         </Pressable>
       )}

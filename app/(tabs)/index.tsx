@@ -154,6 +154,8 @@ export default function HomeScreen() {
               style={styles.iconBtn}
               onPress={() => router.push('/search')}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Search"
             >
               <Ionicons name="search" size={20} color={colors.cream} />
             </Pressable>
@@ -161,6 +163,8 @@ export default function HomeScreen() {
               style={styles.iconBtn}
               onPress={() => router.push('/settings')}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
             >
               <Ionicons name="person" size={20} color={colors.cream} />
             </Pressable>
@@ -446,6 +450,8 @@ export default function HomeScreen() {
       <PressableScale
         style={styles.fab}
         pressedScale={0.92}
+        accessibilityRole="button"
+        accessibilityLabel="Quick add: inspection, job, lead, or estimate"
         onPress={() => {
           tap();
           onQuickAdd();
