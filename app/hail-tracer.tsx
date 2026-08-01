@@ -12,7 +12,10 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type MapView from 'react-native-maps';
 import { Map, MapHeatmap, MapPin } from '@/components/map/Map';
-import { fetchStormHistory, STATE_CENTERS, type StormEvent } from '@/lib/noaa';
+import { fetchStormHistory, type StormEvent } from '@/lib/noaa';
+import { resolveServiceCenter } from '@/lib/services/serviceState';
+import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import {
   colors,
   fontSize,
@@ -45,8 +48,18 @@ export default function HailTracerScreen() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<StormEvent | null>(null);
 
-  // TODO: pull service area state from a ServiceAreaStore. Default to TX.
-  const center = STATE_CENTERS.TX;
+  // Storm queries follow the user's saved Service Area (falling back to
+  // their most recent inspection's address, then the launch market). The
+  // old hardcoded 'TX' silently showed out-of-state contractors the wrong
+  // state's storms — real data in the wrong place, which reads as correct.
+  const areas = useServiceAreaStore((s) => s.areas);
+  const inspections = useInspectionStore((s) => s.inspections);
+  const { state: serviceState, ...center } = useMemo(
+    () => resolveServiceCenter(),
+    // Recompute when the inputs that feed resolution change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [areas, inspections],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +67,7 @@ export default function HailTracerScreen() {
     setError(null);
     const { start, end } = rangeFor(range);
     const types = layer === 'both' ? (['hail', 'wind'] as const) : ([layer] as const);
-    fetchStormHistory({ state: 'TX', start, end, types: [...types] })
+    fetchStormHistory({ state: serviceState, start, end, types: [...types] })
       .then((data) => {
         if (cancelled) return;
         setEvents(data);
@@ -70,7 +83,7 @@ export default function HailTracerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [range, layer]);
+  }, [range, layer, serviceState]);
 
   const filtered = useMemo(() => filterByMagnitude(events, magnitude), [events, magnitude]);
 

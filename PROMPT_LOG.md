@@ -2007,3 +2007,24 @@ detail screens (Job/Lead) — they inherit the token changes.
 - **Not verified here:** anything native. The PDF's rendered output, the camera pipeline, maps, and sensors need a device. `/pitch-gauge` fails on web only (`expo-sensors` has no browser accelerometer) — expected, not a defect.
 
 **Follow-ups:** in BACKLOG.md. The device pass is now the single highest-value remaining item — it gates verification of #39, #41, and this entry's PDF changes.
+
+---
+
+### [2026-07-22] #43 — Storm queries follow the user's service area instead of hardcoded Texas
+
+**Prompt:** (continuation of the #42 ship-readiness pass)
+
+**Intent / Goal:**
+- A `TODO` in `app/hail-tracer.tsx` and the same hardcoded `state: 'TX'` in `app/(tabs)/map.tsx` meant every storm query targeted Texas regardless of where the contractor works. This is a worse class of bug than a crash: it returns **real NOAA data for the wrong state**, so it looks correct. An Oklahoma contractor would pitch claims against Texas hail history.
+
+**Decisions:**
+- New `lib/services/serviceState.ts` resolves the target state in priority order: (1) a supported 2-letter code parsed from a saved Service Area label, (2) the state on the most recent inspection's address, (3) `'TX'` as the launch-market default. `stateFromText` matches standalone uppercase pairs against the known `STATE_CENTERS` keys so "Saint"/"Ok" can't false-positive.
+- Both screens now derive `serviceState` and the map center from it, and re-query when the resolution inputs change. Removed the `TODO` and the `STATE_CENTERS.TX` imports.
+- Reads stores imperatively via `getState()` so services can call it too; components pass the store slices as memo deps for reactivity.
+- Caught in review: the first patch left `serviceState` referenced in a `useEffect` dep array **above** its `const` declaration — a temporal-dead-zone crash on every Map render. Reordered before commit.
+
+**Files touched:** `lib/services/serviceState.ts` (new), `app/hail-tracer.tsx`, `app/(tabs)/map.tsx`, `BACKLOG.md`, `PROMPT_LOG.md`.
+
+**Verification:** typecheck + lint clean; `/map` and `/hail-tracer` re-driven in the browser harness, both render with no page errors.
+
+**Follow-ups:** Service Area labels are free text; a state picker in `app/settings/service-area.tsx` would make resolution deterministic instead of parsed. Tracked in BACKLOG.

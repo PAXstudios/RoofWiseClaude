@@ -3,7 +3,8 @@ import { View, Text, ScrollView, StyleSheet, ActivityIndicator, Pressable } from
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Map, MapPin, MapCircle, regionForLatLon } from '@/components/map/Map';
-import { fetchStormHistory, rangeYearsAgo, STATE_CENTERS, severityColor, magnitudeLabel, type StormEvent } from '@/lib/noaa';
+import { fetchStormHistory, rangeYearsAgo, severityColor, magnitudeLabel, type StormEvent } from '@/lib/noaa';
+import { resolveServiceCenter } from '@/lib/services/serviceState';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
@@ -40,13 +41,21 @@ export default function MapScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Follows the saved Service Area rather than assuming Texas.
+  const { state: serviceState, ...center } = useMemo(
+    () => resolveServiceCenter(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [serviceAreas, inspections],
+  );
+  const initialRegion = regionForLatLon(center.lat, center.lon, 4);
+
   useEffect(() => {
     if (filter !== 'storms') return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     const { start, end } = rangeYearsAgo(1);
-    fetchStormHistory({ state: 'TX', start, end, types: ['hail', 'wind'] })
+    fetchStormHistory({ state: serviceState, start, end, types: ['hail', 'wind'] })
       .then((d) => !cancelled && setEvents(d))
       .catch((e) => {
         if (cancelled) return;
@@ -55,10 +64,7 @@ export default function MapScreen() {
       })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [filter]);
-
-  const center = STATE_CENTERS.TX;
-  const initialRegion = regionForLatLon(center.lat, center.lon, 4);
+  }, [filter, serviceState]);
 
   const jobPins = useMemo(
     () => inspections.filter((i) => typeof i.lat === 'number' && typeof i.lng === 'number'),

@@ -14,11 +14,11 @@ entry does not count as tracked.
 ## Now (committed next steps, in order)
 
 
-- [ ] Extend motion layer to Settings tab + Job/Lead detail screens — #34 · last un-animated surfaces; mechanical with `components/motion/`
-- [ ] HAAG claim packet PDF polish (`lib/services/haagPdf.ts`) — user priority list 2026-07-22 · the money artifact; layout, annotated photos, threshold citations, signatures
 - [ ] **Device pass on a real iPhone** — verify (a) rectangle overlays + withheld-detections toast against a live analysis [#39], and (b) the new 2560px analyze profile is actually selected (not the SAFE fallback), with no OOM on a long capture session [#41] · built and typechecked, but not yet seen with live Gemini output
 
 ## Next
+
+- [ ] Add an explicit state picker to `app/settings/service-area.tsx` so storm-query resolution is deterministic rather than parsed from free-text labels — #43
 
 - [ ] Welcome screen pre-checks `isSupabaseConfigured` and shows a banner before first submit — #35
 - [ ] Settings screen "backend: not configured / connected" indicator — #35 · faster field debugging
@@ -50,6 +50,15 @@ entry does not count as tracked.
 - [ ] Apple Sign In · true background execution · geofenced mileage · native voice-to-text · LiDAR — CLAUDE.md "Known parked items" (Drift #10 for LiDAR)
 
 ## Done (most recent first)
+
+- [x] Full 35-route audit harness; 35/35 clean — closed by #42
+- [x] setState-during-render in ProposalView (double-create / dropped write) — closed by #42
+- [x] Cold-launch nav crashes (quick-inspection redirect + notification deep link) — closed by #42
+- [x] "Invalid Date" leaking to users and into HAAG/proposal PDFs — `lib/format/date.ts` — closed by #42
+- [x] HAAG PDF: roadmap-language leak, methodology block, section numbering, print page-breaks — closed by #42
+- [x] Motion layer on Settings + Job/Lead detail — closed by #42
+- [x] Accessibility labels on icon-only controls — closed by #42
+- [x] Hardcoded 'TX' in Map + Hail Tracer — now resolves from Service Area → recent inspection → default (`lib/services/serviceState.ts`) — closed by #43
 
 - [x] Bundle ID settled: `com.roofwise.app` (both platforms already agreed; unblocks Google key restrictions) — closed by #42
 - [x] App-level ErrorBoundary — crash shows a recoverable screen instead of a white screen — closed by #42
