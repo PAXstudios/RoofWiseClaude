@@ -8,21 +8,27 @@ apply here. This app has no mocks at all (Drift Warning #5).
 
 ---
 
-## ⚠️ Resolve first: which bundle ID?
+## ✅ Settled: the bundle ID is `com.roofwise.app`
 
-`app.config.js` currently declares:
+**Decided 2026-07-22 (entry #42).** Both platforms in `app.config.js` already
+declare it consistently:
 
 ```
 ios.bundleIdentifier = 'com.roofwise.app'
+android.package       = 'com.roofwise.app'
 ```
 
-Some earlier notes reference `com.paxconsulting.roofwise`. **These must match**
-before you add an iOS application restriction to any Google API key — restricting
-the key to the wrong bundle ID silently breaks Maps, Places, and Solar in the
-shipped app, and the failure message is unhelpful.
+Earlier notes referenced `com.paxconsulting.roofwise`. That is **not** the
+identifier — it was never in the code. `com.roofwise.app` wins because it is
+already coherent across both platforms, matches the product name, and changing
+it costs config churn for zero benefit before launch. (After the first App Store
+submission the bundle ID is permanent, so this is the moment it was cheap to
+settle.)
 
-Pick one, then make it consistent across: `app.config.js`, the Apple Developer
-App ID, and every Google Cloud key restriction.
+**Use `com.roofwise.app` everywhere:** the Apple Developer App ID, the iOS
+application restriction on Google keys, and the Android restriction (which also
+needs the release keystore SHA-1). Restricting a key to any other value silently
+breaks Maps, Places, and Solar in the shipped app with an unhelpful error.
 
 ---
 

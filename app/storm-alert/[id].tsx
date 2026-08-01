@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/format/date';
 import { useMemo } from 'react';
 import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -90,10 +91,7 @@ export default function StormAlertDetail() {
           </View>
           <Text style={styles.heroArea}>{alert.areaLabel}</Text>
           <Text style={styles.heroSub}>
-            {new Date(alert.firedAt).toLocaleString(undefined, {
-              dateStyle: 'long',
-              timeStyle: 'short',
-            })}
+            {formatDateTime(alert.firedAt, 'Time unavailable')}
           </Text>
         </View>
 

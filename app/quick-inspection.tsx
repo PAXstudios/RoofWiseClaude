@@ -9,7 +9,12 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  Stack,
+  useLocalSearchParams,
+  useRootNavigationState,
+  useRouter,
+} from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,7 +25,6 @@ import {
   fontSize,
   fontWeight,
   radii,
-  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -54,10 +58,16 @@ export default function QuickInspection() {
     }
   }, [permission, requestPermission]);
 
-  // Pre-flight safety check (re-runs the checklist every 4h while enabled)
+  // Pre-flight safety check (re-runs the checklist every 4h while enabled).
+  // Gated on navigator readiness: cold-launching straight into this route
+  // (deep link, notification tap) used to fire router.replace before the
+  // root navigator mounted, which throws "Attempted to navigate before
+  // mounting the Root Layout component" and leaves a dead screen.
   const preFlightEnabled = useSafetyStore((s) => s.preFlightEnabled);
   const lastConfirmedAt = useSafetyStore((s) => s.lastConfirmedAt);
+  const navReady = !!useRootNavigationState()?.key;
   useEffect(() => {
+    if (!navReady) return;
     if (!preFlightEnabled) return;
     const fresh =
       lastConfirmedAt &&
@@ -67,7 +77,7 @@ export default function QuickInspection() {
       pathname: '/safety-check',
       params: jobId ? { jobId } : undefined,
     });
-  }, [preFlightEnabled, lastConfirmedAt, router, jobId]);
+  }, [navReady, preFlightEnabled, lastConfirmedAt, router, jobId]);
 
   if (!permission) return <View style={styles.permRoot} />;
 

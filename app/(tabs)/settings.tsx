@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/authStore';
@@ -16,6 +16,8 @@ import { useInspectionSyncStore } from '@/lib/stores/inspectionSyncStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { syncCorrections } from '@/lib/services/correctionsSync';
 import { isGeminiConfigured } from '@/lib/env';
+import { PressableScale } from '@/components/PressableScale';
+import { FadeSlideIn } from '@/components/motion';
 import { colors, fontSize, fontWeight, radii, spacing, shadows } from '@/theme/tokens';
 
 export default function SettingsScreen() {
@@ -90,279 +92,293 @@ export default function SettingsScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Settings</Text>
 
-      <Text style={styles.sectionLabel}>Account</Text>
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <Ionicons name="mail-outline" size={20} color={colors.textMuted} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Email</Text>
-            <Text style={styles.rowValue}>{user?.email ?? 'Not signed in'}</Text>
-          </View>
-        </View>
-
-        {joined ? (
-          <View style={[styles.row, styles.rowBorder]}>
-            <Ionicons name="calendar-outline" size={20} color={colors.textMuted} />
+      <FadeSlideIn index={0}>
+        <Text style={styles.sectionLabel}>Account</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Ionicons name="mail-outline" size={20} color={colors.textMuted} />
             <View style={styles.rowText}>
-              <Text style={styles.rowLabel}>Joined</Text>
-              <Text style={styles.rowValue}>{joined}</Text>
+              <Text style={styles.rowLabel}>Email</Text>
+              <Text style={styles.rowValue}>{user?.email ?? 'Not signed in'}</Text>
             </View>
           </View>
-        ) : null}
 
-        <Pressable onPress={confirmSignOut} style={styles.signOutBtn}>
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
-      </View>
+          {joined ? (
+            <View style={[styles.row, styles.rowBorder]}>
+              <Ionicons name="calendar-outline" size={20} color={colors.textMuted} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Joined</Text>
+                <Text style={styles.rowValue}>{joined}</Text>
+              </View>
+            </View>
+          ) : null}
 
-      <Text style={styles.sectionLabel}>Integrations</Text>
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <Ionicons
-            name={isGeminiConfigured ? 'checkmark-circle' : 'alert-circle-outline'}
-            size={22}
-            color={isGeminiConfigured ? colors.success : colors.warn}
-          />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Gemini Vision (AI damage detection)</Text>
-            <Text style={styles.rowValue}>
-              {isGeminiConfigured
-                ? 'Connected'
-                : 'Add EXPO_PUBLIC_GEMINI_API_KEY to .env.local'}
-            </Text>
+          <PressableScale onPress={confirmSignOut} style={styles.signOutBtn}>
+            <Text style={styles.signOutText}>Sign out</Text>
+          </PressableScale>
+        </View>
+      </FadeSlideIn>
+
+      <FadeSlideIn index={1}>
+        <Text style={styles.sectionLabel}>Integrations</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Ionicons
+              name={isGeminiConfigured ? 'checkmark-circle' : 'alert-circle-outline'}
+              size={22}
+              color={isGeminiConfigured ? colors.success : colors.warn}
+            />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Gemini Vision (AI damage detection)</Text>
+              <Text style={styles.rowValue}>
+                {isGeminiConfigured
+                  ? 'Connected'
+                  : 'Add EXPO_PUBLIC_GEMINI_API_KEY to .env.local'}
+              </Text>
+            </View>
+          </View>
+          <View style={[styles.row, styles.rowBorder]}>
+            <Ionicons name="cloud-outline" size={22} color={colors.info} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Supabase</Text>
+              <Text style={styles.rowValue}>Connected (auth + storage)</Text>
+            </View>
           </View>
         </View>
-        <View style={[styles.row, styles.rowBorder]}>
-          <Ionicons name="cloud-outline" size={22} color={colors.info} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Supabase</Text>
-            <Text style={styles.rowValue}>Connected (auth + storage)</Text>
-          </View>
+      </FadeSlideIn>
+
+      <FadeSlideIn index={2}>
+        <Text style={styles.sectionLabel}>Field</Text>
+        <View style={styles.card}>
+          <PressableScale style={styles.row} onPress={() => router.push('/settings/inspector-profile')}>
+            <Ionicons name="person-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Inspector profile</Text>
+              <Text style={styles.rowValue}>
+                {inspectorProfile.fullName
+                  ? `${inspectorProfile.fullName}${inspectorProfile.haagCertified ? ' · HAAG certified' : ''}`
+                  : 'Not set'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </PressableScale>
+
+          <PressableScale style={[styles.row, styles.rowBorder]} onPress={() => router.push('/settings/service-area')}>
+            <Ionicons name="map-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Service Area</Text>
+              <Text style={styles.rowValue}>
+                {serviceAreaCount === 0
+                  ? 'Not set — Storm Watch is off'
+                  : `${serviceAreaCount} area${serviceAreaCount === 1 ? '' : 's'} configured`}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </PressableScale>
         </View>
-      </View>
+      </FadeSlideIn>
 
-      <Text style={styles.sectionLabel}>Field</Text>
-      <View style={styles.card}>
-        <Pressable style={styles.row} onPress={() => router.push('/settings/inspector-profile')}>
-          <Ionicons name="person-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Inspector profile</Text>
-            <Text style={styles.rowValue}>
-              {inspectorProfile.fullName
-                ? `${inspectorProfile.fullName}${inspectorProfile.haagCertified ? ' · HAAG certified' : ''}`
-                : 'Not set'}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </Pressable>
+      <FadeSlideIn index={3}>
+        <Text style={styles.sectionLabel}>Business</Text>
+        <View style={styles.card}>
+          <PressableScale style={styles.row} onPress={() => router.push('/reports')}>
+            <Ionicons name="bar-chart-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Reports</Text>
+              <Text style={styles.rowValue}>Revenue, funnel, mileage, AI calibration</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </PressableScale>
 
-        <Pressable style={[styles.row, styles.rowBorder]} onPress={() => router.push('/settings/service-area')}>
-          <Ionicons name="map-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Service Area</Text>
-            <Text style={styles.rowValue}>
-              {serviceAreaCount === 0
-                ? 'Not set — Storm Watch is off'
-                : `${serviceAreaCount} area${serviceAreaCount === 1 ? '' : 's'} configured`}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </Pressable>
-      </View>
+          <PressableScale style={[styles.row, styles.rowBorder]} onPress={() => router.push('/settings/backup')}>
+            <Ionicons name="archive-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Backup & Restore</Text>
+              <Text style={styles.rowValue}>Export everything as JSON, restore on a new device</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </PressableScale>
 
-      <Text style={styles.sectionLabel}>Business</Text>
-      <View style={styles.card}>
-        <Pressable style={styles.row} onPress={() => router.push('/reports')}>
-          <Ionicons name="bar-chart-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Reports</Text>
-            <Text style={styles.rowValue}>Revenue, funnel, mileage, AI calibration</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </Pressable>
-
-        <Pressable style={[styles.row, styles.rowBorder]} onPress={() => router.push('/settings/backup')}>
-          <Ionicons name="archive-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Backup & Restore</Text>
-            <Text style={styles.rowValue}>Export everything as JSON, restore on a new device</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </Pressable>
-
-        <Pressable style={[styles.row, styles.rowBorder]} onPress={() => router.push('/settings/about')}>
-          <Ionicons name="information-circle-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>About RoofWise</Text>
-            <Text style={styles.rowValue}>Features, references, version</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </Pressable>
-      </View>
-
-      <Text style={styles.sectionLabel}>Safety</Text>
-      <View style={styles.card}>
-        <Pressable
-          style={styles.row}
-          onPress={() => setPreFlightEnabled(!preFlightEnabled)}
-        >
-          <Ionicons
-            name={preFlightEnabled ? 'shield-checkmark' : 'shield-outline'}
-            size={22}
-            color={preFlightEnabled ? colors.success : colors.slate}
-          />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Pre-inspection safety check</Text>
-            <Text style={styles.rowValue}>
-              {preFlightEnabled ? 'On — runs every 4 hours' : 'Off'}
-            </Text>
-          </View>
-        </Pressable>
-      </View>
-
-      <Text style={styles.sectionLabel}>AI calibration</Text>
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <Ionicons name="sparkles-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Corrections recorded</Text>
-            <Text style={styles.rowValue}>{correctionsCount}</Text>
-          </View>
+          <PressableScale style={[styles.row, styles.rowBorder]} onPress={() => router.push('/settings/about')}>
+            <Ionicons name="information-circle-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>About RoofWise</Text>
+              <Text style={styles.rowValue}>Features, references, version</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </PressableScale>
         </View>
+      </FadeSlideIn>
 
-        <Pressable
-          style={[styles.row, styles.rowBorder, syncing && { opacity: 0.5 }]}
-          onPress={onSyncNow}
-          disabled={syncing}
-        >
-          <Ionicons name="cloud-upload-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Sync corrections</Text>
-            <Text style={styles.rowValue}>
-              {pendingCorrections === 0
-                ? 'Up to date'
-                : `${pendingCorrections} pending`}
-            </Text>
+      <FadeSlideIn index={4}>
+        <Text style={styles.sectionLabel}>Safety</Text>
+        <View style={styles.card}>
+          <PressableScale
+            style={styles.row}
+            onPress={() => setPreFlightEnabled(!preFlightEnabled)}
+          >
+            <Ionicons
+              name={preFlightEnabled ? 'shield-checkmark' : 'shield-outline'}
+              size={22}
+              color={preFlightEnabled ? colors.success : colors.slate}
+            />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Pre-inspection safety check</Text>
+              <Text style={styles.rowValue}>
+                {preFlightEnabled ? 'On — runs every 4 hours' : 'Off'}
+              </Text>
+            </View>
+          </PressableScale>
+        </View>
+      </FadeSlideIn>
+
+      <FadeSlideIn index={5}>
+        <Text style={styles.sectionLabel}>AI calibration</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Ionicons name="sparkles-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Corrections recorded</Text>
+              <Text style={styles.rowValue}>{correctionsCount}</Text>
+            </View>
           </View>
-          {syncing ? (
-            <ActivityIndicator color={colors.accent} />
-          ) : (
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          )}
-        </Pressable>
 
-        <Pressable
-          style={[styles.row, styles.rowBorder, leadsSyncing && { opacity: 0.5 }]}
-          onPress={async () => {
-            setLeadsSyncing(true);
-            try {
-              const r = await syncLeads();
-              toast({
-                tone: r.error ? 'warn' : 'success',
-                title: r.error
-                  ? 'Cloud sync issue'
-                  : `${r.pushed} pushed · ${r.pulled} pulled`,
-                body: r.error,
-              });
-            } finally {
-              setLeadsSyncing(false);
-            }
-          }}
-          disabled={leadsSyncing}
-        >
-          <Ionicons name="people-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Sync leads to cloud</Text>
-            <Text style={styles.rowValue}>
-              {pendingLeads === 0 ? 'Up to date' : `${pendingLeads} pending`}
+          <PressableScale
+            style={[styles.row, styles.rowBorder, syncing && { opacity: 0.5 }]}
+            onPress={onSyncNow}
+            disabled={syncing}
+          >
+            <Ionicons name="cloud-upload-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Sync corrections</Text>
+              <Text style={styles.rowValue}>
+                {pendingCorrections === 0
+                  ? 'Up to date'
+                  : `${pendingCorrections} pending`}
+              </Text>
+            </View>
+            {syncing ? (
+              <ActivityIndicator color={colors.accent} />
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            )}
+          </PressableScale>
+
+          <PressableScale
+            style={[styles.row, styles.rowBorder, leadsSyncing && { opacity: 0.5 }]}
+            onPress={async () => {
+              setLeadsSyncing(true);
+              try {
+                const r = await syncLeads();
+                toast({
+                  tone: r.error ? 'warn' : 'success',
+                  title: r.error
+                    ? 'Cloud sync issue'
+                    : `${r.pushed} pushed · ${r.pulled} pulled`,
+                  body: r.error,
+                });
+              } finally {
+                setLeadsSyncing(false);
+              }
+            }}
+            disabled={leadsSyncing}
+          >
+            <Ionicons name="people-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Sync leads to cloud</Text>
+              <Text style={styles.rowValue}>
+                {pendingLeads === 0 ? 'Up to date' : `${pendingLeads} pending`}
+              </Text>
+            </View>
+            {leadsSyncing ? (
+              <ActivityIndicator color={colors.accent} />
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            )}
+          </PressableScale>
+
+          <PressableScale
+            style={[styles.row, styles.rowBorder, inspectionsSyncing && { opacity: 0.5 }]}
+            onPress={async () => {
+              setInspectionsSyncing(true);
+              try {
+                const r = await syncInspections();
+                toast({
+                  tone: r.error ? 'warn' : 'success',
+                  title: r.error
+                    ? 'Cloud sync issue'
+                    : `${r.pushed} pushed · ${r.pulled} pulled`,
+                  body: r.error,
+                });
+              } finally {
+                setInspectionsSyncing(false);
+              }
+            }}
+            disabled={inspectionsSyncing}
+          >
+            <Ionicons name="briefcase-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Sync inspections to cloud</Text>
+              <Text style={styles.rowValue}>
+                {pendingInspections === 0 ? 'Up to date' : `${pendingInspections} pending`}
+              </Text>
+            </View>
+            {inspectionsSyncing ? (
+              <ActivityIndicator color={colors.accent} />
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            )}
+          </PressableScale>
+
+          <PressableScale
+            style={[styles.row, styles.rowBorder, photosSyncing && { opacity: 0.5 }]}
+            onPress={async () => {
+              setPhotosSyncing(true);
+              try {
+                const r = await syncInspectionPhotos();
+                toast({
+                  tone: r.error ? 'warn' : 'success',
+                  title: r.error
+                    ? 'Photo upload issue'
+                    : `${r.uploaded} uploaded · ${r.remaining} remaining`,
+                  body: r.error,
+                });
+              } finally {
+                setPhotosSyncing(false);
+              }
+            }}
+            disabled={photosSyncing}
+          >
+            <Ionicons name="images-outline" size={22} color={colors.accent} />
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Upload photos to cloud</Text>
+              <Text style={styles.rowValue}>
+                {pendingPhotos === 0 ? 'Up to date' : `${pendingPhotos} pending`}
+              </Text>
+            </View>
+            {photosSyncing ? (
+              <ActivityIndicator color={colors.accent} />
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            )}
+          </PressableScale>
+        </View>
+      </FadeSlideIn>
+
+      <FadeSlideIn index={6}>
+        <Text style={styles.sectionLabel}>Coming soon</Text>
+        <View style={styles.card}>
+          {[
+            'AI thresholds: minimum confidence, auto-approve cutoffs',
+            'Team & roles (Adjuster, Crew Lead, Owner)',
+            'CRM + accounting integrations (HubSpot, QuickBooks)',
+          ].map((line) => (
+            <Text key={line} style={styles.bullet}>
+              • {line}
             </Text>
-          </View>
-          {leadsSyncing ? (
-            <ActivityIndicator color={colors.accent} />
-          ) : (
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          )}
-        </Pressable>
-
-        <Pressable
-          style={[styles.row, styles.rowBorder, inspectionsSyncing && { opacity: 0.5 }]}
-          onPress={async () => {
-            setInspectionsSyncing(true);
-            try {
-              const r = await syncInspections();
-              toast({
-                tone: r.error ? 'warn' : 'success',
-                title: r.error
-                  ? 'Cloud sync issue'
-                  : `${r.pushed} pushed · ${r.pulled} pulled`,
-                body: r.error,
-              });
-            } finally {
-              setInspectionsSyncing(false);
-            }
-          }}
-          disabled={inspectionsSyncing}
-        >
-          <Ionicons name="briefcase-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Sync inspections to cloud</Text>
-            <Text style={styles.rowValue}>
-              {pendingInspections === 0 ? 'Up to date' : `${pendingInspections} pending`}
-            </Text>
-          </View>
-          {inspectionsSyncing ? (
-            <ActivityIndicator color={colors.accent} />
-          ) : (
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          )}
-        </Pressable>
-
-        <Pressable
-          style={[styles.row, styles.rowBorder, photosSyncing && { opacity: 0.5 }]}
-          onPress={async () => {
-            setPhotosSyncing(true);
-            try {
-              const r = await syncInspectionPhotos();
-              toast({
-                tone: r.error ? 'warn' : 'success',
-                title: r.error
-                  ? 'Photo upload issue'
-                  : `${r.uploaded} uploaded · ${r.remaining} remaining`,
-                body: r.error,
-              });
-            } finally {
-              setPhotosSyncing(false);
-            }
-          }}
-          disabled={photosSyncing}
-        >
-          <Ionicons name="images-outline" size={22} color={colors.accent} />
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Upload photos to cloud</Text>
-            <Text style={styles.rowValue}>
-              {pendingPhotos === 0 ? 'Up to date' : `${pendingPhotos} pending`}
-            </Text>
-          </View>
-          {photosSyncing ? (
-            <ActivityIndicator color={colors.accent} />
-          ) : (
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          )}
-        </Pressable>
-      </View>
-
-      <Text style={styles.sectionLabel}>Coming soon</Text>
-      <View style={styles.card}>
-        {[
-          'AI thresholds: minimum confidence, auto-approve cutoffs',
-          'Team & roles (Adjuster, Crew Lead, Owner)',
-          'CRM + accounting integrations (HubSpot, QuickBooks)',
-        ].map((line) => (
-          <Text key={line} style={styles.bullet}>
-            • {line}
-          </Text>
-        ))}
-      </View>
+          ))}
+        </View>
+      </FadeSlideIn>
     </ScrollView>
   );
 }

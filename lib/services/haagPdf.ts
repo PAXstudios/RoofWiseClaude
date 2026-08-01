@@ -1,3 +1,4 @@
+import { formatDateShort, formatDateTime } from '@/lib/format/date';
 // HAAG-style PDF report generator.
 // Uses expo-print to render an HTML template to a PDF on disk.
 // Spec Phase 3 — 9-section Haag report (cover, weather, roof, slopes,
@@ -73,8 +74,8 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
   const worthiness = claimWorthiness(decision, score);
   const threshold = thresholdFor(ins.material);
   const inspector = useInspectorProfileStore.getState().profile;
-  const generatedAt = new Date().toLocaleString();
-  const createdDate = new Date(ins.createdAt).toLocaleDateString();
+  const generatedAt = formatDateTime(new Date());
+  const createdDate = formatDateShort(ins.createdAt);
 
   return `<!DOCTYPE html>
 <html>
@@ -187,7 +188,7 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
 
   <h2>2. Weather Verification</h2>
   ${ins.event
-    ? `<p>${esc(ins.event.kind)} event on ${esc(new Date(ins.event.date).toLocaleDateString())}${
+    ? `<p>${esc(ins.event.kind)} event on ${esc(formatDateShort(ins.event.date))}${
         ins.event.hailSizeInches ? ` — ${ins.event.hailSizeInches}\" hail` : ''}${
         ins.event.windSpeedMph ? ` — ${ins.event.windSpeedMph} mph wind` : ''}${
         ins.event.distanceMiles ? ` — ${ins.event.distanceMiles.toFixed(1)} mi from property` : ''}.</p>`
@@ -256,7 +257,7 @@ function renderHtml(ins: Inspection, photoMap: Record<string, string[]> = {}): s
       ${ins.inspectorSignatureSvg
         ? `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet"><path d="${esc(ins.inspectorSignatureSvg)}" stroke="#0C183C" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg><br/>`
         : ''}
-      Inspector signature${ins.signedAt ? ` · ${new Date(ins.signedAt).toLocaleDateString()}` : ''}
+      Inspector signature${ins.signedAt ? ` · ${formatDateShort(ins.signedAt)}` : ''}
     </div>
     <div class="sig-box">
       ${ins.homeownerSignatureSvg

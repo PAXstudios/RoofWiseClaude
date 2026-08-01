@@ -13,7 +13,6 @@ entry does not count as tracked.
 
 ## Now (committed next steps, in order)
 
-- [ ] **Resolve the bundle ID** — `app.config.js` says `com.roofwise.app`, other notes say `com.paxconsulting.roofwise`. Must be settled BEFORE adding iOS restrictions to any Google key, or Maps/Places/Solar break in the shipped app with an unhelpful error — 2026-07-22 · see `docs/SETUP_ACCOUNTS.md`
 
 - [ ] Extend motion layer to Settings tab + Job/Lead detail screens — #34 · last un-animated surfaces; mechanical with `components/motion/`
 - [ ] HAAG claim packet PDF polish (`lib/services/haagPdf.ts`) — user priority list 2026-07-22 · the money artifact; layout, annotated photos, threshold citations, signatures
@@ -51,6 +50,11 @@ entry does not count as tracked.
 - [ ] Apple Sign In · true background execution · geofenced mileage · native voice-to-text · LiDAR — CLAUDE.md "Known parked items" (Drift #10 for LiDAR)
 
 ## Done (most recent first)
+
+- [x] Bundle ID settled: `com.roofwise.app` (both platforms already agreed; unblocks Google key restrictions) — closed by #42
+- [x] App-level ErrorBoundary — crash shows a recoverable screen instead of a white screen — closed by #42
+- [x] Navigator-readiness guards on cold-launch deep links (quick-inspection safety redirect, notification tap handler) — closed by #42
+- [x] Lint warnings cleared to zero — closed by #42
 
 - [x] Two-profile image pipeline (2560px/0.82 analyze + 1600px safe fallback, camera quality 0.7→0.95) — closed by #41
 - [x] ESLint linting the `dist/` web-export bundle (2036 bogus errors) — closed by #41

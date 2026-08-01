@@ -1,3 +1,4 @@
+import { formatDateShort } from '@/lib/format/date';
 import { ScrollView, View, Text, Pressable, StyleSheet, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,7 +18,7 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-const STAGES: Array<{ id: LeadStage; label: string }> = [
+const STAGES: { id: LeadStage; label: string }[] = [
   { id: 'new', label: 'New' },
   { id: 'contacted', label: 'Contacted' },
   { id: 'inspection_scheduled', label: 'Scheduled' },
@@ -137,7 +138,7 @@ export default function LeadDetail() {
           <Text style={styles.title}>{lead.customerName}</Text>
           <Text style={styles.sub}>
             {lead.source ? `${lead.source.replace(/_/g, ' ')} · ` : ''}
-            {new Date(lead.createdAt).toLocaleDateString()}
+            {formatDateShort(lead.createdAt)}
           </Text>
         </View>
         <Pressable onPress={onDelete} hitSlop={10} style={styles.headerBtn}>
@@ -215,7 +216,7 @@ export default function LeadDetail() {
           <View style={styles.followUpBanner}>
             <Ionicons name="alarm-outline" size={18} color={colors.orange} />
             <Text style={styles.followUpText}>
-              Scheduled for {new Date(lead.followUpAt).toLocaleDateString()}
+              Scheduled for {formatDateShort(lead.followUpAt)}
             </Text>
           </View>
         )}

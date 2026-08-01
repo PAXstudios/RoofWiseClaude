@@ -15,7 +15,7 @@ type ActiveTrip = {
   startLng: number;
   startAddress?: string;
   purpose?: string;
-  samples: Array<{ lat: number; lng: number; ts: number }>;
+  samples: { lat: number; lng: number; ts: number }[];
 };
 
 type MileageStoreState = {

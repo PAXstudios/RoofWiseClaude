@@ -79,11 +79,11 @@ export async function fetchStormHistory({
     throw new Error(`NOAA/IEM request failed: ${res.status} ${res.statusText}`);
   }
   const data = (await res.json()) as {
-    features?: Array<{
+    features?: {
       id?: string;
       geometry?: { coordinates?: [number, number] };
       properties?: Record<string, unknown>;
-    }>;
+    }[];
   };
 
   const features = data.features ?? [];
@@ -147,7 +147,7 @@ export function rangeYearsAgo(years: number): { start: Date; end: Date } {
   return { start, end };
 }
 
-export const US_STATES: Array<{ code: string; name: string }> = [
+export const US_STATES: { code: string; name: string }[] = [
   { code: 'AL', name: 'Alabama' },
   { code: 'AR', name: 'Arkansas' },
   { code: 'AZ', name: 'Arizona' },

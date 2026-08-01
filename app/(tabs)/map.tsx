@@ -20,7 +20,7 @@ import {
 
 type Filter = 'leads' | 'jobs' | 'storms' | 'knocks';
 
-const FILTERS: Array<{ id: Filter; label: string; icon: keyof typeof import('@expo/vector-icons/build/Ionicons').default.glyphMap }> = [
+const FILTERS: { id: Filter; label: string; icon: keyof typeof import('@expo/vector-icons/build/Ionicons').default.glyphMap }[] = [
   { id: 'leads', label: 'Leads', icon: 'people-outline' },
   { id: 'jobs', label: 'Jobs', icon: 'hammer-outline' },
   { id: 'storms', label: 'Storms', icon: 'thunderstorm-outline' },

@@ -18,7 +18,7 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-const STAGES: Array<{ id: LeadStage | 'all'; label: string }> = [
+const STAGES: { id: LeadStage | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'new', label: 'New' },
   { id: 'contacted', label: 'Contacted' },

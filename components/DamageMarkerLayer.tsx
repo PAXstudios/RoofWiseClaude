@@ -135,7 +135,6 @@ export function DamageMarkerLayer({
   // Clamp translate so the photo doesn't fly offscreen at any scale.
   const clampTranslate = (tx: number, ty: number, s: number) => {
     'worklet';
-    const r = rectRef.current;
     if (!containerSize.width || !containerSize.height) return { tx, ty };
     const scaledW = containerSize.width * s;
     const scaledH = containerSize.height * s;

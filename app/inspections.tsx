@@ -23,7 +23,7 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-const STATUSES: Array<{ id: 'all' | InspectionStatus; label: string }> = [
+const STATUSES: { id: 'all' | InspectionStatus; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'in_progress', label: 'In progress' },
   { id: 'scheduled', label: 'Scheduled' },

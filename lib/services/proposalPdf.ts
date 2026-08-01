@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/format/date';
 // Branded proposal PDF generator. expo-print + HTML template.
 
 import * as Print from 'expo-print';
@@ -19,7 +20,7 @@ export async function generateProposalPdf(
 }
 
 function renderHtml(p: Proposal, ins: Inspection): string {
-  const generatedAt = new Date().toLocaleString();
+  const generatedAt = formatDateTime(new Date());
   const carrier = ins.carrier ? INSURANCE_CARRIER_LABELS[ins.carrier] : '—';
 
   return `<!DOCTYPE html>

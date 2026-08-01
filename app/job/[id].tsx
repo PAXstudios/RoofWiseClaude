@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/format/date';
 import { useState } from 'react';
 import { ScrollView, View, Text, Pressable, StyleSheet, Alert, Image, Share, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -197,11 +198,7 @@ export default function JobDetail() {
                 : `${inspection.event.windSpeedMph ?? ''} mph wind`}
             </Text>
             <Text style={styles.cardSub}>
-              {new Date(inspection.event.date).toLocaleDateString(undefined, {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-              })}
+              {formatDate(inspection.event.date, 'Date unavailable')}
               {inspection.event.distanceMiles
                 ? ` · ${inspection.event.distanceMiles.toFixed(1)} mi away`
                 : ''}

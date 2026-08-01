@@ -74,7 +74,7 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }:
       await rec.startAsync();
       setRecording(rec);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (e) {
+    } catch {
       toast({ tone: 'danger', title: 'Could not start recording' });
     }
   };

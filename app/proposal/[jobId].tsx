@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -47,12 +47,26 @@ export default function ProposalView() {
   const toast = useToastStore((s) => s.show);
   const [busy, setBusy] = useState(false);
 
-  const proposal = useMemo(() => {
-    if (existing) return existing;
-    if (!inspection) return null;
-    const draft = generateProposalDraft(inspection);
-    return create(draft);
+  // Auto-create the draft on first visit — but in an effect, never during
+  // render. The old useMemo called create() (a Zustand setter) mid-render,
+  // which React flags as "Cannot update a component while rendering a
+  // different component" and which can double-create the proposal or drop
+  // the write entirely. The guard ref keeps StrictMode's double-invoke from
+  // minting two proposals for the same job.
+  const creatingRef = useRef(false);
+  useEffect(() => {
+    if (existing || !inspection || creatingRef.current) return;
+    creatingRef.current = true;
+    create(generateProposalDraft(inspection));
   }, [existing, inspection, create]);
+
+  // Reset the guard if the user navigates to a different job on the same
+  // mounted screen.
+  useEffect(() => {
+    creatingRef.current = false;
+  }, [jobId]);
+
+  const proposal = existing ?? null;
 
   if (!inspection || !proposal) {
     return (
