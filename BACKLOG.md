@@ -25,7 +25,6 @@ entry does not count as tracked.
 - [ ] Settings screen "backend: not configured / connected" indicator — #35 · faster field debugging
 - [ ] Device pass on motion layer: confirm 60fps dashboard stagger with long lists; profile `AnimatedCounter` setState cost — #34
 - [ ] Capture web-preview launch recipe as a project skill via `/run-skill-generator` — #38 · so future sessions don't rediscover the expo-web + Playwright dance
-- [ ] Refresh the stale Feature Backlog table in PROMPT_LOG (rows don't reflect built features like proposals/PDFs/door-knocking) — noticed #38
 - [ ] Configure EAS (`eas.json` + EAS Secrets for the `EXPO_PUBLIC_*` keys) for TestFlight distribution — asked 2026-07-22 · required to put builds in contractors' hands for field trials; needs Apple Developer Program ($99/yr). Expo Go is fine for solo testing until then.
 - [ ] Apple Developer Program enrollment ($99/yr) — 2026-07-22 · gates TestFlight, Apple Sign In, background execution, geofenced mileage
 - [ ] Enable + restrict Google APIs (Maps iOS/Android, Places, Geocoding, Solar, Weather) on project `gen-lang-client-0432200648`; link billing; set a Solar budget alert — 2026-07-22 · see `docs/SETUP_ACCOUNTS.md`
@@ -55,6 +54,7 @@ entry does not count as tracked.
 
 - [x] Two-profile image pipeline (2560px/0.82 analyze + 1600px safe fallback, camera quality 0.7→0.95) — closed by #41
 - [x] ESLint linting the `dist/` web-export bundle (2036 bogus errors) — closed by #41
+- [x] Audit the stale Feature Backlog table in PROMPT_LOG — closed by #40
 
 - [x] Rectangle damage overlays from bbox data — closed by #39 (was #32 follow-up)
 - [x] "AI withheld detections" inspector toast — closed by #39 (was #31 follow-up)
