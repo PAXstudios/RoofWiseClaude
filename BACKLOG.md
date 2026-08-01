@@ -14,11 +14,10 @@ entry does not count as tracked.
 ## Now (committed next steps, in order)
 
 - [ ] **Resolve the bundle ID** — `app.config.js` says `com.roofwise.app`, other notes say `com.paxconsulting.roofwise`. Must be settled BEFORE adding iOS restrictions to any Google key, or Maps/Places/Solar break in the shipped app with an unhelpful error — 2026-07-22 · see `docs/SETUP_ACCOUNTS.md`
-- [ ] **Full-resolution analyze path** — capture stores ONE 1600px/0.7 JPEG (`app/quick-inspection.tsx`) and Gemini analyzes that same file, so a ~1in hail strike is only ~30px. Restore the two-profile pipeline: keep 1600px for storage/display, generate a higher-res (2400–3072px) transient copy for analysis only. **Constraint:** the 1600px cap exists to prevent the Expo Go OOM/SIGABRT crashes from #23/#24 — raise it in the analyze path only, never in the multi-photo picker path — 2026-07-22 · detection accuracy is the product
 
 - [ ] Extend motion layer to Settings tab + Job/Lead detail screens — #34 · last un-animated surfaces; mechanical with `components/motion/`
 - [ ] HAAG claim packet PDF polish (`lib/services/haagPdf.ts`) — user priority list 2026-07-22 · the money artifact; layout, annotated photos, threshold citations, signatures
-- [ ] Verify rectangle overlays + withheld-detections toast on a real device with a real analysis — #39 · built and typechecked, but not yet seen with live Gemini output
+- [ ] **Device pass on a real iPhone** — verify (a) rectangle overlays + withheld-detections toast against a live analysis [#39], and (b) the new 2560px analyze profile is actually selected (not the SAFE fallback), with no OOM on a long capture session [#41] · built and typechecked, but not yet seen with live Gemini output
 
 ## Next
 
@@ -53,6 +52,9 @@ entry does not count as tracked.
 - [ ] Apple Sign In · true background execution · geofenced mileage · native voice-to-text · LiDAR — CLAUDE.md "Known parked items" (Drift #10 for LiDAR)
 
 ## Done (most recent first)
+
+- [x] Two-profile image pipeline (2560px/0.82 analyze + 1600px safe fallback, camera quality 0.7→0.95) — closed by #41
+- [x] ESLint linting the `dist/` web-export bundle (2036 bogus errors) — closed by #41
 
 - [x] Rectangle damage overlays from bbox data — closed by #39 (was #32 follow-up)
 - [x] "AI withheld detections" inspector toast — closed by #39 (was #31 follow-up)

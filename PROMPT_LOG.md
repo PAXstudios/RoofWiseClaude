@@ -1935,3 +1935,40 @@ detail screens (Job/Lead) — they inherit the token changes.
 
 **Follow-ups:**
 - All in BACKLOG.md. Highest-leverage next code change is the two-profile analyze pipeline (finding 6) — it directly moves detection accuracy, which is the product.
+
+---
+
+### [2026-07-22] #41 — Two-profile image pipeline: stop starving Gemini of pixels
+
+**Prompt:**
+> okay continue. theres the word lol. go
+
+**Intent / Goal:**
+- Implement the full-resolution analyze path identified in #40 finding 6. Detection accuracy is bounded by how many pixels (and how much un-smeared texture) Gemini receives, and the capture path was throttling both.
+
+**Root cause — two stacked losses, not one:**
+1. `downscale()` in `app/quick-inspection.tsx` capped every photo at **1600px / JPEG 0.7**, and `analyzeSlope` sends that same stored file to Gemini. There was no separate analyze profile. A ~1in hail strike in a ~4ft frame lands around **30px** — marginal for judging exposed mat, granule displacement at the edges, and the compressed-asphalt sheen, which is exactly what the HAAG call turns on.
+2. **Upstream of that**, `takePictureAsync({ quality: 0.7 })` had already baked JPEG artifacts into the frame before our pipeline ever saw it. Compression artifacts smear fine granule texture specifically — the diagnostic signal. Two lossy steps stacked; the first was pure loss with no benefit.
+
+**Decisions:**
+- **New `lib/services/imagePipeline.ts`** with two named profiles: `ANALYZE_PROFILE` (2560px / 0.82) stored + sent to Gemini, `SAFE_PROFILE` (1600px / 0.7) as the fallback. At 2560px the same strike is ~48px.
+- **Ladder, not a raise.** The old 1600px cap was load-bearing — it stopped the Expo Go OOM/SIGABRT crashes in #23/#24. `prepareCapturedPhoto()` tries ANALYZE, falls back to SAFE if the device can't manage it, then falls back to the untouched original rather than ever dropping a photo. The crash guard survives as a fallback instead of a ceiling.
+- **Never upscale.** `Image.getSize()` first; the resize action is omitted entirely when the source is already narrower than the target. Upscaling a small library photo would add interpolation artifacts and bytes without adding information. The JPEG re-encode still runs unconditionally (HEIC normalization depends on it).
+- **Camera quality 0.7 → 0.95**, so `prepareCapturedPhoto` is the single intentional lossy step. Explicitly noted in-code that this is unrelated to the ImagePicker `quality` param removed in #23 — different API, different failure mode (that one was a multi-HEIC re-encode OOM).
+- **Storage strategy: one file, not two.** Raising the stored resolution avoids a data-model change, a migration, and orphan cleanup. Downstream consumers already re-manipulate from the stored file (`photoSync` → 1600px for upload, `haagPdf` → 700px for the report), so they are unaffected beyond starting from a better source.
+- **Cost:** roughly 2x image *input* tokens per photo. Output tokens — the expensive half — unchanged.
+
+**Incidental bug found and fixed:** `npm run lint` was reporting **2036 errors** because ESLint was linting `dist/` (the web-export bundle from #38). `dist/` is gitignored, but ESLint doesn't read `.gitignore`. Added `ignorePatterns` to `.eslintrc.js` and verified with a deliberately-bad `dist/fake.js` that it's now skipped. Anyone who ran `expo export` was getting a broken lint.
+
+**Files touched:**
+- `lib/services/imagePipeline.ts` — new.
+- `app/quick-inspection.tsx` — local `downscale()` removed, both capture and library paths call `prepareCapturedPhoto`, camera quality raised.
+- `.eslintrc.js` — ignorePatterns for build artifacts.
+- `PROMPT_LOG.md` — this entry. `BACKLOG.md` — item moved to Done.
+
+**Verification:**
+- typecheck clean; lint back to baseline 14 warnings / 0 errors; ignorePatterns verified against a planted bad file.
+- **NOT device-verified.** The image pipeline can't run on web (no camera, and `expo-image-manipulator` is native). Needs a real-iPhone pass: confirm no OOM on a long capture session, confirm the analyze profile is the one actually selected (not the SAFE fallback), and compare detection counts against the same roof at the old settings. Tracked in BACKLOG.
+
+**Follow-ups:**
+- Consider logging which profile won into the ActivityStore, so a device silently falling back to SAFE is visible rather than a mystery accuracy regression.

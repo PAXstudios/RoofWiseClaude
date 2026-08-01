@@ -13,7 +13,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
+import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
 import * as Haptics from 'expo-haptics';
 import {
   colors,
@@ -31,23 +31,6 @@ import { useSafetyStore } from '@/lib/stores/safetyStore';
 import { CameraHUD } from '@/components/CameraHUD';
 
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-
-// Downscale to a max 1600px edge + JPEG compress. Keeps memory low (large
-// HEIC library photos otherwise OOM-crash Expo Go) and shrinks the base64
-// payload sent to Gemini. Falls back to the original URI if manipulation
-// fails so a photo is never silently dropped.
-async function downscale(uri: string): Promise<string> {
-  try {
-    const out = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 1600 } }],
-      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-    );
-    return out.uri;
-  } catch {
-    return uri;
-  }
-}
 
 type CapturedPhoto = {
   uri: string;
@@ -113,9 +96,14 @@ export default function QuickInspection() {
     if (!camRef.current) return;
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const photo = await camRef.current.takePictureAsync({ quality: 0.7 });
+      // Capture near-lossless. The old 0.7 baked JPEG artifacts into the
+      // frame before our pipeline ever saw it, permanently smearing the
+      // granule texture damage calls depend on. prepareCapturedPhoto is
+      // the single intentional lossy step. (Unrelated to the ImagePicker
+      // `quality` param removed in #23 — that was a multi-HEIC OOM path.)
+      const photo = await camRef.current.takePictureAsync({ quality: 0.95 });
       if (!photo?.uri) throw new Error('No photo data');
-      const small = await downscale(photo.uri);
+      const small = await prepareCapturedPhoto(photo.uri);
       setPhotos((prev) => [...prev, { uri: small, slope }]);
     } catch (e) {
       Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
@@ -148,7 +136,7 @@ export default function QuickInspection() {
       });
       if (result.canceled || result.assets.length === 0) return;
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const small = await downscale(result.assets[0].uri);
+      const small = await prepareCapturedPhoto(result.assets[0].uri);
       setPhotos((prev) => [...prev, { uri: small, slope }]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
