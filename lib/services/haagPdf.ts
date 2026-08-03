@@ -261,6 +261,12 @@ function renderHtml(ins: Inspection, photoMap: Record<string, ReportPhoto[]> = {
 
   .reasoning { font-style: italic; color: var(--slate); font-size: 11.5px; margin-top: 8px; }
 
+  /* Homeowner section — the only part most owners read end to end, so it
+     gets a longer measure and more air than the adjuster-facing sections. */
+  .homeowner p { font-size: 12.5px; line-height: 1.75; margin: 0 0 11px; }
+  .homeowner p:last-child { margin-bottom: 0; }
+  .homeowner strong { color: var(--royal-deep); }
+
   @media print {
     .slope-card, table, .sig-row, .photo-fig, .callout { page-break-inside: avoid; }
     h2 { page-break-after: avoid; }
@@ -452,7 +458,7 @@ function renderHtml(ins: Inspection, photoMap: Record<string, ReportPhoto[]> = {
   <p>${esc(narrative(ins, decision, score, worthiness))}</p>
 
   <h2><span class="n">11</span>Homeowner Summary</h2>
-  <p>${esc(homeownerSummary(decision, worthiness))}</p>
+  <div class="homeowner">${homeownerSummary(ins, decision, worthiness, score)}</div>
 
   <h2><span class="n">12</span>Certification &amp; Signatures</h2>
   <p class="muted">The inspector of record certifies that this inspection was performed
@@ -541,20 +547,139 @@ function narrative(
   );
 }
 
+/**
+ * Plain-language summary for the homeowner.
+ *
+ * Written at roughly an 8th-grade reading level and returned as HTML
+ * paragraphs, because this is the only section most homeowners actually
+ * read. It answers, in order: what did you find, what does it mean, what
+ * should I do, and what will it cost me.
+ *
+ * Two claims are hedged on purpose, and the hedges are not padding:
+ *   • The filing window. Deadlines are set by state law AND by the policy's
+ *     own notice provision, and they differ. Printing a flat "you have two
+ *     years" in a document a homeowner may act on a year from now risks
+ *     talking someone past their actual deadline.
+ *   • "You only pay your deductible." True on a replacement-cost policy;
+ *     NOT true on actual-cash-value, where recoverable depreciation is held
+ *     back, and wind/hail deductibles are often a percentage of the dwelling
+ *     value rather than a flat amount.
+ * Both are stated as the normal case with a one-line "confirm on your
+ * policy", which keeps the point intact without promising money.
+ */
 function homeownerSummary(
+  ins: Inspection,
   decision: ReturnType<typeof evaluate>,
   worthiness: ReturnType<typeof claimWorthiness>,
+  score: number,
 ): string {
+  const qualifying = decision.perSlope.filter((r) => r.qualifies).length;
+  const slopeCount = ins.slopes.length;
+  const threshold = thresholdFor(ins.material);
+  const material = ROOF_MATERIAL_LABELS[ins.material].toLowerCase();
+  // "a architectural asphalt roof" reads as a typo to a homeowner.
+  const materialArticle = /^[aeiou]/.test(material) ? 'an' : 'a';
+
+  const totals = ins.slopes.reduce(
+    (acc, s) => ({
+      hail: acc.hail + s.hailCount,
+      wind: acc.wind + s.windLiftCount,
+      missing: acc.missing + s.missingCount,
+      bruising: acc.bruising + s.bruisingCount,
+    }),
+    { hail: 0, wind: 0, missing: 0, bruising: 0 },
+  );
+
+  const damageBits: string[] = [];
+  if (totals.hail > 0) damageBits.push(`${totals.hail} hail impact${totals.hail === 1 ? '' : 's'}`);
+  if (totals.bruising > 0) damageBits.push(`${totals.bruising} bruised area${totals.bruising === 1 ? '' : 's'}`);
+  if (totals.wind > 0) damageBits.push(`${totals.wind} wind-lifted shingle${totals.wind === 1 ? '' : 's'}`);
+  if (totals.missing > 0) damageBits.push(`${totals.missing} missing shingle${totals.missing === 1 ? '' : 's'}`);
+  const damageList =
+    damageBits.length === 0
+      ? 'no storm-related damage'
+      : damageBits.length === 1
+      ? damageBits[0]
+      : `${damageBits.slice(0, -1).join(', ')} and ${damageBits[damageBits.length - 1]}`;
+
+  const stormLine = ins.event
+    ? `Your roof was in the path of a ${esc(ins.event.kind)} storm on ${esc(formatDateShort(ins.event.date))}${
+        ins.event.hailSizeInches ? `, which produced hail up to ${ins.event.hailSizeInches} inches across` : ''
+      }. That storm is confirmed in national weather records, which matters: it ties the damage on your roof to a specific date and event.`
+    : 'We have not yet attached a confirmed storm date to this inspection. Doing so strengthens the claim considerably, and we can add it.';
+
+  // ── What we found ──────────────────────────────────────────────────────
+  const found = `<p><strong>What we found.</strong> We inspected ${slopeCount} slope${
+    slopeCount === 1 ? '' : 's'
+  } of your ${esc(material)} roof and documented ${esc(damageList)}. ${stormLine}</p>`;
+
+  // ── What the standard says ─────────────────────────────────────────────
+  const standard = `<p><strong>How that gets judged.</strong> Insurance companies do not decide this by opinion. They use an
+    engineering standard from Haag Engineering, and for ${materialArticle} ${esc(material)} roof the line is
+    <strong>${esc(threshold.rule)}</strong> When a slope crosses that line, the damage is called
+    <em>functional</em> — meaning the roof's ability to protect your home has actually been reduced,
+    not just its appearance. ${
+      qualifying > 0
+        ? `<strong>${qualifying} of your ${slopeCount} slope${slopeCount === 1 ? '' : 's'} crossed that line.</strong>`
+        : 'None of your slopes crossed that line in this inspection.'
+    }</p>`;
+
+  // ── Recommendation + insurance mechanics ───────────────────────────────
+  const insuranceExplainer = `<p><strong>How the insurance side works.</strong> Storm damage is what a policy calls an
+    <em>act of God</em> — a sudden event outside anyone's control. It is not wear and tear, and it is not
+    something you did or failed to do. That distinction matters, because a covered storm loss is not held
+    against you the way an at-fault claim would be. In the normal case, your carrier pays to put the roof
+    back the way it was and <strong>your share is your deductible</strong> — not the cost of the roof.
+    Two details worth confirming on your own policy: whether your wind and hail deductible is a flat dollar
+    amount or a percentage of your home's insured value, and whether your policy pays replacement cost or
+    actual cash value, since the second holds back some money until the work is finished.</p>`;
+
+  const timing = `<p><strong>Don't sit on it.</strong> Carriers expect prompt notice after a storm, and there is a
+    deadline for filing — commonly around two years from the date of the storm in many states, though the
+    exact limit is set by your policy and your state's law, so confirm it rather than assume it. The longer
+    you wait, the easier it is for a carrier to argue the damage came from age or from a later storm instead
+    of the one on record. Filing while the storm date is documented, as it is in this report, is what keeps
+    the claim clean.</p>`;
+
+  let recommendation: string;
   if (worthiness === 'not_claimable') {
-    return 'Our inspection found minimal damage that is unlikely to meet your carrier\'s claim threshold. We recommend monitoring.';
+    recommendation = `<p><strong>What we recommend.</strong> Based on what we can see today, the damage on your roof
+      is below the threshold a carrier uses to approve a replacement, and we are not going to tell you
+      otherwise. Filing a claim that gets denied can still show up in your claims history, so we would rather
+      you keep the roof under watch. Hold on to this report. If another storm comes through, we can
+      re-inspect and compare against this baseline — that comparison is often what proves new damage.</p>`;
+    return found + standard + recommendation;
   }
+
   if (worthiness === 'borderline') {
-    return 'There is some storm-related damage on the roof. A full claim may not succeed without further documentation; we can discuss next steps.';
+    recommendation = `<p><strong>What we recommend.</strong> Your roof sits close to the line. There is real
+      storm damage here — we documented it — but it is not yet clearly past the threshold a carrier uses,
+      and some of what we found is flagged for on-site verification. Our recommendation is a short
+      follow-up inspection to firm up the borderline findings before you file, so that the claim goes in
+      with the strongest possible evidence rather than an argument. We are happy to walk you through what
+      we saw and what the options are.</p>`;
+    return found + standard + recommendation + timing;
   }
-  if (worthiness === 'claimable') {
-    return 'We found damage consistent with the HAAG criteria your carrier uses. We recommend filing a claim and providing this report to the adjuster.';
-  }
-  return 'We found significant storm damage requiring urgent attention. File a claim immediately and engage a roofer for protective work as needed.';
+
+  const urgent = worthiness === 'urgent';
+  recommendation = `<p><strong>What we recommend.</strong> ${
+    urgent
+      ? `Your roof has significant storm damage (damage score ${score} of 100) and we recommend filing a claim right away.
+         Where the roof is open to weather, temporary protection should go on before the next rain to prevent
+         interior damage — which a carrier expects you to mitigate.`
+      : `We recommend filing a claim. The damage meets the standard your carrier uses, and this report is
+         built to be handed directly to the adjuster.`
+  } ${
+    decision.roofRecommendation === 'full_replacement'
+      ? 'Because of how roofing material matching works, the qualifying damage supports replacing the full roof rather than patching individual slopes — a repaired section on an aged roof will not match, and carriers recognize that.'
+      : decision.roofRecommendation === 'partial_replacement'
+      ? 'The qualifying damage supports replacing the affected slopes.'
+      : 'The damage supports an itemized repair scope.'
+  } Give this report to your carrier when you file. It contains the photographs, the storm verification,
+    and the specific standard applied to each slope — which is what an adjuster needs to approve the claim
+    without a second inspection.</p>`;
+
+  return found + standard + recommendation + insuranceExplainer + timing;
 }
 
 function esc(s: string | number): string {

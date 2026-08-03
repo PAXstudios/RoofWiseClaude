@@ -2098,3 +2098,31 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Verification:** typecheck clean, lint 0 problems. Re-rendered the sample report with a 6-photo slope (5 analyzed + 1 captured after the last analysis run): all 6 render in a wrapping 3-column grid, captions read "Photo 1–5 · AI-analyzed" and "Photo 6 · reference", slope header reads "6 photos · 5 AI-analyzed". A second slope with photos in `photoPaths` but none supplied to the renderer correctly reported "2 photos · 2 unavailable", exercising the gap path. Full 35-route audit re-run.
 
 **Follow-up caught during this work:** a bad `re.sub` in the *demo* script silently failed (SVG data URIs contain `;`, which the `[^;]` pattern couldn't cross) and produced a stale render. Caught because the rendered caption disagreed with expected values — worth noting that verifying the *output* rather than trusting the edit is what surfaced it. Demo script only; no production impact.
+
+---
+
+### [2026-08-03] #48 — Plain-language homeowner summary; claimability protocol still missing
+
+**Prompt:**
+> the homewoner summary need to be more descriptive and in plain language. the extent of the damage, the reccomendation. explaining the fact that insurance companies cover up to two years since last hail or severe wind storm. that its an act of God event. that theyd only need to pay thier deductable.
+> ive also added the haag decision protocal to calculate roof damage and replacement needs.
+> i also want to see the simlated version of the app.
+
+**Homeowner summary rewrite (`lib/services/haagPdf.ts`):**
+- Was four one-sentence canned strings. Now a five-paragraph, data-driven narrative at ~8th-grade reading level, returned as HTML (call site no longer `esc()`s it; new `.homeowner` CSS gives it a longer measure and more leading than the adjuster-facing sections, since it's the only part most owners read end to end).
+- Structure: **What we found** (real per-slope totals — "28 hail impacts, 11 bruised areas, 5 wind-lifted shingles and 1 missing shingle" — plus the NOAA storm tie-in) → **How that gets judged** (explains functional vs cosmetic damage and names the material threshold) → **What we recommend** → **How the insurance side works** (act of God, deductible) → **Don't sit on it** (filing window).
+- Branches properly by verdict. The `not_claimable` path deliberately does **not** get the insurance-mechanics or urgency paragraphs — telling someone about deductibles and deadlines when we just told them they don't have a claim would be misleading. It instead advises keeping the report as a baseline for comparison after a future storm.
+
+**Two claims hedged, deliberately — flagged to the user:**
+1. **The two-year window.** Filing deadlines are set by BOTH state law and the policy's own notice provision, and they vary. A flat "you have two years" printed in a document a homeowner may act on a year later risks talking someone past their real deadline. Written as "commonly around two years in many states … confirm it rather than assume it."
+2. **"You only pay your deductible."** True on replacement-cost policies; NOT true on actual-cash-value, where recoverable depreciation is withheld, and wind/hail deductibles are frequently a percentage of dwelling value rather than a flat sum. Written as the normal case plus a one-line prompt to confirm both details on their policy. The persuasive point survives; the false promise doesn't.
+
+**Also fixed:** "for a architectural asphalt roof" → article now chosen by leading vowel.
+
+**Claimability protocol — NOT RECEIVED.** The user believes they added it. Verified it is not present: `git status` clean, no new commits on origin, nothing new in `docs/`, only upload in the session folder is the July 9 onboarding screenshot. Told the user plainly and gave transfer options. This remains the open blocker on replacing the invented `damageScore()` weights (see #44 finding) with a cited protocol.
+
+**Simulator:** rebuilt the single-file interactive build from the current source; it now boots directly into the new onboarding (the packer clears the persisted onboarding flag). Verified it opens on scene 1 with no app errors — the two NetworkErrors are Supabase calls with no keys baked into a static export, which is expected and harmless for a UI-only simulator.
+
+**Files touched:** `lib/services/haagPdf.ts`, `PROMPT_LOG.md`.
+
+**Verification:** typecheck clean, lint 0 problems. Report re-rendered and screenshotted; no `undefined`/`NaN`; five homeowner paragraphs render with correct branching.
