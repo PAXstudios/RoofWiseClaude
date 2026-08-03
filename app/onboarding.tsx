@@ -1,203 +1,349 @@
-import { useRef, useState } from 'react';
+// Onboarding — the product loop, told in four animated beats.
+//
+// Design intent: black ground, brand-lit aurora, glass foreground. Every
+// scene animates one real step of the RoofWise loop so a contractor
+// understands what they bought before they ever sign in. Skip is always
+// available and always lands on auth — onboarding never traps anyone.
+
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
+  FlatList,
   Pressable,
   StyleSheet,
-  ScrollView,
-  Dimensions,
+  Text,
+  View,
+  useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { Aurora } from '@/components/glass/Aurora';
+import {
+  PacketScene,
+  ScanScene,
+  StormScene,
+  VerdictScene,
+  type SceneProps,
+} from '@/components/onboarding/scenes';
 import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 import {
+  brand,
   colors,
   fontSize,
   fontWeight,
+  glass,
+  motion,
   radii,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
 
-const { width: SCREEN_W } = Dimensions.get('window');
-
-type Slide = {
-  icon: keyof typeof Ionicons.glyphMap;
+type Scene = {
+  key: string;
+  eyebrow: string;
   title: string;
   body: string;
+  Illustration: (p: SceneProps) => React.JSX.Element;
 };
 
-const SLIDES: Slide[] = [
+const SCENES: Scene[] = [
   {
-    icon: 'scan-outline',
-    title: 'Forensic inspection in 10 minutes',
-    body:
-      'Open the camera, capture each slope, and let the AI flag every hail strike, bruise, and crack at HAAG-protocol confidence.',
+    key: 'storm',
+    eyebrow: 'Storm intelligence',
+    title: 'Know the\nminute it hits',
+    body: 'RoofWise watches NOAA for hail and wind across your service area, then shows you exactly which properties sit under the swath.',
+    Illustration: StormScene,
   },
   {
-    icon: 'thunderstorm-outline',
-    title: 'Storm Watch on autopilot',
-    body:
-      'Add the cities you cover. We scan NOAA every 30 minutes and push you the moment ≥0.75" hail or ≥58 mph wind crosses your area.',
+    key: 'scan',
+    eyebrow: 'AI inspection',
+    title: 'Walk it once.\nMiss nothing.',
+    body: 'Point the camera. AI reads every shingle across all 13 damage categories and marks each finding with a severity and a confidence score.',
+    Illustration: ScanScene,
   },
   {
-    icon: 'document-text-outline',
-    title: 'Claim-defensible packets',
-    body:
-      'Slope-by-slope verdicts, test-square math, NOAA-verified weather event, and signatures — all in a single HAAG PDF the adjuster accepts.',
+    key: 'verdict',
+    eyebrow: 'HAAG protocol',
+    title: 'Thresholds,\nnot opinions',
+    body: 'Findings are measured against the material-specific Haag criteria your carrier already uses — so the verdict is the standard, not your word against theirs.',
+    Illustration: VerdictScene,
   },
   {
-    icon: 'sparkles-outline',
-    title: 'The AI gets better the more you use it',
-    body:
-      'Every correction you make trains a per-user calibration that lifts accuracy on your jobs. Tinder-swipe review keeps it fast.',
+    key: 'packet',
+    eyebrow: 'Claim packet',
+    title: 'Evidence they\ncan’t wave away',
+    body: 'Leave the driveway with a certified report: annotated photos, storm verification, thresholds met, and signatures. Ready for the adjuster.',
+    Illustration: PacketScene,
   },
 ];
 
 export default function Onboarding() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const complete = useOnboardingStore((s) => s.complete);
-  const scrollRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlatList<Scene>>(null);
   const [index, setIndex] = useState(0);
 
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W));
-  };
+  const isLast = index === SCENES.length - 1;
 
-  const onNext = () => {
-    if (index < SLIDES.length - 1) {
-      scrollRef.current?.scrollTo({ x: (index + 1) * SCREEN_W, animated: true });
-      setIndex(index + 1);
-    } else {
-      complete();
-      router.replace('/(tabs)');
+  // Onboarding is never a gate. Finishing and skipping both land on auth;
+  // the only difference is whether the user saw the pitch.
+  const leave = useCallback(() => {
+    complete();
+    router.replace('/welcome');
+  }, [complete, router]);
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (next !== index && next >= 0 && next < SCENES.length) {
+      setIndex(next);
+      Haptics.selectionAsync().catch(() => {});
     }
   };
 
+  const advance = () => {
+    if (isLast) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      leave();
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    listRef.current?.scrollToOffset({ offset: (index + 1) * width, animated: true });
+  };
+
   return (
-    <LinearGradient
-      colors={[colors.navy, '#1a2a52']}
-      style={styles.gradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
+    <View style={styles.root}>
+      <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
+      <Aurora />
+
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.topRow}>
+        <View style={styles.topBar}>
+          <View style={styles.brandRow}>
+            <View style={styles.brandMark}>
+              <Ionicons name="shield-checkmark" size={15} color={colors.textInverse} />
+            </View>
+            <Text style={styles.brandName}>RoofWise</Text>
+          </View>
+
           <Pressable
-            onPress={() => {
-              complete();
-              router.replace('/(tabs)');
-            }}
-            hitSlop={10}
+            onPress={leave}
+            hitSlop={12}
+            style={styles.skip}
+            accessibilityRole="button"
+            accessibilityLabel="Skip onboarding and go to sign in"
           >
-            <Text style={styles.skip}>Skip</Text>
+            <Text style={styles.skipText}>Skip</Text>
           </Pressable>
         </View>
 
-        <ScrollView
-          ref={scrollRef}
+        <FlatList
+          ref={listRef}
+          data={SCENES}
+          keyExtractor={(s) => s.key}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={onScroll}
           scrollEventThrottle={16}
-          style={{ flex: 1 }}
-        >
-          {SLIDES.map((s) => (
-            <View key={s.title} style={styles.slide}>
-              <View style={styles.iconWrap}>
-                <Ionicons name={s.icon} size={48} color={colors.orange} />
-              </View>
-              <Text style={styles.title}>{s.title}</Text>
-              <Text style={styles.body}>{s.body}</Text>
-            </View>
-          ))}
-        </ScrollView>
+          renderItem={({ item, index: i }) => (
+            <SceneSlide scene={item} active={i === index} width={width} />
+          )}
+        />
 
-        <View style={styles.dotsRow}>
-          {SLIDES.map((_, i) => (
-            <View
-              key={i}
-              style={[styles.dot, i === index && styles.dotActive]}
-            />
-          ))}
+        <View style={styles.footer}>
+          <View style={styles.dots}>
+            {SCENES.map((s, i) => (
+              <Dot key={s.key} active={i === index} />
+            ))}
+          </View>
+
+          <Animated.View entering={FadeInDown.duration(motion.enterMs).delay(120)}>
+            <Pressable
+              onPress={advance}
+              style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={isLast ? 'Get started' : 'Next'}
+            >
+              <Text style={styles.ctaText}>{isLast ? 'Get started' : 'Next'}</Text>
+              <Ionicons
+                name={isLast ? 'arrow-forward' : 'chevron-forward'}
+                size={20}
+                color={colors.textInverse}
+              />
+            </Pressable>
+          </Animated.View>
+
+          <Pressable onPress={leave} hitSlop={10} style={styles.secondary}>
+            <Text style={styles.secondaryText}>
+              {isLast ? 'I’ll explore first' : 'I already have an account'}
+            </Text>
+          </Pressable>
         </View>
-
-        <Pressable style={styles.cta} onPress={onNext}>
-          <Text style={styles.ctaText}>
-            {index < SLIDES.length - 1 ? 'Next' : 'Get started'}
-          </Text>
-          <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
-        </Pressable>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  safe: { flex: 1 },
-  topRow: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    alignItems: 'flex-end',
-  },
-  skip: { color: 'rgba(240,240,228,0.78)', fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+function SceneSlide({ scene, active, width }: { scene: Scene; active: boolean; width: number }) {
+  const { Illustration } = scene;
+  return (
+    <View style={[styles.slide, { width }]}>
+      <View style={styles.stageWrap}>
+        <Illustration active={active} />
+      </View>
 
-  slide: {
-    width: SCREEN_W,
-    paddingHorizontal: spacing.xxl,
+      {active && (
+        <Animated.View
+          key={`${scene.key}-copy`}
+          entering={FadeIn.duration(motion.sceneEnterMs)}
+          style={styles.copy}
+        >
+          <Animated.Text
+            entering={FadeInDown.duration(motion.sceneEnterMs)}
+            style={styles.eyebrow}
+          >
+            {scene.eyebrow}
+          </Animated.Text>
+          <Animated.Text
+            entering={FadeInDown.duration(motion.sceneEnterMs).delay(motion.sceneStaggerMs)}
+            style={styles.title}
+          >
+            {scene.title}
+          </Animated.Text>
+          <Animated.Text
+            entering={FadeInDown.duration(motion.sceneEnterMs).delay(motion.sceneStaggerMs * 2)}
+            style={styles.body}
+          >
+            {scene.body}
+          </Animated.Text>
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
+function Dot({ active }: { active: boolean }) {
+  const w = useSharedValue(active ? 26 : 7);
+  const o = useSharedValue(active ? 1 : 0.35);
+
+  useEffect(() => {
+    w.value = withSpring(active ? 26 : 7, motion.quick);
+    o.value = withTiming(active ? 1 : 0.35, { duration: 220 });
+  }, [active, w, o]);
+
+  const style = useAnimatedStyle(() => ({ width: w.value, opacity: o.value }));
+  return <Animated.View style={[styles.dot, style]} />;
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: brand.black },
+  safe: { flex: 1 },
+
+  topBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.lg,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
   },
-  iconWrap: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(252,96,24,0.18)',
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  brandMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: brand.royal,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  brandName: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    letterSpacing: -0.3,
+  },
+  skip: {
+    minHeight: touchTarget.small,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+    borderRadius: radii.pill,
+    backgroundColor: glass.fillLow,
+    borderWidth: 1,
+    borderColor: glass.border,
+  },
+  skipText: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+  },
+
+  // Illustration takes the free space at the top and centers within it; the
+  // copy sits directly above the footer. Centering the whole group instead
+  // left a large dead gap under the text on tall screens.
+  slide: { flex: 1, paddingHorizontal: spacing.xl },
+  stageWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  copy: {
+    alignItems: 'flex-start',
+    alignSelf: 'stretch',
+    gap: spacing.sm,
+    paddingBottom: spacing.xl,
+  },
+  eyebrow: {
+    color: brand.burnt,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
   },
   title: {
-    fontSize: fontSize.titleXl,
+    color: colors.textInverse,
+    fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
-    color: colors.cream,
-    textAlign: 'center',
+    letterSpacing: -1,
+    lineHeight: 38,
   },
   body: {
+    color: 'rgba(255,255,255,0.66)',
     fontSize: fontSize.bodyLg,
-    color: 'rgba(240,240,228,0.88)',
-    textAlign: 'center',
-    lineHeight: 26,
+    lineHeight: 25,
   },
 
-  dotsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.lg,
-  },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(240,240,228,0.32)' },
-  dotActive: { width: 24, backgroundColor: colors.orange },
+  footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.lg },
+  dots: { flexDirection: 'row', gap: spacing.sm, alignSelf: 'center' },
+  dot: { height: 7, borderRadius: 4, backgroundColor: colors.textInverse },
 
   cta: {
-    flexDirection: 'row',
-    gap: spacing.sm,
     height: touchTarget.sticky,
     borderRadius: radii.pill,
-    backgroundColor: colors.orange,
+    backgroundColor: brand.burnt,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: spacing.xxl,
-    marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
-  ctaText: { color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
+  ctaPressed: { backgroundColor: brand.burntDeep, transform: [{ scale: 0.985 }] },
+  ctaText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    letterSpacing: -0.2,
+  },
+  secondary: { alignSelf: 'center', minHeight: touchTarget.small, justifyContent: 'center' },
+  secondaryText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.medium,
+  },
 });

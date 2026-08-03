@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { useInspectorProfileStore } from '../stores/inspectorProfileStore';
 
 const NOT_CONFIGURED_MESSAGE =
   'Backend not configured on this machine. In the project folder: copy ' +
@@ -24,7 +25,9 @@ type AuthState = {
 
   initialize: () => Promise<() => void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  /** `fullName` is required at the UI layer; it becomes Supabase user
+   *  metadata and seeds the inspector profile that HAAG reports cite. */
+  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<void>;
   signInWithAppleIdToken: (idToken: string, nonce?: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -61,12 +64,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (error) throw error;
   },
 
-  signUpWithEmail: async (email, password) => {
+  signUpWithEmail: async (email, password, fullName) => {
     assertConfigured(set);
     set({ loading: true, error: null });
-    const { error } = await supabase.auth.signUp({ email, password });
+    const name = fullName.trim();
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
     set({ loading: false, error: error?.message ?? null });
     if (error) throw error;
+
+    // Seed the inspector profile so the name appears on HAAG reports and
+    // proposals without the user having to re-enter it in Settings.
+    if (name) {
+      const store = useInspectorProfileStore.getState();
+      if (!store.profile.fullName) store.update({ fullName: name });
+    }
   },
 
   signInWithAppleIdToken: async (idToken, nonce) => {

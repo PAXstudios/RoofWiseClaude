@@ -1,47 +1,89 @@
 import { Platform, ViewStyle } from 'react-native';
 
-// RoofWise brand palette — single source of truth.
-// Per spec: navy + orange + cream + slate. No raw hex anywhere else in the app.
+// RoofWise brand palette — single source of truth. No raw hex anywhere else.
+//
+// BRAND v2 (2026): royal blue + burnt orange. Onboarding runs on true black
+// with glass surfaces (iOS-style translucency); the app proper runs on white.
+// The legacy `navy` / `orange` / `cream` names are kept and REPOINTED at the
+// new palette so every existing screen rebrands without touching 40 files.
+// New work should prefer the explicit names (`royal`, `burnt`, `ink`, …).
+
+export const brand = {
+  // Royal blue — primary identity. Saturated enough to read on black,
+  // dark enough to pass contrast on white.
+  royal: '#2B4EF5',
+  royalDeep: '#1B31A8',
+  royalInk: '#0E1330',        // near-black with a blue bias, for text/dark surfaces
+  royalSoft: '#E4E9FE',       // tint for light surfaces
+
+  // Burnt orange — accent + primary CTA. Deliberately burnt, not neon,
+  // so it reads as a considered pair to the blue rather than a warning.
+  burnt: '#D9541E',
+  burntDeep: '#A63C12',
+  burntSoft: '#FBE7DD',
+
+  // Dark scale (onboarding). True black for OLED depth, iOS-style.
+  black: '#000000',
+  black2: '#0A0C14',          // raised dark surface
+  black3: '#141824',          // higher elevation
+};
+
+// Glass surfaces. Pair these fills with expo-blur; the fill alone is the
+// fallback when blur is unavailable (Android, reduced transparency).
+export const glass = {
+  fillLow: 'rgba(255,255,255,0.06)',
+  fill: 'rgba(255,255,255,0.10)',
+  fillHigh: 'rgba(255,255,255,0.16)',
+  border: 'rgba(255,255,255,0.14)',
+  borderStrong: 'rgba(255,255,255,0.24)',
+  // On white surfaces, glass tints toward the brand rather than pure grey.
+  lightFill: 'rgba(43,78,245,0.06)',
+  lightBorder: 'rgba(43,78,245,0.14)',
+};
+
 export const colors = {
-  navy: '#0C183C',
-  orange: '#FC6018',
-  cream: '#F0F0E4',
-  slate: '#546078',
+  // Legacy names, repointed to brand v2.
+  navy: brand.royalInk,
+  orange: brand.burnt,
+  cream: '#FFFFFF',
+  slate: '#5A6180',
 
-  // Convenience aliases (so existing call sites keep working while we migrate)
-  bg: '#F0F0E4',           // cream
+  bg: '#FFFFFF',
   surface: '#FFFFFF',
-  surfaceMuted: '#F6F5EC',
-  border: '#DDDED1',
-  borderStrong: '#C7C8B8',
+  // Neutrals carry a slight blue bias so they read as chosen, not defaulted.
+  surfaceMuted: '#F5F6FA',
+  border: '#E6E8F0',
+  borderStrong: '#CFD3E2',
 
-  text: '#0C183C',         // navy
-  textMuted: '#546078',    // slate
-  textSubtle: '#8A8F9A',
+  text: '#0E1330',
+  textMuted: '#5A6180',
+  textSubtle: '#8A90A8',
   textInverse: '#FFFFFF',
 
-  accent: '#FC6018',       // orange
-  accentSoft: '#FFE0CC',
-  accentPressed: '#E04E0F',
+  accent: brand.burnt,
+  accentSoft: brand.burntSoft,
+  accentPressed: brand.burntDeep,
 
-  brand: '#0C183C',        // navy
-  brandSoft: '#D6DAE8',
+  brand: brand.royal,
+  brandSoft: brand.royalSoft,
 
-  success: '#2BB673',
-  successSoft: '#DBF5E7',
-  warn: '#F4B400',
-  warnSoft: '#FFF1C2',
-  danger: '#E5484D',
-  dangerSoft: '#FCE2E3',
-  info: '#1E66F5',
-  infoSoft: '#DBEAFE',
+  // Semantic colors stay separate from the brand hues so "good/warning/bad"
+  // never collides with "this is a RoofWise accent".
+  success: '#1E9E62',
+  successSoft: '#DCF3E8',
+  warn: '#C77A0A',
+  warnSoft: '#FBEED6',
+  danger: '#D93A3F',
+  dangerSoft: '#FBE3E4',
+  info: brand.royal,
+  infoSoft: brand.royalSoft,
 
-  overlay: 'rgba(12, 24, 60, 0.45)',
-  scrim: 'rgba(12, 24, 60, 0.72)',
+  overlay: 'rgba(14, 19, 48, 0.45)',
+  scrim: 'rgba(14, 19, 48, 0.72)',
 
-  stormHail: '#1E66F5',
-  stormWind: '#FC6018',
-  stormSevere: '#E5484D',
+  stormHail: brand.royal,
+  stormWind: brand.burnt,
+  stormSevere: '#D93A3F',
 };
 
 export const radii = {
@@ -144,9 +186,18 @@ export const motion = {
   countUpMs: 800,   // KPI counter roll-up
   pulseMs: 1600,    // live-indicator halo loop
   shimmerMs: 1100,  // skeleton shimmer loop
+
+  // Onboarding. Slower and more deliberate than in-app motion — these
+  // animations are doing explanatory work, so they need time to be read.
+  sceneEnterMs: 620,
+  sceneExitMs: 280,
+  sceneStaggerMs: 90,
+  ambientMs: 9000,  // slow background drift loop
 };
 
 export const theme = {
+  brand,
+  glass,
   colors,
   radii,
   spacing,

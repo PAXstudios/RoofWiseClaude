@@ -1,73 +1,120 @@
-import { useState } from 'react';
+// Auth — the terminus of onboarding.
+//
+// Same black-and-glass world as the onboarding scenes so the handoff is
+// seamless; the app itself then opens on white. Three ways in (Apple,
+// Google, email) and a name is required on sign-up: it goes on every HAAG
+// report and proposal this inspector produces, so we ask once, here.
+
+import { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  StyleSheet,
   ActivityIndicator,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Redirect } from 'expo-router';
-import { useAuthStore } from '@/lib/auth/authStore';
+import { Stack, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { Aurora } from '@/components/glass/Aurora';
 import { AppleSignInButton } from '@/components/AppleSignInButton';
-import { colors, radii, spacing, fontSize, fontWeight, shadows } from '@/theme/tokens';
+import { useAuthStore } from '@/lib/auth/authStore';
+import { useToastStore } from '@/lib/stores/toastStore';
+import { env } from '@/lib/env';
+import {
+  brand,
+  colors,
+  fontSize,
+  fontWeight,
+  glass,
+  motion,
+  radii,
+  spacing,
+  touchTarget,
+} from '@/theme/tokens';
 
-type Mode = 'sign-in' | 'sign-up' | 'reset';
+type Mode = 'signin' | 'signup';
 
-export default function WelcomeScreen() {
-  const [mode, setMode] = useState<Mode>('sign-in');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [resetSent, setResetSent] = useState(false);
-
-  const loading = useAuthStore((s) => s.loading);
-  const error = useAuthStore((s) => s.error);
-  const session = useAuthStore((s) => s.session);
+export default function Welcome() {
+  const router = useRouter();
   const signIn = useAuthStore((s) => s.signInWithEmail);
   const signUp = useAuthStore((s) => s.signUpWithEmail);
   const sendReset = useAuthStore((s) => s.sendPasswordReset);
-  const clearError = useAuthStore((s) => s.clearError);
+  const loading = useAuthStore((s) => s.loading);
+  const toast = useToastStore((s) => s.show);
 
-  if (session) {
-    return <Redirect href="/(tabs)" />;
-  }
+  const [mode, setMode] = useState<Mode>('signup');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-  const switchMode = (next: Mode) => {
-    clearError();
-    setResetSent(false);
-    setMode(next);
-  };
+  const isSignUp = mode === 'signup';
 
-  const onSubmit = async () => {
+  const passwordChecks = useMemo(
+    () => [
+      { label: 'At least 8 characters', ok: password.length >= 8 },
+      { label: 'A number', ok: /\d/.test(password) },
+      { label: 'Upper and lower case', ok: /[a-z]/.test(password) && /[A-Z]/.test(password) },
+    ],
+    [password],
+  );
+
+  const canSubmit =
+    email.trim().length > 3 &&
+    password.length >= 8 &&
+    (!isSignUp || (name.trim().length > 1 && passwordChecks.every((c) => c.ok)));
+
+  const submit = async () => {
+    if (!canSubmit || loading) return;
     try {
-      if (mode === 'sign-in') await signIn(email.trim(), password);
-      else if (mode === 'sign-up') await signUp(email.trim(), password);
-      else {
-        await sendReset(email.trim());
-        setResetSent(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      if (isSignUp) {
+        await signUp(email.trim(), password, name);
+        toast({ tone: 'success', title: `Welcome, ${name.trim().split(/\s+/)[0]}` });
+      } else {
+        await signIn(email.trim(), password);
       }
-    } catch {
-      // error already in the store
+      router.replace('/(tabs)');
+    } catch (e) {
+      toast({
+        tone: 'danger',
+        title: isSignUp ? 'Could not create account' : 'Could not sign in',
+        body: e instanceof Error ? e.message : undefined,
+      });
     }
   };
 
-  const canSubmit =
-    email.trim().length > 0 && (mode === 'reset' || password.length >= 6) && !loading;
+  const onForgot = async () => {
+    if (email.trim().length < 4) {
+      toast({ tone: 'warn', title: 'Enter your email first' });
+      return;
+    }
+    try {
+      await sendReset(email.trim());
+      toast({ tone: 'success', title: 'Reset link sent', body: `Check ${email.trim()}` });
+    } catch (e) {
+      toast({
+        tone: 'danger',
+        title: 'Could not send reset link',
+        body: e instanceof Error ? e.message : undefined,
+      });
+    }
+  };
 
   return (
-    <LinearGradient
-      colors={[colors.navy, '#16275f']}
-      style={styles.gradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
+    <View style={styles.root}>
+      <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
+      <Aurora />
+
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           style={styles.flex}
@@ -78,239 +125,338 @@ export default function WelcomeScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.brand}>
-              <View style={styles.logoMark}>
-                <Text style={styles.logoText}>RW</Text>
+            <Animated.View entering={FadeIn.duration(motion.enterMs)} style={styles.header}>
+              <View style={styles.brandMark}>
+                <Ionicons name="shield-checkmark" size={20} color={colors.textInverse} />
               </View>
-              <Text style={styles.title}>RoofWise</Text>
+              <Text style={styles.title}>
+                {isSignUp ? 'Create your\naccount' : 'Welcome\nback'}
+              </Text>
               <Text style={styles.subtitle}>
-                Forensic roof inspections & HAAG claim packets, in your pocket.
+                {isSignUp
+                  ? 'Your name goes on every report you send to a carrier.'
+                  : 'Sign in to pick up where you left off.'}
               </Text>
-            </View>
+            </Animated.View>
 
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>
-                {mode === 'sign-in' && 'Welcome back'}
-                {mode === 'sign-up' && 'Create your account'}
-                {mode === 'reset' && 'Reset password'}
-              </Text>
-
-              {mode !== 'reset' && (
-                <>
-                  <AppleSignInButton />
-                  <View style={styles.divider}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>or</Text>
-                    <View style={styles.dividerLine} />
-                  </View>
-                </>
-              )}
-
-              {error ? (
-                <View style={styles.banner}>
-                  <Text style={styles.bannerText}>{error}</Text>
-                </View>
-              ) : null}
-
-              {resetSent ? (
-                <View style={styles.bannerSuccess}>
-                  <Text style={styles.bannerSuccessText}>
-                    Check your email for a reset link.
+            <Animated.View
+              entering={FadeInDown.duration(motion.enterMs).delay(60)}
+              style={styles.segment}
+            >
+              {(['signup', 'signin'] as Mode[]).map((m) => (
+                <Pressable
+                  key={m}
+                  onPress={() => setMode(m)}
+                  style={[styles.segmentItem, mode === m && styles.segmentItemActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: mode === m }}
+                >
+                  <Text style={[styles.segmentText, mode === m && styles.segmentTextActive]}>
+                    {m === 'signup' ? 'Sign up' : 'Sign in'}
                   </Text>
-                </View>
-              ) : null}
+                </Pressable>
+              ))}
+            </Animated.View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  style={styles.input}
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  keyboardType="email-address"
-                  placeholder="you@company.com"
-                  placeholderTextColor={colors.textSubtle}
+            <Animated.View
+              entering={FadeInDown.duration(motion.enterMs).delay(120)}
+              style={styles.providers}
+            >
+              <AppleSignInButton />
+              <Pressable
+                style={styles.provider}
+                onPress={() =>
+                  toast({
+                    tone: 'info',
+                    title: 'Google sign-in needs a dev build',
+                    body: 'Available once RoofWise runs outside Expo Go. Use email for now.',
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+              >
+                <Ionicons name="logo-google" size={18} color={colors.textInverse} />
+                <Text style={styles.providerText}>Continue with Google</Text>
+              </Pressable>
+            </Animated.View>
+
+            <Animated.View
+              entering={FadeInDown.duration(motion.enterMs).delay(160)}
+              style={styles.dividerRow}
+            >
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>or use email</Text>
+              <View style={styles.divider} />
+            </Animated.View>
+
+            <Animated.View
+              entering={FadeInDown.duration(motion.enterMs).delay(200)}
+              style={styles.form}
+            >
+              {isSignUp && (
+                <Field
+                  icon="person-outline"
+                  placeholder="Full name"
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                  textContentType="name"
                 />
-              </View>
+              )}
+              <Field
+                icon="mail-outline"
+                placeholder="Email address"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+              />
+              <Field
+                icon="lock-closed-outline"
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                textContentType={isSignUp ? 'newPassword' : 'password'}
+                trailing={
+                  <Pressable
+                    onPress={() => setShowPassword((v) => !v)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={19}
+                      color="rgba(255,255,255,0.55)"
+                    />
+                  </Pressable>
+                }
+              />
 
-              {mode !== 'reset' && (
-                <View style={styles.field}>
-                  <Text style={styles.label}>Password</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={password}
-                    onChangeText={setPassword}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
-                    secureTextEntry
-                    placeholder="At least 6 characters"
-                    placeholderTextColor={colors.textSubtle}
-                  />
-                </View>
+              {isSignUp && password.length > 0 && (
+                <Animated.View entering={FadeIn.duration(220)} style={styles.checks}>
+                  {passwordChecks.map((c) => (
+                    <View key={c.label} style={styles.checkRow}>
+                      <Ionicons
+                        name={c.ok ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={15}
+                        color={c.ok ? colors.success : 'rgba(255,255,255,0.35)'}
+                      />
+                      <Text style={[styles.checkText, c.ok && styles.checkTextOk]}>{c.label}</Text>
+                    </View>
+                  ))}
+                </Animated.View>
               )}
 
               <Pressable
-                style={[styles.primaryBtn, !canSubmit && styles.primaryBtnDisabled]}
-                onPress={onSubmit}
-                disabled={!canSubmit}
+                onPress={submit}
+                disabled={!canSubmit || loading}
+                style={({ pressed }) => [
+                  styles.cta,
+                  (!canSubmit || loading) && styles.ctaDisabled,
+                  pressed && canSubmit && styles.ctaPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={isSignUp ? 'Create account' : 'Sign in'}
               >
                 {loading ? (
                   <ActivityIndicator color={colors.textInverse} />
                 ) : (
-                  <Text style={styles.primaryBtnText}>
-                    {mode === 'sign-in' && 'Sign in'}
-                    {mode === 'sign-up' && 'Create account'}
-                    {mode === 'reset' && 'Send reset link'}
-                  </Text>
+                  <>
+                    <Text style={styles.ctaText}>{isSignUp ? 'Create account' : 'Sign in'}</Text>
+                    <Ionicons name="arrow-forward" size={19} color={colors.textInverse} />
+                  </>
                 )}
               </Pressable>
 
-              <View style={styles.footer}>
-                {mode === 'sign-in' && (
-                  <>
-                    <Pressable onPress={() => switchMode('sign-up')}>
-                      <Text style={styles.link}>Create account</Text>
-                    </Pressable>
-                    <Pressable onPress={() => switchMode('reset')}>
-                      <Text style={styles.link}>Forgot password?</Text>
-                    </Pressable>
-                  </>
-                )}
-                {mode === 'sign-up' && (
-                  <Pressable onPress={() => switchMode('sign-in')}>
-                    <Text style={styles.link}>Already have an account? Sign in</Text>
-                  </Pressable>
-                )}
-                {mode === 'reset' && (
-                  <Pressable onPress={() => switchMode('sign-in')}>
-                    <Text style={styles.link}>Back to sign in</Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
+              {!isSignUp && (
+                <Pressable style={styles.link} hitSlop={8} onPress={onForgot}>
+                  <Text style={styles.linkText}>Forgot password?</Text>
+                </Pressable>
+              )}
+            </Animated.View>
+
+            {/* Drift #12: when auth isn't required, let people look around. */}
+            {!env.REQUIRE_AUTH && (
+              <Animated.View entering={FadeInDown.duration(motion.enterMs).delay(260)}>
+                <Pressable
+                  style={styles.explore}
+                  onPress={() => router.replace('/(tabs)')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Explore the app without an account"
+                >
+                  <Text style={styles.exploreText}>Explore without an account</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.55)" />
+                </Pressable>
+              </Animated.View>
+            )}
+
+            <Text style={styles.legal}>
+              By continuing you agree to the RoofWise Terms of Service and Privacy Policy.
+            </Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
+  );
+}
+
+function Field({
+  icon,
+  trailing,
+  ...input
+}: React.ComponentProps<typeof TextInput> & {
+  icon: keyof typeof Ionicons.glyphMap;
+  trailing?: React.ReactNode;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={[styles.field, focused && styles.fieldFocused]}>
+      <Ionicons name={icon} size={19} color="rgba(255,255,255,0.5)" />
+      <TextInput
+        {...input}
+        style={styles.input}
+        placeholderTextColor="rgba(255,255,255,0.38)"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      />
+      {trailing}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
+  root: { flex: 1, backgroundColor: brand.black },
   safe: { flex: 1 },
   flex: { flex: 1 },
-  scroll: {
-    flexGrow: 1,
-    padding: spacing.xl,
-    justifyContent: 'space-between',
-  },
-  brand: { alignItems: 'center', marginTop: spacing.xxxl },
-  logoMark: {
-    width: 72,
-    height: 72,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accent,
+  scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.lg },
+
+  header: { gap: spacing.sm, marginTop: spacing.md },
+  brandMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: brand.royal,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.lg,
-    ...shadows.pressed,
-  },
-  logoText: {
-    color: colors.textInverse,
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
+    marginBottom: spacing.sm,
   },
   title: {
     color: colors.textInverse,
     fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
-    marginBottom: spacing.sm,
+    letterSpacing: -1,
+    lineHeight: 38,
   },
-  subtitle: {
-    color: 'rgba(255,255,255,0.92)',
-    fontSize: fontSize.md,
-    textAlign: 'center',
-    paddingHorizontal: spacing.lg,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
-    marginTop: spacing.xxxl,
-    ...shadows.card,
-  },
-  cardTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-    marginBottom: spacing.lg,
-  },
-  banner: {
-    backgroundColor: colors.dangerSoft,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  bannerText: { color: colors.danger, fontSize: fontSize.sm },
-  bannerSuccess: {
-    backgroundColor: colors.successSoft,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  bannerSuccessText: { color: colors.success, fontSize: fontSize.sm },
-  field: { marginBottom: spacing.lg },
-  label: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
-  input: {
-    height: 52,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    fontSize: fontSize.md,
-    color: colors.text,
-    backgroundColor: colors.surface,
-  },
-  primaryBtn: {
-    height: 56,
+  subtitle: { color: 'rgba(255,255,255,0.6)', fontSize: fontSize.bodyMd, lineHeight: 21 },
+
+  segment: {
+    flexDirection: 'row',
+    backgroundColor: glass.fillLow,
     borderRadius: radii.pill,
-    backgroundColor: colors.accent,
+    borderWidth: 1,
+    borderColor: glass.border,
+    padding: 4,
+  },
+  segmentItem: {
+    flex: 1,
+    minHeight: touchTarget.small,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.md,
   },
-  primaryBtnDisabled: { opacity: 0.5 },
-  primaryBtnText: {
-    color: colors.textInverse,
-    fontSize: fontSize.md,
+  segmentItemActive: { backgroundColor: glass.fillHigh },
+  segmentText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
   },
-  footer: {
-    marginTop: spacing.lg,
+  segmentTextActive: { color: colors.textInverse },
+
+  providers: { gap: spacing.sm },
+  provider: {
+    minHeight: touchTarget.preferred,
+    borderRadius: radii.pill,
+    backgroundColor: glass.fill,
+    borderWidth: 1,
+    borderColor: glass.border,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
-  link: {
-    color: colors.accent,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
+  providerText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
   },
-  divider: {
+
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  divider: { flex: 1, height: 1, backgroundColor: glass.border },
+  dividerText: { color: 'rgba(255,255,255,0.42)', fontSize: fontSize.bodySm },
+
+  form: { gap: spacing.md },
+  field: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginBottom: spacing.md,
+    minHeight: touchTarget.preferred,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: glass.fillLow,
+    borderWidth: 1,
+    borderColor: glass.border,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { color: colors.textMuted, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  fieldFocused: { borderColor: brand.royal, backgroundColor: glass.fill },
+  input: {
+    flex: 1,
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    paddingVertical: spacing.md,
+  },
+
+  checks: { gap: 6, paddingHorizontal: spacing.xs },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  checkText: { color: 'rgba(255,255,255,0.5)', fontSize: fontSize.bodySm },
+  checkTextOk: { color: 'rgba(255,255,255,0.85)' },
+
+  cta: {
+    height: touchTarget.sticky,
+    borderRadius: radii.pill,
+    backgroundColor: brand.burnt,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  ctaPressed: { backgroundColor: brand.burntDeep, transform: [{ scale: 0.985 }] },
+  ctaDisabled: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  ctaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+
+  link: { alignSelf: 'center', minHeight: touchTarget.small, justifyContent: 'center' },
+  linkText: { color: 'rgba(255,255,255,0.6)', fontSize: fontSize.bodyMd },
+
+  explore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: touchTarget.standard,
+  },
+  exploreText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.medium,
+  },
+
+  legal: {
+    color: 'rgba(255,255,255,0.32)',
+    fontSize: fontSize.caption,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
 });
