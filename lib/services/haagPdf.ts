@@ -24,6 +24,15 @@ import {
   evaluate,
 } from './decisionEngine';
 import { thresholdFor } from './haagThresholds';
+import {
+  CONFIDENCE_BOUNDS,
+  TIER_LABEL,
+  TIER_MEANING,
+  TIER_SHORT,
+  averageConfidence,
+  tierFor,
+  type ConfidenceTier,
+} from './confidenceTiers';
 
 export type GeneratedReport = {
   uri: string;
@@ -43,6 +52,12 @@ export type ReportPhoto = {
   dataUri: string;
   /** Whether Gemini actually reviewed this photo. */
   analyzed: boolean;
+  /** Findings attributed to this photo. */
+  findingCount: number;
+  /** Mean detection confidence on this photo, or null when it has none. */
+  avgConfidence: number | null;
+  /** Presentation tier derived from avgConfidence (spec confidence layer). */
+  tier: ConfidenceTier | null;
 };
 
 /** Was this photo run through Gemini? */
@@ -87,10 +102,15 @@ async function preparePhotoDataUris(
           },
         );
         if (out.base64) {
+          const marks = slope.damage.filter((m) => m.photoIndex === index);
+          const avg = averageConfidence(marks.map((m) => m.confidence));
           encoded.push({
             index,
             dataUri: `data:image/jpeg;base64,${out.base64}`,
             analyzed: wasAnalyzed(slope, index),
+            findingCount: marks.length,
+            avgConfidence: avg,
+            tier: avg === null ? null : tierFor(avg),
           });
         }
       } catch {
@@ -111,6 +131,25 @@ function renderHtml(ins: Inspection, photoMap: Record<string, ReportPhoto[]> = {
   const generatedAt = formatDateTime(new Date());
   const createdDate = formatDateShort(ins.createdAt);
 
+  const totalPhotos = ins.slopes.reduce((n, s) => n + s.photoPaths.length, 0);
+
+  // Everything below the high-confidence boundary, disclosed rather than
+  // quietly dropped. A carrier that finds a soft finding you hid discredits
+  // the whole packet; a carrier handed the list up front does not.
+  const uncertainFindings = ins.slopes.flatMap((slope, si) => {
+    const slopeLabel = `Slope ${si + 1} · ${slope.orientation}`;
+    return slope.damage
+      .filter((m) => m.confidence < CONFIDENCE_BOUNDS.high)
+      .map((m) => ({
+        slopeLabel,
+        photo: typeof m.photoIndex === 'number' ? m.photoIndex : null,
+        category: DAMAGE_CATEGORY_LABELS[m.category] ?? String(m.category).replace(/_/g, ' '),
+        confidence: Math.round(m.confidence),
+        tier: tierFor(m.confidence),
+      }))
+      .sort((a, b) => a.confidence - b.confidence);
+  });
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -118,64 +157,121 @@ function renderHtml(ins: Inspection, photoMap: Record<string, ReportPhoto[]> = {
 <title>${esc(ins.reportId)} — HAAG Report</title>
 <style>
   :root {
-    --navy: #0C183C;
-    --orange: #FC6018;
-    --cream: #F0F0E4;
-    --slate: #546078;
-    --border: #E0E0D6;
+    --royal: #2B4EF5;
+    --royal-deep: #1B31A8;
+    --ink: #0E1330;
+    --royal-soft: #E4E9FE;
+    --burnt: #D9541E;
+    --burnt-soft: #FBE7DD;
+    --slate: #5A6180;
+    --line: #E6E8F0;
+    --paper: #F5F6FA;
+    --ok: #1E9E62;
+    --warn: #C77A0A;
+    --bad: #D93A3F;
   }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--navy); margin: 0; padding: 0; background: #fff; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--ink); margin: 0; padding: 0; background: #fff;
+    -webkit-font-smoothing: antialiased;
+  }
   .page { padding: 32px 40px; }
-  .cover { background: var(--navy); color: #fff; padding: 60px 40px; margin: -32px -40px 32px; }
+
+  /* Cover */
+  .cover {
+    background: linear-gradient(135deg, var(--ink) 0%, var(--royal-deep) 68%, var(--royal) 130%);
+    color: #fff; padding: 52px 40px 40px; margin: -32px -40px 28px;
+  }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .brand .mark { width: 44px; height: 44px; border-radius: 12px; background: var(--orange); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; }
-  .brand .name { font-size: 22px; font-weight: 700; }
-  .cover h1 { font-size: 32px; margin: 28px 0 6px; font-weight: 700; }
-  .cover .sub { color: rgba(240, 240, 228, 0.85); font-size: 14px; }
-  .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 32px; margin-top: 32px; }
-  .meta-grid .label { font-size: 11px; color: rgba(240,240,228,0.7); text-transform: uppercase; letter-spacing: 0.5px; }
-  .meta-grid .value { font-size: 16px; font-weight: 600; margin-top: 2px; }
+  .brand .mark {
+    width: 42px; height: 42px; border-radius: 13px; background: var(--royal);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 15px; letter-spacing: 0.5px;
+    border: 1.5px solid rgba(255,255,255,0.25);
+  }
+  .brand .name { font-size: 21px; font-weight: 800; letter-spacing: -0.4px; }
+  .brand .cert {
+    margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; padding: 6px 12px; border-radius: 999px;
+    border: 1.5px solid rgba(255,255,255,0.35); color: rgba(255,255,255,0.95);
+  }
+  .cover h1 { font-size: 31px; margin: 30px 0 4px; font-weight: 800; letter-spacing: -0.8px; }
+  .cover .sub { color: rgba(255,255,255,0.72); font-size: 13.5px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px 32px; margin-top: 30px; }
+  .meta-grid .label {
+    font-size: 9.5px; color: rgba(255,255,255,0.6); text-transform: uppercase;
+    letter-spacing: 1px; font-weight: 700;
+  }
+  .meta-grid .value { font-size: 15px; font-weight: 600; margin-top: 3px; }
 
-  h2 { font-size: 18px; color: var(--navy); border-bottom: 2px solid var(--orange); padding-bottom: 6px; margin: 36px 0 14px; }
-  h3 { font-size: 14px; color: var(--navy); margin: 18px 0 6px; }
-  p { font-size: 13px; line-height: 1.55; color: var(--navy); }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-  th { background: var(--cream); color: var(--navy); font-weight: 600; }
-  .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-  .pill-orange { background: var(--orange); color: #fff; }
-  .pill-cream { background: var(--cream); color: var(--navy); }
-  .pill-slate { background: var(--slate); color: #fff; }
-  .pill-success { background: #2BB673; color: #fff; }
-  .pill-danger { background: #E5484D; color: #fff; }
+  h2 {
+    font-size: 15px; color: var(--ink); margin: 32px 0 12px; font-weight: 800;
+    letter-spacing: 0.4px; text-transform: uppercase;
+    padding-bottom: 7px; border-bottom: 2px solid var(--royal);
+  }
+  h2 .n { color: var(--royal); margin-right: 8px; }
+  h3 { font-size: 13.5px; color: var(--ink); margin: 16px 0 6px; font-weight: 700; }
+  p { font-size: 12.5px; line-height: 1.6; color: var(--ink); }
+  .muted { color: var(--slate); }
 
-  .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0 24px; }
-  .summary-stat { background: var(--cream); padding: 16px; border-radius: 12px; }
-  .summary-stat .stat-value { font-size: 28px; font-weight: 700; color: var(--orange); }
-  .summary-stat .stat-label { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+  th { background: var(--paper); color: var(--slate); font-weight: 700; font-size: 10px;
+       text-transform: uppercase; letter-spacing: 0.7px; }
 
-  .slope-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 12px 0; }
-  .slope-card h3 { margin-top: 0; }
-  /* Grid, not flex — a slope can carry any number of analyzed photos (no
-     cap), so this must wrap to additional rows instead of squeezing every
-     photo into one row as they're added. */
-  .photo-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 10px 0; }
+  .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 9.5px;
+          font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; }
+  .pill-burnt { background: var(--burnt); color: #fff; }
+  .pill-royal { background: var(--royal); color: #fff; }
+  .pill-soft  { background: var(--royal-soft); color: var(--royal-deep); }
+  .pill-slate { background: var(--paper); color: var(--slate); border: 1px solid var(--line); }
+  .pill-ok    { background: var(--ok); color: #fff; }
+  .pill-warn  { background: var(--warn); color: #fff; }
+  .pill-bad   { background: var(--bad); color: #fff; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 18px; }
+  .summary-stat { background: var(--paper); padding: 14px; border-radius: 11px; border-top: 3px solid var(--royal); }
+  .summary-stat.accent { border-top-color: var(--burnt); }
+  .summary-stat .stat-value { font-size: 23px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
+  .summary-stat .stat-label { font-size: 9px; color: var(--slate); text-transform: uppercase;
+                              letter-spacing: 0.8px; margin-top: 4px; font-weight: 700; }
+
+  .callout { background: var(--royal-soft); border-left: 4px solid var(--royal);
+             padding: 13px 15px; border-radius: 9px; margin: 12px 0;
+             font-size: 11.5px; line-height: 1.6; color: var(--ink); }
+  .callout.warn { background: #FDF3E3; border-left-color: var(--warn); }
+  .callout strong { color: var(--royal-deep); }
+  .callout.warn strong { color: var(--warn); }
+
+  .slope-card { border: 1px solid var(--line); border-radius: 12px; padding: 15px; margin: 11px 0; }
+  .slope-card h3 { margin-top: 0; display: flex; align-items: center; gap: 8px; }
+  .slope-meta { font-size: 11px; color: var(--slate); margin: 2px 0 8px; }
+
+  .photo-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; margin: 10px 0 4px; }
   .photo-fig { margin: 0; }
-  .slope-photo { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; object-fit: cover; display: block; }
-  .photo-fig figcaption { font-size: 9.5px; color: var(--slate); margin-top: 4px; letter-spacing: 0.2px; }
-  .reasoning { font-style: italic; color: var(--slate); font-size: 12px; margin-top: 8px; }
+  .slope-photo { width: 100%; aspect-ratio: 4 / 3; border-radius: 7px; object-fit: cover;
+                 display: block; border: 1px solid var(--line); }
+  .photo-fig figcaption { font-size: 8.5px; color: var(--slate); margin-top: 4px; line-height: 1.4; }
+  .photo-fig .tag { font-weight: 800; letter-spacing: 0.3px; }
+  .tag-high { color: var(--ok); }
+  .tag-moderate { color: var(--warn); }
+  .tag-uncertain { color: var(--bad); }
+  .tag-none { color: var(--slate); }
+
+  .reasoning { font-style: italic; color: var(--slate); font-size: 11.5px; margin-top: 8px; }
 
   @media print {
-    .slope-card, table, .sig-row { page-break-inside: avoid; }
+    .slope-card, table, .sig-row, .photo-fig, .callout { page-break-inside: avoid; }
     h2 { page-break-after: avoid; }
     .cover { page-break-after: avoid; }
   }
-  .slope-card, table, .sig-row { break-inside: avoid; }
-  .standards { background: var(--cream); border-left: 4px solid var(--orange); padding: 14px 16px; border-radius: 8px; margin: 16px 0 4px; font-size: 12px; line-height: 1.6; color: var(--slate); }
-  .footer { text-align: center; color: var(--slate); font-size: 10px; padding: 24px 0; border-top: 1px solid var(--border); margin-top: 40px; }
-  .sig-row { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 28px; }
-  .sig-box { border-top: 1px solid var(--navy); padding-top: 8px; font-size: 11px; color: var(--slate); }
+  .slope-card, table, .sig-row, .photo-fig, .callout { break-inside: avoid; }
+
+  .footer { text-align: center; color: var(--slate); font-size: 9px; padding: 20px 0;
+            border-top: 1px solid var(--line); margin-top: 34px; line-height: 1.7; }
+  .sig-row { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 24px; }
+  .sig-box { border-top: 1.5px solid var(--ink); padding-top: 8px; font-size: 10.5px; color: var(--slate); }
 </style>
 </head>
 <body>
@@ -185,82 +281,74 @@ function renderHtml(ins: Inspection, photoMap: Record<string, ReportPhoto[]> = {
     <div class="brand">
       <div class="mark">RW</div>
       <div class="name">RoofWise</div>
+      <div class="cert">Haag Protocol</div>
     </div>
-    <h1>Roof Damage Inspection</h1>
-    <div class="sub">${esc(ins.reportId)} · ${esc(createdDate)}</div>
+    <h1>HAAG Certified<br/>Roof Damage Report</h1>
+    <div class="sub">${esc(ins.reportId)} · Inspected ${esc(createdDate)}</div>
     <div class="meta-grid">
+      <div><div class="label">Customer</div><div class="value">${esc(ins.customerName)}</div></div>
+      <div><div class="label">Property</div><div class="value">${esc(ins.address)}</div></div>
+      <div><div class="label">Carrier</div><div class="value">${ins.carrier ? esc(INSURANCE_CARRIER_LABELS[ins.carrier]) : '—'}</div></div>
+      <div><div class="label">Claim number</div><div class="value">${esc(ins.claimNumber ?? '—')}</div></div>
       <div>
-        <div class="label">Customer</div>
-        <div class="value">${esc(ins.customerName)}</div>
+        <div class="label">Inspector of record</div>
+        <div class="value">${inspector.fullName ? esc(inspector.fullName) : '—'}${inspector.haagCertified ? ' · Haag Certified' : ''}${inspector.haagCertificationNumber ? ` (${esc(inspector.haagCertificationNumber)})` : ''}</div>
       </div>
-      <div>
-        <div class="label">Property</div>
-        <div class="value">${esc(ins.address)}</div>
-      </div>
-      <div>
-        <div class="label">Carrier</div>
-        <div class="value">${ins.carrier ? esc(INSURANCE_CARRIER_LABELS[ins.carrier]) : '—'}</div>
-      </div>
-      <div>
-        <div class="label">Claim #</div>
-        <div class="value">${esc(ins.claimNumber ?? '—')}</div>
-      </div>
-      ${inspector.fullName ? `
-        <div>
-          <div class="label">Inspector</div>
-          <div class="value">${esc(inspector.fullName)}${inspector.haagCertified ? ' · HAAG' : ''}${inspector.haagCertificationNumber ? ` (${esc(inspector.haagCertificationNumber)})` : ''}</div>
-        </div>
-      ` : ''}
+      <div><div class="label">Date of loss</div><div class="value">${ins.event ? esc(formatDateShort(ins.event.date)) : 'Not attached'}</div></div>
     </div>
   </div>
 
-  <div class="standards">
-    <strong>Methodology.</strong> This inspection was conducted under Haag Engineering
-    functional-damage criteria for ${esc(ROOF_MATERIAL_LABELS[ins.material])}
-    (${esc(threshold.rule)}). Damage was documented photographically per slope and
-    assessed against that material-specific threshold. Each finding carries an
-    explicit severity and a 0–100 confidence value; findings below the reporting
-    confidence floor are excluded rather than reported as fact. Photographic
-    evidence for every finding is included in Section 4.
+  <h2><span class="n">01</span>Methodology &amp; Certification</h2>
+  <div class="callout">
+    <strong>How this inspection was conducted.</strong> Damage was assessed against
+    Haag Engineering functional-damage criteria for
+    ${esc(ROOF_MATERIAL_LABELS[ins.material])} — <strong>${esc(threshold.rule)}</strong>
+    Every slope was documented photographically and every finding carries an explicit
+    severity and a 0–100 confidence value. Detections below ${CONFIDENCE_BOUNDS.reportingFloor}%
+    confidence are not emitted at all; those between ${CONFIDENCE_BOUNDS.reportingFloor}% and
+    ${CONFIDENCE_BOUNDS.high}% are reported but labelled uncertain and excluded from the
+    roof-level verdict. <strong>Every photograph captured on this inspection is
+    reproduced in this report</strong>, including those the AI did not analyze —
+    nothing observed has been withheld.
   </div>
 
-  <h2>1. Summary</h2>
+  <h2><span class="n">02</span>Executive Summary</h2>
   <div class="summary-grid">
-    <div class="summary-stat">
-      <div class="stat-value">${score}</div>
-      <div class="stat-label">Damage Score</div>
-    </div>
-    <div class="summary-stat">
-      <div class="stat-value">${ins.slopes.length}</div>
-      <div class="stat-label">Slopes Inspected</div>
-    </div>
-    <div class="summary-stat">
-      <div class="stat-value">${esc(CLAIM_WORTHINESS_LABELS[worthiness])}</div>
-      <div class="stat-label">Claim Worthiness</div>
-    </div>
+    <div class="summary-stat"><div class="stat-value">${score}</div><div class="stat-label">Damage score</div></div>
+    <div class="summary-stat"><div class="stat-value">${ins.slopes.length}</div><div class="stat-label">Slopes inspected</div></div>
+    <div class="summary-stat"><div class="stat-value">${totalPhotos}</div><div class="stat-label">Photos on file</div></div>
+    <div class="summary-stat accent"><div class="stat-value">${esc(CLAIM_WORTHINESS_LABELS[worthiness])}</div><div class="stat-label">Claim worthiness</div></div>
   </div>
   <p><strong>Roof-level recommendation:</strong> ${esc(formatRecommendation(decision.roofRecommendation))}.</p>
   <p class="reasoning">${esc(decision.roofVerdictReasoning)}</p>
+  ${uncertainFindings.length > 0 ? `
+    <div class="callout warn">
+      <strong>${uncertainFindings.length} finding${uncertainFindings.length === 1 ? '' : 's'} flagged uncertain.</strong>
+      These are listed in full in Section 07 and are <em>not</em> relied upon in the
+      recommendation above. They are included so the record is complete and so on-site
+      verification can be targeted.
+    </div>` : ''}
 
-  <h2>2. Weather Verification</h2>
+  <h2><span class="n">03</span>Storm Verification</h2>
   ${ins.event
-    ? `<p>${esc(ins.event.kind)} event on ${esc(formatDateShort(ins.event.date))}${
+    ? `<p>${esc(ins.event.kind)} event on <strong>${esc(formatDateShort(ins.event.date))}</strong>${
         ins.event.hailSizeInches ? ` — ${ins.event.hailSizeInches}\" hail` : ''}${
         ins.event.windSpeedMph ? ` — ${ins.event.windSpeedMph} mph wind` : ''}${
-        ins.event.distanceMiles ? ` — ${ins.event.distanceMiles.toFixed(1)} mi from property` : ''}.</p>`
-    : '<p class="reasoning">No verified storm event is attached to this inspection. Attach the NOAA event for the date of loss to strengthen causation.</p>'}
+        ins.event.distanceMiles ? ` — ${ins.event.distanceMiles.toFixed(1)} mi from the property` : ''}.
+        ${ins.event.source === 'NOAA' ? 'Source: NOAA Storm Events Database.' : `Source: ${esc(ins.event.source)}.`}</p>`
+    : '<p class="reasoning">No verified storm event is attached to this inspection. Attaching the NOAA event for the date of loss materially strengthens causation.</p>'}
 
-  <h2>3. Roof System</h2>
+  <h2><span class="n">04</span>Roof System &amp; Applicable Threshold</h2>
   <table>
     <tr><th>Material</th><td>${esc(ROOF_MATERIAL_LABELS[ins.material])}</td></tr>
     <tr><th>Age</th><td>${ins.ageYears} years</td></tr>
     <tr><th>Geometry</th><td>${esc(ins.geometry)}</td></tr>
     <tr><th>Condition</th><td>${esc(ins.condition)}</td></tr>
-    <tr><th>Brittleness</th><td>${esc(ins.brittlenessTest.replace('_', ' '))}</td></tr>
-    <tr><th>HAAG threshold</th><td>${esc(threshold.rule)}</td></tr>
+    <tr><th>Brittleness test</th><td>${esc(ins.brittlenessTest.replace(/_/g, ' '))}</td></tr>
+    <tr><th>Haag threshold applied</th><td><strong>${esc(threshold.rule)}</strong></td></tr>
   </table>
 
-  <h2>4. Slope-by-Slope Findings</h2>
+  <h2><span class="n">05</span>Slope-by-Slope Findings</h2>
   ${
     ins.slopes.length === 0
       ? '<p class="reasoning">No slopes were captured for this inspection.</p>'
@@ -270,71 +358,125 @@ function renderHtml(ins: Inspection, photoMap: Record<string, ReportPhoto[]> = {
             const verdict = slopeResult?.verdict ?? 'repair';
             const pillClass =
               verdict === 'full_replace' || verdict === 'partial_replace'
-                ? 'pill-orange'
+                ? 'pill-burnt'
                 : verdict === 'verify_with_inspector'
-                ? 'pill-cream'
+                ? 'pill-warn'
                 : 'pill-slate';
             const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
             const photos = photoMap[slope.id] ?? [];
             const total = slope.photoPaths.length;
             const analyzedCount = photos.filter((p) => p.analyzed).length;
-            // Photos that exist in the record but couldn't be read off disk
-            // (restored backup, different device) — say so rather than let
-            // the count quietly disagree with what's on the page.
             const unreadable = total - photos.length;
-            const photoCaption =
-              `${total} photo${total === 1 ? '' : 's'}` +
-              (analyzedCount < photos.length ? ` · ${analyzedCount} AI-analyzed` : '') +
+            const caption =
+              `${total} photo${total === 1 ? '' : 's'} captured` +
+              ` · ${analyzedCount} AI-analyzed` +
               (unreadable > 0 ? ` · ${unreadable} unavailable` : '');
             return `<div class="slope-card">
-        <h3>Slope ${i + 1}: ${esc(slope.orientation)} <span class="pill ${pillClass}">${esc(formatVerdict(verdict))}</span></h3>
-        <p>${photoCaption} · Hail ${slope.hailCount} · Wind ${slope.windLiftCount} · Missing ${slope.missingCount} · Bruising ${slope.bruisingCount}</p>
-        ${photos.length > 0 ? `<div class="photo-row">${photos.map((p) => `<figure class="photo-fig"><img class="slope-photo" src="${p.dataUri}" /><figcaption>Photo ${p.index + 1}${p.analyzed ? ' · AI-analyzed' : ' · reference'}</figcaption></figure>`).join('')}</div>` : ''}
-        ${detected.length === 0 ? '<p class="reasoning">No findings detected on this slope.</p>' : `<table><thead><tr><th>Category</th><th>Severity</th><th>Confidence</th><th>Count</th></tr></thead><tbody>${detected.map((f) => `<tr><td>${esc(DAMAGE_CATEGORY_LABELS[f.label])}</td><td>${esc(f.severity)}</td><td>${f.confidence}%</td><td>${f.count}</td></tr>`).join('')}</tbody></table>`}
+        <h3>Slope ${i + 1} · ${esc(slope.orientation)} <span class="pill ${pillClass}">${esc(formatVerdict(verdict))}</span></h3>
+        <div class="slope-meta">${caption} · Hail ${slope.hailCount} · Wind ${slope.windLiftCount} · Missing ${slope.missingCount} · Bruising ${slope.bruisingCount}</div>
+        ${photos.length > 0 ? `<div class="photo-row">${photos.map((ph) => photoFigure(ph)).join('')}</div>` : ''}
+        ${detected.length === 0
+          ? '<p class="reasoning">No findings detected on this slope.</p>'
+          : `<table><thead><tr><th>Category</th><th>Severity</th><th>Confidence</th><th>Assessment</th><th>Count</th></tr></thead><tbody>${detected
+              .map((f) => {
+                const t = tierFor(f.confidence);
+                return `<tr><td>${esc(DAMAGE_CATEGORY_LABELS[f.label] ?? String(f.label).replace(/_/g, ' '))}</td><td>${esc(f.severity)}</td><td>${f.confidence}%</td><td><span class="pill ${t === 'high' ? 'pill-ok' : t === 'moderate' ? 'pill-warn' : 'pill-bad'}">${esc(TIER_SHORT[t])}</span></td><td>${f.count}</td></tr>`;
+              })
+              .join('')}</tbody></table>`}
         <p class="reasoning">${esc(slopeResult?.reasoning ?? '')}</p>
       </div>`;
           })
           .join('')
   }
 
+  <h2><span class="n">06</span>Photo Evidence Index</h2>
+  <p class="muted">Every photograph captured during this inspection, by slope, with its
+  analysis status. Photos marked <em>reference</em> were captured but not submitted to AI
+  analysis; they are included as part of the complete record.</p>
+  <table>
+    <thead><tr><th>Slope</th><th>Photo</th><th>Status</th><th>Findings</th><th>Confidence</th></tr></thead>
+    <tbody>
+      ${ins.slopes
+        .map((slope, si) => {
+          const photos = photoMap[slope.id] ?? [];
+          if (slope.photoPaths.length === 0) {
+            return `<tr><td>Slope ${si + 1} · ${esc(slope.orientation)}</td><td colspan="4" class="muted">No photos captured</td></tr>`;
+          }
+          return slope.photoPaths
+            .map((_, pi) => {
+              const ph = photos.find((x) => x.index === pi);
+              if (!ph) {
+                return `<tr><td>Slope ${si + 1} · ${esc(slope.orientation)}</td><td>Photo ${pi + 1}</td><td><span class="pill pill-slate">Unavailable</span></td><td class="muted">—</td><td class="muted">—</td></tr>`;
+              }
+              const status = ph.analyzed
+                ? '<span class="pill pill-royal">AI-analyzed</span>'
+                : '<span class="pill pill-soft">Reference</span>';
+              const conf = ph.avgConfidence === null
+                ? '<span class="muted">—</span>'
+                : `${Math.round(ph.avgConfidence)}% · ${esc(TIER_SHORT[ph.tier!])}`;
+              return `<tr><td>Slope ${si + 1} · ${esc(slope.orientation)}</td><td>Photo ${pi + 1}</td><td>${status}</td><td>${ph.findingCount}</td><td>${conf}</td></tr>`;
+            })
+            .join('');
+        })
+        .join('')}
+    </tbody>
+  </table>
+
+  <h2><span class="n">07</span>Uncertainty Register</h2>
+  ${uncertainFindings.length === 0
+    ? '<p class="muted">No findings fell below the confidence threshold. Every detection in this report is reported at moderate confidence or above.</p>'
+    : `<p class="muted">Findings below ${CONFIDENCE_BOUNDS.high}% confidence, disclosed in full.
+       ${esc(TIER_MEANING.uncertain)}</p>
+       <table>
+         <thead><tr><th>Slope</th><th>Photo</th><th>Category</th><th>Confidence</th><th>Tier</th></tr></thead>
+         <tbody>${uncertainFindings
+           .map((u) => `<tr><td>${esc(u.slopeLabel)}</td><td>${u.photo === null ? '<span class="muted">—</span>' : `Photo ${u.photo + 1}`}</td><td>${esc(u.category)}</td><td>${u.confidence}%</td><td><span class="pill ${u.tier === 'moderate' ? 'pill-warn' : 'pill-bad'}">${esc(TIER_LABEL[u.tier])}</span></td></tr>`)
+           .join('')}</tbody>
+       </table>`}
+
   ${ins.notes && ins.notes.trim() ? `
-    <h2>5. Inspector Notes</h2>
+    <h2><span class="n">08</span>Inspector Notes</h2>
     <p>${esc(ins.notes.trim())}</p>
   ` : ''}
 
-  <h2>6. Collateral Checklist</h2>
+  <h2><span class="n">09</span>Collateral Evidence</h2>
   ${
     Object.keys(ins.collateralChecklist).length === 0
-      ? '<p class="reasoning">No collateral checklist recorded yet.</p>'
+      ? '<p class="reasoning">No collateral checklist recorded.</p>'
       : `<table>${Object.entries(ins.collateralChecklist)
-          .map(([k, v]) => `<tr><th>${esc(collateralLabel(k))}</th><td>${v ? 'Yes' : 'No'}</td></tr>`)
+          .map(([k, v]) => `<tr><th>${esc(collateralLabel(k))}</th><td>${v ? '<span class="pill pill-ok">Yes</span>' : '<span class="pill pill-slate">No</span>'}</td></tr>`)
           .join('')}</table>`
   }
 
-  <h2>7. Insurance-Grade Narrative</h2>
+  <h2><span class="n">10</span>Insurance-Grade Narrative</h2>
   <p>${esc(narrative(ins, decision, score, worthiness))}</p>
 
-  <h2>8. Homeowner Summary</h2>
+  <h2><span class="n">11</span>Homeowner Summary</h2>
   <p>${esc(homeownerSummary(decision, worthiness))}</p>
 
-  <h2>9. Signatures</h2>
+  <h2><span class="n">12</span>Certification &amp; Signatures</h2>
+  <p class="muted">The inspector of record certifies that this inspection was performed
+  in accordance with Haag Engineering functional-damage criteria for the roof system
+  identified in Section 04, and that the photographic record in Sections 05–06 is complete
+  and unaltered.</p>
   <div class="sig-row">
     <div class="sig-box">
       ${ins.inspectorSignatureSvg
-        ? `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet"><path d="${esc(ins.inspectorSignatureSvg)}" stroke="#0C183C" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg><br/>`
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="230" height="76" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet"><path d="${esc(ins.inspectorSignatureSvg)}" stroke="#0E1330" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg><br/>`
         : ''}
-      Inspector signature${ins.signedAt ? ` · ${formatDateShort(ins.signedAt)}` : ''}
+      ${inspector.fullName ? `${esc(inspector.fullName)} — ` : ''}Inspector of record${ins.signedAt ? ` · ${esc(formatDateShort(ins.signedAt))}` : ''}
     </div>
     <div class="sig-box">
       ${ins.homeownerSignatureSvg
-        ? `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet"><path d="${esc(ins.homeownerSignatureSvg)}" stroke="#0C183C" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg><br/>`
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="230" height="76" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet"><path d="${esc(ins.homeownerSignatureSvg)}" stroke="#0E1330" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg><br/>`
         : ''}
-      Homeowner signature
+      Homeowner acknowledgement
     </div>
   </div>
 
   <div class="footer">
-    Report ID ${esc(ins.reportId)} · Generated ${esc(generatedAt)} · RoofWise — Forensic Roof Inspection
+    <strong>RoofWise HAAG Certified Report</strong> · ${esc(ins.reportId)}<br/>
+    Generated ${esc(generatedAt)} · ${totalPhotos} photograph${totalPhotos === 1 ? '' : 's'} on file · ${ins.slopes.length} slope${ins.slopes.length === 1 ? '' : 's'} inspected
   </div>
 </div>
 </body>
@@ -351,6 +493,20 @@ const COLLATERAL_LABELS: Record<string, string> = {
   window_screens: 'Hail damage on window screens / siding',
   gutters_dented: 'Dents in gutters or downspouts',
 };
+
+/** One photo in a slope card, captioned with its analysis + confidence state. */
+function photoFigure(p: ReportPhoto): string {
+  const tagClass = p.tier ? `tag-${p.tier}` : 'tag-none';
+  const label = !p.analyzed
+    ? 'Reference'
+    : p.tier
+    ? `${TIER_SHORT[p.tier]} · ${p.findingCount} finding${p.findingCount === 1 ? '' : 's'}`
+    : 'Analyzed · clean';
+  return `<figure class="photo-fig">
+    <img class="slope-photo" src="${p.dataUri}" />
+    <figcaption>Photo ${p.index + 1} · <span class="tag ${tagClass}">${esc(label)}</span></figcaption>
+  </figure>`;
+}
 
 function collateralLabel(key: string): string {
   return COLLATERAL_LABELS[key] ?? key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
