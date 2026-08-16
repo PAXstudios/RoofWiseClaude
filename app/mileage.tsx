@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
+  Platform,
   Pressable,
   StyleSheet,
   ScrollView,
@@ -29,6 +30,84 @@ const PURPOSES = ['Inspection', 'Door knocking', 'Supply run', 'Office'];
 const IRS_RATE_PER_MILE = 0.67; // 2026 estimated business mileage rate
 
 export default function MileageScreen() {
+  // Trip tracking needs continuous GPS sampling from a phone in a moving
+  // vehicle — a desktop browser can't do that. On web, show a friendly
+  // notice instead of half-rendering a tracker that never gets a fix.
+  // Branching lives in this wrapper so the native hooks stay unconditional.
+  if (Platform.OS === 'web') return <MileageWebNotice />;
+  return <MileageNative />;
+}
+
+function MileageWebNotice() {
+  const router = useRouter();
+  return (
+    <SafeAreaView style={webStyles.root} edges={['top']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={webStyles.wrap}>
+        <View style={webStyles.iconWrap}>
+          <Ionicons name="car-outline" size={36} color={colors.brand} />
+        </View>
+        <Text style={webStyles.title}>Mileage tracking uses the phone&apos;s GPS</Text>
+        <Text style={webStyles.body}>
+          This tool runs on the RoofWise mobile app — your jobs, leads,
+          reports, and map stay in sync here on the web.
+        </Text>
+        <Pressable style={webStyles.cta} onPress={() => router.replace('/')}>
+          <Text style={webStyles.ctaText}>Back to dashboard</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const webStyles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+  wrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xxl,
+    gap: spacing.md,
+  },
+  iconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: radii.pill,
+    backgroundColor: colors.brandSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  title: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.navy,
+    textAlign: 'center',
+    maxWidth: 420,
+  },
+  body: {
+    fontSize: fontSize.bodyMd,
+    color: colors.slate,
+    textAlign: 'center',
+    maxWidth: 420,
+  },
+  cta: {
+    height: touchTarget.preferred,
+    paddingHorizontal: spacing.xxxl,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.lg,
+  },
+  ctaText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+  },
+});
+
+function MileageNative() {
   const router = useRouter();
   const active = useMileageStore((s) => s.active);
   const trips = useMileageStore((s) => s.trips);

@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  Platform,
   Pressable,
   ScrollView,
   Image,
@@ -42,6 +43,84 @@ type CapturedPhoto = {
 };
 
 export default function QuickInspection() {
+  // The capture pipeline (expo-camera viewfinder, HEIC handling, haptics)
+  // is native-only. On web, show a friendly notice instead of half-rendering
+  // a dead viewfinder. Branching lives in this wrapper so the native
+  // component's hooks stay unconditional.
+  if (Platform.OS === 'web') return <QuickInspectionWebNotice />;
+  return <QuickInspectionNative />;
+}
+
+function QuickInspectionWebNotice() {
+  const router = useRouter();
+  return (
+    <SafeAreaView style={webStyles.root} edges={['top', 'bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={webStyles.wrap}>
+        <View style={webStyles.iconWrap}>
+          <Ionicons name="camera-outline" size={36} color={colors.brand} />
+        </View>
+        <Text style={webStyles.title}>Quick Inspection uses the phone camera</Text>
+        <Text style={webStyles.body}>
+          This tool runs on the RoofWise mobile app — your jobs, leads,
+          reports, and map stay in sync here on the web.
+        </Text>
+        <Pressable style={webStyles.cta} onPress={() => router.replace('/')}>
+          <Text style={webStyles.ctaText}>Back to dashboard</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const webStyles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+  wrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xxl,
+    gap: spacing.md,
+  },
+  iconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: radii.pill,
+    backgroundColor: colors.brandSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  title: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.navy,
+    textAlign: 'center',
+    maxWidth: 420,
+  },
+  body: {
+    fontSize: fontSize.bodyMd,
+    color: colors.slate,
+    textAlign: 'center',
+    maxWidth: 420,
+  },
+  cta: {
+    height: touchTarget.preferred,
+    paddingHorizontal: spacing.xxxl,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.lg,
+  },
+  ctaText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+  },
+});
+
+function QuickInspectionNative() {
   const router = useRouter();
   const { jobId } = useLocalSearchParams<{ jobId?: string }>();
   const attachRawPhotos = useInspectionStore((s) => s.attachRawPhotos);

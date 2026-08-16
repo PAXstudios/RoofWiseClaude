@@ -87,13 +87,21 @@ export default function ServiceAreaScreen() {
         kind: 'storm_alert_received',
         message: `Storm Watch scanned ${areas.length} area${areas.length === 1 ? '' : 's'} — ${result.newAlerts.length} new alert${result.newAlerts.length === 1 ? '' : 's'}`,
       });
+      // Drift #5: a failed area must read as "not available", never as a
+      // clean scan.
+      const unavailableNote =
+        result.unavailableAreas.length > 0
+          ? ` ${result.unavailableAreas.length} area${
+              result.unavailableAreas.length === 1 ? '' : 's'
+            } not available — storm data could not be fetched.`
+          : '';
       toast({
-        tone: result.newAlerts.length > 0 ? 'warn' : 'info',
+        tone: result.newAlerts.length > 0 || result.unavailableAreas.length > 0 ? 'warn' : 'info',
         title:
           result.newAlerts.length > 0
             ? `${result.newAlerts.length} new storm alert${result.newAlerts.length === 1 ? '' : 's'}`
             : 'No qualifying storms in the last 24 hours',
-        body: `Scanned ${result.scanned} NOAA report${result.scanned === 1 ? '' : 's'}.`,
+        body: `Scanned ${result.scanned} NOAA report${result.scanned === 1 ? '' : 's'}.${unavailableNote}`,
       });
     } catch (e) {
       toast({

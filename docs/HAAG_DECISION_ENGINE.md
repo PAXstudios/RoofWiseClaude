@@ -161,6 +161,15 @@ Evaluated from the forecast before the inspector climbs.
 | **USE CAUTION** | Wind 20–30 mph, gusts < 40 mph, slight rain (< 20% chance) |
 | **UNSAFE** | Gusts ≥ 40 mph, any precipitation expected, temp < 35 or > 95 °F, thunderstorm watch |
 
+> **Gap-fills (conservative, binding on the implementation).** The table above
+> leaves two conditions unassigned; the engine closes both on the safe side:
+> (a) sustained wind **above the 30 mph** USE CAUTION ceiling matches no row —
+> it rates **UNSAFE** rather than silently passing; (b) "any precipitation
+> expected" is reconciled with USE CAUTION's "slight rain (< 20% chance)" as:
+> precipitation chance **≥ 20%** (or an explicit precipitation-expected flag)
+> rates **UNSAFE**, while 0 < chance < 20% rates USE CAUTION.
+> `lib/services/safetyEngine.ts` implements exactly this reading.
+
 ---
 
 ## 8. Carrier-specific behavior
@@ -197,13 +206,18 @@ Per slope:
   "hail_hits_per_square": 0,
   "wind_creased_count": 0,
   "missing_shingles": 0,
-  "brittleness_result": "PASS" | "FAIL" | "BORDERLINE",
+  "brittleness_result": "PASS" | "FAIL" | "BORDERLINE" | "NOT_TESTED",
   "collateral_damage": ["..."],
   "haag_threshold_triggered": true,
   "recommended_action": "Full Replacement" | "Partial Replacement" | "Localized Repairs" | "No Storm-Related Work",
   "justification": "Reasoning citing HAAG thresholds and evidence."
 }
 ```
+
+`"NOT_TESTED"` is the missing-data honesty value: emitted when no brittleness
+test was recorded for the slope's roof, per the rule below — a test result is
+never assumed. Consumers (reports, sync) must accept it; only `PASS` / `FAIL` /
+`BORDERLINE` participate in the §3 repairability gate.
 
 Every response must include: slope-by-slope evaluation, roof-level
 recommendation, insurance-adjuster narrative, homeowner summary, the list of

@@ -22,12 +22,30 @@ export const CONFIDENCE_BOUNDS = {
   moderate: 50,
   /** Below `moderate` and at/above this: flag for on-site verification. */
   reportingFloor: 45,
+  /**
+   * Below this a detection auto-queues for human review (docs/
+   * PRODUCT_SYNTHESIS.md §1 "AI analysis" — the Dashboard Spec pins the
+   * confidence-graded review gate at <80%). A SEPARATE AXIS from the report
+   * tiers above: a 75-confidence finding still renders as a "high" tier in
+   * the packet while also landing in the review queue. Do not fold this
+   * into tierFor.
+   */
+  reviewThreshold: 80,
 } as const;
 
 export function tierFor(confidence: number): ConfidenceTier {
   if (confidence >= CONFIDENCE_BOUNDS.high) return 'high';
   if (confidence >= CONFIDENCE_BOUNDS.moderate) return 'moderate';
   return 'uncertain';
+}
+
+/**
+ * Confidence-graded review gate: true when a detection should auto-queue
+ * for expert/inspector review (confidence below 80). Workflow gate only —
+ * report presentation keeps using tierFor, which is unchanged.
+ */
+export function needsExpertReview(confidence: number): boolean {
+  return confidence < CONFIDENCE_BOUNDS.reviewThreshold;
 }
 
 export const TIER_LABEL: Record<ConfidenceTier, string> = {

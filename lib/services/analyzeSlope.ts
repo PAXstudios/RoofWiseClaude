@@ -4,6 +4,7 @@
 
 import * as FileSystem from 'expo-file-system';
 import {
+  NO_ROOF_MESSAGE,
   analyzePhoto,
   type AnalysisResult,
 } from './gemini';
@@ -13,9 +14,8 @@ import { useTrainingQueueStore } from '../stores/trainingQueueStore';
 import { useToastStore } from '../stores/toastStore';
 import { computeProfile } from './learning/userCorrectionProfile';
 import { userStylePromptPrefix } from './learning/localLearningEngine';
+import { needsExpertReview } from './confidenceTiers';
 import type { Slope } from '../models/types';
-
-const LOW_CONFIDENCE_THRESHOLD = 60;
 
 export type SlopeAnalysisProgress = {
   done: number;
@@ -54,6 +54,7 @@ export async function analyzeSlope(
   let attached = 0;
   let failed = 0;
   let withheldPhotos = 0;
+  let noRoofPhotos = 0;
 
   for (let i = 0; i < todoIndexes.length; i++) {
     const photoIndex = todoIndexes[i];
@@ -76,13 +77,11 @@ export async function analyzeSlope(
         photoIndex,
         r.markers,
       );
-      mergeFindingsForPhoto(inspectionId, slopeId, r);
+      mergeFindingsForPhoto(inspectionId, slopeId, photoIndex, r);
 
-      // Auto-enqueue low-confidence detections for inspector review
-      const avgConfidence = avgMarkerConfidence(r.markers);
-      const shouldQueue =
-        r.markers.length > 0 &&
-        (avgConfidence < LOW_CONFIDENCE_THRESHOLD || r.markers.length > 10);
+      // Canonical review gate (PRODUCT_SYNTHESIS §1): ANY detection below the
+      // 80-confidence review threshold queues the photo for inspector review.
+      const shouldQueue = r.markers.some((m) => needsExpertReview(m.confidence));
       if (shouldQueue) {
         useTrainingQueueStore.getState().enqueue({
           inspectionId,
@@ -93,12 +92,20 @@ export async function analyzeSlope(
         });
       }
 
-      // #31 follow-up: when the client filter withheld everything the model
-      // produced, that photo would otherwise be indistinguishable from a
-      // clean roof. Count it so the inspector gets told below.
-      const audit = r.detectionAudit;
-      if (audit.gridRejected || (audit.rawCount > 0 && audit.keptCount === 0)) {
-        withheldPhotos++;
+      // No-roof photos come back with an empty detectionAudit by design, so
+      // the "withheld detections" toast below never fires for them — count
+      // them separately and tell the inspector with the friendly message
+      // (Drift #5: honest unavailability, never silence).
+      if (r.noRoofDetected) {
+        noRoofPhotos++;
+      } else {
+        // #31 follow-up: when the client filter withheld everything the model
+        // produced, that photo would otherwise be indistinguishable from a
+        // clean roof. Count it so the inspector gets told below.
+        const audit = r.detectionAudit;
+        if (audit.gridRejected || (audit.rawCount > 0 && audit.keptCount === 0)) {
+          withheldPhotos++;
+        }
       }
 
       attached++;
@@ -107,6 +114,15 @@ export async function analyzeSlope(
     }
   }
   opts.onProgress?.({ done: todoIndexes.length, total: todoIndexes.length });
+
+  if (noRoofPhotos > 0) {
+    useToastStore.getState().show({
+      tone: 'warn',
+      title: 'No roof detected',
+      body:
+        `${noRoofPhotos} photo${noRoofPhotos === 1 ? '' : 's'}: ${NO_ROOF_MESSAGE}`,
+    });
+  }
 
   if (withheldPhotos > 0) {
     useToastStore.getState().show({
@@ -122,11 +138,6 @@ export async function analyzeSlope(
   return { results, attached, failed };
 }
 
-function avgMarkerConfidence(markers: AnalysisResult['markers']): number {
-  if (markers.length === 0) return 100;
-  return markers.reduce((sum, m) => sum + m.confidence, 0) / markers.length;
-}
-
 function pickPhotos(slope: Slope, onlyNew: boolean): number[] {
   if (!onlyNew) return slope.photoPaths.map((_, i) => i);
   // Uses the explicit analyzed-index record, not `damage` markers — a photo
@@ -140,6 +151,7 @@ function pickPhotos(slope: Slope, onlyNew: boolean): number[] {
 function mergeFindingsForPhoto(
   inspectionId: string,
   slopeId: string,
+  photoIndex: number,
   result: AnalysisResult,
 ) {
   useInspectionStore.setState((state) => ({
@@ -149,7 +161,26 @@ function mergeFindingsForPhoto(
         ...ins,
         slopes: ins.slopes.map((sl) => {
           if (sl.id !== slopeId) return sl;
-          return { ...sl, aiFindings: [...(sl.aiFindings ?? []), ...result.findings] };
+          // Persist the per-photo scale calibration estimate alongside the
+          // findings so calibration logging survives (and syncs with) the
+          // inspection record.
+          const scale = result.shingleScaleEstimate;
+          const scaleEstimates = scale
+            ? [
+                ...(sl.scaleEstimates ?? []).filter((e) => e.photoIndex !== photoIndex),
+                {
+                  photoIndex,
+                  pixelsPerInch: scale.pixelsPerInch,
+                  confidence: scale.confidence,
+                  reference: scale.reference,
+                },
+              ]
+            : sl.scaleEstimates;
+          return {
+            ...sl,
+            aiFindings: [...(sl.aiFindings ?? []), ...result.findings],
+            scaleEstimates,
+          };
         }),
       };
     }),

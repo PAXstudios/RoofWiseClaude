@@ -8,7 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
+import * as ImagePicker from 'expo-image-picker';
 import { generateHaagReport } from '@/lib/services/haagPdf';
+import { generateLongReport } from '@/lib/services/longReport';
 import { SignaturePad } from '@/components/SignaturePad';
 import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
@@ -17,15 +19,21 @@ import { useToastStore } from '@/lib/stores/toastStore';
 import { isGeminiConfigured } from '@/lib/env';
 import { thresholdFor } from '@/lib/services/haagThresholds';
 import {
-  CLAIM_WORTHINESS_LABELS,
-  claimWorthiness,
+  CLAIM_VIABILITY_LABELS,
+  ROOFWISE_RECOMMENDATION_LABELS,
+  SAFETY_RATING_LABELS,
   damageScore,
   evaluate,
 } from '@/lib/services/decisionEngine';
 import {
+  CAUSE_OF_LOSS_LABELS,
+  COLLATERAL_ZONES,
+  COLLATERAL_ZONE_LABELS,
   DAMAGE_CATEGORY_LABELS,
   INSURANCE_CARRIER_LABELS,
+  POLICY_TYPE_LABELS,
   ROOF_MATERIAL_LABELS,
+  type BrittlenessResult,
   type Inspection,
   type Slope,
   type SlopeVerdict,
@@ -57,6 +65,8 @@ export default function JobDetail() {
   const setStatus = useInspectionStore((s) => s.setStatus);
   const setInspectorSignature = useInspectionStore((s) => s.setInspectorSignature);
   const setCollateralItem = useInspectionStore((s) => s.setCollateralItem);
+  const setCollateralZone = useInspectionStore((s) => s.setCollateralZone);
+  const setBrittlenessProtocol = useInspectionStore((s) => s.setBrittlenessProtocol);
   const setNotes = useInspectionStore((s) => s.setNotes);
   const addAudioNote = useInspectionStore((s) => s.addAudioNote);
   const removeAudioNote = useInspectionStore((s) => s.removeAudioNote);
@@ -65,6 +75,7 @@ export default function JobDetail() {
   const logActivity = useActivityStore((s) => s.log);
   const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const [generating, setGenerating] = useState(false);
+  const [generatingLong, setGeneratingLong] = useState(false);
 
   if (!inspection) {
     return (
@@ -81,9 +92,11 @@ export default function JobDetail() {
     );
   }
 
-  const decision = evaluate(inspection);
+  // asOfIso enables the §6 two-year corroboration check without the engine
+  // reading the clock (Drift #8 purity — the call site supplies "now").
+  const decision = evaluate(inspection, new Date().toISOString());
   const score = damageScore(inspection);
-  const worthiness = claimWorthiness(decision, score);
+  const isClaim = inspection.kind === 'insurance_claim';
 
   const onDelete = () => {
     Alert.alert(
@@ -173,15 +186,37 @@ export default function JobDetail() {
           </Text>
         </View>
 
-        {inspection.carrier && (
+        {(inspection.carrier || isClaim) && (
           <View style={styles.card}>
-            <Text style={styles.cardLabel}>Insurance</Text>
-            <Text style={styles.cardValue}>{INSURANCE_CARRIER_LABELS[inspection.carrier]}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              <Text style={styles.cardLabel}>Insurance</Text>
+              {isClaim && (
+                <View style={styles.claimBadge}>
+                  <Text style={styles.claimBadgeText}>Insurance Claim</Text>
+                </View>
+              )}
+            </View>
+            {inspection.carrier && (
+              <Text style={styles.cardValue}>{INSURANCE_CARRIER_LABELS[inspection.carrier]}</Text>
+            )}
             {(inspection.policyNumber || inspection.claimNumber) && (
               <Text style={styles.cardSub}>
                 {inspection.policyNumber && `Policy ${inspection.policyNumber}`}
                 {inspection.policyNumber && inspection.claimNumber && '  ·  '}
                 {inspection.claimNumber && `Claim ${inspection.claimNumber}`}
+              </Text>
+            )}
+            {isClaim && (
+              <Text style={styles.cardSub}>
+                {[
+                  inspection.causeOfLoss && CAUSE_OF_LOSS_LABELS[inspection.causeOfLoss],
+                  inspection.policyType && POLICY_TYPE_LABELS[inspection.policyType],
+                  inspection.deductible != null &&
+                    `$${inspection.deductible.toLocaleString()} deductible`,
+                  inspection.dateOfLoss && `DOL ${inspection.dateOfLoss}`,
+                ]
+                  .filter(Boolean)
+                  .join('  ·  ') || 'Claim details not recorded yet'}
               </Text>
             )}
           </View>
@@ -217,15 +252,18 @@ export default function JobDetail() {
         <View style={styles.statsRow}>
           <Stat label="Slopes" value={String(inspection.slopes.length)} />
           <Stat label="Photos" value={String(inspection.slopes.reduce((a, sl) => a + sl.photoPaths.length, 0))} />
-          <Stat label="Claim" value={CLAIM_WORTHINESS_LABELS[worthiness]} />
+          <Stat label="Claim" value={CLAIM_VIABILITY_LABELS[decision.haag.claim_viability]} />
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>HAAG verdict</Text>
           <Text style={styles.cardValue}>
-            {decision.roofRecommendation.replace('_', ' ')}
+            {ROOFWISE_RECOMMENDATION_LABELS[decision.haag.roofwise_recommendation]}
           </Text>
           <Text style={styles.cardSub}>{decision.roofVerdictReasoning}</Text>
+          <Text style={styles.cardSub}>
+            Roofer safety: {SAFETY_RATING_LABELS[decision.haag.roofer_safety_rating]}
+          </Text>
         </View>
 
         <PressableScale
@@ -299,6 +337,99 @@ export default function JobDetail() {
             );
           })}
         </View>
+
+        {isClaim && (
+          <View style={styles.card}>
+            <Text style={styles.cardLabel}>Claim evidence</Text>
+            {COLLATERAL_ZONES.map((zone) => {
+              const item = inspection.collateralEvidence?.[zone] ?? { checked: false, photoIds: [] };
+              return (
+                <PressableScale
+                  key={zone}
+                  style={styles.collateralRow}
+                  onPress={() => setCollateralZone(inspection.id, zone, { checked: !item.checked })}
+                >
+                  <Ionicons
+                    name={item.checked ? 'checkbox' : 'square-outline'}
+                    size={22}
+                    color={item.checked ? colors.success : colors.slate}
+                  />
+                  <Text style={styles.collateralLabel}>{COLLATERAL_ZONE_LABELS[zone]}</Text>
+                  {item.photoIds.length > 0 && (
+                    <Text style={styles.cardSub}>
+                      {item.photoIds.length} photo{item.photoIds.length === 1 ? '' : 's'}
+                    </Text>
+                  )}
+                </PressableScale>
+              );
+            })}
+
+            <Text style={[styles.cardLabel, { marginTop: spacing.md }]}>Brittleness test</Text>
+            <Text style={styles.cardSub}>
+              Lift shingle corners in an undamaged area and photograph the test — the photo is
+              required evidence on an insurance report.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+              {(['PASS', 'FAIL', 'BORDERLINE'] as BrittlenessResult[]).map((r) => {
+                const active = inspection.brittlenessProtocol?.result === r;
+                return (
+                  <PressableScale
+                    key={r}
+                    style={[styles.britChip, active && styles.britChipActive]}
+                    onPress={() =>
+                      setBrittlenessProtocol(inspection.id, {
+                        result: r,
+                        photoIds: inspection.brittlenessProtocol?.photoIds ?? [],
+                        notes: inspection.brittlenessProtocol?.notes,
+                      })
+                    }
+                  >
+                    <Text style={[styles.britChipText, active && styles.britChipTextActive]}>
+                      {r === 'PASS' ? 'Pass' : r === 'FAIL' ? 'Fail' : 'Borderline'}
+                    </Text>
+                  </PressableScale>
+                );
+              })}
+            </View>
+            <PressableScale
+              style={styles.analyzeBtn}
+              onPress={() => {
+                if (!inspection.brittlenessProtocol) {
+                  Alert.alert(
+                    'Pick a result first',
+                    'Record the test result (Pass / Fail / Borderline), then attach the photo of the test process.',
+                  );
+                  return;
+                }
+                void pickEvidencePhoto((uri) => {
+                  const current = useInspectionStore
+                    .getState()
+                    .getById(inspection.id)?.brittlenessProtocol;
+                  if (!current) return;
+                  setBrittlenessProtocol(inspection.id, {
+                    ...current,
+                    photoIds: [...current.photoIds, uri],
+                  });
+                });
+              }}
+            >
+              <Ionicons name="camera-outline" size={18} color={colors.navy} />
+              <Text style={styles.analyzeBtnText}>
+                Add test photo
+                {(inspection.brittlenessProtocol?.photoIds.length ?? 0) > 0
+                  ? ` (${inspection.brittlenessProtocol?.photoIds.length})`
+                  : ''}
+              </Text>
+            </PressableScale>
+            {inspection.brittlenessProtocol &&
+              inspection.brittlenessProtocol.photoIds.length === 0 && (
+                <Text style={styles.evidenceWarn}>
+                  Photo of the test process is still required before this result can go to a
+                  carrier.
+                </Text>
+              )}
+          </View>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Notes</Text>
@@ -385,9 +516,93 @@ export default function JobDetail() {
             {generating ? 'Generating…' : 'Generate HAAG report (PDF)'}
           </Text>
         </PressableScale>
+
+        <PressableScale
+          style={[styles.secondaryCta, generatingLong && { opacity: 0.5 }]}
+          disabled={generatingLong}
+          onPress={async () => {
+            try {
+              setGeneratingLong(true);
+              // Payload-build seam: attach the stored §5 cost record to each
+              // §9 slope evaluation (the engine keeps costs under
+              // cost_analysis; the Long Report restates, never recalculates).
+              const perSlope = decision.haag.slope_evaluations.map((ev) => {
+                const cost = decision.haag.cost_analysis?.slopes.find(
+                  (c) => c.slope === ev.slope,
+                );
+                return {
+                  ...ev,
+                  cost: cost
+                    ? {
+                        ...cost.inputs,
+                        repair_cost_slope: cost.repair_cost_slope,
+                        replacement_cost_slope: cost.replacement_cost_slope,
+                      }
+                    : undefined,
+                };
+              });
+              const { uri } = await generateLongReport({
+                inspection,
+                engine: decision.haag,
+                perSlope,
+              });
+              logActivity({
+                kind: 'pdf_generated',
+                inspectionId: inspection.id,
+                message: `Generated Long Report for ${inspection.reportId}`,
+              });
+              await Share.share({ url: uri, message: `RoofWise Long Report ${inspection.reportId}` });
+            } catch (e) {
+              Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
+            } finally {
+              setGeneratingLong(false);
+            }
+          }}
+        >
+          <Ionicons name="reader-outline" size={20} color={colors.navy} />
+          <Text style={styles.secondaryCtaText}>
+            {generatingLong ? 'Generating…' : 'Generate Long Report (PDF)'}
+          </Text>
+        </PressableScale>
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+/**
+ * Camera-first evidence capture with library fallback — same single-select +
+ * Compatible-representation rationale as new-job.tsx / quick-inspection.tsx.
+ */
+async function pickEvidencePhoto(onPicked: (uri: string) => void) {
+  try {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (perm.granted) {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      });
+      if (result.canceled || result.assets.length === 0) return;
+      onPicked(result.assets[0].uri);
+      return;
+    }
+    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!lib.granted) {
+      Alert.alert(
+        'Camera access needed',
+        'Enable Camera or Photos access in Settings to attach test photos.',
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: false,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    onPicked(result.assets[0].uri);
+  } catch (e) {
+    Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
+  }
 }
 
 function SlopeBlock({
@@ -617,12 +832,46 @@ const styles = StyleSheet.create({
   },
   signedBadgeText: { color: colors.success, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
+  claimBadge: {
+    backgroundColor: colors.orange,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+  },
+  claimBadgeText: {
+    color: colors.textInverse,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  britChip: {
+    flex: 1,
+    minHeight: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  britChipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  britChipText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  britChipTextActive: { color: colors.textInverse },
+  evidenceWarn: {
+    fontSize: fontSize.bodySm,
+    color: colors.danger,
+    marginTop: spacing.sm,
+  },
+
   collateralRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.sm,
-    minHeight: touchTarget.small,
+    // Drift #1: gloved-roofer persona — interactive rows meet the 56pt minimum.
+    minHeight: touchTarget.standard,
   },
   collateralLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy },
   collateralChecked: { textDecorationLine: 'line-through', color: colors.slate },

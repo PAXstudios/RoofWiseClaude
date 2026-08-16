@@ -95,7 +95,52 @@ export const ROOF_MATERIAL_LABELS: Record<RoofMaterial, string> = {
 
 export type RoofGeometry = 'gable' | 'hip' | 'mansard' | 'flat' | 'mixed';
 export type RoofCondition = 'excellent' | 'good' | 'fair' | 'poor';
-export type BrittlenessTest = 'not_tested' | 'passed' | 'failed';
+
+/**
+ * Legacy quick-capture brittleness field. `'borderline'` was added for the
+ * Insurance Claim mode field protocol — per HAAG_DECISION_ENGINE.md §4 a
+ * BORDERLINE result gates repairs exactly like FAIL. New code should prefer
+ * `Inspection.brittlenessProtocol` (result + mandatory photos) and fall back
+ * to this field for older records.
+ */
+export type BrittlenessTest = 'not_tested' | 'passed' | 'failed' | 'borderline';
+
+/**
+ * HAAG brittleness result in decision-engine casing (§9 output
+ * `brittleness_result`). FAIL and BORDERLINE both force replacement — spot
+ * repairs on a brittle roof cause further damage.
+ */
+export type BrittlenessResult = 'PASS' | 'FAIL' | 'BORDERLINE';
+
+/**
+ * Brittleness *field protocol* (Professional Report §VII-C): lift shingle
+ * corners in an undamaged area and photograph the test as you run it. In
+ * Insurance Claim mode the photos are REQUIRED evidence — a result without
+ * photos of the process is not defensible in front of an adjuster.
+ */
+export type BrittlenessProtocol = {
+  result: BrittlenessResult;
+  /** Local photo URIs of the test process (photoSync maps local → remote). */
+  photoIds: string[];
+  notes?: string;
+};
+
+export function brittlenessResultToLegacy(r: BrittlenessResult): BrittlenessTest {
+  switch (r) {
+    case 'PASS': return 'passed';
+    case 'FAIL': return 'failed';
+    case 'BORDERLINE': return 'borderline';
+  }
+}
+
+export function legacyBrittlenessToResult(t: BrittlenessTest): BrittlenessResult | undefined {
+  switch (t) {
+    case 'passed': return 'PASS';
+    case 'failed': return 'FAIL';
+    case 'borderline': return 'BORDERLINE';
+    case 'not_tested': return undefined;
+  }
+}
 
 // -----------------------------------------------------------------------------
 // Slope orientation — 8-way compass plus Flat / Unknown
@@ -142,6 +187,13 @@ export type DamageMarker = {
   radius: number;
   confidence: number;       // 0-100
   note?: string;
+  /**
+   * Insurance Claim mode — one sentence tying this observation to the
+   * inspection's cause of loss ("Fracture pattern consistent with hail
+   * impact"). Optional at capture; the insurance report requires it on every
+   * observation it presents (Professional Report doc).
+   */
+  causation?: string;
   /** Index into Slope.photoPaths that this marker belongs to. */
   photoIndex?: number;
   /**
@@ -159,6 +211,8 @@ export type InspectionFinding = {
   confidence: number;       // 0-100
   count: number;
   note?: string;
+  /** See DamageMarker.causation — links the finding to the cause of loss. */
+  causation?: string;
 };
 
 // Spec-described shingle type classification surfaced by Gemini.
@@ -183,6 +237,133 @@ export type StormEvent = {
   distanceMiles?: number;
   source: 'NOAA' | 'manual' | 'other';
 };
+
+/**
+ * Outcome of the automatic NOAA storm search that runs at job creation.
+ * Distinguishes "search ran and found nothing" ('no_match' — the only value
+ * that lets the decision engine treat `weather_event_exists` as false, §4
+ * step 1 / §6 LOW) from "service unreachable" ('unavailable') and "never ran"
+ * (field absent). Mirrors `StormMatchResult['status']` in stormMatch.ts.
+ */
+export type StormSearchOutcome = 'matched' | 'no_match' | 'unavailable';
+
+// -----------------------------------------------------------------------------
+// Insurance Claim mode — Professional Report doc sections VI–IX.
+// Selecting 'insurance_claim' makes the claim questionnaire mandatory; the
+// Storm Damage Protocol (§VII) activates only for wind/hail causes of loss.
+// -----------------------------------------------------------------------------
+
+export type InspectionKind = 'general' | 'insurance_claim';
+
+export const INSPECTION_KIND_LABELS: Record<InspectionKind, string> = {
+  general: 'General Inspection',
+  insurance_claim: 'Insurance Claim',
+};
+
+/** Primary Cause of Loss — exactly 7 values (Professional Report §VI). */
+export const CAUSES_OF_LOSS = [
+  'wind_damage',
+  'hail_damage',
+  'debris_impact',
+  'wear_and_tear',
+  'installation_defect',
+  'manufacturer_defect',
+  'maintenance_neglect',
+] as const;
+
+export type CauseOfLoss = (typeof CAUSES_OF_LOSS)[number];
+
+export const CAUSE_OF_LOSS_LABELS: Record<CauseOfLoss, string> = {
+  wind_damage: 'Wind Damage',
+  hail_damage: 'Hail Damage',
+  debris_impact: 'Debris Impact',
+  wear_and_tear: 'Wear & Tear / Age',
+  installation_defect: 'Installation Defect',
+  manufacturer_defect: 'Manufacturer Defect',
+  maintenance_neglect: 'Maintenance Neglect',
+};
+
+/** §VII Storm Damage Protocols apply only to wind and hail causes. */
+export function isStormCause(cause: CauseOfLoss | null | undefined): boolean {
+  return cause === 'wind_damage' || cause === 'hail_damage';
+}
+
+/** RCV = replacement cost value; ACV = actual cash value (depreciation withheld). */
+export type PolicyType = 'RCV' | 'ACV';
+
+export const POLICY_TYPE_LABELS: Record<PolicyType, string> = {
+  RCV: 'RCV — Replacement Cost',
+  ACV: 'ACV — Actual Cash Value',
+};
+
+/**
+ * Claim Viability input (HAAG_DECISION_ENGINE.md §6): deductible ≤ 2% of home
+ * value supports HIGH viability; above it is a LOW-viability signal.
+ */
+export const DEDUCTIBLE_HOME_VALUE_MAX_RATIO = 0.02;
+
+/** undefined when either number is missing/invalid — never guess. */
+export function isDeductibleHigh(
+  deductible: number | undefined,
+  homeValue: number | undefined,
+): boolean | undefined {
+  if (
+    deductible === undefined || homeValue === undefined ||
+    !Number.isFinite(deductible) || !Number.isFinite(homeValue) || homeValue <= 0
+  ) {
+    return undefined;
+  }
+  return deductible > homeValue * DEDUCTIBLE_HOME_VALUE_MAX_RATIO;
+}
+
+/**
+ * The four canonical collateral evidence zones (Professional Report §VIII).
+ * Soft-metal dents off the roof corroborate the storm; each zone gets
+ * photographed even when clean — a no-damage photo proves the zone was
+ * inspected. Distinct from the legacy `collateralChecklist` quick-observation
+ * booleans, which stay untouched for older records.
+ */
+export const COLLATERAL_ZONES = [
+  'gutters_downspouts',
+  'hvac_condenser_fins',
+  'siding_window_screens',
+  'soft_metal_roof_vents',
+] as const;
+
+export type CollateralZone = (typeof COLLATERAL_ZONES)[number];
+
+export const COLLATERAL_ZONE_LABELS: Record<CollateralZone, string> = {
+  gutters_downspouts: 'Gutters & Downspouts',
+  hvac_condenser_fins: 'HVAC Condenser Fins',
+  siding_window_screens: 'Siding & Window Screens',
+  soft_metal_roof_vents: 'Soft-Metal Roof Vents',
+};
+
+export const COLLATERAL_ZONE_HINTS: Record<CollateralZone, string> = {
+  gutters_downspouts: 'Look for dents, not blockage',
+  hvac_condenser_fins: 'Crushed or flattened fins on the condenser coil',
+  siding_window_screens: 'Impact marks, torn screens, cracked siding',
+  soft_metal_roof_vents: 'Dings on turtle vents, turbines, flashing caps',
+};
+
+export type CollateralChecklistItem = {
+  /** True once the zone has been inspected (damaged or clean). */
+  checked: boolean;
+  /** Local photo URIs of the zone (photoSync maps local → remote). */
+  photoIds: string[];
+  note?: string;
+};
+
+export type CollateralEvidence = Record<CollateralZone, CollateralChecklistItem>;
+
+export function emptyCollateralEvidence(): CollateralEvidence {
+  return {
+    gutters_downspouts: { checked: false, photoIds: [] },
+    hvac_condenser_fins: { checked: false, photoIds: [] },
+    siding_window_screens: { checked: false, photoIds: [] },
+    soft_metal_roof_vents: { checked: false, photoIds: [] },
+  };
+}
 
 // -----------------------------------------------------------------------------
 // Slope + Inspection
@@ -218,6 +399,18 @@ export type Slope = {
   analyzedPhotoIndices?: number[];
   /** localUri → Supabase Storage public URL, written by photoSync. */
   photoUploads?: Record<string, string>;
+  /**
+   * Per-photo shingle-scale calibration estimates from Gemini (keyed by
+   * photoIndex), persisted for calibration logging. Optional — older
+   * inspections predate this field. Rides the whole-Inspection JSON payload
+   * through inspectionSync automatically.
+   */
+  scaleEstimates?: {
+    photoIndex: number;
+    pixelsPerInch: number | null;
+    confidence: number;
+    reference?: string;
+  }[];
 };
 
 export type InspectionStatus = 'lead' | 'scheduled' | 'in_progress' | 'complete';
@@ -244,6 +437,22 @@ export type Inspection = {
   claimNumber?: string;
   adjusterName?: string;
 
+  // Insurance Claim mode (Professional Report §VI–IX). All optional so
+  // persisted pre-claim-mode inspections load unchanged; absent `kind`
+  // reads as 'general'.
+  kind?: InspectionKind;
+  causeOfLoss?: CauseOfLoss;
+  policyType?: PolicyType;
+  deductible?: number;              // dollars
+  homeValue?: number;               // dollars — for the deductible ≤2% viability check
+  priorClaimsWithin3Years?: boolean;
+  /** Date of loss as reported by the homeowner (§VII — storm causes only). */
+  dateOfLoss?: string;
+  collateralEvidence?: CollateralEvidence;
+  brittlenessProtocol?: BrittlenessProtocol;
+  /** §IX — local code items that expand covered scope (ventilation, ice & water shield). */
+  codeComplianceNotes?: string;
+
   // Roof System
   material: RoofMaterial;
   ageYears: number;
@@ -254,6 +463,8 @@ export type Inspection = {
 
   // Event
   event?: StormEvent;
+  /** How the automatic storm search resolved — absent on inspections that never searched. */
+  stormSearchOutcome?: StormSearchOutcome;
 
   // Slopes
   slopes: Slope[];

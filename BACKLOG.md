@@ -13,20 +13,19 @@ entry does not count as tracked.
 
 ## Now (committed next steps, in order — see docs/PRODUCT_SYNTHESIS.md §5 for the full rationale)
 
-- [ ] **Rewrite `decisionEngine.ts` + `haagThresholds.ts` against `docs/HAAG_DECISION_ENGINE.md`** — current code has 3-tab at 8 hits (should be >5) and architectural at 10 (should be >8), is missing the wood/metal/tile/flat material rules, and has none of the repairability gates (discontinued material, brittleness FAIL/BORDERLINE, 2+ layers) that override hit counts entirely. Highest-value correctness fix in the repo — 2026-08-03
-- [ ] **Add Claim Viability engine** (HIGH/MEDIUM/LOW) — the claimability protocol, sourced from the Drive decision-engine doc. Replaces the invented `damageScore()` weights, which cite a spec section that never contained them. Inputs: ±72h date-of-loss match, RCV vs ACV, deductible % of home value, prior claims in 3 years, carrier denial behavior, two-year corroboration limit — 2026-08-03
-- [ ] **Add pre-climb Safety engine** (SAFE / USE_CAUTION / UNSAFE from forecast: wind, gusts, precip, temp, lightning) — gates the Quick Inspection entry point — 2026-08-03
-- [ ] **Long Report (8-section) + Insurance report variant (6-section)** — the Long Report doc's `{{inspection_json}}` contract (report layer never recalculates RC or contradicts stored booleans) plus the Professional Report doc's insurance structure: test-square table (Slope | Count | Size), brittleness narrative, per-finding HAAG rule citations — synthesis 2026-08-16
-- [ ] **Insurance Claim mode (sections VI–IX)** — Insurance-vs-General toggle, 7-value Cause-of-Loss enum, required per-observation `causation` field, collateral evidence checklist capture (gutters/HVAC/screens/vents, each photographed), brittleness field protocol with mandatory photos, inspector credentials + code-compliance notes — synthesis 2026-08-16
-- [ ] **Detection hardening in the Gemini prompt** — `shingleScaleEstimate` calibration logging, anti-fabrication guard (no roof in frame → no findings), ridge-cap false-positive instruction, <80% confidence auto-queue wired into Train — synthesis 2026-08-16
-- [ ] **Storm validation to the public spec** — ≥0.25" hail floor in `stormMatch.ts`, 3–4-year address lookback, per-job storm view, Triple-Check discrepancy flag (AI hail + no storm on date → review) — synthesis 2026-08-16
 - [ ] **19-area slope/subject tagging + Single-Shingle vs 10x10-Square capture modes** with separately aggregated counts; label burned into photo — synthesis 2026-08-16
-- [ ] **Restore the desktop/responsive layout.** The scaffold had `theme/useResponsive.ts` plus `Sidebar` + `TopBar` for ≥1100px and bottom tabs under 768px. All three are gone from the current tree; the app is mobile-only — surfaced by the owner's uploaded scaffold-era CLAUDE.md, 2026-08-03
-- [ ] **Device pass on a real iPhone** — verify (a) rectangle overlays + withheld-detections toast against a live analysis [#39], and (b) the new 2560px analyze profile is actually selected (not the SAFE fallback), with no OOM on a long capture session [#41] · built and typechecked, but not yet seen with live Gemini output
+- [ ] **Persist the engine result on the inspection** — `haagPdf.ts` still runs `evaluate()` fresh at render time; store the full `HaagEngineResult` at analysis/finalize time and have every report surface read the stored payload (Long Report already takes a payload) — #50 integration note
+- [ ] **Wire a real forecast into `HaagEngineInput.forecast`** — `roofer_safety_rating` reads "Use caution" until WeatherTile/Open-Meteo data reaches the engine; also gate Quick Inspection entry on `evaluateSafety()` — #50 integration note
+- [ ] **Device pass on a real iPhone** — verify (a) rectangle overlays + withheld-detections toast against a live analysis [#39], (b) the 2560px analyze profile is actually selected with no OOM [#41], and (c) the new claim-evidence photo attach + responsive shell on tablet [#50]
 
 ## Soon (from the 2026-08-16 Drive synthesis — after Now clears)
 
-- [ ] Damage Score reconciliation — Kanban PRD defines 1–100 INVERTED (1–30 red/severe, 61–100 green/repair); reconcile `DamageScoreBar` semantics explicitly, don't silently flip — synthesis
+- [ ] Damage Score reconciliation — Kanban PRD defines 1–100 INVERTED (1–30 red/severe, 61–100 green/repair); reconcile `DamageScoreBar` semantics explicitly, don't silently flip. `damageScore()`/`claimWorthiness()` are now deprecated wrappers over the §6 claim-viability band; homeowner-summary tone branches in `haagPdf.ts` still key off the old worthiness scale — synthesis + #50
+- [ ] Watch Train-tab queue volume — the new <80% expert-review gate queues far more photos than the old avg<60 rule (store caps at 500); consider queueing only the sub-80 subset per photo — #50
+- [ ] Enforce brittleness-protocol photos (≥1) before a claim-mode report can finalize — the job screen warns and the report discloses the gap, but generation isn't blocked; needs a finalize step — #50
+- [ ] Migrate `map.tsx`/`hail-tracer.tsx` to `fetchAddressStormHistory` (4-year clamp); `lib/noaa.ts` severityColor still keys hail colors at 0.75" with inline hex (pre-existing Drift #11 debt) — #50
+- [ ] Claim-evidence photo attach bypasses `prepareCapturedPhoto` (no resize profile); route through the image pipeline — #50
+- [ ] Real date-of-loss capture in claim mode — Triple-Check currently falls back to the attached event's own date when no user DOL exists, which trivially satisfies the ±72h leg; the HIGH-band criterion only has teeth with a user-entered DOL — #50
 - [ ] Mobile-first pipeline board — 11-column job pipeline as a glove-friendly column-picker view inside Leads (Kanban PRD's own mobile section) — synthesis
 - [ ] Swipe-review completion — up = correct gesture, 5-star confidence rating, trust-weighting field on correction profile (weighting itself is post-raise) — synthesis
 - [ ] Report integrity — SHA-256 hash embedded in PDF + verification endpoint (Supabase edge function) — synthesis
@@ -51,7 +50,8 @@ entry does not count as tracked.
 - [ ] `REQUIRE_AUTH=true` end-to-end re-test (welcome gate → sign-in → tabs) — #38
 - [ ] Rotate ALL API keys ever pasted in chat (Gemini, Supabase anon, Maps) — Context Summary standing item
 - [ ] Supabase project on a paid tier (free tier auto-pauses after 7 idle days → "network request failed" in the field) — session 2026-07-07
-- [ ] Web is preview-only — confirm no web target ships; camera/maps/sensors/PDF are device-only — #38
+- [ ] **Web is now a FIRST-CLASS target** (owner directive 2026-08-16, reverses #38's preview-only ruling): host the static export (roofwise.app), browser pass on the web build (maps with `EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY`, responsive shell ≥1100px, camera/sensor tools show their friendly web notices), and referrer-restrict the web Maps key — #50
+- [ ] EAS build config covers all three targets: iOS + Android store builds, `expo export --platform web` for the web app — #50
 
 ## Marketing (website/ folder)
 
@@ -71,6 +71,16 @@ entry does not count as tracked.
 - [ ] Circle-to-focus secondary Gemini pass ("2D virtual chalk") — Camera prompt via synthesis
 
 ## Done (most recent first)
+
+- [x] Rewrite `decisionEngine.ts` + `haagThresholds.ts` against `docs/HAAG_DECISION_ENGINE.md` — corrected thresholds (3-tab >5, architectural >8, wood/metal/tile/flat rules), §3 repairability gates override counts, §4 tree in exact order, RC stored once — closed by #50
+- [x] Claim Viability engine (HIGH/MEDIUM/LOW) — `lib/services/claimViability.ts`; `damageScore()`/`claimWorthiness()` kept as deprecated wrappers — closed by #50
+- [x] Pre-climb Safety engine — `lib/services/safetyEngine.ts` (SAFE/USE_CAUTION/UNSAFE, conservative on missing inputs) — closed by #50
+- [x] Long Report (8-section) `lib/services/longReport.ts` + Insurance report variant in `haagPdf.ts` (test-square table, brittleness narrative, rule citations, carrier-norm context) — closed by #50
+- [x] Insurance Claim mode — toggle, 7-value Cause-of-Loss, collateral checklist, brittleness photo protocol, policy RCV/ACV + deductible + home value + prior claims, code-compliance notes — closed by #50
+- [x] Detection hardening — `shingleScaleEstimate` persisted per photo, anti-fabrication `no_roof_detected` flag + toast, ridge-cap guard, `needsExpertReview()` <80% auto-queue into Train — closed by #50
+- [x] Storm validation — ≥0.25" hail floor (exported constant), 4-year lookback distinct from 2-year corroboration, `tripleCheckDateOfLoss()` discrepancy verdict wired into engine + report — closed by #50
+- [x] Restore desktop/responsive layout — `theme/useResponsive.ts`, `components/shell/{Sidebar,TopBar}.tsx`, responsive `(tabs)/_layout` (≥1100px sidebar, phones byte-identical) — closed by #50
+- [x] Real web map — `Map.web.tsx` upgraded from placeholder to Google Maps JS (same export surface; friendly placeholder kept when key absent); web export green incl. Supabase Node-prerender fix — closed by #50
 
 - [x] Full 35-route audit harness; 35/35 clean — closed by #42
 - [x] setState-during-render in ProposalView (double-create / dropped write) — closed by #42

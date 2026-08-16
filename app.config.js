@@ -24,7 +24,8 @@ module.exports = {
     userInterfaceStyle: 'light',
     splash: {
       resizeMode: 'contain',
-      backgroundColor: '#F0F0E4',
+      // Brand v2: the app proper runs on white (see theme/tokens.ts).
+      backgroundColor: '#FFFFFF',
     },
     assetBundlePatterns: ['**/*'],
     ios: {
@@ -67,6 +68,16 @@ module.exports = {
       adaptiveIcon: {
         backgroundColor: '#0C183C',
       },
+    },
+    web: {
+      // First-class web target: Metro bundling + static export so the same
+      // expo-router tree ships to iOS, Android, and a hosted web app
+      // (`npx expo export --platform web`).
+      bundler: 'metro',
+      output: 'static',
+      // Ships as favicon.ico in the static export — without it every page
+      // load logs a 404 for /favicon.ico.
+      favicon: './assets/favicon.png',
     },
     plugins: [
       'expo-router',

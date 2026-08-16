@@ -1,8 +1,13 @@
-// Gemini 2.5 Flash vision service.
-// Spec section "Gemini System Prompt for Damage Detection" + Drift Warning #9.
+// Gemini 2.5 Pro vision service (model id from env, default gemini-2.5-pro —
+// Drift Warning #9: gemini-3-flash / gemini-3.5-flash do not exist).
+// Spec section "Gemini System Prompt for Damage Detection" +
+// docs/PRODUCT_SYNTHESIS.md §1 "AI analysis" (scale-aware detection,
+// anti-fabrication guard, ridge-cap false-positive mitigation).
 //
-// Real API only — no mock fallback. Throws a clear error when the API key is
-// missing so callers can surface a friendly "Not available" state.
+// Real API only — no mock fallback (Drift #5). Throws a clear error when the
+// API key is missing so callers can surface a friendly "Not available" state.
+// A placeholder/invalid key produces GeminiNotConfiguredError or
+// GeminiAnalysisError — never synthesized findings.
 
 import {
   DAMAGE_CATEGORIES,
@@ -42,10 +47,36 @@ export type DetectionAudit = {
   gridRejected: boolean;
 };
 
+/** Scale calibration derived from the in-photo shingle ruler.
+ *  Standard asphalt shingle geometry (12in x 36in, ~5.6in exposed course)
+ *  gives the model a known physical reference in almost every roof photo. */
+export type ShingleScaleEstimate = {
+  /** Estimated image resolution at the roof plane. Null when the model found
+   *  no reliable shingle feature to measure (extreme angle, macro crop,
+   *  non-asphalt material). */
+  pixelsPerInch: number | null;
+  /** Which shingle feature the model measured to derive the scale. */
+  reference?: string;
+  /** 0-100 — how confident the model is in the scale estimate itself. */
+  confidence: number;
+};
+
+/** Friendly copy for the no-roof state (Drift #5 — honest empty state,
+ *  never synthesized findings). Call sites surface this when
+ *  `noRoofDetected` is true instead of the "withheld detections" copy. */
+export const NO_ROOF_MESSAGE =
+  'No roof detected in this photo. Nothing was flagged — re-aim at the shingle surface and re-shoot.';
+
 export type AnalysisResult = {
   analyzed: boolean;
+  /** Anti-fabrication guard: true when the model could not identify a
+   *  roof/shingle surface in frame. Findings and markers are always empty
+   *  when set — surface NO_ROOF_MESSAGE in the UI. */
   noRoofDetected: boolean;
   shingleType?: ShingleTypeClassification;
+  /** Persisted on the result for calibration logging/sync. Absent on older
+   *  cached results that predate scale-aware detection. */
+  shingleScaleEstimate?: ShingleScaleEstimate;
   findings: InspectionFinding[];
   markers: DamageMarker[];
   /** Why markers may differ from what the model produced — drives the
@@ -62,6 +93,12 @@ Return STRICT JSON only (no markdown wrapper), with this exact schema:
 
 {
   "analyzed": true|false,
+  "no_roof_detected": true|false,
+  "shingle_scale_estimate": {
+    "pixels_per_inch": <number, or null when no reliable reference is measurable>,
+    "reference": "<which shingle feature you measured and its approximate pixel extent>",
+    "confidence": 0-100
+  },
   "shingle_type": {
     "type": "3-tab asphalt|architectural asphalt|luxury asphalt|wood shake|wood shingle|metal standing seam|metal shingle|clay tile|concrete tile|slate|synthetic slate|composite|rolled roofing|TPO|EPDM|unknown",
     "confidence": 0-100,
@@ -88,11 +125,20 @@ Return STRICT JSON only (no markdown wrapper), with this exact schema:
   ]
 }
 
+STEP 0 — ANTI-FABRICATION GUARD (absolute; evaluate before anything else)
+If you cannot positively identify a roof or shingle surface in the frame (grass, sky, indoors, a person, a vehicle, pavement, a blank or corrupted image, an unrelated screenshot), you MUST return exactly: "analyzed": false, "no_roof_detected": true, empty "findings", empty "detections", and "shingle_scale_estimate" with pixels_per_inch null. NEVER invent findings to be helpful — zero findings on a non-roof photo is the correct, expected answer. When a roof IS identifiable, set "no_roof_detected": false and continue.
+
+STEP 1 — CALIBRATE SCALE (before sizing any detection)
+Standard asphalt shingles are manufactured to known dimensions: a full shingle is 12in tall x 36in wide, and the exposed course (the visible band between horizontal course lines) is ~5.6in tall. On 3-tab shingles each tab is ~12in wide. Use whichever of these is most cleanly visible as an in-photo ruler:
+- Measure that feature's extent in image pixels, divide by its known size in inches, and report the result as "shingle_scale_estimate.pixels_per_inch", naming what you measured in "reference".
+- If no shingle geometry is measurable (extreme oblique angle, tight macro crop, non-asphalt material), report "pixels_per_inch": null and lower your detection confidences to reflect the missing scale anchor.
+- Size EVERY detection by its pixel extent RELATIVE TO THIS SCALE: convert a candidate's pixel extent into inches using your estimate and check that the physical size is plausible for that damage class before emitting it. Do NOT assume any fixed pixel size for damage, and do NOT apply a memorized absolute size range without converting through the measured scale — the same hail bruise can span 15px in a wide establishing shot and 400px in a close-up.
+
 ALL 13 DAMAGE CATEGORIES ARE IN SCOPE
 You are not a hail-only detector. Look for and emit detections for every category visible: hail_hits AND bruising AND granule_loss AND wind_damage AND wind_creasing AND blistering AND cracking AND flashing_damage AND algae_moss AND missing_shingles AND splitting AND lifted_shingles AND structural_sagging. Multiple categories can and often do appear in the same photo.
 
 BOUNDING-BOX COORDINATE SYSTEM (critical — use the integer 0–1000 scale, NOT decimal fractions)
-"box_2d" is a 4-integer array [ymin, xmin, ymax, xmax] where each value is on a 0–1000 scale relative to the image (ymin=0 is the top edge, ymax=1000 is the bottom edge; xmin=0 is the left, xmax=1000 is the right). Boxes tightly enclose the damage instance — no padding. A real hail-strike bounding box is typically 20–60 wide and 20–60 tall on the 0–1000 scale; a granule-loss patch can be 80–250 across; a missing shingle can be 100–300 across. ymin < ymax and xmin < xmax always.
+"box_2d" is a 4-integer array [ymin, xmin, ymax, xmax] where each value is on a 0–1000 scale relative to the image (ymin=0 is the top edge, ymax=1000 is the bottom edge; xmin=0 is the left, xmax=1000 is the right). Boxes tightly enclose the damage instance — no padding. Box extent follows from the calibrated scale (STEP 1), never from a stock size: measure the damage's true pixel extent, then express it on the 0–1000 scale. There is no "typical" box size — it depends entirely on how close the shot is. ymin < ymax and xmin < xmax always.
 
 DETECTION VOLUME GUIDANCE (calibrate to what you see)
 - Clean roof, no storm: 0–2 detections (most likely 0).
@@ -111,13 +157,12 @@ ANTI-HALLUCINATION RULES (avoid these specific failure modes)
 
 4. GRANULE LOSS — output ONE box per patch covering the whole visible patch, not multiple boxes inside one patch.
 
-5. HAIL HITS — each strike is its own box. A hail bruise has: a circular/oval shape, exposed darker substrate (mat) in the center, granule displacement at the edges, often with a faint shiny appearance from compressed asphalt.
+5. HAIL HITS — each strike is its own box. A hail bruise has: a circular/oval shape, exposed darker substrate (mat) in the center, granule displacement at the edges, often with a faint shiny appearance from compressed asphalt. Judge its size through the calibrated scale (STEP 1), never against a fixed pixel expectation.
+
+6. RIDGE AND HIP CAPS ARE FALSE-POSITIVE MAGNETS. The cut edges of ridge/hip cap shingles, their overlap seams, and the hard shadow lines they cast are routinely mistaken for hail hits. For any candidate detection on or immediately adjacent to a ridge or hip line, emit it as hail_hits or bruising ONLY if you can see mat fracture or exposed substrate INSIDE the mark itself — a cap edge, seam, or shadow line alone is not evidence. Without that substrate-level evidence, either skip the detection or emit it with confidence below 60 and a note stating it sits on a ridge line with limited evidence.
 
 FINDINGS (the 13-row summary table)
 Include all 13 damage categories in "findings". "detected": true when that category is genuinely present. "count" is the number of distinct instances visible (should roughly match the number of boxes you output for that category).
-
-NOT-A-ROOF DETECTION
-If the image is not a roof (grass, sky, indoors, person, vehicle, blank screenshot), set "analyzed": false, return empty "detections", and add ONE finding with label "no_roof_detected".
 
 CONFIDENCE RUBRIC (apply per-detection — be willing to commit to high confidence when the evidence is clear)
 - 90–100: Unmistakable. Multiple definitive indicators visible (e.g. for hail: circular shape + exposed mat + granule displacement). Use this freely when warranted.
@@ -159,7 +204,7 @@ export async function analyzePhoto(opts: AnalyzeOptions): Promise<AnalysisResult
             },
           },
           {
-            text: 'Analyze this roof photograph. Identify the shingle type, evaluate all 13 damage categories in findings, and detect every distinct damage instance you can see with a tight bounding box on the 0–1000 integer scale (box_2d). Cover ALL damage categories present — hail, wind, granule loss, missing shingles, cracking, blistering, lifted shingles, flashing, algae, structural sagging, splitting, bruising, wind creasing. If real storm damage is present you should output many detections; the inspector trusts you to flag everything they would.',
+            text: 'Analyze this roof photograph. First confirm a roof/shingle surface is actually in frame (if not, return no_roof_detected: true with zero findings), then calibrate pixels-per-inch from the standard shingle geometry and report shingle_scale_estimate. Identify the shingle type, evaluate all 13 damage categories in findings, and detect every distinct damage instance you can see with a tight bounding box on the 0–1000 integer scale (box_2d), sized by pixel extent relative to your scale estimate. Cover ALL damage categories present — hail, wind, granule loss, missing shingles, cracking, blistering, lifted shingles, flashing, algae, structural sagging, splitting, bruising, wind creasing. If real storm damage is present you should output many detections; the inspector trusts you to flag everything they would.',
           },
         ],
       },
@@ -202,8 +247,33 @@ export async function analyzePhoto(opts: AnalyzeOptions): Promise<AnalysisResult
 
 function normalize(parsed: any, raw: unknown): AnalysisResult {
   const noRoofDetected =
+    // Current prompt: explicit machine-readable flag.
+    parsed?.no_roof_detected === true ||
     parsed?.analyzed === false ||
+    // Legacy prompt versions signalled this as a pseudo-finding; keep parsing
+    // it so older cached responses still surface the state.
     !!parsed?.findings?.find?.((f: any) => f?.label === 'no_roof_detected');
+
+  const shingleScaleEstimate = parseScaleEstimate(parsed?.shingle_scale_estimate);
+
+  if (noRoofDetected) {
+    // Anti-fabrication guard: a no-roof verdict wins over any detections the
+    // model contradicted itself with — zero findings is the only honest
+    // output (Drift #5). The audit reports an empty batch so the "AI
+    // withheld detections" toast (which coaches a re-shoot for light) never
+    // fires for a non-roof photo; callers surface NO_ROOF_MESSAGE via the
+    // noRoofDetected flag instead.
+    return {
+      analyzed: false,
+      noRoofDetected: true,
+      shingleType: undefined,
+      shingleScaleEstimate,
+      findings: [],
+      markers: [],
+      detectionAudit: { rawCount: 0, keptCount: 0, gridRejected: false },
+      raw,
+    };
+  }
 
   const findings: InspectionFinding[] = (parsed?.findings ?? [])
     .map((f: any): InspectionFinding | null => {
@@ -280,8 +350,10 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
 
   return {
     analyzed: parsed?.analyzed !== false,
-    noRoofDetected,
+    // Always false here — the no-roof case returned early above.
+    noRoofDetected: false,
     shingleType,
+    shingleScaleEstimate,
     findings,
     markers,
     detectionAudit: {
@@ -290,6 +362,19 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
       gridRejected,
     },
     raw,
+  };
+}
+
+// Defensive parse of the scale-calibration block. Older cached responses
+// (and any model reply that omits or malforms it) yield undefined — callers
+// must treat the field as optional.
+function parseScaleEstimate(raw: any): ShingleScaleEstimate | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const ppi = Number(raw.pixels_per_inch);
+  return {
+    pixelsPerInch: Number.isFinite(ppi) && ppi > 0 ? ppi : null,
+    reference: typeof raw.reference === 'string' ? raw.reference : undefined,
+    confidence: clamp(Number(raw.confidence ?? 0), 0, 100),
   };
 }
 

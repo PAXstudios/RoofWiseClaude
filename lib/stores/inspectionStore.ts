@@ -2,9 +2,16 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
+  BrittlenessProtocol,
   BrittlenessTest,
+  CauseOfLoss,
+  CollateralChecklistItem,
+  CollateralEvidence,
+  CollateralZone,
   Inspection,
+  InspectionKind,
   InspectionStatus,
+  PolicyType,
   RoofMaterial,
   RoofGeometry,
   RoofCondition,
@@ -13,6 +20,10 @@ import type {
   SlopeOrientation,
   DamageMarker,
   InspectionFinding,
+} from '../models/types';
+import {
+  brittlenessResultToLegacy,
+  emptyCollateralEvidence,
 } from '../models/types';
 
 let counter = 0;
@@ -64,7 +75,33 @@ type CreateDraft = {
   geometry: RoofGeometry;
   condition: RoofCondition;
   brittlenessTest?: BrittlenessTest;
+
+  // Insurance Claim mode (all optional — default is a general inspection).
+  kind?: InspectionKind;
+  causeOfLoss?: CauseOfLoss;
+  policyType?: PolicyType;
+  deductible?: number;
+  homeValue?: number;
+  priorClaimsWithin3Years?: boolean;
+  dateOfLoss?: string;
+  collateralEvidence?: CollateralEvidence;
+  brittlenessProtocol?: BrittlenessProtocol;
+  codeComplianceNotes?: string;
 };
+
+/** Claim detail fields editable after creation (job detail / edit flows). */
+type ClaimDetailsPatch = Partial<
+  Pick<
+    Inspection,
+    | 'causeOfLoss'
+    | 'policyType'
+    | 'deductible'
+    | 'homeValue'
+    | 'priorClaimsWithin3Years'
+    | 'dateOfLoss'
+    | 'codeComplianceNotes'
+  >
+>;
 
 export type PhotoCapture = {
   uri: string;
@@ -86,8 +123,18 @@ type InspectionStoreState = {
   remove: (id: string) => void;
   setStatus: (id: string, status: InspectionStatus) => void;
   setEvent: (id: string, event: Inspection['event']) => void;
+  setStormSearchOutcome: (id: string, outcome: Inspection['stormSearchOutcome']) => void;
   setInspectorSignature: (id: string, svg: string) => void;
   setCollateralItem: (id: string, key: string, value: boolean) => void;
+  setKind: (id: string, kind: InspectionKind) => void;
+  setCauseOfLoss: (id: string, cause: CauseOfLoss | undefined) => void;
+  setClaimDetails: (id: string, patch: ClaimDetailsPatch) => void;
+  setCollateralZone: (
+    id: string,
+    zone: CollateralZone,
+    patch: Partial<CollateralChecklistItem>,
+  ) => void;
+  setBrittlenessProtocol: (id: string, protocol: BrittlenessProtocol | undefined) => void;
   addAudioNote: (id: string, note: { uri: string; durationSec: number; label?: string }) => void;
   removeAudioNote: (id: string, noteId: string) => void;
   setAudioNoteLabel: (id: string, noteId: string, label: string) => void;
@@ -160,10 +207,30 @@ export const useInspectionStore = create<InspectionStoreState>()(
           ageYears: d.ageYears,
           geometry: d.geometry,
           condition: d.condition,
-          brittlenessTest: d.brittlenessTest ?? 'not_tested',
+          brittlenessTest:
+            d.brittlenessTest ??
+            (d.brittlenessProtocol
+              ? brittlenessResultToLegacy(d.brittlenessProtocol.result)
+              : 'not_tested'),
           collateralChecklist: {},
           slopes: [],
           verifyWithInspector: false,
+
+          // Insurance Claim mode. `kind` defaults to general; a claim gets an
+          // empty four-zone collateral checklist so the capture flow always
+          // has all zones to walk.
+          kind: d.kind ?? 'general',
+          causeOfLoss: d.causeOfLoss,
+          policyType: d.policyType,
+          deductible: d.deductible,
+          homeValue: d.homeValue,
+          priorClaimsWithin3Years: d.priorClaimsWithin3Years,
+          dateOfLoss: d.dateOfLoss,
+          collateralEvidence:
+            d.collateralEvidence ??
+            (d.kind === 'insurance_claim' ? emptyCollateralEvidence() : undefined),
+          brittlenessProtocol: d.brittlenessProtocol,
+          codeComplianceNotes: d.codeComplianceNotes,
         };
         set((s) => ({
           inspections: [inspection, ...s.inspections],
@@ -185,6 +252,13 @@ export const useInspectionStore = create<InspectionStoreState>()(
           inspections: s.inspections.map((i) => (i.id === id ? { ...i, event } : i)),
         })),
 
+      setStormSearchOutcome: (id, outcome) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id ? { ...i, stormSearchOutcome: outcome } : i,
+          ),
+        })),
+
       setInspectorSignature: (id, svg) =>
         set((s) => ({
           inspections: s.inspections.map((i) =>
@@ -201,6 +275,69 @@ export const useInspectionStore = create<InspectionStoreState>()(
               ? { ...i, collateralChecklist: { ...i.collateralChecklist, [key]: value } }
               : i,
           ),
+        })),
+
+      setKind: (id, kind) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) => {
+            if (i.id !== id) return i;
+            return {
+              ...i,
+              kind,
+              // Flipping an existing job to a claim initializes the four-zone
+              // checklist; flipping back keeps any evidence already gathered.
+              collateralEvidence:
+                kind === 'insurance_claim'
+                  ? i.collateralEvidence ?? emptyCollateralEvidence()
+                  : i.collateralEvidence,
+            };
+          }),
+        })),
+
+      setCauseOfLoss: (id, cause) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id ? { ...i, causeOfLoss: cause } : i,
+          ),
+        })),
+
+      setClaimDetails: (id, patch) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id ? { ...i, ...patch } : i,
+          ),
+        })),
+
+      setCollateralZone: (id, zone, patch) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) => {
+            if (i.id !== id) return i;
+            // Migration-safe: pre-claim-mode records have no evidence map yet.
+            const evidence = i.collateralEvidence ?? emptyCollateralEvidence();
+            return {
+              ...i,
+              collateralEvidence: {
+                ...evidence,
+                [zone]: { ...evidence[zone], ...patch },
+              },
+            };
+          }),
+        })),
+
+      setBrittlenessProtocol: (id, protocol) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) => {
+            if (i.id !== id) return i;
+            return {
+              ...i,
+              brittlenessProtocol: protocol,
+              // Mirror into the legacy field so older read sites (report
+              // header, engine fallback) stay truthful.
+              brittlenessTest: protocol
+                ? brittlenessResultToLegacy(protocol.result)
+                : i.brittlenessTest,
+            };
+          }),
         })),
 
       addAudioNote: (id, note) =>

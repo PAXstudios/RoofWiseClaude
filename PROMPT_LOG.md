@@ -2145,3 +2145,31 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Key rulings recorded (Contradictions section):** Drift Warnings beat every Drive doc where they conflict (5 tabs not sidebar, camera-only not LiDAR, no mocks, tokens not inline hex, gloved-roofer persona); Quadrant's 2–3 photos/square is engineering truth over the deck's 4; storm lookback (map, ≤4yr) is distinct from claim corroboration (2yr max); confidence must never be rendered as accuracy; the Influencer Messaging doc is for a physical shingle product and is excluded from product truth.
 
 **Files touched:** `docs/PRODUCT_SYNTHESIS.md` (new), `BACKLOG.md`, `PROMPT_LOG.md`.
+
+---
+
+### [2026-08-16] #50 — Coordinated 11-agent parallel build: HAAG engine rewrite, claim mode, Long Report, detection hardening, storm validation, web as first-class target
+
+**Prompt:**
+> Please use multiple agents do work in coordination at the same time on multiple things.
+> I want this to be an app that I will put on android and Apple Store. I also want to be able to use the same program to do the web app as well so that users can use seamlessly across devices.
+
+**How it ran:** one workflow, four phases — 6 builders in parallel with strict disjoint file ownership, then 1 integrator, then 3 verifiers in parallel (engine-vs-spec adversarial audit, drift-compliance diff review, build+headless-browser boot test), then 1 fix agent. 11 agents, ~1.43M tokens, 0 errors. 21 files modified + 7 new, +4,749/−404.
+
+**Decision recorded — web is a first-class target.** Owner directive reverses #38's "web is preview-only" ruling. One Expo codebase now ships three ways: EAS build → App Store + Play Store; `npx expo export --platform web` → hosted web app. BACKLOG "Before ship" updated accordingly.
+
+**What shipped:**
+1. **Engine rewrite to spec** (`haagThresholds.ts`, `decisionEngine.ts` + new `claimViability.ts`, `safetyEngine.ts`): corrected thresholds (3-tab >5 → legacy field 6 with ≥ semantics; architectural >8 → 9; wind >5%; wood/metal/tile/TPO rules), §3 repairability gates override counts, §4 tree in exact first-match order, RC = D×U×R×A stored once, §6 claim-viability BAND (never a number), §7 safety engine, §9 output contract incl. adjuster narrative + uncertainties + decision-path trace. All legacy exports preserved as thin wrappers — `damageScore()`/`claimWorthiness()` deprecated, not removed. 30+ behavior assertions passed in a scratchpad smoke test.
+2. **Insurance Claim mode** (`types.ts`, `inspectionStore.ts`, `new-job.tsx`): General/Insurance toggle, 7-value Cause-of-Loss, collateral checklist (4 zones, photos per zone), brittleness protocol w/ photo requirement + new `borderline` member reaching the §3 gate, RCV/ACV + deductible + home value + prior claims, code-compliance notes. Storm-protocol fields only for wind/hail causes.
+3. **Reports** (`haagPdf.ts` + new `longReport.ts`): 8-section Long Report consuming stored engine output (never recalculates RC); insurance variant w/ test-square table, brittleness narrative, per-finding HAAG rule citations, carrier-norm 8–12 as context only; Triple-Check verdict rendered in Section 03. The 12-section report + homeowner summary untouched.
+4. **Detection hardening** (`gemini.ts`, `confidenceTiers.ts`): shingle-as-ruler `shingleScaleEstimate` persisted per photo; `no_roof_detected` anti-fabrication flag + inspector toast; ridge-cap false-positive instruction; `needsExpertReview()` <80% auto-queues to Train via `analyzeSlope.ts`.
+5. **Storm validation** (`stormMatch.ts`, `stormWatch.ts`): ≥0.25" published hail floor as exported constant; 4-year lookback explicitly distinct from the 2-year claim-corroboration max; `tripleCheckDateOfLoss()` verdict feeds engine input `weather.event_hours_from_dol` + report.
+6. **Web platform** (`Map.web.tsx`, `useResponsive.ts`, `Sidebar/TopBar`, `(tabs)/_layout`, guards on quick-inspection/pitch-gauge/mileage, `app.config.js` static output + favicon + splash fixed to brand white): real Google Maps JS on web behind `EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY` with the friendly placeholder kept when the key is absent (Drift #5); ≥1100px sidebar shell, phones unchanged; `lib/supabase.ts` noop-storage fix for Node prerender was the one real export blocker.
+
+**Verification cycle:** 13 findings (12 CONFIRMED/actionable) — the standouts: insurance Section C re-derived thresholds from an incomplete observation (could contradict the stored verdict on non-asphalt roofs — fixed by exporting `legacyObservation`); `weather_event_exists` could never be `false` (NO_STORM_DAMAGE unreachable — fixed with new `stormSearchOutcome` field preserving no_match vs unavailable, Drift #5); ±72h check used display-rounded hours (fixed: millisecond-exact `withinWindow72h` threads through); 44pt claim-evidence rows (Drift #1 — raised to 56); unconditional "no scale calibration" sentence now conditional. Two spec-gap resolutions were written INTO docs/HAAG_DECISION_ENGINE.md (§7 sustained-wind>30 UNSAFE; §9 per-slope NOT_TESTED member) so spec and code agree textually. Three low/PLAUSIBLE interpretation questions left documented in code comments (strict-carrier HIGH vs MEDIUM; two-year rule scoped globally vs collateral-only; multi_slope reading) — each a one-line change if the owner reads the spec differently.
+
+**Known caveats (backlogged):** engine result not yet persisted (haagPdf re-evaluates at render); safety rating reads "Use caution" until a real forecast is wired; DOL fallback anchors on the event's own date until claim mode captures a user DOL; <80% gate will queue much more than the old rule; brittleness-photo enforcement needs a finalize step.
+
+**Verification:** typecheck clean, lint 0 problems, `expo export --platform web` green, headless Chromium boot of `/`, `/leads`, `/settings` clean (favicon 404 fixed). Re-run by hand after the workflow: typecheck + lint confirmed clean.
+
+**Files touched:** 21 modified, 7 new (see git show for the list), `BACKLOG.md`, `PROMPT_LOG.md`.
