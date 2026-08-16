@@ -2126,3 +2126,22 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Files touched:** `lib/services/haagPdf.ts`, `PROMPT_LOG.md`.
 
 **Verification:** typecheck clean, lint 0 problems. Report re-rendered and screenshotted; no `undefined`/`NaN`; five homeowner paragraphs render with correct branching.
+
+---
+
+### [2026-08-16] #49 — Complete Drive read: master product synthesis committed
+
+**Prompt:**
+> I want you ti read everything. Then come up with the best conclusion for how you want to move forward to Great a great app
+
+**What ran:** 9-agent workflow (8 thematic readers + 1 synthesis, ~612K tokens) over the 20+ remaining unread documents in the owner's Drive folder: Pitch Deck FINAL 5.6.26, camera tech architecture, Roofwise Camera prompt, Prompt Master, App prompt/Rork, Professional Report spec, Long Report HAAG prompt, Kanban Mini-PRD, Dashboard Design Spec, three market-research reports, six launch-communications docs, and the Quadrant Deck/Jira/SOW. Every document read successfully; zero agent errors. Combined with the four docs read inline in #47–48, **the entire Drive folder has now been read.**
+
+**Deliverable:** `docs/PRODUCT_SYNTHESIS.md` — new product truths (10–15 min SLA with per-step budgets, swipe gesture semantics incl. up-to-correct + 5-star rating, 19-area tagging, Single-Shingle vs Square modes, Cause-of-Loss enum + per-observation `causation`, carrier-norm 8–12 context vs HAAG thresholds, brittleness photo protocol, Long Report 8-section contract, Insurance 6-section variant, inverted 1–100 Damage Score, ≥0.25" storm floor, <80% review queue, Triple-Check discrepancy rule, SHA-256 report integrity), 22 resolved contradictions with explicit rulings, 8 launch blockers, a repo-verified feature ledger, and a corrected 13-step build priority order.
+
+**One machine error caught before commit:** the synthesis agent marked the HAAG engine "BUILT." Verified against source: `haagThresholds.ts` still has 3-tab at 8 (spec >5) and architectural at 10 (spec >8), and `decisionEngine.ts` has no Claim Viability, no Safety engine, no repairability gates. The committed doc carries the corrected status, and the engine rewrite is priority #2 (after the launch-blocker sweep).
+
+**BACKLOG.md restructured** to the synthesis order: Now = engine rewrite → Claim Viability → Safety → Long/Insurance reports → Claim mode VI–IX → detection hardening → storm validation → capture tagging/modes; new Soon section (score reconciliation, pipeline board, swipe completion, report integrity, speed instrumentation, photo import, color-coding decision); Parked gains the explicit do-not-resurrect v2 list with citations.
+
+**Key rulings recorded (Contradictions section):** Drift Warnings beat every Drive doc where they conflict (5 tabs not sidebar, camera-only not LiDAR, no mocks, tokens not inline hex, gloved-roofer persona); Quadrant's 2–3 photos/square is engineering truth over the deck's 4; storm lookback (map, ≤4yr) is distinct from claim corroboration (2yr max); confidence must never be rendered as accuracy; the Influencer Messaging doc is for a physical shingle product and is excluded from product truth.
+
+**Files touched:** `docs/PRODUCT_SYNTHESIS.md` (new), `BACKLOG.md`, `PROMPT_LOG.md`.
