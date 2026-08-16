@@ -13,25 +13,29 @@ entry does not count as tracked.
 
 ## Now (committed next steps, in order — see docs/PRODUCT_SYNTHESIS.md §5 for the full rationale)
 
-- [ ] **19-area slope/subject tagging + Single-Shingle vs 10x10-Square capture modes** with separately aggregated counts; label burned into photo — synthesis 2026-08-16
-- [ ] **Persist the engine result on the inspection** — `haagPdf.ts` still runs `evaluate()` fresh at render time; store the full `HaagEngineResult` at analysis/finalize time and have every report surface read the stored payload (Long Report already takes a payload) — #50 integration note
-- [ ] **Wire a real forecast into `HaagEngineInput.forecast`** — `roofer_safety_rating` reads "Use caution" until WeatherTile/Open-Meteo data reaches the engine; also gate Quick Inspection entry on `evaluateSafety()` — #50 integration note
-- [ ] **Device pass on a real iPhone** — verify (a) rectangle overlays + withheld-detections toast against a live analysis [#39], (b) the 2560px analyze profile is actually selected with no OOM [#41], and (c) the new claim-evidence photo attach + responsive shell on tablet [#50]
+- [ ] **OWNER DECISION — the HIGH claim-viability band is unreachable in the field.** `assessClaimViability` requires `is_discontinued === true` as one of six HIGH criteria and nothing populates it, so every claim lands MEDIUM or LOW. The code is faithful: `docs/HAAG_DECISION_ENGINE.md` §6 reads "**HIGH** — all of: … Material is discontinued". Deliberately NOT patched (Drive docs win on logic — CLAUDE.md). Three options: (a) spec is right and HIGH is genuinely rare — capture `is_discontinued` in claim mode so it can be met; (b) discontinued belongs in MEDIUM's supporting factors, not HIGH's gate — amend §6 and the code together; (c) HIGH requires 5-of-6. **Do not resolve this by quietly loosening the criterion.** — #51
+- [ ] **Device pass on a real iPhone** — now covering (a) rectangle overlays + withheld-detections toast against a live analysis [#39], (b) the 2560px analyze profile with no OOM [#41], (c) claim-evidence photo attach + responsive shell on tablet [#50], and NEW from #51: (d) capture dock height on an SE-class screen (three 56pt rows ≈310–330pt leaves ~270pt of viewfinder — functional but cramped), (e) up-swipe → edit → save → star round trip (`useFocusEffect` behavior was reasoned from types, not exercised), (f) pure-JS SHA-256 wall time on a photo-heavy multi-MB report on Hermes (est. 0.1–1s synchronous on the JS thread), (g) star-row width on a 320pt device (lands at exactly 56pt) — #51
+- [ ] **Long Report CTA has no finalize gate** — the brittleness-evidence gate is wired to the HAAG packet CTA only (`haagPdf.ts:674` insurance supplement); the Long Report can still be generated without it — #51
+- [ ] **Mode-bucket counts go stale on manual marker edits** — `squareHitCount`/`singleShingleHitCount` are written only by `analyzeSlope`; edit-detection / swipe-review / DamageMarkerLayer recount `hailCount` through the store's `withRecount` but leave the buckets untouched, so hand-edited slopes feed the engine a stale per-square denominator — #51
 
 ## Soon (from the 2026-08-16 Drive synthesis — after Now clears)
 
-- [ ] Damage Score reconciliation — Kanban PRD defines 1–100 INVERTED (1–30 red/severe, 61–100 green/repair); reconcile `DamageScoreBar` semantics explicitly, don't silently flip. `damageScore()`/`claimWorthiness()` are now deprecated wrappers over the §6 claim-viability band; homeowner-summary tone branches in `haagPdf.ts` still key off the old worthiness scale — synthesis + #50
+- [ ] **Homeowner-summary copy rewrite needs owner sign-off** — a straight band re-key would have printed "the damage on your roof is below the threshold a carrier uses" (LOW) on reports whose Sections 02/05 say the opposite, so the reports-core builder rewrote the opening clauses in `longReport.ts` to resolve the contradiction. That is approved-copy drift made for a good reason; read it and confirm — #51
 - [ ] Watch Train-tab queue volume — the new <80% expert-review gate queues far more photos than the old avg<60 rule (store caps at 500); consider queueing only the sub-80 subset per photo — #50
-- [ ] Enforce brittleness-protocol photos (≥1) before a claim-mode report can finalize — the job screen warns and the report discloses the gap, but generation isn't blocked; needs a finalize step — #50
-- [ ] Migrate `map.tsx`/`hail-tracer.tsx` to `fetchAddressStormHistory` (4-year clamp); `lib/noaa.ts` severityColor still keys hail colors at 0.75" with inline hex (pre-existing Drift #11 debt) — #50
-- [ ] Claim-evidence photo attach bypasses `prepareCapturedPhoto` (no resize profile); route through the image pipeline — #50
-- [ ] Real date-of-loss capture in claim mode — Triple-Check currently falls back to the attached event's own date when no user DOL exists, which trivially satisfies the ±72h leg; the HIGH-band criterion only has teeth with a user-entered DOL — #50
-- [ ] Mobile-first pipeline board — 11-column job pipeline as a glove-friendly column-picker view inside Leads (Kanban PRD's own mobile section) — synthesis
-- [ ] Swipe-review completion — up = correct gesture, 5-star confidence rating, trust-weighting field on correction profile (weighting itself is post-raise) — synthesis
-- [ ] Report integrity — SHA-256 hash embedded in PDF + verification endpoint (Supabase edge function) — synthesis
-- [ ] Speed instrumentation — scan-to-signed-PDF time, claim-acceptance-without-reinspection, analysis P50/P95 vs ≤60s/≤180s targets — synthesis
-- [ ] Photo-library import wired into the inspection flow (pickers already installed) — synthesis
+- [ ] `lib/noaa.ts` `severityColor` still keys hail colors at 0.75" with inline hex (pre-existing Drift #11 debt) — #50
 - [ ] Damage color coding decided once in `theme/tokens.ts` (recommend severity-based, not peril-based) — synthesis Contradiction 17
+- [ ] Speed-stats UI surface — `telemetry.ts` records analysis/report P50/P95 but `getSpeedStats()` has no screen; decide where it shows (Settings → About? Train tab?) — #51
+- [ ] Area label as a rendered overlay chip only — pixel burn-in via expo-image-manipulator is deferred; `docs/PRODUCT_SYNTHESIS.md` §1 quotes the Camera prompt wanting the label burned into the photo so it survives export to a carrier — #51
+- [ ] Area-tag overlay chips not yet shown on photo thumbnails in job / analyze / swipe-review / edit-detection (stored, just not surfaced there) — #51
+- [ ] Pipeline board pager on web — `pagingEnabled` + `onMomentumScrollEnd` are unreliable on react-native-web, so the chip strip can desync from the visible column after a swipe (tapping a chip still works) — #51
+- [ ] `areaTag` is typed `string`, not the `AreaTag` union — no compile-time guarantee a stored value is one of the 19 — #51
+- [ ] Confirm the storm-alert radius change — alerts are now scoped to 25 mi around the service-area centroid instead of state-wide. Fixes "Plano, TX alerted by Amarillo hail" but a contractor who relied on state-wide coverage will see fewer alerts — #51
+- [ ] Confirm Map/Hail-Tracer now hide hail reports with no recorded size (they apply the published ≥0.25" validation floor via `fetchAddressStormHistory`) and crop to 50 mi around the resolved service center — #51
+- [ ] Google Weather `currentConditions:lookup` field names for `wind.gust`, `precipitation.probability.percent`, `thunderstormProbability` are parsed defensively but were never verified against a live response (no API key in the build container) — #51
+- [ ] `thunderstorm_watch` is derived from a ≥50% probability, not a real NWS watch product (the API exposes no watch feed) — documented as `THUNDERSTORM_PROBABILITY_PERCENT` in `weather.ts` — #51
+- [ ] Map draws at most 300 storm pins — the 300 most **recent**, not the 300 most **severe**; the count line always reports the true total. Product call worth confirming — #51
+- [ ] Down-swipe is now skip where it used to be up — muscle-memory hazard for anyone on the old build (same destructiveness as before: queue item marked `discarded`) — #51
+- [ ] Report-verification endpoint (online hash check) — the local SHA-256 stamp ships now; a hosted verifier needs the Supabase project, which is administered from a different workspace — #51
 
 ## Next
 
@@ -72,6 +76,20 @@ entry does not count as tracked.
 
 ## Done (most recent first)
 
+- [x] 19-area slope/subject tagging + Single-Shingle vs 10×10-Square capture modes with separately aggregated counts (`AREA_TAGS`, `captureSession.ts`, `Slope.squareHitCount`/`singleShingleHitCount`) — closed by #51
+- [x] Photo-library import wired into the inspection flow, through the same `prepareCapturedPhoto` pipeline and analysis queue as camera captures — closed by #51
+- [x] Persist the engine result on the inspection — `storedEngine.ts`; reports restate a stored `HaagEngineResult`, freshness by SHA-256 input fingerprint (stronger than a timestamp), with a write-side freeze so a finalized report can't be silently re-snapshotted — closed by #51
+- [x] Wire a real forecast into `HaagEngineInput.forecast` — `getSafetyForecast()` in `weather.ts` → `evaluateSafety()`; `roofer_safety_rating` no longer defaults to "Use caution" — closed by #51
+- [x] Real date-of-loss capture in claim mode — replaced a free-text field (which accepted "around mid-May" and silently disabled every downstream date check) with a structured preset + MM/DD/YYYY control that rejects impossible dates and shows the matched storm date beside it — closed by #51
+- [x] Claim-evidence photo attach routed through `prepareCapturedPhoto` — closed by #51
+- [x] Brittleness-evidence finalize gate on the HAAG packet CTA (informative friction, not a hard block) — closed by #51 · Long Report CTA still ungated, see Now
+- [x] Damage Score reconciliation — `DamageScoreBar` renders the HIGH/MEDIUM/LOW band; the deprecated 0–100 score removed from the carrier-facing report narrative, homeowner summary, `urgent` branch, and Section 02 stat tile — closed by #51
+- [x] Mobile-first pipeline board — 12-column glove-first column-picker in Leads (11 live stages + terminal `lost`), one-tap Move sheet, no drag-and-drop; List view byte-identical — closed by #51
+- [x] Swipe-review completion — up = correct, dominant-axis gesture resolution, 5-star confidence prompt on corrections, `inspectorTrustWeight` stamped neutral — closed by #51
+- [x] Report integrity — pure-JS SHA-256 (no new dependency) stamped in both report variants; verified by hand against Node `crypto` across padding boundaries, multibyte UTF-8, emoji, and 500KB bodies; strip/verify round-trips and tamper detection both confirmed — closed by #51 · online verifier still deferred
+- [x] Speed instrumentation — local-only `telemetry.ts` recording analysis/report P50/P95 against the ≤60s/≤180s targets, no network (Drift #5) — closed by #51 · no UI surface yet
+- [x] Storm-matched lead clustering — `matchLeadsToStorm()` haversine over already-fetched data; "N leads within X mi of the hail core" on the storm hero with tap-through to Map — closed by #51
+- [x] Migrate `map.tsx`/`hail-tracer.tsx` to `fetchAddressStormHistory` (4-year clamp) — closed by #51
 - [x] Rewrite `decisionEngine.ts` + `haagThresholds.ts` against `docs/HAAG_DECISION_ENGINE.md` — corrected thresholds (3-tab >5, architectural >8, wood/metal/tile/flat rules), §3 repairability gates override counts, §4 tree in exact order, RC stored once — closed by #50
 - [x] Claim Viability engine (HIGH/MEDIUM/LOW) — `lib/services/claimViability.ts`; `damageScore()`/`claimWorthiness()` kept as deprecated wrappers — closed by #50
 - [x] Pre-climb Safety engine — `lib/services/safetyEngine.ts` (SAFE/USE_CAUTION/UNSAFE, conservative on missing inputs) — closed by #50

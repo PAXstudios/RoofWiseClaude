@@ -2,7 +2,7 @@
 // Uses the Decision Engine + CostEstimator to seed line items, scope, and total.
 
 import type { Inspection, Proposal, ProposalLineItem } from '../models/types';
-import { evaluate } from './decisionEngine';
+import { resolveEngineResult } from './storedEngine';
 import { estimateCost, regionForState, type DamageScope } from './costEstimator';
 
 let lineCounter = 0;
@@ -31,7 +31,17 @@ export function generateProposalDraft(
 ): Omit<Proposal, 'id'> {
   const cfg = { ...DEFAULTS, ...opts };
 
-  const decision = evaluate(inspection);
+  // Same read path as the job screen and the reports: the STORED
+  // determination when it still speaks for the current inputs. Re-deriving
+  // here would let a proposal quote a different scope than the HAAG packet
+  // the homeowner was already shown.
+  //
+  // `honorFreeze: false`: a proposal is a PRICE THE ROOFER IS ABOUT TO SIGN.
+  // If the inspection changed after the last report was finalized, quoting the
+  // pre-edit scope is quoting the wrong roof — that risk is the contractor's,
+  // not the document's. The job screen flags the same drift and asks for a
+  // regenerated packet.
+  const { decision } = resolveEngineResult(inspection, Date.now(), { honorFreeze: false });
   const scope: DamageScope =
     decision.roofRecommendation === 'full_replacement'
       ? 'full_replacement'

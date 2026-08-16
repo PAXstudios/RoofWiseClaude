@@ -1,6 +1,6 @@
 import { PressableScale } from '@/components/PressableScale';
-import { formatDate } from '@/lib/format/date';
-import { useState } from 'react';
+import { formatDate, formatDateShort, formatRelative } from '@/lib/format/date';
+import { useRef, useState } from 'react';
 import { ScrollView, View, Text, StyleSheet, Alert, Image, Share, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -11,6 +11,7 @@ import { useProposalStore } from '@/lib/stores/proposalStore';
 import * as ImagePicker from 'expo-image-picker';
 import { generateHaagReport } from '@/lib/services/haagPdf';
 import { generateLongReport } from '@/lib/services/longReport';
+import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
 import { SignaturePad } from '@/components/SignaturePad';
 import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
@@ -22,9 +23,13 @@ import {
   CLAIM_VIABILITY_LABELS,
   ROOFWISE_RECOMMENDATION_LABELS,
   SAFETY_RATING_LABELS,
-  damageScore,
-  evaluate,
 } from '@/lib/services/decisionEngine';
+import {
+  resolveEngineResult,
+  snapshotEngineResult,
+  storedEngineFreshness,
+} from '@/lib/services/storedEngine';
+import { getSafetyForecast } from '@/lib/services/weather';
 import {
   CAUSE_OF_LOSS_LABELS,
   COLLATERAL_ZONES,
@@ -67,6 +72,8 @@ export default function JobDetail() {
   const setCollateralItem = useInspectionStore((s) => s.setCollateralItem);
   const setCollateralZone = useInspectionStore((s) => s.setCollateralZone);
   const setBrittlenessProtocol = useInspectionStore((s) => s.setBrittlenessProtocol);
+  const setReportFinalizedAt = useInspectionStore((s) => s.setReportFinalizedAt);
+  const setStoredEngineResult = useInspectionStore((s) => s.setStoredEngineResult);
   const setNotes = useInspectionStore((s) => s.setNotes);
   const addAudioNote = useInspectionStore((s) => s.addAudioNote);
   const removeAudioNote = useInspectionStore((s) => s.removeAudioNote);
@@ -76,6 +83,10 @@ export default function JobDetail() {
   const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const [generating, setGenerating] = useState(false);
   const [generatingLong, setGeneratingLong] = useState(false);
+  // "Record now" on the finalize gate has to land the roofer on the card that
+  // fixes the problem, not just dismiss a dialog.
+  const scrollRef = useRef<ScrollView>(null);
+  const evidenceCardY = useRef(0);
 
   if (!inspection) {
     return (
@@ -92,10 +103,18 @@ export default function JobDetail() {
     );
   }
 
-  // asOfIso enables the §6 two-year corroboration check without the engine
-  // reading the clock (Drift #8 purity — the call site supplies "now").
-  const decision = evaluate(inspection, new Date().toISOString());
-  const score = damageScore(inspection);
+  // The same read path the reports use: the STORED engine result when it still
+  // speaks for the current inputs, otherwise a fresh evaluation. Reading it
+  // here is what keeps this screen and the generated PDF from ever showing two
+  // different determinations for one roof.
+  //
+  // `honorFreeze: false`: this screen describes the roof as it stands right
+  // now. When the report was signed and the inputs changed afterwards, the
+  // frozen snapshot is a pre-edit determination — restating it here would hide
+  // the edit. The banner below says the signed packet is behind; regenerating
+  // re-freezes the two together.
+  const { haag, decision } = resolveEngineResult(inspection, Date.now(), { honorFreeze: false });
+  const engineFreshness = storedEngineFreshness(inspection);
   const isClaim = inspection.kind === 'insurance_claim';
 
   const onDelete = () => {
@@ -108,6 +127,103 @@ export default function JobDetail() {
           remove(inspection.id);
           router.replace('/(tabs)');
         } },
+      ],
+    );
+  };
+
+  // ---------- Finalize gate (insurance claims) ----------
+  //
+  // The brittleness protocol is the §3 repairability gate: with no result the
+  // gate cannot be evaluated at all, and with a result but no photograph it
+  // rests on the inspector's word alone (§VII-C requires the process be
+  // photographed). Both gaps are DISCLOSED in the generated report, so this is
+  // informative friction and never a hard block — a roofer standing next to an
+  // adjuster may need the packet now and record the test after.
+  const proto = inspection.brittlenessProtocol;
+  const brittlenessGap: string | null = !isClaim
+    ? null
+    : !proto?.result
+      ? 'Brittleness test not recorded. The HAAG repairability gate (§3) cannot be evaluated without it.'
+      : proto.photoIds.length === 0
+        ? `Brittleness test recorded as ${proto.result}, but no photo evidence is attached. The field protocol requires a photo of the test process.`
+        : null;
+
+  const jumpToClaimEvidence = () =>
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, evidenceCardY.current - spacing.xl),
+      animated: true,
+    });
+
+  /**
+   * Freeze the determination the report is about to be signed with, and hand
+   * back the inspection the report should render from.
+   *
+   * Order matters: the snapshot is taken and stored BEFORE the PDF renders, so
+   * the document restates exactly the determination that was frozen. Snapshot
+   * after rendering and a report generated with no prior snapshot would print
+   * one determination while the store froze another.
+   *
+   * The §7 safety rating needs a real forecast, and the engine is pure, so the
+   * fetch happens at this call site. `getSafetyForecast()` returns null when
+   * the service is unreachable or location was never granted; that is passed
+   * through as `undefined` so the engine records honest uncertainty rather
+   * than a rating computed from absent inputs.
+   */
+  const finalizeWithSnapshot = async (): Promise<Inspection> => {
+    const at = new Date().toISOString();
+    try {
+      const coord =
+        inspection.lat != null && inspection.lng != null
+          ? { lat: inspection.lat, lng: inspection.lng }
+          : undefined;
+      const forecast = (await getSafetyForecast(coord)) ?? undefined;
+      const { payload } = snapshotEngineResult(inspection, at, forecast);
+      // `force`: this IS the deliberate re-finalize path, so it is allowed to
+      // replace a previously frozen snapshot — and it re-stamps
+      // `reportFinalizedAt` below, so the record and the document stay in step.
+      setStoredEngineResult(inspection.id, payload, at, { force: true });
+    } catch {
+      // A missed snapshot is recoverable — the report falls back to evaluating
+      // the same engine at render time.
+    }
+    setReportFinalizedAt(inspection.id, at);
+    // Re-read: `inspection` is this render's snapshot and does not carry the
+    // fields just written.
+    return (
+      useInspectionStore.getState().inspections.find((i) => i.id === inspection.id) ?? inspection
+    );
+  };
+
+  const runHaagReport = async () => {
+    try {
+      setGenerating(true);
+      // Freeze first, then render from the frozen record.
+      const finalized = await finalizeWithSnapshot();
+      const { uri } = await generateHaagReport(finalized);
+      logActivity({
+        kind: 'pdf_generated',
+        inspectionId: inspection.id,
+        message: `Generated HAAG report for ${inspection.reportId}`,
+      });
+      await Share.share({ url: uri, message: `RoofWise HAAG report ${inspection.reportId}` });
+    } catch (e) {
+      Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const onGenerateHaagReport = () => {
+    if (!brittlenessGap) {
+      void runHaagReport();
+      return;
+    }
+    Alert.alert(
+      'Claim evidence is incomplete',
+      `${brittlenessGap}\n\nThe report discloses the gap either way — the adjuster will see it.`,
+      [
+        { text: 'Record now', style: 'cancel', onPress: jumpToClaimEvidence },
+        { text: 'Generate anyway', onPress: () => void runHaagReport() },
       ],
     );
   };
@@ -172,7 +288,7 @@ export default function JobDetail() {
         </PressableScale>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll}>
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Address</Text>
           <Text style={styles.cardValue}>{inspection.address}</Text>
@@ -213,7 +329,9 @@ export default function JobDetail() {
                   inspection.policyType && POLICY_TYPE_LABELS[inspection.policyType],
                   inspection.deductible != null &&
                     `$${inspection.deductible.toLocaleString()} deductible`,
-                  inspection.dateOfLoss && `DOL ${inspection.dateOfLoss}`,
+                  // Formatted, never raw: the stored value is an ISO
+                  // timestamp and a raw one reads as broken on a claim screen.
+                  inspection.dateOfLoss && `DOL ${formatDateShort(inspection.dateOfLoss)}`,
                 ]
                   .filter(Boolean)
                   .join('  ·  ') || 'Claim details not recorded yet'}
@@ -246,23 +364,23 @@ export default function JobDetail() {
         )}
 
         <View style={styles.card}>
-          <DamageScoreBar score={score} />
+          <DamageScoreBar band={haag.claim_viability} />
         </View>
 
         <View style={styles.statsRow}>
           <Stat label="Slopes" value={String(inspection.slopes.length)} />
           <Stat label="Photos" value={String(inspection.slopes.reduce((a, sl) => a + sl.photoPaths.length, 0))} />
-          <Stat label="Claim" value={CLAIM_VIABILITY_LABELS[decision.haag.claim_viability]} />
+          <Stat label="Claim" value={CLAIM_VIABILITY_LABELS[haag.claim_viability]} />
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>HAAG verdict</Text>
           <Text style={styles.cardValue}>
-            {ROOFWISE_RECOMMENDATION_LABELS[decision.haag.roofwise_recommendation]}
+            {ROOFWISE_RECOMMENDATION_LABELS[haag.roofwise_recommendation]}
           </Text>
           <Text style={styles.cardSub}>{decision.roofVerdictReasoning}</Text>
           <Text style={styles.cardSub}>
-            Roofer safety: {SAFETY_RATING_LABELS[decision.haag.roofer_safety_rating]}
+            Roofer safety: {SAFETY_RATING_LABELS[haag.roofer_safety_rating]}
           </Text>
         </View>
 
@@ -339,28 +457,55 @@ export default function JobDetail() {
         </View>
 
         {isClaim && (
-          <View style={styles.card}>
+          <View
+            style={styles.card}
+            onLayout={(e) => {
+              evidenceCardY.current = e.nativeEvent.layout.y;
+            }}
+          >
             <Text style={styles.cardLabel}>Claim evidence</Text>
             {COLLATERAL_ZONES.map((zone) => {
               const item = inspection.collateralEvidence?.[zone] ?? { checked: false, photoIds: [] };
               return (
-                <PressableScale
-                  key={zone}
-                  style={styles.collateralRow}
-                  onPress={() => setCollateralZone(inspection.id, zone, { checked: !item.checked })}
-                >
-                  <Ionicons
-                    name={item.checked ? 'checkbox' : 'square-outline'}
-                    size={22}
-                    color={item.checked ? colors.success : colors.slate}
-                  />
-                  <Text style={styles.collateralLabel}>{COLLATERAL_ZONE_LABELS[zone]}</Text>
-                  {item.photoIds.length > 0 && (
-                    <Text style={styles.cardSub}>
-                      {item.photoIds.length} photo{item.photoIds.length === 1 ? '' : 's'}
-                    </Text>
-                  )}
-                </PressableScale>
+                <View key={zone} style={styles.zoneRow}>
+                  <PressableScale
+                    style={[styles.collateralRow, { flex: 1 }]}
+                    onPress={() =>
+                      setCollateralZone(inspection.id, zone, { checked: !item.checked })
+                    }
+                  >
+                    <Ionicons
+                      name={item.checked ? 'checkbox' : 'square-outline'}
+                      size={22}
+                      color={item.checked ? colors.success : colors.slate}
+                    />
+                    <Text style={styles.collateralLabel}>{COLLATERAL_ZONE_LABELS[zone]}</Text>
+                  </PressableScale>
+                  <PressableScale
+                    style={styles.zonePhotoBtn}
+                    accessibilityLabel={`Add photo for ${COLLATERAL_ZONE_LABELS[zone]}`}
+                    onPress={() =>
+                      void pickEvidencePhoto((uri) => {
+                        // Re-read: the picker is async and the record may have
+                        // changed while the camera was open.
+                        const current = useInspectionStore
+                          .getState()
+                          .getById(inspection.id)?.collateralEvidence?.[zone];
+                        setCollateralZone(inspection.id, zone, {
+                          photoIds: [...(current?.photoIds ?? []), uri],
+                          // A photographed zone is a checked zone — a clean
+                          // photo still proves the zone was worked.
+                          checked: true,
+                        });
+                      })
+                    }
+                  >
+                    <Ionicons name="camera-outline" size={20} color={colors.navy} />
+                    {item.photoIds.length > 0 && (
+                      <Text style={styles.zonePhotoCount}>{item.photoIds.length}</Text>
+                    )}
+                  </PressableScale>
+                </View>
               );
             })}
 
@@ -494,28 +639,33 @@ export default function JobDetail() {
         <PressableScale
           style={[styles.secondaryCta, generating && { opacity: 0.5 }]}
           disabled={generating}
-          onPress={async () => {
-            try {
-              setGenerating(true);
-              const { uri } = await generateHaagReport(inspection);
-              logActivity({
-                kind: 'pdf_generated',
-                inspectionId: inspection.id,
-                message: `Generated HAAG report for ${inspection.reportId}`,
-              });
-              await Share.share({ url: uri, message: `RoofWise HAAG report ${inspection.reportId}` });
-            } catch (e) {
-              Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
-            } finally {
-              setGenerating(false);
-            }
-          }}
+          onPress={onGenerateHaagReport}
         >
           <Ionicons name="document-text-outline" size={20} color={colors.navy} />
           <Text style={styles.secondaryCtaText}>
-            {generating ? 'Generating…' : 'Generate HAAG report (PDF)'}
+            {generating
+              ? 'Generating…'
+              : isClaim
+                ? 'Generate HAAG claim packet (PDF)'
+                : 'Generate HAAG report (PDF)'}
           </Text>
         </PressableScale>
+        {isClaim && brittlenessGap && (
+          <Text style={styles.gateHint}>
+            Brittleness evidence is incomplete — the packet will disclose it.
+          </Text>
+        )}
+        {inspection.reportFinalizedAt && (
+          <Text style={styles.finalizedHint}>
+            Report last finalized {formatRelative(inspection.reportFinalizedAt)}
+          </Text>
+        )}
+        {engineFreshness.staleFrozen && (
+          <Text style={styles.gateHint}>
+            This job changed since that report was finalized. The determination above is
+            current; the signed PDF is not — regenerate it before sending.
+          </Text>
+        )}
 
         <PressableScale
           style={[styles.secondaryCta, generatingLong && { opacity: 0.5 }]}
@@ -523,29 +673,13 @@ export default function JobDetail() {
           onPress={async () => {
             try {
               setGeneratingLong(true);
-              // Payload-build seam: attach the stored §5 cost record to each
-              // §9 slope evaluation (the engine keeps costs under
-              // cost_analysis; the Long Report restates, never recalculates).
-              const perSlope = decision.haag.slope_evaluations.map((ev) => {
-                const cost = decision.haag.cost_analysis?.slopes.find(
-                  (c) => c.slope === ev.slope,
-                );
-                return {
-                  ...ev,
-                  cost: cost
-                    ? {
-                        ...cost.inputs,
-                        repair_cost_slope: cost.repair_cost_slope,
-                        replacement_cost_slope: cost.replacement_cost_slope,
-                      }
-                    : undefined,
-                };
-              });
-              const { uri } = await generateLongReport({
-                inspection,
-                engine: decision.haag,
-                perSlope,
-              });
+              // Freeze first, then render from the frozen record. The Long
+              // Report resolves the stored engine result itself and builds its
+              // own per-slope cost rows (`perSlopeFromEngine`) — passing a
+              // live evaluation here would put the old re-derive-at-render
+              // behaviour back.
+              const finalized = await finalizeWithSnapshot();
+              const { uri } = await generateLongReport({ inspection: finalized });
               logActivity({
                 kind: 'pdf_generated',
                 inspectionId: inspection.id,
@@ -572,6 +706,12 @@ export default function JobDetail() {
 /**
  * Camera-first evidence capture with library fallback — same single-select +
  * Compatible-representation rationale as new-job.tsx / quick-inspection.tsx.
+ *
+ * Claim-evidence photos (collateral zones, brittleness protocol) go through
+ * `prepareCapturedPhoto` exactly like slope photos do: they land in the same
+ * carrier packet and are persisted the same way, and the un-piped path stored
+ * full-resolution HEIC/JPEG originals — the payloads the capture ladder exists
+ * to keep from OOM-crashing Expo Go.
  */
 async function pickEvidencePhoto(onPicked: (uri: string) => void) {
   try {
@@ -581,7 +721,7 @@ async function pickEvidencePhoto(onPicked: (uri: string) => void) {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
       });
       if (result.canceled || result.assets.length === 0) return;
-      onPicked(result.assets[0].uri);
+      onPicked(await prepareCapturedPhoto(result.assets[0].uri));
       return;
     }
     const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -599,7 +739,7 @@ async function pickEvidencePhoto(onPicked: (uri: string) => void) {
         ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (result.canceled || result.assets.length === 0) return;
-    onPicked(result.assets[0].uri);
+    onPicked(await prepareCapturedPhoto(result.assets[0].uri));
   } catch (e) {
     Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
   }
@@ -872,6 +1012,38 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     // Drift #1: gloved-roofer persona — interactive rows meet the 56pt minimum.
     minHeight: touchTarget.standard,
+  },
+  zoneRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  zonePhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minWidth: touchTarget.standard,
+    height: touchTarget.standard,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  zonePhotoCount: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.bold,
+    color: colors.navy,
+  },
+  gateHint: {
+    fontSize: fontSize.bodySm,
+    color: colors.warn,
+    fontWeight: fontWeight.medium,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  finalizedHint: {
+    fontSize: fontSize.bodySm,
+    color: colors.slate,
+    textAlign: 'center',
+    marginTop: spacing.xs,
   },
   collateralLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy },
   collateralChecked: { textDecorationLine: 'line-through', color: colors.slate },

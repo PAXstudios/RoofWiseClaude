@@ -1,18 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Map, MapPin, MapCircle, regionForLatLon } from '@/components/map/Map';
-import { fetchStormHistory, rangeYearsAgo, severityColor, magnitudeLabel, type StormEvent } from '@/lib/noaa';
+import { severityColor, magnitudeLabel, type StormEvent } from '@/lib/noaa';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
+import {
+  fetchAddressStormHistory,
+  clampLookbackYears,
+  HISTORY_LOOKBACK_YEARS_MAX,
+} from '@/lib/services/stormMatch';
+import {
+  leadsInStormCluster,
+  STORM_HISTORY_BROWSE_RADIUS_MILES,
+} from '@/lib/services/stormWatch';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
+import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import {
   colors,
   fontSize,
   fontWeight,
+  glass,
   radii,
   shadows,
   spacing,
@@ -28,15 +39,40 @@ const FILTERS: { id: Filter; label: string; icon: keyof typeof import('@expo/vec
   { id: 'knocks', label: 'Knocks', icon: 'walk-outline' },
 ];
 
+/**
+ * Time Travel lookbacks (years). The service clamps to
+ * HISTORY_LOOKBACK_YEARS_MAX = 4; 1 year stays the default so opening the tab
+ * doesn't pull four years of state-wide reports over cellular. This is the
+ * history-*browsing* window — deliberately separate from the 2-year claim
+ * corroboration cap (docs/HAAG_DECISION_ENGINE.md §6).
+ */
+const LOOKBACK_OPTIONS = [1, 2, HISTORY_LOOKBACK_YEARS_MAX] as const;
+const DEFAULT_LOOKBACK_YEARS = 1;
+
+/** Storm pins drawn at once. The count line always reports the real total. */
+const MAX_STORM_PINS = 300;
+
+/**
+ * Deep-link target for the dashboard storm-alert hero: land on the Leads
+ * filter with the storm-matched pins already highlighted.
+ * `router.push({ pathname: '/(tabs)/map', params: { focus: FOCUS_STORM_LEADS } })`
+ */
+export const FOCUS_STORM_LEADS = 'storm-leads';
+
 export default function MapScreen() {
   const router = useRouter();
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
   const inspections = useInspectionStore((s) => s.inspections);
   const leads = useLeadStore((s) => s.leads);
   const archive = useKnockSessionStore((s) => s.archive);
   const active = useKnockSessionStore((s) => s.activeSession);
   const serviceAreas = useServiceAreaStore((s) => s.areas);
+  const alerts = useStormAlertStore((s) => s.alerts);
 
-  const [filter, setFilter] = useState<Filter>('storms');
+  const [filter, setFilter] = useState<Filter>(
+    focus === FOCUS_STORM_LEADS ? 'leads' : 'storms',
+  );
+  const [lookbackYears, setLookbackYears] = useState<number>(DEFAULT_LOOKBACK_YEARS);
   const [events, setEvents] = useState<StormEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,22 +85,46 @@ export default function MapScreen() {
   );
   const initialRegion = regionForLatLon(center.lat, center.lon, 4);
 
+  // The Map tab is pre-mounted by the tab navigator, so a deep link can arrive
+  // while this screen is already alive — react to the param, don't rely on the
+  // initial state alone.
+  useEffect(() => {
+    if (focus === FOCUS_STORM_LEADS) setFilter('leads');
+  }, [focus]);
+
+  // Storm history now runs through the shared, 4-year-clamped address lookback
+  // (stormMatch.fetchAddressStormHistory) instead of a raw NOAA call: same
+  // published validation floors as every other storm surface, and an explicit
+  // "unavailable" result rather than a silent empty map (Drift #5).
   useEffect(() => {
     if (filter !== 'storms') return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const { start, end } = rangeYearsAgo(1);
-    fetchStormHistory({ state: serviceState, start, end, types: ['hail', 'wind'] })
-      .then((d) => !cancelled && setEvents(d))
-      .catch((e) => {
+    fetchAddressStormHistory({
+      lat: center.lat,
+      lng: center.lon,
+      state: serviceState,
+      lookbackYears,
+      radiusMiles: STORM_HISTORY_BROWSE_RADIUS_MILES,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.status === 'ok') {
+          setEvents(res.events);
+        } else {
+          setEvents([]);
+          setError('Storm history not available right now.');
+        }
+      })
+      .catch(() => {
         if (cancelled) return;
         setEvents([]);
-        setError(e?.message ?? 'Could not load storm history.');
+        setError('Storm history not available right now.');
       })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [filter, serviceState]);
+  }, [filter, serviceState, lookbackYears, center.lat, center.lon]);
 
   const jobPins = useMemo(
     () => inspections.filter((i) => typeof i.lat === 'number' && typeof i.lng === 'number'),
@@ -81,6 +141,18 @@ export default function MapScreen() {
     ];
     return knocks;
   }, [archive, active]);
+
+  // Storm-matched lead cluster for the live alert — "3 leads within 1.4 mi of
+  // the Apr 18 hail core". Rebuilt from the leads Storm Watch stamped, so it
+  // survives a restart. Null when nothing matched: no line, no highlight.
+  const activeAlert = useMemo(() => alerts.find((a) => a.status === 'new'), [alerts]);
+  const cluster = useMemo(
+    () => (activeAlert ? leadsInStormCluster(leads, activeAlert) : null),
+    [leads, activeAlert],
+  );
+  const clusterLeadIds = useMemo(() => new Set(cluster?.leadIds ?? []), [cluster]);
+
+  const stormPins = useMemo(() => events.slice(0, MAX_STORM_PINS), [events]);
 
   return (
     <View style={styles.root}>
@@ -120,6 +192,35 @@ export default function MapScreen() {
         ))}
       </ScrollView>
 
+      {filter === 'storms' && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScrollContent}
+          style={styles.chipScroll}
+        >
+          {LOOKBACK_OPTIONS.map((years) => (
+            <Pressable
+              key={years}
+              hitSlop={8}
+              style={[styles.chip, lookbackYears === years && styles.chipActive]}
+              onPress={() => setLookbackYears(clampLookbackYears(years))}
+            >
+              <Ionicons
+                name="time-outline"
+                size={16}
+                color={lookbackYears === years ? colors.textInverse : colors.navy}
+              />
+              <Text
+                style={[styles.chipText, lookbackYears === years && styles.chipTextActive]}
+              >
+                {years} yr
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+
       <View style={styles.mapWrap}>
         <Map initialRegion={initialRegion}>
           {serviceAreas
@@ -131,11 +232,11 @@ export default function MapScreen() {
                 radius={8047}  // 5 mi in meters
                 strokeColor={colors.navy}
                 strokeWidth={2}
-                fillColor="rgba(12,24,60,0.08)"
+                fillColor={glass.lightFill}
               />
             ))}
           {filter === 'storms' &&
-            events.map((e) => (
+            stormPins.map((e) => (
               <MapPin
                 key={e.id}
                 coordinate={{ latitude: e.lat, longitude: e.lon }}
@@ -156,15 +257,25 @@ export default function MapScreen() {
               />
             ))}
           {filter === 'leads' &&
-            leadPins.map((lead) => (
-              <MapPin
-                key={lead.id}
-                coordinate={{ latitude: lead.lat!, longitude: lead.lng! }}
-                title={lead.customerName}
-                description={`Stage: ${lead.stage.replace('_', ' ')}`}
-                tone="info"
-              />
-            ))}
+            leadPins.map((lead) => {
+              // Storm-matched leads ride the existing pin-tone system: red for
+              // "inside the core", the same read as a severe storm pin.
+              const inCore = clusterLeadIds.has(lead.id);
+              const miles = lead.lastStormMatch?.distanceMiles;
+              return (
+                <MapPin
+                  key={lead.id}
+                  coordinate={{ latitude: lead.lat!, longitude: lead.lng! }}
+                  title={lead.customerName}
+                  description={
+                    inCore && miles != null
+                      ? `In storm core · ${miles.toFixed(1)} mi · ${lead.stage.replace('_', ' ')}`
+                      : `Stage: ${lead.stage.replace('_', ' ')}`
+                  }
+                  tone={inCore ? 'danger' : 'info'}
+                />
+              );
+            })}
           {filter === 'knocks' &&
             knockPins.map((k) => (
               <MapPin
@@ -196,14 +307,27 @@ export default function MapScreen() {
 
       <View style={styles.statBar}>
         <Text style={styles.statText}>
-          {filter === 'storms' && `${events.length} storm events`}
+          {filter === 'storms' && stormCountLine(events.length, stormPins.length, lookbackYears)}
           {filter === 'jobs' && `${jobPins.length} of ${inspections.length} jobs mapped`}
           {filter === 'leads' && `${leadPins.length} of ${leads.length} leads mapped`}
           {filter === 'knocks' && `${knockPins.length} knock pins`}
         </Text>
+        {/* Real numbers only — the line is absent when nothing matched. */}
+        {cluster && <Text style={styles.clusterText}>{cluster.headline}</Text>}
       </View>
     </View>
   );
+}
+
+/** Honest count line: never claims to draw more pins than it drew. */
+function stormCountLine(total: number, shown: number, years: number): string {
+  const window = `past ${years} yr within ${STORM_HISTORY_BROWSE_RADIUS_MILES} mi`;
+  if (total === 0) return `No validated storm events · ${window}`;
+  const head =
+    shown < total
+      ? `${shown} most recent of ${total} storm events`
+      : `${total} storm event${total === 1 ? '' : 's'}`;
+  return `${head} · ${window}`;
 }
 
 const styles = StyleSheet.create({
@@ -232,13 +356,16 @@ const styles = StyleSheet.create({
   },
   knockBtnText: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
-  chipScroll: { maxHeight: 56 },
+  // Drift #1: the strip has to clear the chips it holds, and `touchTarget.small`
+  // is explicitly "not for primary actions" — filter and lookback chips are the
+  // only controls on this screen.
+  chipScroll: { maxHeight: touchTarget.preferred },
   chipScrollContent: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    minHeight: touchTarget.small,
+    minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
@@ -287,4 +414,11 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   statText: { color: colors.slate, fontSize: fontSize.bodySm, textAlign: 'center' },
+  clusterText: {
+    color: colors.danger,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
 });

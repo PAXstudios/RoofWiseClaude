@@ -15,6 +15,10 @@ import { useToastStore } from '../stores/toastStore';
 import { computeProfile } from './learning/userCorrectionProfile';
 import { userStylePromptPrefix } from './learning/localLearningEngine';
 import { needsExpertReview } from './confidenceTiers';
+import { snapshotEngineResult } from './storedEngine';
+import { getSafetyForecast } from './weather';
+import { recordAnalysisMs } from './telemetry';
+import type { SafetyForecast } from './safetyEngine';
 import type { Slope } from '../models/types';
 
 export type SlopeAnalysisProgress = {
@@ -45,9 +49,13 @@ export async function analyzeSlope(
 
   const todoIndexes = pickPhotos(slope, opts.onlyNew ?? true);
   if (todoIndexes.length === 0) {
+    // No pass ran — nothing to time, nothing new to snapshot.
     return { results: [], attached: 0, failed: 0 };
   }
 
+  // Speed instrumentation (PRODUCT_SYNTHESIS §"Workflow & speed contracts":
+  // analysis P50 ≤60s / P95 ≤180s). Local only — see lib/services/telemetry.ts.
+  const startedAtMs = Date.now();
   const profile = computeProfile(useCorrectionsStore.getState().corrections);
   const prefix = userStylePromptPrefix(profile);
   const results: AnalysisResult[] = [];
@@ -115,6 +123,21 @@ export async function analyzeSlope(
   }
   opts.onProgress?.({ done: todoIndexes.length, total: todoIndexes.length });
 
+  // Post-pass bookkeeping. The per-mode hit split is already done: every
+  // marker write above went through the store's `withRecount`, which buckets
+  // `squareHitCount` / `singleShingleHitCount` in the same pass it recounts
+  // `hailCount`. All that is left is to freeze the engine result those inputs
+  // produce — best-effort, since a failure here must never lose the
+  // detections already written.
+  //
+  // §7 roofer safety needs a real forecast; the engine is pure, so the fetch
+  // happens here. Null (no key, offline, no location permission) is passed
+  // through as `undefined` — never `{}`, which would rate USE_CAUTION off
+  // missing inputs and launder "we don't know" into a rating.
+  const forecast = await safetyForecastForInspection(inspectionId);
+  storeEngineSnapshot(inspectionId, forecast);
+  void recordAnalysisMs(todoIndexes.length, Date.now() - startedAtMs);
+
   if (noRoofPhotos > 0) {
     useToastStore.getState().show({
       tone: 'warn',
@@ -146,6 +169,52 @@ function pickPhotos(slope: Slope, onlyNew: boolean): number[] {
   // pass forever.
   const analyzed = new Set(slope.analyzedPhotoIndices ?? []);
   return slope.photoPaths.map((_, i) => i).filter((i) => !analyzed.has(i));
+}
+
+/**
+ * Best-effort §7 forecast for the inspection's address. Returns `undefined`
+ * (not an empty object) whenever the real conditions are unknown.
+ */
+async function safetyForecastForInspection(inspectionId: string): Promise<SafetyForecast | undefined> {
+  try {
+    const inspection = useInspectionStore.getState().inspections.find((i) => i.id === inspectionId);
+    const coord =
+      inspection?.lat != null && inspection?.lng != null
+        ? { lat: inspection.lat, lng: inspection.lng }
+        : undefined;
+    return (await getSafetyForecast(coord)) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Freeze the decision-engine result for this inspection right after the
+ * analysis that produced it, so every later report restates a stored
+ * determination instead of re-deriving one at render time
+ * (lib/services/storedEngine.ts).
+ *
+ * Reads the store AFTER the markers (and the mode counts the store derives
+ * from them) are written, so the snapshot reflects the pass that just
+ * completed.
+ *
+ * Skipped once a report has been finalized: the store rejects the write
+ * anyway (see `setStoredEngineResult`), and re-analysis is not the deliberate
+ * re-finalize that is allowed to replace a signed determination. The job
+ * screen surfaces the resulting drift as "out of date" and re-freezes when
+ * the roofer regenerates the report.
+ */
+function storeEngineSnapshot(inspectionId: string, forecast?: SafetyForecast): void {
+  try {
+    const store = useInspectionStore.getState();
+    const inspection = store.inspections.find((i) => i.id === inspectionId);
+    if (!inspection || inspection.reportFinalizedAt) return;
+    const { payload, at } = snapshotEngineResult(inspection, undefined, forecast);
+    store.setStoredEngineResult(inspection.id, payload, at);
+  } catch {
+    // A missed snapshot is recoverable: report layers fall back to evaluating
+    // the engine at render time. Losing the analysis results is not.
+  }
 }
 
 function mergeFindingsForPhoto(

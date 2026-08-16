@@ -12,7 +12,8 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { ROOF_MATERIAL_LABELS, type InspectionStatus } from '@/lib/models/types';
-import { damageScore, evaluate } from '@/lib/services/decisionEngine';
+import { CLAIM_VIABILITY_LABELS } from '@/lib/services/decisionEngine';
+import { resolveEngineResult } from '@/lib/services/storedEngine';
 import {
   colors,
   fontSize,
@@ -121,8 +122,15 @@ export default function InspectionsList() {
           </View>
         ) : (
           filtered.map((ins) => {
-            const decision = evaluate(ins);
-            const score = damageScore(ins);
+            // Same read path as the job screen: the stored determination when
+            // it still speaks for the current inputs. Showing the deprecated
+            // 0-100 score here would put a different number next to the same
+            // roof. `honorFreeze: false` for the same reason the job screen
+            // uses it — a list of jobs describes them as they stand, not as a
+            // report signed before the last edit described them.
+            const { haag, decision } = resolveEngineResult(ins, Date.now(), {
+              honorFreeze: false,
+            });
             return (
               <Pressable
                 key={ins.id}
@@ -144,7 +152,9 @@ export default function InspectionsList() {
                 <View style={styles.jobStats}>
                   <Text style={styles.jobStat}>{ROOF_MATERIAL_LABELS[ins.material]}</Text>
                   <Text style={styles.jobStat}>· {ins.ageYears}yr</Text>
-                  <Text style={styles.jobStat}>· Damage {score}</Text>
+                  <Text style={styles.jobStat}>
+                    · {CLAIM_VIABILITY_LABELS[haag.claim_viability]}
+                  </Text>
                   <Text style={styles.jobStat}>· {decision.roofRecommendation.replace(/_/g, ' ')}</Text>
                 </View>
               </Pressable>

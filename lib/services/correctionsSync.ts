@@ -75,5 +75,7 @@ function serialize(c: Correction) {
     photo_url: c.photoUrl,
     photo_hash: c.photoHash,
     corrected_at: c.correctedAt,
+    confidence_stars: c.confidenceStars,
+    inspector_trust_weight: c.inspectorTrustWeight,
   };
 }

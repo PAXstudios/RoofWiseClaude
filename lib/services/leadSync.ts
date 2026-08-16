@@ -100,6 +100,8 @@ function leadToRow(l: Lead, userId: string) {
     value: l.value,
     last_contact_at: l.lastContactAt,
     follow_up_at: l.followUpAt,
+    last_storm_match: l.lastStormMatch,
+    stage_changed_at: l.stageChangedAt,
     created_at: l.createdAt,
     updated_at: l.updatedAt ?? l.createdAt,
   };
@@ -119,6 +121,8 @@ function rowToLead(row: Record<string, any>): Lead {
     value: row.value ?? undefined,
     lastContactAt: row.last_contact_at ?? undefined,
     followUpAt: row.follow_up_at ?? undefined,
+    lastStormMatch: (row.last_storm_match ?? undefined) as Lead['lastStormMatch'],
+    stageChangedAt: row.stage_changed_at ?? undefined,
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: row.updated_at ?? undefined,
     syncStatus: 'synced',
@@ -145,9 +149,15 @@ create table if not exists public.leads (
   value numeric,
   last_contact_at timestamptz,
   follow_up_at timestamptz,
+  last_storm_match jsonb,
+  stage_changed_at timestamptz,
   created_at timestamptz not null,
   updated_at timestamptz not null default now()
 );
+
+-- Safe to re-run on an existing install (column added after the first release).
+alter table public.leads add column if not exists last_storm_match jsonb;
+alter table public.leads add column if not exists stage_changed_at timestamptz;
 
 alter table public.leads enable row level security;
 

@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   BrittlenessProtocol,
   BrittlenessTest,
+  CaptureMode,
   CauseOfLoss,
   CollateralChecklistItem,
   CollateralEvidence,
@@ -16,11 +17,13 @@ import type {
   RoofGeometry,
   RoofCondition,
   InsuranceCarrier,
+  PhotoMeta,
   Slope,
   SlopeOrientation,
   DamageMarker,
   InspectionFinding,
 } from '../models/types';
+import { bucketHitCountsByMode } from '../services/captureSession';
 import {
   brittlenessResultToLegacy,
   emptyCollateralEvidence,
@@ -108,11 +111,30 @@ export type PhotoCapture = {
   slope: SlopeOrientation;
   findings: InspectionFinding[];
   markers: DamageMarker[];
+  /** One of AREA_TAGS — persisted to Slope.photoMeta when present. */
+  areaTag?: string;
+  captureMode?: CaptureMode;
 };
 
 export type RawCapture = {
   uri: string;
   slope: SlopeOrientation;
+  /** One of AREA_TAGS — persisted to Slope.photoMeta when present. */
+  areaTag?: string;
+  captureMode?: CaptureMode;
+};
+
+/**
+ * Per-capture-mode hit totals.
+ *
+ * There is deliberately no setter for these: `withRecount` derives them from
+ * the markers on every marker mutation, so an external write would be both
+ * overwritten by the next edit and free to violate the
+ * `square + singleShingle === hailCount` invariant.
+ */
+export type SlopeModeCounts = {
+  squareHitCount?: number;
+  singleShingleHitCount?: number;
 };
 
 type InspectionStoreState = {
@@ -135,6 +157,24 @@ type InspectionStoreState = {
     patch: Partial<CollateralChecklistItem>,
   ) => void;
   setBrittlenessProtocol: (id: string, protocol: BrittlenessProtocol | undefined) => void;
+  /**
+   * Persist a decision-engine snapshot.
+   *
+   * Ignored once `reportFinalizedAt` is set unless `opts.force` is passed: a
+   * finalized report is signed evidence, and silently replacing the numbers
+   * underneath it would leave the record claiming to be "frozen with the
+   * finalized report" while carrying a determination that document never had.
+   * Only a deliberate re-finalize (which re-stamps `reportFinalizedAt` in the
+   * same action) may force it.
+   */
+  setStoredEngineResult: (
+    inspectionId: string,
+    result: unknown,
+    atIso?: string,
+    opts?: { force?: boolean },
+  ) => void;
+  setReportFinalizedAt: (id: string, atIso?: string) => void;
+  clearReportFinalizedAt: (id: string) => void;
   addAudioNote: (id: string, note: { uri: string; durationSec: number; label?: string }) => void;
   removeAudioNote: (id: string, noteId: string) => void;
   setAudioNoteLabel: (id: string, noteId: string, label: string) => void;
@@ -165,8 +205,31 @@ type InspectionStoreState = {
 
 function withRecount(slope: Slope): Slope {
   const m = slope.damage;
+  // Split the hail hits by the capture mode of the photo each marker came
+  // from, in the SAME pass that recounts hailCount.
+  //
+  // This has to happen here rather than only after an analysis pass: the
+  // decision engine reads `squareHitCount ?? hailCount` as the HAAG §2
+  // per-square denominator, so a manual marker edit that recounted hailCount
+  // but left squareHitCount behind would feed the engine a stale number —
+  // worse than having no split at all. Every marker mutation in this store
+  // funnels through withRecount, which makes
+  // `squareHitCount + singleShingleHitCount === hailCount` a store invariant.
+  //
+  // Photos with no recorded mode fall into the square bucket, matching the
+  // capture flow's default, so slopes captured before mode tagging recount to
+  // exactly the numbers they had before.
+  const hitsByPhotoIndex: Record<number, number> = {};
+  for (const marker of m) {
+    if (marker.category !== 'hail_hits') continue;
+    const key = typeof marker.photoIndex === 'number' ? marker.photoIndex : -1;
+    hitsByPhotoIndex[key] = (hitsByPhotoIndex[key] ?? 0) + 1;
+  }
+  const modeCounts = bucketHitCountsByMode(slope.photoMeta, hitsByPhotoIndex);
+
   return {
     ...slope,
+    ...modeCounts,
     hailCount: m.filter((x) => x.category === 'hail_hits').length,
     bruisingCount: m.filter((x) => x.category === 'bruising').length,
     windLiftCount: m.filter((x) =>
@@ -177,6 +240,19 @@ function withRecount(slope: Slope): Slope {
       ['granule_loss', 'cracking', 'splitting'].includes(x.category),
     ).length,
   };
+}
+
+/** Appends per-photo capture metadata only when the capture carried some. */
+function appendPhotoMeta(
+  slope: Slope,
+  photoIndex: number,
+  cap: { areaTag?: string; captureMode?: CaptureMode },
+): PhotoMeta[] | undefined {
+  if (!cap.areaTag && !cap.captureMode) return slope.photoMeta;
+  return [
+    ...(slope.photoMeta ?? []),
+    { photoIndex, areaTag: cap.areaTag, captureMode: cap.captureMode },
+  ];
 }
 
 export const useInspectionStore = create<InspectionStoreState>()(
@@ -340,6 +416,38 @@ export const useInspectionStore = create<InspectionStoreState>()(
           }),
         })),
 
+      setStoredEngineResult: (inspectionId, result, atIso, opts) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) => {
+            if (i.id !== inspectionId) return i;
+            // The freeze is a write-side invariant, not just a read-side label:
+            // re-analysis after a report was signed must not overwrite the
+            // determination that document carries.
+            if (i.reportFinalizedAt && !opts?.force) return i;
+            return {
+              ...i,
+              storedEngineResult: result,
+              storedEngineResultAt: atIso ?? new Date().toISOString(),
+            };
+          }),
+        })),
+
+      setReportFinalizedAt: (id, atIso) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id
+              ? { ...i, reportFinalizedAt: atIso ?? new Date().toISOString() }
+              : i,
+          ),
+        })),
+
+      clearReportFinalizedAt: (id) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id ? { ...i, reportFinalizedAt: undefined } : i,
+          ),
+        })),
+
       addAudioNote: (id, note) =>
         set((s) => ({
           inspections: s.inspections.map((i) => {
@@ -404,7 +512,20 @@ export const useInspectionStore = create<InspectionStoreState>()(
                 const analyzedPhotoIndices = (sl.analyzedPhotoIndices ?? [])
                   .filter((i) => i !== photoIndex)
                   .map((i) => (i > photoIndex ? i - 1 : i));
-                return withRecount({ ...sl, photoPaths, damage, analyzedPhotoIndices });
+                const photoMeta = sl.photoMeta
+                  ?.filter((m) => m.photoIndex !== photoIndex)
+                  .map((m) =>
+                    m.photoIndex > photoIndex
+                      ? { ...m, photoIndex: m.photoIndex - 1 }
+                      : m,
+                  );
+                return withRecount({
+                  ...sl,
+                  photoPaths,
+                  damage,
+                  analyzedPhotoIndices,
+                  photoMeta,
+                });
               }),
             };
           }),
@@ -464,7 +585,9 @@ export const useInspectionStore = create<InspectionStoreState>()(
                 slope = makeSlope(cap.slope);
                 slopes.push(slope);
               }
+              const photoIndex = slope.photoPaths.length;
               slope.photoPaths = [...slope.photoPaths, cap.uri];
+              slope.photoMeta = appendPhotoMeta(slope, photoIndex, cap);
             }
             return { ...ins, slopes };
           }),
@@ -485,6 +608,7 @@ export const useInspectionStore = create<InspectionStoreState>()(
               }
               const photoIndex = slope.photoPaths.length;
               slope.photoPaths = [...slope.photoPaths, cap.uri];
+              slope.photoMeta = appendPhotoMeta(slope, photoIndex, cap);
               const tagged = cap.markers.map((m) => ({ ...m, photoIndex }));
               slope.damage = [...slope.damage, ...tagged];
               slope.aiFindings = [...(slope.aiFindings ?? []), ...cap.findings];

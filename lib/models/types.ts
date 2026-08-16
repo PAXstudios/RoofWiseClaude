@@ -366,6 +366,62 @@ export function emptyCollateralEvidence(): CollateralEvidence {
 }
 
 // -----------------------------------------------------------------------------
+// Photo capture — 19-area subject tagging + the two capture modes
+// -----------------------------------------------------------------------------
+
+/**
+ * The 19 canonical capture subjects (Camera prompt). Roof slopes lead so the
+ * common picks sit closest to a gloved thumb; the label rides the photo into
+ * the report.
+ */
+export const AREA_TAGS = [
+  'Front Slope',
+  'Rear Slope',
+  'Left Slope',
+  'Right Slope',
+  'Ridge / Hip',
+  'Valley',
+  'Flashing / Penetrations',
+  'Gutters / Downspouts',
+  'Fascia / Soffit',
+  'Siding',
+  'Windows',
+  'Window Screens',
+  'Garage Door',
+  'Fence / Gate',
+  'HVAC Condenser',
+  'Roof Vents / Soft Metals',
+  'Chimney',
+  'Skylight',
+  'Other',
+] as const;
+
+export type AreaTag = (typeof AREA_TAGS)[number];
+
+/**
+ * The two capture modes. Their hit counts aggregate **separately** in reports
+ * (Camera prompt): a 10x10 test square is the HAAG per-square denominator, a
+ * single-shingle close-up is not and must never be mixed into it.
+ */
+export type CaptureMode = 'square_10x10' | 'single_shingle';
+
+export const CAPTURE_MODE_LABELS: Record<CaptureMode, string> = {
+  square_10x10: '10x10 Square',
+  single_shingle: 'Single Shingle',
+};
+
+/**
+ * Per-photo capture metadata, keyed by index into `Slope.photoPaths`.
+ * `areaTag` is a plain string (values come from AREA_TAGS) so older or
+ * free-form persisted labels still load.
+ */
+export type PhotoMeta = {
+  photoIndex: number;
+  areaTag?: string;
+  captureMode?: CaptureMode;
+};
+
+// -----------------------------------------------------------------------------
 // Slope + Inspection
 // -----------------------------------------------------------------------------
 
@@ -411,6 +467,18 @@ export type Slope = {
     confidence: number;
     reference?: string;
   }[];
+  /**
+   * Per-photo area tag + capture mode. Absent on photos captured before
+   * tagging existed; entries are renumbered alongside photoPaths on delete.
+   */
+  photoMeta?: PhotoMeta[];
+  /**
+   * Hit counts aggregated per capture mode — kept apart because only the
+   * 10x10 square feeds the HAAG per-square threshold. Absent until a
+   * mode-tagged capture writes them; never derive one from the other.
+   */
+  squareHitCount?: number;
+  singleShingleHitCount?: number;
 };
 
 export type InspectionStatus = 'lead' | 'scheduled' | 'in_progress' | 'complete';
@@ -446,7 +514,16 @@ export type Inspection = {
   deductible?: number;              // dollars
   homeValue?: number;               // dollars — for the deductible ≤2% viability check
   priorClaimsWithin3Years?: boolean;
-  /** Date of loss as reported by the homeowner (§VII — storm causes only). */
+  /**
+   * Date of loss as reported by the homeowner (§VII). Written for every
+   * insurance-claim cause, not only storm ones.
+   *
+   * ISO timestamp at LOCAL NOON. A bare 'YYYY-MM-DD' parses as UTC midnight
+   * and renders as the previous day in every US timezone — an off-by-one on
+   * the one date an adjuster actually verifies against weather records. Any
+   * new editor must write the same shape:
+   * `new Date(y, m - 1, d, 12, 0, 0).toISOString()`.
+   */
   dateOfLoss?: string;
   collateralEvidence?: CollateralEvidence;
   brittlenessProtocol?: BrittlenessProtocol;
@@ -473,6 +550,18 @@ export type Inspection = {
   roofRecommendation?: RoofRecommendation;
   roofVerdictReasoning?: string;
   verifyWithInspector: boolean;
+
+  /**
+   * Frozen decision-engine snapshot (a JSON-serializable `HaagEngineResult`),
+   * so a finalized report keeps showing the numbers it was signed with.
+   * Typed `unknown` to keep the model layer free of a services import — read
+   * sites cast it through the reports helper.
+   */
+  storedEngineResult?: unknown;
+  /** ISO timestamp the storedEngineResult snapshot was taken. */
+  storedEngineResultAt?: string;
+  /** ISO timestamp the report was finalized — gates the finalize step. */
+  reportFinalizedAt?: string;
 
   // Traceability
   originEstimateId?: string;
@@ -536,9 +625,57 @@ export const INSURANCE_CARRIER_LABELS: Record<InsuranceCarrier, string> = {
 // CRM-ish models
 // -----------------------------------------------------------------------------
 
+/**
+ * Pipeline stages. The first line is the original set — kept verbatim so
+ * persisted leads never fail to load; the second line adds the Kanban PRD's
+ * post-sale stages. `proposal_sent` is the legacy spelling of `estimate_sent`
+ * and folds into that column via `leadStageColumn()`.
+ */
 export type LeadStage =
   | 'new' | 'contacted' | 'inspection_scheduled' | 'inspected'
-  | 'proposal_sent' | 'signed' | 'lost';
+  | 'proposal_sent' | 'signed' | 'lost'
+  | 'estimate_sent' | 'install_scheduled' | 'in_progress'
+  | 'completed' | 'invoiced' | 'paid';
+
+/**
+ * The 11 board columns in display order (Kanban PRD). `lost` is terminal and
+ * deliberately off-board; `proposal_sent` is absent because it maps onto
+ * `estimate_sent` — bucket leads with `leadStageColumn()`, not raw equality.
+ */
+export const LEAD_STAGE_ORDER: LeadStage[] = [
+  'new',
+  'contacted',
+  'inspection_scheduled',
+  'inspected',
+  'estimate_sent',
+  'signed',
+  'install_scheduled',
+  'in_progress',
+  'completed',
+  'invoiced',
+  'paid',
+];
+
+export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
+  new: 'New Lead',
+  contacted: 'Contacted',
+  inspection_scheduled: 'Inspection Scheduled',
+  inspected: 'Inspection Complete',
+  proposal_sent: 'Proposal Sent',
+  estimate_sent: 'Estimate Sent',
+  signed: 'Approved / Signed',
+  install_scheduled: 'Scheduled for Install',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  invoiced: 'Invoiced',
+  paid: 'Paid',
+  lost: 'Lost',
+};
+
+/** Board column a stage renders in — folds the legacy `proposal_sent`. */
+export function leadStageColumn(stage: LeadStage): LeadStage {
+  return stage === 'proposal_sent' ? 'estimate_sent' : stage;
+}
 
 export type Lead = {
   id: string;
@@ -555,7 +692,23 @@ export type Lead = {
   followUpAt?: string;
   createdAt: string;
   updatedAt?: string;
+  /**
+   * When `stage` last changed. Distinct from `updatedAt`, which any write
+   * bumps (follow-up, storm match) — the Pipeline board's days-in-stage
+   * number is only honest if it measures the stage, not the last touch.
+   */
+  stageChangedAt?: string;
   syncStatus?: 'pending' | 'synced' | 'failed';
+  /**
+   * Last NOAA storm this address matched. Absent means "never checked" —
+   * distinct from a check that found nothing, which never writes this field.
+   */
+  lastStormMatch?: {
+    eventDate: string;
+    distanceMiles: number;
+    hailInches?: number;
+    matchedAt: string;
+  };
 };
 
 export type JobStatus = 'scheduled' | 'in_progress' | 'awaiting_adjuster' | 'done' | 'lost';
@@ -685,7 +838,10 @@ export type TrainingItem = {
   enqueuedAt: string;
 };
 
-export type CorrectionType = 'swipe_accept' | 'swipe_reject' | 'edit' | 'add_marker' | 'remove_marker';
+/** `swipe_correct` is the up-swipe gesture — distinct from a deliberate `edit`. */
+export type CorrectionType =
+  | 'swipe_accept' | 'swipe_reject' | 'swipe_correct'
+  | 'edit' | 'add_marker' | 'remove_marker';
 
 export type Correction = {
   id: string;
@@ -701,6 +857,10 @@ export type Correction = {
   photoHash?: string;
   syncStatus: 'pending' | 'syncing' | 'synced' | 'failed';
   correctedAt: string;
+  /** How sure the contractor was, 1-5 stars. Absent when not asked. */
+  confidenceStars?: 1 | 2 | 3 | 4 | 5;
+  /** Future certification weighting for the learning loop. Absent by default. */
+  inspectorTrustWeight?: number;
 };
 
 export type UserCorrectionProfile = {

@@ -2173,3 +2173,41 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Verification:** typecheck clean, lint 0 problems, `expo export --platform web` green, headless Chromium boot of `/`, `/leads`, `/settings` clean (favicon 404 fixed). Re-run by hand after the workflow: typecheck + lint confirmed clean.
 
 **Files touched:** 21 modified, 7 new (see git show for the list), `BACKLOG.md`, `PROMPT_LOG.md`.
+
+---
+
+### [2026-08-16] #51 — Wave 2: 12-agent parallel build — capture tagging/modes/import, engine-result persistence + report integrity, claim polish, swipe completion, pipeline board, storm-lead clustering
+
+**Prompt:**
+> (Wave 2 was self-directed under a standing green light from #50, then paused mid-run and resumed.)
+> "Supabase isn't connected bc it's connected to another code workspace nothing Claude. Pause" → "Continue"
+
+**How it ran:** one workflow, five phases — 1 schema agent ALONE (so six builders could not race on `types.ts`), then 6 builders in parallel with disjoint file ownership, then 1 integrator, then 3 adversarial verifiers in parallel, then 1 fix agent. 12 agents, ~1.65M tokens, 696 tool calls, 0 errors, ~73 min. 26 files modified + 4 new, +4,046/−514.
+
+**Pause/resume note:** the first launch was stopped by the owner one agent in. The schema agent had started but never completed, so nothing was written and the tree was clean — this run started fresh rather than resuming. Three script defects were fixed during the pause: (a) `expo-crypto` is not installed, so the hash decision was pre-made (pure-JS, no new dependency — adding one mid-parallel-build would collide on `package.json`); (b) the `Correction` type was located in `types.ts` so the schema agent extends it directly and adds a `swipe_correct` member; (c) a real bug in the workflow script itself — findings were filtered before being paired with their verifier, so one null verifier would have mislabelled which auditor found what.
+
+**What shipped:**
+1. **Capture** (`quick-inspection.tsx`, `CameraHUD.tsx`, new `captureSession.ts`): 19-area tagging picker (`AREA_TAGS`), Test Square (10×10) vs Single Shingle mode toggle with **separately aggregated counts**, photo-library import through `prepareCapturedPhoto` (same pipeline, same queue as camera captures). Multi-select is a repeated single-asset loop **on purpose** — native multi-select was root-caused to an uncatchable SIGABRT in Expo Go in #24/#25.
+2. **Engine persistence + report integrity** (new `storedEngine.ts`, `reportIntegrity.ts`, `telemetry.ts`): reports now restate a **stored** `HaagEngineResult` instead of re-running `evaluate()` at render. Freshness is decided by a **SHA-256 input fingerprint**, not a timestamp — the Inspection carries no "last analysis change" time, and a fingerprint is strictly stronger. Both report variants carry a tamper-evidence footer; local-only speed instrumentation (no network, Drift #5) records analysis/report timings against the published ≤60s/≤180s targets.
+3. **Claim polish** (`new-job.tsx`, `job/[id].tsx`): DOL was **free text** — "around mid-May" was an accepted answer, which silently disabled Triple-Check, the ±72h window, and the report header. Now a structured control (one-tap presets + 64pt MM/DD/YYYY boxes) that rejects impossible dates, shows the matched storm date beside it, and anchors the post-save storm match on the reported DOL rather than `createdAt`. Claim-evidence photos routed through the image pipeline; brittleness finalize gate as informative friction, not a hard block.
+4. **Swipe** (`swipe-review.tsx`, `correctionsStore.ts`): gesture remap to Pitch Deck truth — right accept, left reject, **up = correct**, down = skip. Dominant-axis resolution so an up-swipe with drift no longer registers as accept/reject. Five-star confidence prompt after corrections only; `inspectorTrustWeight` stamped neutral (weighting itself is post-raise).
+5. **Pipeline board** (`(tabs)/leads.tsx`): 12-column glove-first column-picker (11 live stages + terminal `lost`), one-tap Move sheet, no drag-and-drop. List view is byte-identical behind the toggle (`git diff -w` shows only three removed import lines).
+6. **Storm leads** (`stormWatch.ts`, `map.tsx`, `hail-tracer.tsx`, `weather.ts`, `WeatherTile.tsx`): `matchLeadsToStorm()` haversine clustering over already-fetched data (leads without coordinates are skipped, never geocoded or guessed), the "N leads within X mi of the hail core" line on the storm hero with tap-through to Map, both storm surfaces migrated to the 4-year-clamped lookback, and a real forecast wired into `roofer_safety_rating` so it stops defaulting to "Use caution."
+
+**Verification cycle:** 13 findings, 12 CONFIRMED/actionable, **all 12 fixed, none skipped.** The standouts:
+- **One broken invariant seen from three directions.** Findings 1/3/8 were all the freeze contract: a finalized report could be silently re-snapshotted by a later re-analysis, so the signed PDF and the stored determination could drift apart. Fixed once, coherently — `setStoredEngineResult` no-ops once `reportFinalizedAt` is set unless forced; only the deliberate re-finalize path forces (and re-stamps in the same action); non-report surfaces read with `honorFreeze:false` so a *proposal* can never quote a pre-edit scope.
+- **Drift #5 caught in new code:** the dashboard pipeline mini-Kanban hardcoded `Contacted: 0` / `Proposal: 0` — permanent fabricated placeholders. Now derived from real leads, empty stages omitted, honest empty state.
+- The deprecated 0–100 damage score was still printing in the carrier-facing report ("damage score 47 of 100") alongside the new band — removed from narrative, homeowner summary, the `urgent` branch, and the Section 02 stat tile.
+- Legacy `proposal_sent` leads would have vanished from the board and the detail-screen chips (raw stage equality vs `leadStageColumn()`).
+
+**Independently verified by hand after the workflow** (not taken on the agents' word): typecheck clean, lint clean, and the pure-JS SHA-256 executed against Node's `crypto` across the 55/56/63/64/65-byte padding boundaries, multibyte UTF-8, emoji surrogate pairs, and a 500KB body — all match. `stripIntegrityFooter(stamp(x)) === x` exactly, and tampering flips `matches` to false. The self-reference trap (hashing content that contains its own hash) is avoided: hash first, inject footer after.
+
+**Not fixed — deliberately.** `assessClaimViability` requires `is_discontinued === true` for the HIGH band, and nothing populates it, so **HIGH is currently unreachable in the field.** `docs/HAAG_DECISION_ENGINE.md` §6 says verbatim "**HIGH** — all of: … Material is discontinued", so the code is a faithful transcription. Per CLAUDE.md the Drive documents win on logic and thresholds — loosening a documented criterion is exactly the drift this repo guards against. Backlogged as an **owner decision**, not patched.
+
+**Behavior changes worth knowing:** storm alerts are now scoped to 25 mi around the service-area centroid instead of state-wide (fixes "Plano gets Amarillo hail" but narrows coverage); Map and Hail Tracer now apply the published validation floors, so hail reports with no recorded size no longer appear; down-swipe is now skip where it used to be up (muscle-memory hazard, same destructiveness as before).
+
+**Supabase:** untouched and not required. The project is administered from a different workspace, so the online report-verification endpoint stays deferred and the footer copy deliberately does **not** promise a verification service that doesn't exist (Drift #5). The local hash stands alone.
+
+**Nothing was run on a device or a simulator** — no agent could, and neither could I. Typecheck, lint, the web export, and the hash test are the full extent of verification.
+
+**Files touched:** 26 modified, 4 new (`captureSession.ts`, `reportIntegrity.ts`, `storedEngine.ts`, `telemetry.ts`), `BACKLOG.md`, `PROMPT_LOG.md`.

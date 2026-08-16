@@ -899,21 +899,27 @@ function monthsBetweenIso(fromIso: string, toIso: string): number | undefined {
  * stored engine booleans by re-deriving from a thinner observation.
  */
 export function legacyObservation(material: RoofMaterial, slope: Slope): ThresholdObservation | undefined {
+  // §2 material rules are PER TEST SQUARE (`brokenPerSquareMin`, puncture
+  // counts), so they take the same denominator `hail_hits_per_square` does:
+  // square-mode hits only, with the untagged legacy count as the fallback.
+  // Feeding raw `hailCount` here would let a single-shingle close-up trip a
+  // per-square tile/membrane threshold it never met.
+  const perSquareHits = slope.squareHitCount ?? slope.hailCount;
   switch (material) {
     case 'clay_tile':
     case 'concrete_tile':
     case 'slate':
     case 'synthetic_slate':
       // Legacy hail markers on tile-family roofs are cracked/broken units.
-      return slope.hailCount > 0 ? { brokenUnits: slope.hailCount } : undefined;
+      return perSquareHits > 0 ? { brokenUnits: perSquareHits } : undefined;
     case 'tpo':
     case 'epdm':
     case 'rolled_roofing':
       // Legacy hail markers on membranes are punctures (the only thing the
       // capture flow counts there); missing sections imply displacement.
-      if (slope.hailCount > 0 || slope.missingCount > 0) {
+      if (perSquareHits > 0 || slope.missingCount > 0) {
         return {
-          membranePunctures: slope.hailCount > 0 ? true : undefined,
+          membranePunctures: perSquareHits > 0 ? true : undefined,
           membraneDisplacement: slope.missingCount > 0 ? true : undefined,
         };
       }
@@ -927,8 +933,19 @@ export function legacyObservation(material: RoofMaterial, slope: Slope): Thresho
   }
 }
 
-/** Builds the §10 engine input from the app's Inspection model. */
-export function engineInputFromInspection(inspection: Inspection, asOfIso?: string): HaagEngineInput {
+/**
+ * Builds the §10 engine input from the app's Inspection model.
+ *
+ * `forecast` (§7) must be fetched by the async caller and passed in — the
+ * engine stays I/O-free (Drift #8). Pass `undefined`, never `{}`, when the
+ * forecast is unavailable: `evaluateSafety({})` rates USE_CAUTION purely from
+ * missing inputs, which would launder "we don't know" into a rating.
+ */
+export function engineInputFromInspection(
+  inspection: Inspection,
+  asOfIso?: string,
+  forecast?: SafetyForecast,
+): HaagEngineInput {
   // Insurance Claim mode records the field protocol (result + mandatory
   // photos); it wins over the legacy quick-capture chip. The legacy mapping
   // handles the 'borderline' member added for claim mode — BORDERLINE gates
@@ -966,7 +983,13 @@ export function engineInputFromInspection(inspection: Inspection, asOfIso?: stri
       // instead of silently assuming.
       slopes: inspection.slopes.map((s, i) => ({
         slope: s.id,
-        hail_hits_per_square: s.hailCount,
+        // Only hits captured in a 10x10 test square are the per-square
+        // denominator. `squareHitCount` is written by analyzeSlope once photos
+        // carry a capture mode; `hailCount` (every marker, both modes) is the
+        // fallback for inspections captured before mode tagging existed.
+        // Never sum the two — a single-shingle close-up is several bruises on
+        // ONE shingle, not several hits in a square (HAAG §2).
+        hail_hits_per_square: s.squareHitCount ?? s.hailCount,
         wind_creased_count: s.windLiftCount,
         missing_shingles: s.missingCount,
         // §1 authoritative flag, mapped from the legacy `functional` boolean.
@@ -1003,6 +1026,7 @@ export function engineInputFromInspection(inspection: Inspection, asOfIso?: stri
       home_value_usd: inspection.homeValue,
       prior_claims_within_3_years: inspection.priorClaimsWithin3Years,
     },
+    forecast,
   };
 }
 
@@ -1011,8 +1035,12 @@ export function engineInputFromInspection(inspection: Inspection, asOfIso?: stri
  * the spec-exact engine. `asOfIso` (optional, ISO 8601) enables the two-year
  * corroboration check without the engine reading the clock (Drift #8 purity).
  */
-export function evaluate(inspection: Inspection, asOfIso?: string): DecisionEngineResult {
-  const haag = runHaagDecisionEngine(engineInputFromInspection(inspection, asOfIso));
+export function evaluate(
+  inspection: Inspection,
+  asOfIso?: string,
+  forecast?: SafetyForecast,
+): DecisionEngineResult {
+  const haag = runHaagDecisionEngine(engineInputFromInspection(inspection, asOfIso, forecast));
   const evalBySlope = new Map(haag.slope_evaluations.map((e) => [e.slope, e]));
 
   const perSlope: PerSlopeResult[] = inspection.slopes.map((slope) => {

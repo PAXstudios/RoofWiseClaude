@@ -8,11 +8,37 @@ import type {
   DamageMarker,
   InspectionFinding,
 } from '../models/types';
+import { useInspectorProfileStore } from './inspectorProfileStore';
 
 let counter = 0;
 
 function newId(): string {
   return `corr_${Date.now()}_${counter++}`;
+}
+
+/** Stars the contractor can give a correction. Only asked on corrections. */
+export type ConfidenceStars = 1 | 2 | 3 | 4 | 5;
+
+/**
+ * Trust weighting for the learning loop.
+ *
+ * TODO(post-raise): certification is captured on the inspector profile
+ * (`haagCertified` / `haagCertificationNumber`) but is deliberately NOT
+ * weighted yet — real trust weighting needs a validated model and is
+ * post-raise work. Every correction is stamped with the neutral weight so the
+ * field exists on records from day one and nothing needs back-filling later.
+ */
+const NEUTRAL_TRUST_WEIGHT = 1;
+const TRUST_WEIGHTS: Record<'certified' | 'uncertified', number> = {
+  certified: NEUTRAL_TRUST_WEIGHT,
+  uncertified: NEUTRAL_TRUST_WEIGHT,
+};
+
+/** Current inspector's trust weight. Neutral (1) for everyone today. */
+export function inspectorTrustWeight(): number {
+  const profile = useInspectorProfileStore.getState().profile;
+  const certified = profile.haagCertified || Boolean(profile.haagCertificationNumber);
+  return TRUST_WEIGHTS[certified ? 'certified' : 'uncertified'];
 }
 
 export type RecordCorrectionInput = {
@@ -26,12 +52,30 @@ export type RecordCorrectionInput = {
   delta: Record<string, unknown>;
   photoUrl?: string;
   photoHash?: string;
+  /** Optional at record time — swipe-review stamps it after the fact. */
+  confidenceStars?: ConfidenceStars;
+  /** Defaults to the current inspector's weight; pass to override. */
+  inspectorTrustWeight?: number;
 };
 
 type CorrectionsStoreState = {
   corrections: Correction[];
 
   record: (input: RecordCorrectionInput) => Correction;
+  /**
+   * Attach a 1-5 star confidence rating to an already-recorded correction.
+   * Used by swipe-review after the contractor returns from the editor.
+   * Re-arms sync for records that already shipped so the star follows.
+   *
+   * `via` records the gesture that opened the correction — the editor keeps
+   * ownership of `correctionType` (edit / add_marker / remove_marker), which
+   * describes *what* changed, so provenance rides along in `delta` instead.
+   */
+  setConfidence: (
+    id: string,
+    stars: ConfidenceStars,
+    options?: { via?: CorrectionType },
+  ) => void;
   pending: () => Correction[];
   markSyncing: (ids: string[]) => void;
   markSynced: (ids: string[]) => void;
@@ -61,10 +105,28 @@ export const useCorrectionsStore = create<CorrectionsStoreState>()(
           photoHash: input.photoHash,
           syncStatus: 'pending',
           correctedAt: new Date().toISOString(),
+          confidenceStars: input.confidenceStars,
+          inspectorTrustWeight: input.inspectorTrustWeight ?? inspectorTrustWeight(),
         };
         set((s) => ({ corrections: [corr, ...s.corrections].slice(0, 1000) }));
         return corr;
       },
+
+      setConfidence: (id, stars, options) =>
+        set((s) => ({
+          corrections: s.corrections.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  confidenceStars: stars,
+                  inspectorTrustWeight: c.inspectorTrustWeight ?? inspectorTrustWeight(),
+                  delta: options?.via ? { ...c.delta, correctedVia: options.via } : c.delta,
+                  // A synced record needs to go out again to carry the star.
+                  syncStatus: c.syncStatus === 'synced' ? 'pending' : c.syncStatus,
+                }
+              : c,
+          ),
+        })),
 
       pending: () => get().corrections.filter((c) => c.syncStatus === 'pending'),
 

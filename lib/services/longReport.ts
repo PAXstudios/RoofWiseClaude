@@ -36,7 +36,10 @@ import {
 } from '../models/types';
 import { useInspectorProfileStore } from '../stores/inspectorProfileStore';
 import { thresholdFor } from './haagThresholds';
-import { REPORT_BASE_CSS, esc } from './haagPdf';
+import { REPORT_BASE_CSS, engineProvenance, esc } from './haagPdf';
+import { resolveEngineResult, storedEngineFreshness } from './storedEngine';
+import { stampReportIntegrity } from './reportIntegrity';
+import { recordReportMs } from './telemetry';
 import type {
   ClaimViabilityBand,
   HaagEngineResult,
@@ -105,16 +108,27 @@ export type EngineRoofResult = Pick<
   | 'detailed_explanation'
 >;
 
-/** The single payload the Long Report consumes. */
+/**
+ * The single payload the Long Report consumes.
+ *
+ * `engine` / `perSlope` are OPTIONAL and are a fallback, not the primary
+ * source: the report reads the STORED engine result for this inspection
+ * (lib/services/storedEngine.ts) whenever one is present and still speaks for
+ * the current inputs. A caller that already evaluated the engine may pass its
+ * result — it is used only when no usable stored snapshot exists, so the two
+ * paths never render different numbers for the same document.
+ */
 export type LongReportPayload = {
   inspection: Inspection;
-  engine: EngineRoofResult;
-  perSlope: EngineSlopeResult[];
+  engine?: EngineRoofResult;
+  perSlope?: EngineSlopeResult[];
 };
 
 export type GeneratedLongReport = {
   uri: string;
   inspection: Inspection;
+  /** SHA-256 of the report HTML, as printed in the document's integrity footer. */
+  integrityHash: string;
 };
 
 /** The fixed 8-section structure (Long Report doc). Order is the contract. */
@@ -136,9 +150,69 @@ export const LONG_REPORT_SECTIONS = [
 export async function generateLongReport(
   payload: LongReportPayload,
 ): Promise<GeneratedLongReport> {
-  const html = renderLongReportHtml(payload);
+  // Speed instrumentation — published commitment is a report in under a
+  // minute (PRODUCT_SYNTHESIS §"Workflow & speed contracts"). Local only.
+  const startedAtMs = Date.now();
+  // Tamper-evidence: hash the footer-free HTML, then inject the footer that
+  // carries the hash (self-reference-safe contract in reportIntegrity.ts).
+  const body = renderLongReportHtml(payload);
+  const { html, hash } = stampReportIntegrity(body, formatDateTime(new Date()));
   const { uri } = await Print.printToFileAsync({ html, base64: false });
-  return { uri, inspection: payload.inspection };
+  void recordReportMs(Date.now() - startedAtMs);
+  return { uri, inspection: payload.inspection, integrityHash: hash };
+}
+
+/**
+ * Attach each slope's stored §5 cost record to its §9 evaluation — the
+ * payload-build seam. The engine keeps costs under `cost_analysis`; this only
+ * re-associates them by slope key. Nothing is computed here.
+ */
+export function perSlopeFromEngine(haag: HaagEngineResult): EngineSlopeResult[] {
+  return haag.slope_evaluations.map((ev) => {
+    const cost = haag.cost_analysis?.slopes.find((c) => c.slope === ev.slope);
+    return {
+      ...ev,
+      cost: cost
+        ? {
+            ...cost.inputs,
+            repair_cost_slope: cost.repair_cost_slope,
+            replacement_cost_slope: cost.replacement_cost_slope,
+          }
+        : undefined,
+    };
+  });
+}
+
+type ResolvedReportEngine = {
+  engine: EngineRoofResult;
+  perSlope: EngineSlopeResult[];
+  /** One-line disclosure of where the determination came from. */
+  provenance: string;
+};
+
+/**
+ * Stored engine result first; the caller's payload only as a fallback.
+ *
+ * Order matters for report integrity: a finalized or still-valid snapshot is
+ * the document of record, so it wins over anything a screen evaluated live.
+ * Only when no usable snapshot exists does the caller's result get used —
+ * and if the caller passed nothing, the engine is snapshotted here.
+ */
+function resolveReportEngine(payload: LongReportPayload): ResolvedReportEngine {
+  const freshness = storedEngineFreshness(payload.inspection);
+  if (!freshness.usable && payload.engine) {
+    return {
+      engine: payload.engine,
+      perSlope: payload.perSlope ?? [],
+      provenance: engineProvenance('recomputed', new Date().toISOString()),
+    };
+  }
+  const resolved = resolveEngineResult(payload.inspection);
+  return {
+    engine: resolved.haag,
+    perSlope: perSlopeFromEngine(resolved.haag),
+    provenance: engineProvenance(resolved.source, resolved.at),
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -394,7 +468,8 @@ function missingDataRegister(ins: Inspection, perSlope: EngineSlopeResult[]): Mi
 // -----------------------------------------------------------------------------
 
 export function renderLongReportHtml(payload: LongReportPayload): string {
-  const { inspection: ins, engine, perSlope } = payload;
+  const ins = payload.inspection;
+  const { engine, perSlope, provenance } = resolveReportEngine(payload);
   const inspector = useInspectorProfileStore.getState().profile;
   const generatedAt = formatDateTime(new Date());
   const createdDate = formatDateShort(ins.createdAt);
@@ -569,7 +644,7 @@ export function renderLongReportHtml(payload: LongReportPayload): string {
     stored RoofWise decision-engine output for this inspection, per the Haag Decision Engine
     specification (§9). It restates stored values in words; it does not recalculate the Haag
     RC = D × U × R × A cost figures, re-derive any recommendation, or override any stored
-    determination.</div>`;
+    determination. ${esc(provenance)}</div>`;
 
   return `<!DOCTYPE html>
 <html>
@@ -691,7 +766,8 @@ export function renderLongReportHtml(payload: LongReportPayload): string {
 
   <div class="footer">
     <strong>RoofWise Long-Form Inspection Report</strong> · ${esc(ins.reportId)}<br/>
-    Generated ${esc(generatedAt)} · Restates the stored RoofWise decision-engine output · ${ins.slopes.length} slope${ins.slopes.length === 1 ? '' : 's'} inspected
+    Generated ${esc(generatedAt)} · Restates the stored RoofWise decision-engine output · ${ins.slopes.length} slope${ins.slopes.length === 1 ? '' : 's'} inspected<br/>
+    ${esc(provenance)}
   </div>
 </div>
 </body>

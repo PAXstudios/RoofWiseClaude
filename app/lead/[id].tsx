@@ -8,7 +8,12 @@ import { useLeadStore } from '@/lib/stores/leadStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
-import type { LeadStage } from '@/lib/models/types';
+import {
+  LEAD_STAGE_LABELS,
+  LEAD_STAGE_ORDER,
+  leadStageColumn,
+  type LeadStage,
+} from '@/lib/models/types';
 import {
   colors,
   fontSize,
@@ -19,15 +24,14 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-const STAGES: { id: LeadStage; label: string }[] = [
-  { id: 'new', label: 'New' },
-  { id: 'contacted', label: 'Contacted' },
-  { id: 'inspection_scheduled', label: 'Scheduled' },
-  { id: 'inspected', label: 'Inspected' },
-  { id: 'proposal_sent', label: 'Proposal' },
-  { id: 'signed', label: 'Signed' },
-  { id: 'lost', label: 'Lost' },
-];
+/**
+ * Same 12 chips the Pipeline board shows: the 11 live columns plus terminal
+ * `lost`. Selection compares through `leadStageColumn()` so a lead persisted
+ * under the legacy `proposal_sent` still lights up the Estimate Sent chip.
+ */
+const STAGES: { id: LeadStage; label: string }[] = ([...LEAD_STAGE_ORDER, 'lost'] as LeadStage[]).map(
+  (id) => ({ id, label: LEAD_STAGE_LABELS[id] }),
+);
 
 export default function LeadDetail() {
   const router = useRouter();
@@ -190,26 +194,21 @@ export default function LeadDetail() {
 
         <Text style={styles.sectionLabel}>Stage</Text>
         <View style={styles.chipWrap}>
-          {STAGES.map((s) => (
-            <PressableScale
-              key={s.id}
-              style={[
-                styles.chip,
-                lead.stage === s.id &&
-                  (s.id === 'lost' ? styles.chipLost : styles.chipActive),
-              ]}
-              onPress={() => setStage(lead.id, s.id)}
-            >
-              <Text
+          {STAGES.map((s) => {
+            const active = leadStageColumn(lead.stage) === s.id;
+            return (
+              <PressableScale
+                key={s.id}
                 style={[
-                  styles.chipText,
-                  lead.stage === s.id && styles.chipTextActive,
+                  styles.chip,
+                  active && (s.id === 'lost' ? styles.chipLost : styles.chipActive),
                 ]}
+                onPress={() => setStage(lead.id, s.id)}
               >
-                {s.label}
-              </Text>
-            </PressableScale>
-          ))}
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
+              </PressableScale>
+            );
+          })}
         </View>
 
         <Text style={styles.sectionLabel}>Follow up</Text>

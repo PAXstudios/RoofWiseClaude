@@ -43,11 +43,13 @@ import { useInspectorProfileStore } from '../stores/inspectorProfileStore';
 import {
   CARRIER_IMPACT_NORM_NOTE,
   CLAIM_VIABILITY_LABELS,
-  claimWorthiness,
-  damageScore,
-  evaluate,
   legacyObservation,
+  type ClaimViabilityBand,
+  type DecisionEngineResult,
 } from './decisionEngine';
+import { resolveEngineResult } from './storedEngine';
+import { stampReportIntegrity } from './reportIntegrity';
+import { recordReportMs } from './telemetry';
 import { tripleCheckDateOfLoss } from './stormMatch';
 import { evaluateMaterialThreshold, thresholdFor } from './haagThresholds';
 import {
@@ -63,14 +65,24 @@ import {
 export type GeneratedReport = {
   uri: string;
   inspection: Inspection;
+  /** SHA-256 of the report HTML, as printed in the document's integrity footer. */
+  integrityHash: string;
 };
 
 export async function generateHaagReport(inspection: Inspection): Promise<GeneratedReport> {
+  // Speed instrumentation — the published commitment is a report in under a
+  // minute (PRODUCT_SYNTHESIS §"Workflow & speed contracts"). Local only.
+  const startedAtMs = Date.now();
   const photoMap = await preparePhotoDataUris(inspection);
   const brittlenessPhotos = await prepareBrittlenessPhotoUris(inspection);
-  const html = renderHtml(inspection, photoMap, brittlenessPhotos);
+  // Tamper-evidence: hash the report BEFORE any integrity footer exists, then
+  // inject the footer carrying that hash. The self-reference-safe contract
+  // (strip footer → re-hash → compare) is documented in reportIntegrity.ts.
+  const body = renderHtml(inspection, photoMap, brittlenessPhotos);
+  const { html, hash } = stampReportIntegrity(body, formatDateTime(new Date()));
   const { uri } = await Print.printToFileAsync({ html, base64: false });
-  return { uri, inspection };
+  void recordReportMs(Date.now() - startedAtMs);
+  return { uri, inspection, integrityHash: hash };
 }
 
 export type ReportPhoto = {
@@ -317,6 +329,14 @@ export const REPORT_BASE_CSS = `
 
   .footer { text-align: center; color: var(--slate); font-size: 9px; padding: 20px 0;
             border-top: 1px solid var(--line); margin-top: 34px; line-height: 1.7; }
+
+  /* Integrity block — injected after render by reportIntegrity.ts, so it sits
+     outside .page and carries its own gutter. */
+  .integrity { padding: 0 40px 30px; text-align: center; break-inside: avoid; }
+  .integrity .integrity-line { font-size: 9.5px; font-weight: 700; color: var(--ink);
+                               letter-spacing: 0.3px; font-family: 'SFMono-Regular', Menlo, monospace; }
+  .integrity .integrity-note { font-size: 8.5px; color: var(--slate); line-height: 1.6;
+                               margin: 5px auto 0; max-width: 460px; }
   .sig-row { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 24px; }
   .sig-box { border-top: 1.5px solid var(--ink); padding-top: 8px; font-size: 10.5px; color: var(--slate); }
 `;
@@ -326,14 +346,23 @@ function renderHtml(
   photoMap: Record<string, ReportPhoto[]> = {},
   brittlenessPhotos: string[] = [],
 ): string {
-  // Evaluated as of report-generation time so the §6 two-year corroboration
-  // rule participates (months_since_event stays undefined without an asOf —
-  // a 3-year-old storm must render the mandated LOW band, not skip the rule).
-  // Follow-up (BACKLOG): persist the HaagEngineResult with the inspection and
-  // restate it here instead of re-deriving on every render.
-  const decision = evaluate(ins, new Date().toISOString());
-  const score = damageScore(ins);
-  const worthiness = claimWorthiness(decision, score);
+  // The determination is READ, not re-derived: `resolveEngineResult` returns
+  // the stored engine snapshot when the inspection still has the inputs it was
+  // taken from (and verbatim once the report is finalized), and only falls
+  // back to evaluating now when no usable snapshot exists — in which case the
+  // §6 two-year corroboration rule still participates, because the fallback
+  // snapshot is taken as of this moment (months_since_event stays undefined
+  // without an asOf, and a 3-year-old storm must render the mandated LOW band).
+  const resolved = resolveEngineResult(ins);
+  const decision = resolved.decision;
+  // §6 band — the claim-viability scale. It replaces the deprecated numeric
+  // claimWorthiness() as the branch key for the homeowner summary below.
+  const viabilityBand = decision.haag.claim_viability;
+  // Slopes the engine found over the material's HAAG threshold. This replaces
+  // the deprecated 0-100 damage score everywhere in this document: the score is
+  // not a HAAG quantity, and an adjuster has no standard to check it against —
+  // it only invites an argument about a number nobody backs.
+  const qualifyingSlopes = decision.perSlope.filter((r) => r.qualifies).length;
   // Triple-Check (§6): pure DOL-vs-event corroboration verdict for Section 03.
   // Prefers the reported date of loss (claim mode); falls back to the attached
   // event's own date for general inspections.
@@ -422,7 +451,7 @@ function renderHtml(
 
   <h2><span class="n">02</span>Executive Summary</h2>
   <div class="summary-grid">
-    <div class="summary-stat"><div class="stat-value">${score}</div><div class="stat-label">Damage score</div></div>
+    <div class="summary-stat"><div class="stat-value">${qualifyingSlopes}/${ins.slopes.length}</div><div class="stat-label">Slopes meeting HAAG threshold</div></div>
     <div class="summary-stat"><div class="stat-value">${ins.slopes.length}</div><div class="stat-label">Slopes inspected</div></div>
     <div class="summary-stat"><div class="stat-value">${totalPhotos}</div><div class="stat-label">Photos on file</div></div>
     <div class="summary-stat accent"><div class="stat-value">${esc(CLAIM_VIABILITY_LABELS[decision.haag.claim_viability])}</div><div class="stat-label">Claim viability</div></div>
@@ -567,10 +596,10 @@ function renderHtml(
   ${collateralZonesBlock(ins.collateralEvidence)}
 
   <h2><span class="n">10</span>Insurance-Grade Narrative</h2>
-  <p>${esc(narrative(ins, decision, score))}</p>
+  <p>${esc(narrative(ins, decision))}</p>
 
   <h2><span class="n">11</span>Homeowner Summary</h2>
-  <div class="homeowner">${homeownerSummary(ins, decision, worthiness, score)}</div>
+  <div class="homeowner">${homeownerSummary(ins, decision, viabilityBand)}</div>
 
   ${isInsurance ? insuranceSupplement(ins, brittlenessPhotos, inspector) : ''}
 
@@ -596,7 +625,8 @@ function renderHtml(
 
   <div class="footer">
     <strong>RoofWise HAAG Certified Report</strong> · ${esc(ins.reportId)}<br/>
-    Generated ${esc(generatedAt)} · ${totalPhotos} photograph${totalPhotos === 1 ? '' : 's'} on file · ${ins.slopes.length} slope${ins.slopes.length === 1 ? '' : 's'} inspected
+    Generated ${esc(generatedAt)} · ${totalPhotos} photograph${totalPhotos === 1 ? '' : 's'} on file · ${ins.slopes.length} slope${ins.slopes.length === 1 ? '' : 's'} inspected<br/>
+    ${esc(engineProvenance(resolved.source, resolved.at))}
   </div>
 </div>
 </body>
@@ -1004,6 +1034,27 @@ function insuranceSupplement(
   ${sectionF}`;
 }
 
+/**
+ * One honest line about where the determination in this document came from.
+ * Shared with the Long Report so both documents disclose provenance the same
+ * way — a carrier reading two RoofWise PDFs must be able to tell whether they
+ * quote the same stored engine result.
+ */
+export function engineProvenance(
+  source: 'frozen' | 'stored' | 'recomputed',
+  atIso: string,
+): string {
+  const when = formatDateTime(atIso);
+  switch (source) {
+    case 'frozen':
+      return `Determination frozen with the finalized report — decision engine evaluated ${when}.`;
+    case 'stored':
+      return `Determination read from the stored decision-engine result evaluated ${when}.`;
+    default:
+      return `Decision engine evaluated ${when}, at the time this document was generated.`;
+  }
+}
+
 function formatRecommendation(r: string): string {
   return r.replace('_', ' ');
 }
@@ -1017,15 +1068,12 @@ function formatVerdict(v: string): string {
   }
 }
 
-function narrative(
-  ins: Inspection,
-  decision: ReturnType<typeof evaluate>,
-  score: number,
-): string {
+function narrative(ins: Inspection, decision: DecisionEngineResult): string {
   const t = thresholdFor(ins.material);
+  const qualifying = decision.perSlope.filter((r) => r.qualifies).length;
   return (
     `Based on a HAAG-protocol inspection of the ${ROOF_MATERIAL_LABELS[ins.material]} roof at ` +
-    `${ins.address}, the property exhibits a damage score of ${score}/100 across ${ins.slopes.length} slope(s). ` +
+    `${ins.address}, ${qualifying} of ${ins.slopes.length} slope(s) meet the functional-damage threshold. ` +
     `Per HAAG functional-damage criteria for this material (${t.rule}), the roof-level recommendation is ` +
     `${formatRecommendation(decision.roofRecommendation)}. ${decision.roofVerdictReasoning} ` +
     `Claim viability assessed as ${CLAIM_VIABILITY_LABELS[decision.haag.claim_viability]} (HAAG §6 band).`
@@ -1051,12 +1099,18 @@ function narrative(
  *     value rather than a flat amount.
  * Both are stated as the normal case with a one-line "confirm on your
  * policy", which keeps the point intact without promising money.
+ *
+ * TONE BRANCHING: keyed off the stored §6 claim-viability band, NOT the
+ * deprecated numeric claimWorthiness scale it used to read. The copy below is
+ * unchanged — only the branch variable moved:
+ *   LOW    → the not-claimable path (do not file; keep as a baseline)
+ *   MEDIUM → the hedged path (close to the line; verify before filing)
+ *   HIGH   → the strong path (file; this report is built for the adjuster)
  */
 function homeownerSummary(
   ins: Inspection,
-  decision: ReturnType<typeof evaluate>,
-  worthiness: ReturnType<typeof claimWorthiness>,
-  score: number,
+  decision: DecisionEngineResult,
+  band: ClaimViabilityBand,
 ): string {
   const qualifying = decision.perSlope.filter((r) => r.qualifies).length;
   const slopeCount = ins.slopes.length;
@@ -1126,30 +1180,60 @@ function homeownerSummary(
     of the one on record. Filing while the storm date is documented, as it is in this report, is what keeps
     the claim clean.</p>`;
 
+  // The §6 band answers "will this claim hold up?" — NOT "is the roof past the
+  // engineering threshold". The two genuinely disagree: a roof whose slopes
+  // meet the HAAG threshold still bands LOW on an ACV policy, a prior claim, a
+  // deductible over 2%, or a storm past the two-year corroboration window, and
+  // MEDIUM whenever a HIGH criterion is merely unverified. The LOW and MEDIUM
+  // paragraphs were written under the old branch key, where "the damage is
+  // below the threshold" was guaranteed true — under the band it is not, and a
+  // packet whose homeowner page contradicts its own Sections 02/05 is exactly
+  // what a carrier uses to discredit the whole document. So each of those two
+  // paragraphs keeps its approved wording for the below-threshold case and
+  // carries an alternate opening clause for the case where the engine DID find
+  // qualifying damage. Everything downstream of the opening clause is verbatim.
+  const qualifyingDamage =
+    decision.roofRecommendation !== 'repair' || decision.perSlope.some((r) => r.qualifies);
+
   let recommendation: string;
-  if (worthiness === 'not_claimable') {
-    recommendation = `<p><strong>What we recommend.</strong> Based on what we can see today, the damage on your roof
+  if (band === 'LOW') {
+    const opening = qualifyingDamage
+      ? `The damage on your roof does meet the engineering standard — Section 05 shows which slopes — but the
+      claim-side factors under Claim viability in Section 02 weigh against approval as this file stands, and
+      we are not going to tell you otherwise.`
+      : `Based on what we can see today, the damage on your roof
       is below the threshold a carrier uses to approve a replacement, and we are not going to tell you
-      otherwise. Filing a claim that gets denied can still show up in your claims history, so we would rather
+      otherwise.`;
+    recommendation = `<p><strong>What we recommend.</strong> ${opening} Filing a claim that gets denied can still show up in your claims history, so we would rather
       you keep the roof under watch. Hold on to this report. If another storm comes through, we can
       re-inspect and compare against this baseline — that comparison is often what proves new damage.</p>`;
     return found + standard + recommendation;
   }
 
-  if (worthiness === 'borderline') {
-    recommendation = `<p><strong>What we recommend.</strong> Your roof sits close to the line. There is real
+  if (band === 'MEDIUM') {
+    const opening = qualifyingDamage
+      ? `Your roof has damage that meets the engineering standard, but the claim itself has open questions —
+      the factors listed under Claim viability in Section 02 are the kind a carrier pushes back on,
+      and some of what we found is flagged for on-site verification.`
+      : `Your roof sits close to the line. There is real
       storm damage here — we documented it — but it is not yet clearly past the threshold a carrier uses,
-      and some of what we found is flagged for on-site verification. Our recommendation is a short
+      and some of what we found is flagged for on-site verification.`;
+    recommendation = `<p><strong>What we recommend.</strong> ${opening} Our recommendation is a short
       follow-up inspection to firm up the borderline findings before you file, so that the claim goes in
       with the strongest possible evidence rather than an argument. We are happy to walk you through what
       we saw and what the options are.</p>`;
     return found + standard + recommendation + timing;
   }
 
-  const urgent = worthiness === 'urgent';
+  // Copy-tone sub-branch only, inside the HIGH path — never a determination.
+  // Anchored on the §9 recommendation alone: a full replacement inside the HIGH
+  // viability band is exactly the file that should be mitigated and filed now.
+  // The retired `score >= 70` half of this test was the deprecated 0-100 damage
+  // score, which no standard backs and which this document no longer prints.
+  const urgent = decision.roofRecommendation === 'full_replacement';
   recommendation = `<p><strong>What we recommend.</strong> ${
     urgent
-      ? `Your roof has significant storm damage (damage score ${score} of 100) and we recommend filing a claim right away.
+      ? `Your roof has significant storm damage and we recommend filing a claim right away.
          Where the roof is open to weather, temporary protection should go on before the next rain to prevent
          interior damage — which a carrier expects you to mitigate.`
       : `We recommend filing a claim. The damage meets the standard your carrier uses, and this report is

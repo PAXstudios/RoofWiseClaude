@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +38,7 @@ import {
   type RoofGeometry,
   type RoofCondition,
   type RoofMaterial,
+  type StormEvent,
   CAUSES_OF_LOSS,
   CAUSE_OF_LOSS_LABELS,
   COLLATERAL_ZONES,
@@ -54,7 +56,13 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
-import { matchStorm } from '@/lib/services/stormMatch';
+import {
+  DOL_MATCH_WINDOW_DAYS,
+  matchStorm,
+  tripleCheckDateOfLoss,
+} from '@/lib/services/stormMatch';
+import { formatDate, formatDateShort } from '@/lib/format/date';
+import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 // Step model. General inspections keep the original 4-step flow untouched;
@@ -96,7 +104,18 @@ type Draft = {
   // Insurance Claim mode
   kind: InspectionKind;
   causeOfLoss: CauseOfLoss | null;
+  /**
+   * Canonical date of loss — an ISO timestamp at LOCAL noon, or '' when the
+   * inspector has not entered a complete date yet. Every downstream reader
+   * (Triple-Check, HAAG report header, Long Report §03) parses this as a
+   * date, so free text can never be stored here: an unparseable DOL silently
+   * disables the storm corroboration the whole claim rests on.
+   */
   dateOfLoss: string;
+  /** Raw MM / DD / YYYY entry boxes. `dateOfLoss` is derived from these. */
+  dolMonth: string;
+  dolDay: string;
+  dolYear: string;
   policyType: PolicyType | null;
   deductible: string;              // free text, parsed on save
   homeValue: string;               // free text, parsed on save
@@ -127,6 +146,9 @@ const EMPTY: Draft = {
   kind: 'general',
   causeOfLoss: null,
   dateOfLoss: '',
+  dolMonth: '',
+  dolDay: '',
+  dolYear: '',
   policyType: null,
   deductible: '',
   homeValue: '',
@@ -137,6 +159,97 @@ const EMPTY: Draft = {
   brittlenessNotes: '',
   codeComplianceNotes: '',
 };
+
+// ---------- Date of loss ----------
+//
+// The date of loss is the anchor the carrier checks the whole claim against:
+// NOAA storm corroboration, the ±72h HAAG high-confidence window, and the
+// Triple-Check discrepancy flag all key off it. So it is captured as a real
+// calendar date, never as free text.
+//
+// STORED AS LOCAL NOON. A bare 'YYYY-MM-DD' parses as UTC midnight, which
+// renders as the *previous* day in every US timezone — an off-by-one on the
+// one date an adjuster will actually verify. Local noon survives any real
+// device offset.
+
+/** MM / DD / YYYY entry boxes → a real calendar date, or null if incomplete/impossible. */
+function partsToDate(month: string, day: string, year: string): Date | null {
+  if (!/^\d{1,2}$/.test(month) || !/^\d{1,2}$/.test(day) || !/^\d{4}$/.test(year)) return null;
+  const m = Number(month);
+  const d = Number(day);
+  const y = Number(year);
+  if (m < 1 || m > 12 || d < 1 || d > 31 || y < 1900) return null;
+  const date = new Date(y, m - 1, d, 12, 0, 0, 0);
+  // Rejects rollovers like 02/30 (which JS would silently turn into Mar 2).
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
+  return date;
+}
+
+/** Apply an MM/DD/YYYY edit and re-derive the canonical ISO value in one step. */
+function withDateParts(
+  draft: Draft,
+  parts: { dolMonth?: string; dolDay?: string; dolYear?: string },
+): Draft {
+  const next = { ...draft, ...parts };
+  const date = partsToDate(next.dolMonth, next.dolDay, next.dolYear);
+  return { ...next, dateOfLoss: date ? date.toISOString() : '' };
+}
+
+/** Set the date of loss from a Date (quick-pick chips). */
+function withDate(draft: Draft, date: Date): Draft {
+  return {
+    ...draft,
+    dolMonth: String(date.getMonth() + 1),
+    dolDay: String(date.getDate()),
+    dolYear: String(date.getFullYear()),
+    dateOfLoss: new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      12,
+      0,
+      0,
+      0,
+    ).toISOString(),
+  };
+}
+
+function daysAgo(n: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d;
+}
+
+const DOL_PRESETS: { label: string; days: number }[] = [
+  { label: 'Today', days: 0 },
+  { label: 'Yesterday', days: 1 },
+  { label: '1 week ago', days: 7 },
+  { label: '2 weeks ago', days: 14 },
+  { label: '1 month ago', days: 30 },
+];
+
+/**
+ * NOAA cross-check state for the entered date of loss. Kept at wizard level so
+ * stepping back and forth does not re-hit the storm-history service, and so
+ * `save()` can reuse the answer instead of asking twice.
+ *
+ * Drift #5: `unavailable` is surfaced as "not available", never collapsed into
+ * "no storm found".
+ */
+type StormLookup =
+  | { key: string; status: 'loading' }
+  | { key: string; status: 'matched'; event: StormEvent }
+  | { key: string; status: 'no_match' }
+  | { key: string; status: 'unavailable'; reason: string };
+
+/** NOAA queries are per-state; the state abbreviation comes from the address. */
+function stateFromAddress(address: string): string | undefined {
+  return address.match(/,\s*([A-Z]{2})/)?.[1];
+}
+
+function stormLookupKey(lat: number, lng: number, state: string, dolIso: string): string {
+  return `${lat.toFixed(4)},${lng.toFixed(4)},${state},${dolIso.slice(0, 10)}`;
+}
 
 function parseMoney(t: string): number | undefined {
   const cleaned = t.replace(/[^0-9.]/g, '');
@@ -159,6 +272,8 @@ export default function NewJobWizard() {
   const consumePrefill = useWizardPrefillStore((s) => s.consume);
   const [stepIndex, setStepIndex] = useState(0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [stormLookup, setStormLookup] = useState<StormLookup | null>(null);
+  const stormKeyRef = useRef<string | null>(null);
 
   const steps = draft.kind === 'insurance_claim' ? CLAIM_STEPS : GENERAL_STEPS;
   const stepKey = steps[stepIndex];
@@ -192,6 +307,63 @@ export default function NewJobWizard() {
       });
     }
   }, [consumePrefill, toast]);
+
+  // NOAA cross-check for the entered date of loss. Runs only once the
+  // inspector has given us a real date and a geocoded address in a known
+  // state — the ±30-day search window is anchored on the reported DOL, so
+  // without one there is nothing meaningful to search around. Re-runs only
+  // when that anchor actually changes (keyed), so editing other fields costs
+  // nothing.
+  const { kind, causeOfLoss, addressLat, addressLng, address, dateOfLoss } = draft;
+  useEffect(() => {
+    const state = stateFromAddress(address);
+    const dol = dateOfLoss ? new Date(dateOfLoss) : null;
+    const usable =
+      kind === 'insurance_claim' &&
+      isStormCause(causeOfLoss) &&
+      addressLat !== undefined &&
+      addressLng !== undefined &&
+      !!state &&
+      !!dol &&
+      !Number.isNaN(dol.getTime());
+
+    if (!usable) {
+      stormKeyRef.current = null;
+      // Functional update: returns the same reference when already null, so
+      // this cannot loop.
+      setStormLookup((prev) => (prev ? null : prev));
+      return;
+    }
+
+    const key = stormLookupKey(addressLat!, addressLng!, state!, dateOfLoss);
+    if (stormKeyRef.current === key) return;
+    stormKeyRef.current = key;
+    setStormLookup({ key, status: 'loading' });
+
+    let cancelled = false;
+    matchStorm({ lat: addressLat!, lng: addressLng!, near: dol!, state: state! })
+      .then((result) => {
+        if (cancelled) return;
+        setStormLookup(
+          result.status === 'matched'
+            ? { key, status: 'matched', event: result.event }
+            : result.status === 'no_match'
+              ? { key, status: 'no_match' }
+              : { key, status: 'unavailable', reason: result.reason },
+        );
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setStormLookup({
+          key,
+          status: 'unavailable',
+          reason: e instanceof Error ? e.message : 'Storm history service unreachable',
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kind, causeOfLoss, addressLat, addressLng, address, dateOfLoss]);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(EMPTY);
 
@@ -255,10 +427,10 @@ export default function NewJobWizard() {
       deductible: isClaim ? parseMoney(draft.deductible) : undefined,
       homeValue: isClaim ? parseMoney(draft.homeValue) : undefined,
       priorClaimsWithin3Years: isClaim ? draft.priorClaimsWithin3Years ?? undefined : undefined,
-      dateOfLoss:
-        isClaim && isStormCause(draft.causeOfLoss)
-          ? draft.dateOfLoss.trim() || undefined
-          : undefined,
+      // Persisted for every claim cause, not just storm ones: a carrier
+      // date-anchors any peril, and the Long Report's missing-data register
+      // flags an absent DOL on every insurance claim.
+      dateOfLoss: isClaim ? draft.dateOfLoss || undefined : undefined,
       collateralEvidence: isClaim ? draft.collateral : undefined,
       brittlenessProtocol:
         isClaim && draft.brittlenessResult !== null
@@ -277,28 +449,57 @@ export default function NewJobWizard() {
     });
 
     // Background storm-match — auto-fill Inspection.event when a qualifying
-    // NOAA storm exists within 5mi / ±30d of the property + creation date.
+    // NOAA storm exists within 5mi / ±30d of the property and the anchor date.
+    //
+    // Record how the search resolved: only a genuine 'no_match' lets the
+    // decision engine treat "no weather event" as verified (§4 step 1);
+    // 'unavailable' stays unknown — never synthesized either way (Drift #5).
+    const applyStormOutcome = (
+      outcome: 'matched' | 'no_match' | 'unavailable',
+      event?: StormEvent,
+    ) => {
+      setStormSearchOutcome(ins.id, outcome);
+      if (outcome === 'matched' && event) {
+        setEvent(ins.id, event);
+        toast({
+          tone: 'success',
+          title: 'Storm event matched',
+          body: `NOAA ${event.kind}${event.hailSizeInches ? ` ${event.hailSizeInches.toFixed(2)}"` : ''}${event.windSpeedMph ? ` ${event.windSpeedMph}mph` : ''} · ${event.distanceMiles?.toFixed(1)}mi away`,
+        });
+      }
+    };
+
     if (ins.lat !== undefined && ins.lng !== undefined) {
-      const state = ins.address.match(/,\s*([A-Z]{2})/)?.[1];
+      const state = stateFromAddress(ins.address);
       if (state) {
-        matchStorm({ lat: ins.lat, lng: ins.lng, near: new Date(ins.createdAt), state })
-          .then((result) => {
-            // Record how the search resolved: only a genuine 'no_match' lets
-            // the decision engine treat "no weather event" as verified (§4
-            // step 1); 'unavailable' stays unknown — never synthesized
-            // either way (Drift #5).
-            setStormSearchOutcome(ins.id, result.status);
-            if (result.status === 'matched') {
-              const event = result.event;
-              setEvent(ins.id, event);
-              toast({
-                tone: 'success',
-                title: 'Storm event matched',
-                body: `NOAA ${event.kind}${event.hailSizeInches ? ` ${event.hailSizeInches.toFixed(2)}"` : ''}${event.windSpeedMph ? ` ${event.windSpeedMph}mph` : ''} · ${event.distanceMiles?.toFixed(1)}mi away`,
-              });
-            }
-          })
-          .catch(() => {});
+        // Anchor on the reported date of loss when we have one — a storm from
+        // four months ago is invisible to a ±30-day window around "today".
+        const dol = ins.dateOfLoss ? new Date(ins.dateOfLoss) : null;
+        const anchor = dol && !Number.isNaN(dol.getTime()) ? dol : new Date(ins.createdAt);
+        const key = stormLookupKey(ins.lat, ins.lng, state, anchor.toISOString());
+        // The wizard already asked NOAA this exact question while the
+        // inspector typed the date — reuse a settled answer rather than spend
+        // a second call on it. 'unavailable' is NOT settled: connectivity may
+        // have come back, so that case falls through and retries.
+        if (
+          stormLookup &&
+          stormLookup.key === key &&
+          (stormLookup.status === 'matched' || stormLookup.status === 'no_match')
+        ) {
+          applyStormOutcome(
+            stormLookup.status,
+            stormLookup.status === 'matched' ? stormLookup.event : undefined,
+          );
+        } else {
+          matchStorm({ lat: ins.lat, lng: ins.lng, near: anchor, state })
+            .then((result) =>
+              applyStormOutcome(
+                result.status,
+                result.status === 'matched' ? result.event : undefined,
+              ),
+            )
+            .catch(() => {});
+        }
       }
     }
 
@@ -343,7 +544,9 @@ export default function NewJobWizard() {
           >
             {stepKey === 'customer' && <CustomerStep draft={draft} setDraft={setDraft} />}
             {stepKey === 'insurance' && <InsuranceStep draft={draft} setDraft={setDraft} />}
-            {stepKey === 'claim' && <ClaimStep draft={draft} setDraft={setDraft} />}
+            {stepKey === 'claim' && (
+              <ClaimStep draft={draft} setDraft={setDraft} stormLookup={stormLookup} />
+            )}
             {stepKey === 'roof' && <RoofStep draft={draft} setDraft={setDraft} />}
             {stepKey === 'evidence' && <EvidenceStep draft={draft} setDraft={setDraft} />}
             {stepKey === 'review' && (
@@ -382,6 +585,13 @@ function confirmDiscard(onConfirm: () => void) {
 }
 
 // ---------- Evidence photo helpers (claim mode) ----------
+//
+// Claim evidence is photographic evidence: collateral-zone shots and the
+// brittleness protocol end up in the carrier packet next to the slope photos,
+// so they go through the SAME capture pipeline (lib/services/imagePipeline).
+// Skipping it shipped full-resolution HEIC/JPEG originals straight into the
+// persisted record — the exact payloads the 2560px ladder exists to keep from
+// OOM-crashing Expo Go on large library images.
 
 async function launchEvidenceCamera(onPicked: (uri: string) => void) {
   try {
@@ -397,7 +607,7 @@ async function launchEvidenceCamera(onPicked: (uri: string) => void) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
     if (result.canceled || result.assets.length === 0) return;
-    onPicked(result.assets[0].uri);
+    onPicked(await prepareCapturedPhoto(result.assets[0].uri));
   } catch (e) {
     Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
   }
@@ -423,7 +633,7 @@ async function launchEvidenceLibrary(onPicked: (uri: string) => void) {
         ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (result.canceled || result.assets.length === 0) return;
-    onPicked(result.assets[0].uri);
+    onPicked(await prepareCapturedPhoto(result.assets[0].uri));
   } catch (e) {
     Alert.alert('Photo pick failed', e instanceof Error ? e.message : 'Unknown error');
   }
@@ -626,9 +836,244 @@ function InsuranceStep({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft)
   );
 }
 
+// ---------- Date of loss field (insurance claim mode, §VII) ----------
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/** Number pads on some keyboards emit separators; keep only digits. */
+function digitsOnly(text: string, max: number): string {
+  return text.replace(/[^0-9]/g, '').slice(0, max);
+}
+
+function DateOfLossField({
+  draft,
+  setDraft,
+  stormLookup,
+}: {
+  draft: Draft;
+  setDraft: (d: Draft) => void;
+  stormLookup: StormLookup | null;
+}) {
+  const date = partsToDate(draft.dolMonth, draft.dolDay, draft.dolYear);
+  const started = !!(draft.dolMonth || draft.dolDay || draft.dolYear);
+  const incomplete = started && !date;
+  const future = !!date && date.getTime() > Date.now();
+  // NOAA is queried per state around a geocoded point. Say so rather than
+  // silently showing nothing when the address was typed instead of picked.
+  const geocoded =
+    draft.addressLat !== undefined &&
+    draft.addressLng !== undefined &&
+    !!stateFromAddress(draft.address);
+  const noaaUnreachableAddress = isStormCause(draft.causeOfLoss) && !!date && !geocoded;
+
+  return (
+    <View style={{ gap: spacing.md }}>
+      <View>
+        <Text style={styles.subSection}>Date of loss</Text>
+        <Text style={styles.helperText}>
+          The day the homeowner says the damage happened. The insurer verifies this date
+          against weather records, so it has to be a real date — not "around mid-May".
+        </Text>
+      </View>
+
+      <View style={styles.chipWrap}>
+        {DOL_PRESETS.map(({ label, days }) => {
+          const preset = daysAgo(days);
+          const selected = !!date && isSameDay(date, preset);
+          return (
+            <Pressable
+              key={label}
+              style={[styles.bigChip, selected && styles.bigChipSelected]}
+              onPress={() => setDraft(withDate(draft, preset))}
+            >
+              <Text style={[styles.bigChipText, selected && styles.bigChipTextSelected]}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.dolRow}>
+        <DatePart
+          label="Month"
+          value={draft.dolMonth}
+          onChangeText={(t) => setDraft(withDateParts(draft, { dolMonth: digitsOnly(t, 2) }))}
+          placeholder="MM"
+          maxLength={2}
+        />
+        <DatePart
+          label="Day"
+          value={draft.dolDay}
+          onChangeText={(t) => setDraft(withDateParts(draft, { dolDay: digitsOnly(t, 2) }))}
+          placeholder="DD"
+          maxLength={2}
+        />
+        <DatePart
+          label="Year"
+          flex={1.4}
+          value={draft.dolYear}
+          onChangeText={(t) => setDraft(withDateParts(draft, { dolYear: digitsOnly(t, 4) }))}
+          placeholder="YYYY"
+          maxLength={4}
+        />
+      </View>
+
+      {date && !future && <Text style={styles.okText}>Date of loss: {formatDate(date)}</Text>}
+      {incomplete && (
+        <Text style={styles.helperText}>
+          Fill in month, day and year — a partial date can't be checked against weather records.
+        </Text>
+      )}
+      {future && (
+        <View style={styles.warnBox}>
+          <Ionicons name="alert-circle" size={20} color={colors.warn} />
+          <Text style={styles.warnText}>
+            That date is in the future. A carrier will reject a date of loss that hasn't
+            happened yet — check it with the homeowner.
+          </Text>
+        </View>
+      )}
+      {!started && (
+        <View style={styles.warnBox}>
+          <Ionicons name="alert-circle" size={20} color={colors.warn} />
+          <Text style={styles.warnText}>
+            No date of loss yet. You can save the job without it, but the report has to
+            disclose it as missing and the claim can't be date-anchored.
+          </Text>
+        </View>
+      )}
+
+      {noaaUnreachableAddress ? (
+        <View style={styles.noaaRow}>
+          <Ionicons name="location-outline" size={20} color={colors.slate} />
+          <Text style={styles.noaaText}>
+            Pick the property address from the suggestions on the previous step and we'll
+            check this date against NOAA storm records for you.
+          </Text>
+        </View>
+      ) : (
+        <NoaaCrossCheck lookup={stormLookup} dolIso={draft.dateOfLoss} />
+      )}
+    </View>
+  );
+}
+
+function DatePart({
+  label,
+  flex = 1,
+  ...rest
+}: { label: string; flex?: number } & React.ComponentProps<typeof TextInput>) {
+  return (
+    <View style={[styles.field, { flex }]}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        style={[styles.input, styles.dolInput]}
+        keyboardType="number-pad"
+        placeholderTextColor={colors.textSubtle}
+        {...rest}
+      />
+    </View>
+  );
+}
+
+/**
+ * NOAA cross-check shown beside the date of loss. Its whole job is to let the
+ * inspector spot a date mismatch while the homeowner is still standing there —
+ * the same discrepancy the Triple-Check raises downstream (stormMatch
+ * `tripleCheckDateOfLoss`, HAAG_DECISION_ENGINE.md §6).
+ *
+ * Drift #5: an unreachable service says so. It is never rendered as "no storm".
+ */
+function NoaaCrossCheck({ lookup, dolIso }: { lookup: StormLookup | null; dolIso: string }) {
+  if (!lookup) return null;
+
+  if (lookup.status === 'loading') {
+    return (
+      <View style={styles.noaaRow}>
+        <ActivityIndicator size="small" color={colors.info} />
+        <Text style={styles.noaaText}>Checking NOAA storm records for this address…</Text>
+      </View>
+    );
+  }
+
+  if (lookup.status === 'unavailable') {
+    return (
+      <View style={styles.noaaRow}>
+        <Ionicons name="cloud-offline-outline" size={20} color={colors.slate} />
+        <Text style={styles.noaaText}>
+          NOAA storm records aren't available right now. The date you entered still stands —
+          we'll try the match again when you save the job.
+        </Text>
+      </View>
+    );
+  }
+
+  if (lookup.status === 'no_match') {
+    return (
+      <View style={styles.warnBox}>
+        <Ionicons name="alert-circle" size={20} color={colors.warn} />
+        <Text style={styles.warnText}>
+          No NOAA storm on record within 5 mi of this address in the ±{DOL_MATCH_WINDOW_DAYS}{' '}
+          days around that date. The carrier runs the same check — confirm the date with the
+          homeowner before you submit.
+        </Text>
+      </View>
+    );
+  }
+
+  const event = lookup.event;
+  const verdict = tripleCheckDateOfLoss({
+    reportedDateOfLoss: dolIso,
+    events: [event],
+  });
+  const offBy = Math.abs(verdict.daysFromDol ?? 0);
+  const magnitude =
+    event.kind === 'hail' && event.hailSizeInches !== undefined
+      ? `${event.hailSizeInches.toFixed(2)}" hail`
+      : event.kind === 'wind' && event.windSpeedMph !== undefined
+        ? `${event.windSpeedMph} mph wind`
+        : event.kind;
+
+  return (
+    <View style={verdict.withinWindow72h ? styles.noaaMatchBox : styles.warnBox}>
+      <Ionicons
+        name={verdict.withinWindow72h ? 'checkmark-circle' : 'alert-circle'}
+        size={20}
+        color={verdict.withinWindow72h ? colors.success : colors.warn}
+      />
+      <View style={{ flex: 1, gap: spacing.xs }}>
+        <Text style={verdict.withinWindow72h ? styles.noaaMatchText : styles.warnText}>
+          NOAA event {formatDateShort(event.date)} · {magnitude}
+          {event.distanceMiles !== undefined ? ` · ${event.distanceMiles.toFixed(1)} mi away` : ''}
+        </Text>
+        <Text style={verdict.withinWindow72h ? styles.noaaMatchSub : styles.warnText}>
+          {verdict.withinWindow72h
+            ? 'Matches the date you entered (within 72 hours) — the strongest version of this claim.'
+            : `That's ${offBy} day${offBy === 1 ? '' : 's'} from the date you entered. Re-check it with the homeowner — the report flags a gap this wide.`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 // ---------- Step: Claim & Policy (insurance claim mode, §VI–VII) ----------
 
-function ClaimStep({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => void }) {
+function ClaimStep({
+  draft,
+  setDraft,
+  stormLookup,
+}: {
+  draft: Draft;
+  setDraft: (d: Draft) => void;
+  stormLookup: StormLookup | null;
+}) {
   const deductible = parseMoney(draft.deductible);
   const homeValue = parseMoney(draft.homeValue);
   const highDeductible = isDeductibleHigh(deductible, homeValue);
@@ -655,24 +1100,18 @@ function ClaimStep({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => 
         </View>
       </View>
 
-      {isStormCause(draft.causeOfLoss) && (
-        <View style={styles.stormBox}>
-          <View style={styles.stormHead}>
-            <Ionicons name="thunderstorm-outline" size={20} color={colors.info} />
-            <Text style={styles.stormTitle}>Storm Damage Protocol</Text>
+      {draft.causeOfLoss !== null &&
+        (isStormCause(draft.causeOfLoss) ? (
+          <View style={styles.stormBox}>
+            <View style={styles.stormHead}>
+              <Ionicons name="thunderstorm-outline" size={20} color={colors.info} />
+              <Text style={styles.stormTitle}>Storm Damage Protocol</Text>
+            </View>
+            <DateOfLossField draft={draft} setDraft={setDraft} stormLookup={stormLookup} />
           </View>
-          <Text style={styles.helperText}>
-            When did the storm hit? Close is fine — we'll match the address against NOAA
-            records automatically.
-          </Text>
-          <Field
-            label="Date of loss"
-            value={draft.dateOfLoss}
-            onChangeText={(t) => setDraft({ ...draft, dateOfLoss: t })}
-            placeholder={'e.g. 2026-05-14 or "around mid-May"'}
-          />
-        </View>
-      )}
+        ) : (
+          <DateOfLossField draft={draft} setDraft={setDraft} stormLookup={stormLookup} />
+        ))}
 
       <InsuranceFields draft={draft} setDraft={setDraft} />
 
@@ -1072,8 +1511,12 @@ function ReviewStep({ draft, onEdit }: { draft: Draft; onEdit: (k: StepKey) => v
             label="Cause of loss"
             value={draft.causeOfLoss ? CAUSE_OF_LOSS_LABELS[draft.causeOfLoss] : '—'}
           />
-          {isStormCause(draft.causeOfLoss) && (
-            <ReviewLine label="Date of loss" value={draft.dateOfLoss.trim() || '—'} />
+          <ReviewLine label="Date of loss" value={formatDate(draft.dateOfLoss, 'Not recorded')} />
+          {isStormCause(draft.causeOfLoss) && !draft.dateOfLoss && (
+            <ReviewLine
+              label="Weather check"
+              value="Needs a date of loss before NOAA can corroborate"
+            />
           )}
           <ReviewLine
             label="Carrier"
@@ -1411,6 +1854,39 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     padding: spacing.md,
   },
+
+  // Date of loss — MM / DD / YYYY boxes sized for a gloved thumb on a
+  // number pad (Drift #1), plus the NOAA cross-check rows beneath them.
+  dolRow: { flexDirection: 'row', gap: spacing.sm },
+  dolInput: {
+    minHeight: touchTarget.preferred,
+    textAlign: 'center',
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.semibold,
+  },
+  noaaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  noaaText: { flex: 1, fontSize: fontSize.bodySm, color: colors.slate },
+  noaaMatchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.successSoft,
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  noaaMatchText: {
+    fontSize: fontSize.bodyMd,
+    color: colors.success,
+    fontWeight: fontWeight.semibold,
+  },
+  noaaMatchSub: { fontSize: fontSize.bodySm, color: colors.success },
   warnText: { flex: 1, fontSize: fontSize.bodySm, color: colors.warn, fontWeight: fontWeight.medium },
   okText: { fontSize: fontSize.bodySm, color: colors.success, fontWeight: fontWeight.medium },
 

@@ -8,7 +8,8 @@ import { useMemo, useState } from 'react';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { syncLeads } from '@/lib/services/leadSync';
 import { syncCorrections } from '@/lib/services/correctionsSync';
-import { checkStormWatch } from '@/lib/services/stormWatch';
+import { checkStormWatch, leadsInStormCluster } from '@/lib/services/stormWatch';
+import { FOCUS_STORM_LEADS } from '@/app/(tabs)/map';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
@@ -21,7 +22,13 @@ import { WeatherTile } from '@/components/WeatherTile';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { PressableScale } from '@/components/PressableScale';
 import { AnimatedCounter, FadeSlideIn, PulseRing } from '@/components/motion';
-import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
+import {
+  LEAD_STAGE_LABELS,
+  LEAD_STAGE_ORDER,
+  ROOF_MATERIAL_LABELS,
+  leadStageColumn,
+  type LeadStage,
+} from '@/lib/models/types';
 import {
   colors,
   fontSize,
@@ -53,6 +60,16 @@ export default function HomeScreen() {
   const proposals = useProposalStore((s) => s.proposals);
   const leads = useLeadStore((s) => s.leads);
   const inspectorName = useInspectorProfileStore((s) => s.profile.fullName);
+
+  // Leads this alert's storm actually passed over. Re-derived from each lead's
+  // persisted `lastStormMatch` (Storm Watch stamps `matchedAt` with the
+  // alert's `firedAt`), so it survives a restart with no schema change.
+  // Null when nothing matched — the line is omitted rather than reading
+  // "0 leads" (Drift #5).
+  const stormCluster = useMemo(
+    () => (activeAlert ? leadsInStormCluster(leads, activeAlert) : null),
+    [leads, activeAlert],
+  );
 
   const pipelineValue = useMemo(
     () =>
@@ -109,15 +126,22 @@ export default function HomeScreen() {
     return email.split('@')[0].split(/[._-]/)[0].replace(/^\w/, (c) => c.toUpperCase());
   }, [user, inspectorName]);
 
-  const pipelineCounts = useMemo(() => {
-    return {
-      New: inspections.filter((i) => i.status === 'lead').length,
-      Contacted: 0,
-      Inspection: inspections.filter((i) => i.status === 'in_progress').length,
-      Proposal: 0,
-      Signed: inspections.filter((i) => i.status === 'complete').length,
-    };
-  }, [inspections]);
+  // Real per-stage lead counts, folded onto board columns exactly as the Leads
+  // Pipeline board buckets them. Stages with no leads are omitted rather than
+  // rendered as zero cards: the previous row hardcoded `Contacted: 0` and
+  // `Proposal: 0`, which read as real counts of an empty stage (Drift #5).
+  const pipelineStages = useMemo(() => {
+    const counts = new Map<LeadStage, number>();
+    for (const l of leads) {
+      const column = leadStageColumn(l.stage);
+      counts.set(column, (counts.get(column) ?? 0) + 1);
+    }
+    return LEAD_STAGE_ORDER.filter((s) => (counts.get(s) ?? 0) > 0).map((stage) => ({
+      stage,
+      label: LEAD_STAGE_LABELS[stage],
+      count: counts.get(stage) ?? 0,
+    }));
+  }, [leads]);
 
   const hour = new Date().getHours();
   const greeting =
@@ -215,6 +239,22 @@ export default function HomeScreen() {
               {activeAlert.hailSizeInches ? ` · ${activeAlert.hailSizeInches}" hail` : ''}
               {activeAlert.windSpeedMph ? ` · ${activeAlert.windSpeedMph} mph` : ''}
             </Text>
+            {stormCluster && (
+              <Pressable
+                style={styles.stormClusterLink}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`${stormCluster.headline}. Opens the map filtered to matched leads.`}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/map',
+                    params: { focus: FOCUS_STORM_LEADS },
+                  } as any)
+                }
+              >
+                <Text style={styles.stormHeroSub}>{stormCluster.headline} ›</Text>
+              </Pressable>
+            )}
             <View style={styles.stormHeroCta}>
               <Text style={styles.stormHeroCtaText}>View impacted properties</Text>
               <Ionicons name="arrow-forward" size={20} color={colors.navy} />
@@ -350,17 +390,23 @@ export default function HomeScreen() {
       {/* Pipeline mini-Kanban */}
       <FadeSlideIn index={6}>
         <SectionTitle title="Pipeline" />
-        <View style={styles.pipelineRow}>
-          {(Object.entries(pipelineCounts) as [string, number][]).map(([stage, count]) => (
-            <View key={stage} style={[styles.pipelineCard, count > 0 && styles.pipelineCardActive]}>
-              <AnimatedCounter
-                value={count}
-                style={[styles.pipelineCount, count === 0 && styles.pipelineCountZero]}
-              />
-              <Text style={styles.pipelineLabel}>{stage}</Text>
-            </View>
-          ))}
-        </View>
+        {pipelineStages.length === 0 ? (
+          <EmptyCard
+            icon="funnel-outline"
+            message="No leads in the pipeline yet. Add a lead and it shows up here."
+          />
+        ) : (
+          <View style={styles.pipelineRow}>
+            {pipelineStages.map(({ stage, label, count }) => (
+              <View key={stage} style={styles.pipelineCard}>
+                <AnimatedCounter value={count} style={styles.pipelineCount} />
+                <Text style={styles.pipelineLabel} numberOfLines={2}>
+                  {label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </FadeSlideIn>
 
       {/* Today's Plan */}
@@ -710,28 +756,33 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  pipelineRow: { flexDirection: 'row', gap: spacing.sm },
+  // Wraps: the number of cards is the number of OCCUPIED stages now, which
+  // ranges from 1 to 11 rather than a fixed 5.
+  pipelineRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   pipelineCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 88,
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     padding: spacing.md,
     alignItems: 'center',
     minHeight: touchTarget.standard,
     justifyContent: 'center',
-    ...shadows.card,
-  },
-  pipelineCardActive: {
     borderBottomWidth: 3,
     borderBottomColor: colors.orange,
+    ...shadows.card,
   },
   pipelineCount: {
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
     color: colors.orange,
   },
-  pipelineCountZero: { color: colors.borderStrong },
-  pipelineLabel: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
+  pipelineLabel: {
+    fontSize: fontSize.caption,
+    color: colors.slate,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
 
   stormHero: {
     backgroundColor: colors.navy,
@@ -755,6 +806,9 @@ const styles = StyleSheet.create({
   stormHeroChipText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.bold, textTransform: 'uppercase' },
   stormHeroTitle: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.textInverse },
   stormHeroSub: { fontSize: fontSize.bodyMd, color: 'rgba(240,240,228,0.85)' },
+  // Drift #1: a one-line text link is ~19pt tall on its own. The gloved-roofer
+  // floor is a real 56pt target, not text height plus hitSlop.
+  stormClusterLink: { minHeight: touchTarget.standard, justifyContent: 'center' },
   stormHeroCta: {
     marginTop: spacing.md,
     height: touchTarget.preferred,

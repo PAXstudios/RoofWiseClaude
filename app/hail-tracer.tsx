@@ -12,8 +12,10 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type MapView from 'react-native-maps';
 import { Map, MapHeatmap, MapPin } from '@/components/map/Map';
-import { fetchStormHistory, type StormEvent } from '@/lib/noaa';
+import { type StormEvent } from '@/lib/noaa';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
+import { fetchAddressStormHistory } from '@/lib/services/stormMatch';
+import { STORM_HISTORY_BROWSE_RADIUS_MILES } from '@/lib/services/stormWatch';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import {
@@ -26,13 +28,36 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-type Range = '7d' | '30d' | '6m' | '24m';
+type Range = '7d' | '30d' | '6m' | '24m' | '48m';
 const RANGE_LABELS: Record<Range, string> = {
   '7d': 'Past 7 days',
   '30d': 'Past 30 days',
   '6m': 'Past 6 months',
   '24m': 'Past 24 months',
+  '48m': 'Past 4 years',
 };
+
+/**
+ * Whole-year lookback that contains each range. `fetchAddressStormHistory`
+ * expresses its window in years and clamps at 4 (HISTORY_LOOKBACK_YEARS_MAX),
+ * so sub-year ranges fetch the smallest whole year that covers them and get
+ * cropped client-side — flipping between the short ranges then costs no
+ * further requests. Time Travel depth tops out at the same 4 years.
+ */
+const RANGE_LOOKBACK_YEARS: Record<Range, number> = {
+  '7d': 1,
+  '30d': 1,
+  '6m': 1,
+  '24m': 2,
+  '48m': 4,
+};
+
+/**
+ * Initial viewport, sized to the browse radius so the swath fills the map
+ * instead of hiding in the middle of a state-wide view.
+ * 1° latitude ≈ 69 mi; the 1.1 factor is margin around the circle.
+ */
+const BROWSE_REGION_DELTA = (STORM_HISTORY_BROWSE_RADIUS_MILES * 2 * 1.1) / 69;
 
 type Layer = 'hail' | 'wind' | 'both';
 type Magnitude = 'all' | 'hail_1' | 'hail_15' | 'wind_58';
@@ -61,20 +86,34 @@ export default function HailTracerScreen() {
     [areas, inspections],
   );
 
+  // Shared, validation-floored, 4-year-clamped lookback (stormMatch.ts) rather
+  // than a raw NOAA call — every storm surface now agrees on what counts as a
+  // storm, and an unreachable service says so instead of drawing an empty map
+  // (Drift #5). Hail/wind layer selection is client-side, so toggling it costs
+  // no refetch.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const { start, end } = rangeFor(range);
-    const types = layer === 'both' ? (['hail', 'wind'] as const) : ([layer] as const);
-    fetchStormHistory({ state: serviceState, start, end, types: [...types] })
-      .then((data) => {
+    fetchAddressStormHistory({
+      lat: center.lat,
+      lng: center.lon,
+      state: serviceState,
+      lookbackYears: RANGE_LOOKBACK_YEARS[range],
+      radiusMiles: STORM_HISTORY_BROWSE_RADIUS_MILES,
+    })
+      .then((res) => {
         if (cancelled) return;
-        setEvents(data);
+        if (res.status === 'ok') {
+          setEvents(res.events);
+        } else {
+          setEvents([]);
+          setError('Storm history not available right now.');
+        }
       })
-      .catch((e) => {
+      .catch(() => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : 'Failed to load storms');
+        setError('Storm history not available right now.');
         setEvents([]);
       })
       .finally(() => {
@@ -83,9 +122,17 @@ export default function HailTracerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [range, layer, serviceState]);
+  }, [range, serviceState, center.lat, center.lon]);
 
-  const filtered = useMemo(() => filterByMagnitude(events, magnitude), [events, magnitude]);
+  const filtered = useMemo(() => {
+    const startMs = rangeStart(range).getTime();
+    const inRange = events.filter((e) => {
+      const at = Date.parse(e.occurredAt);
+      return Number.isFinite(at) && at >= startMs;
+    });
+    const byLayer = layer === 'both' ? inRange : inRange.filter((e) => e.type === layer);
+    return filterByMagnitude(byLayer, magnitude);
+  }, [events, range, layer, magnitude]);
 
   const heatmapPoints = useMemo(
     () =>
@@ -110,7 +157,8 @@ export default function HailTracerScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Hail Tracer</Text>
           <Text style={styles.sub}>
-            {filtered.length} event{filtered.length === 1 ? '' : 's'} · {RANGE_LABELS[range]}
+            {filtered.length} event{filtered.length === 1 ? '' : 's'} · {RANGE_LABELS[range]} ·
+            within {STORM_HISTORY_BROWSE_RADIUS_MILES} mi
           </Text>
         </View>
       </View>
@@ -182,8 +230,8 @@ export default function HailTracerScreen() {
           initialRegion={{
             latitude: center.lat,
             longitude: center.lon,
-            latitudeDelta: 4,
-            longitudeDelta: 4,
+            latitudeDelta: BROWSE_REGION_DELTA,
+            longitudeDelta: BROWSE_REGION_DELTA,
           }}
         >
           {heatmapPoints.length > 0 && (
@@ -192,7 +240,8 @@ export default function HailTracerScreen() {
               radius={40}
               opacity={0.7}
               gradient={{
-                colors: ['#FFE6D5', '#FC6018', '#B83239'],
+                // Theme tokens, not raw hex (Drift #11).
+                colors: [colors.accentSoft, colors.orange, colors.stormSevere],
                 startPoints: [0.1, 0.5, 0.9],
                 colorMapSize: 256,
               }}
@@ -267,14 +316,15 @@ export default function HailTracerScreen() {
   );
 }
 
-function rangeFor(r: Range): { start: Date; end: Date } {
-  const end = new Date();
-  const start = new Date();
+/** Start of the selected range — the client-side crop over the fetched window. */
+function rangeStart(r: Range, end: Date = new Date()): Date {
+  const start = new Date(end.getTime());
   if (r === '7d') start.setDate(end.getDate() - 7);
   else if (r === '30d') start.setDate(end.getDate() - 30);
   else if (r === '6m') start.setMonth(end.getMonth() - 6);
-  else start.setMonth(end.getMonth() - 24);
-  return { start, end };
+  else if (r === '24m') start.setMonth(end.getMonth() - 24);
+  else start.setFullYear(end.getFullYear() - 4);
+  return start;
 }
 
 function filterByMagnitude(events: StormEvent[], m: Magnitude): StormEvent[] {

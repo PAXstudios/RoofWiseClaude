@@ -1,22 +1,42 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDeviceMotion, useAltitudeFeet } from '@/lib/services/deviceMotion';
-import { pitchDegreesToRatio, yawToOrientation } from '@/lib/models/types';
+import {
+  pitchDegreesToRatio,
+  yawToOrientation,
+  CAPTURE_MODE_LABELS,
+  type CaptureMode,
+} from '@/lib/models/types';
+import { captureModeOption } from '@/lib/services/captureSession';
 import { colors, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
+
+/** Fallback clearance under the HUD's bottom-left stack when nothing is measured. */
+const DEFAULT_BOTTOM_INSET = 220;
 
 type Props = {
   /** Currently-selected slope (S, N, etc.) so the HUD can hint when the heading drifts. */
   selectedSlope?: string;
+  /** Currently-selected capture subject (one of AREA_TAGS). Rides the photo. */
+  areaTag?: string;
+  /** Which mode the next shutter press records. Changes how hits aggregate. */
+  captureMode?: CaptureMode;
+  /**
+   * Height of whatever chrome sits at the bottom of the screen (the capture
+   * dock), so the bottom-left stack clears it. Measured by the host screen —
+   * the dock grew when area/mode pickers landed and a hardcoded offset drifts.
+   */
+  bottomInset?: number;
 };
 
 /**
  * Heads-up display overlay for the Quick Inspection camera. Shows
  * - a bullseye level driven by current roll
  * - compass arrow + heading (auto-detected slope orientation)
+ * - the active capture subject (area tag) and capture mode
  * - pitch readout in degrees and X/12 ratio
  * - GPS elevation
  */
-export function CameraHUD({ selectedSlope }: Props) {
+export function CameraHUD({ selectedSlope, areaTag, captureMode, bottomInset }: Props) {
   const { pitchDegrees, rollDegrees, yawDegrees } = useDeviceMotion();
   const altFeet = useAltitudeFeet();
   const heading = yawToOrientation(yawDegrees);
@@ -25,6 +45,9 @@ export function CameraHUD({ selectedSlope }: Props) {
   const slopeOk = !selectedSlope || selectedSlope === heading;
   const rollOk = Math.abs(rollDegrees) < 5;
   const levelTint = rollOk ? colors.success : Math.abs(rollDegrees) < 15 ? colors.warn : colors.danger;
+
+  const mode = captureModeOption(captureMode ?? 'square_10x10');
+  const singleShingle = mode.mode === 'single_shingle';
 
   return (
     <View style={styles.wrap} pointerEvents="none">
@@ -68,8 +91,26 @@ export function CameraHUD({ selectedSlope }: Props) {
         </Text>
       </View>
 
-      {/* Bottom-left: pitch + elevation */}
-      <View style={styles.bottomLeft}>
+      {/* Bottom-left: capture subject + mode, then pitch + elevation */}
+      <View
+        style={[styles.bottomLeft, { bottom: bottomInset ?? DEFAULT_BOTTOM_INSET }]}
+      >
+        {!!areaTag && (
+          <View style={[styles.dataChip, styles.areaChip]}>
+            <Ionicons name="pricetag" size={14} color={colors.textInverse} />
+            <Text style={[styles.dataChipText, styles.areaChipText]} numberOfLines={1}>
+              {areaTag}
+            </Text>
+          </View>
+        )}
+        <View style={[styles.dataChip, singleShingle && styles.modeChipSingle]}>
+          <Ionicons
+            name={mode.icon}
+            size={14}
+            color={singleShingle ? colors.textInverse : colors.cream}
+          />
+          <Text style={styles.dataChipText}>{CAPTURE_MODE_LABELS[mode.mode]}</Text>
+        </View>
         <View style={styles.dataChip}>
           <Ionicons name="trending-up" size={14} color={colors.cream} />
           <Text style={styles.dataChipText}>{pitchDegrees.toFixed(1)}° · {pitchDegreesToRatio(pitchDegrees)}</Text>
@@ -90,7 +131,8 @@ const styles = StyleSheet.create({
 
   topRight: { position: 'absolute', top: spacing.xxxl + 20, right: spacing.xl, alignItems: 'center', gap: spacing.xs },
   topLeft: { position: 'absolute', top: spacing.xxxl + 20, left: spacing.xl, alignItems: 'center', gap: spacing.xs },
-  bottomLeft: { position: 'absolute', bottom: 220, left: spacing.xl, gap: spacing.xs },
+  // `bottom` is supplied at render time from the measured dock height.
+  bottomLeft: { position: 'absolute', left: spacing.xl, right: spacing.xl, gap: spacing.xs },
 
   compassWrap: {
     width: 60,
@@ -148,4 +190,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   dataChipText: { color: colors.cream, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
+
+  // The subject label rides the photo into the report, so it gets the accent.
+  areaChip: { backgroundColor: colors.orange, maxWidth: '100%' },
+  areaChipText: { color: colors.textInverse, flexShrink: 1 },
+  // Single-shingle is the mode that does NOT feed the per-square threshold;
+  // it must never be mistaken for the default at a glance.
+  modeChipSingle: { backgroundColor: colors.brand },
 });

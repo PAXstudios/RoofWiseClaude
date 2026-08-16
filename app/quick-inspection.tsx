@@ -9,7 +9,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Stack,
   useLocalSearchParams,
@@ -25,11 +25,23 @@ import {
   colors,
   fontSize,
   fontWeight,
+  glass,
   radii,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
-import { type SlopeOrientation } from '@/lib/models/types';
+import {
+  AREA_TAGS,
+  type CaptureMode,
+  type SlopeOrientation,
+} from '@/lib/models/types';
+import {
+  CAPTURE_MODE_OPTIONS,
+  DEFAULT_CAPTURE_MODE,
+  captureModeOption,
+  defaultAreaTagForSlope,
+  shortAreaTag,
+} from '@/lib/services/captureSession';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
@@ -37,9 +49,23 @@ import { CameraHUD } from '@/components/CameraHUD';
 
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
+const INITIAL_SLOPE: SlopeOrientation = 'S';
+
+/**
+ * Ceiling on one import run. expo-image-picker in Expo Go can only be driven
+ * one asset at a time (see `importFromLibrary`), so "multi-select" is a loop —
+ * and a loop needs a stop even if the user never taps Cancel.
+ */
+const IMPORT_RUN_LIMIT = 24;
+
 type CapturedPhoto = {
   uri: string;
   slope: SlopeOrientation;
+  /** One of AREA_TAGS — the subject the inspector had selected when shooting. */
+  areaTag: string;
+  captureMode: CaptureMode;
+  /** Library imports are flagged so the strip can show where a photo came from. */
+  imported?: boolean;
 };
 
 export default function QuickInspection() {
@@ -128,8 +154,37 @@ function QuickInspectionNative() {
   const logActivity = useActivityStore((s) => s.log);
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
-  const [slope, setSlope] = useState<SlopeOrientation>('S');
+  const insets = useSafeAreaInsets();
+  const [slope, setSlope] = useState<SlopeOrientation>(INITIAL_SLOPE);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [captureMode, setCaptureMode] = useState<CaptureMode>(DEFAULT_CAPTURE_MODE);
+  const [areaTag, setAreaTag] = useState<string>(() =>
+    defaultAreaTagForSlope(INITIAL_SLOPE),
+  );
+  // Once the inspector picks a subject by hand, changing slopes stops
+  // overwriting it — you shoot gutters on more than one elevation.
+  const [areaTagPinned, setAreaTagPinned] = useState(false);
+  const [importing, setImporting] = useState(false);
+  // The bottom dock grew three rows; the HUD's bottom-left stack tracks its
+  // measured height instead of a constant that drifts every layout change.
+  const [dockHeight, setDockHeight] = useState(0);
+
+  const selectSlope = (next: SlopeOrientation) => {
+    setSlope(next);
+    if (!areaTagPinned) setAreaTag(defaultAreaTagForSlope(next));
+    Haptics.selectionAsync().catch(() => {});
+  };
+
+  const selectAreaTag = (tag: string) => {
+    setAreaTag(tag);
+    setAreaTagPinned(true);
+    Haptics.selectionAsync().catch(() => {});
+  };
+
+  const selectCaptureMode = (mode: CaptureMode) => {
+    setCaptureMode(mode);
+    Haptics.selectionAsync().catch(() => {});
+  };
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -193,49 +248,83 @@ function QuickInspectionNative() {
       const photo = await camRef.current.takePictureAsync({ quality: 0.95 });
       if (!photo?.uri) throw new Error('No photo data');
       const small = await prepareCapturedPhoto(photo.uri);
-      setPhotos((prev) => [...prev, { uri: small, slope }]);
+      setPhotos((prev) => [...prev, { uri: small, slope, areaTag, captureMode }]);
     } catch (e) {
       Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
-  const pickFromLibrary = async () => {
+  /**
+   * Import existing photos from the library. Imports are first-class captures:
+   * same `prepareCapturedPhoto` normalization, same area tag / capture mode,
+   * same `photos` array, so they reach analysis by exactly the camera's path.
+   *
+   * Multi-photo import is a LOOP over the single-asset picker, not
+   * `allowsMultipleSelection`. expo-image-picker's multi-select handler fires
+   * its JS completion once per failed asset and never debounces, so two
+   * unreadable assets (iCloud originals, simulator HEIC placeholders) reject
+   * the same promise twice and abort the process — SIGABRT, no JS error
+   * (PROMPT_LOG #24/#25). Re-presenting the single-select picker gives the
+   * same "pick several" outcome on the path that settles exactly once. The
+   * user taps Cancel to stop.
+   */
+  const importFromLibrary = async () => {
+    if (importing) return;
+    setImporting(true);
+    let added = 0;
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         Alert.alert(
           'Photos access needed',
-          'Enable Photos access in Settings to upload existing images.',
+          perm.canAskAgain
+            ? 'RoofWise needs Photos access to import existing roof images. You can still capture with the camera.'
+            : 'Enable Photos access for RoofWise in Settings to import existing images. You can still capture with the camera.',
         );
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        // Single-select only. Expo Go's multi-select native handler rejects its
-        // promise once per failed asset; two failures = double-reject = SIGABRT
-        // (app dies, no JS error). The single path settles exactly once. The
-        // user taps the library button again to add more photos.
-        allowsMultipleSelection: false,
-        // Compatible (not Current) makes iOS transcode HEIC / iCloud originals
-        // to a readable JPEG before handing them over. Current returns raw HEIC
-        // bytes, which fail with "Cannot load representation of type public.heic"
-        // — especially on the simulator and for not-yet-downloaded iCloud photos.
-        preferredAssetRepresentationMode:
-          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-      });
-      if (result.canceled || result.assets.length === 0) return;
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const small = await prepareCapturedPhoto(result.assets[0].uri);
-      setPhotos((prev) => [...prev, { uri: small, slope }]);
+
+      for (let i = 0; i < IMPORT_RUN_LIMIT; i++) {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsMultipleSelection: false,
+          // Compatible (not Current) makes iOS transcode HEIC / iCloud originals
+          // to a readable JPEG before handing them over. Current returns raw HEIC
+          // bytes, which fail with "Cannot load representation of type public.heic"
+          // — especially on the simulator and for not-yet-downloaded iCloud photos.
+          preferredAssetRepresentationMode:
+            ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+        });
+        // Cancel is how the user says "done adding".
+        if (result.canceled || result.assets.length === 0) break;
+
+        const small = await prepareCapturedPhoto(result.assets[0].uri);
+        setPhotos((prev) => [
+          ...prev,
+          { uri: small, slope, areaTag, captureMode, imported: true },
+        ]);
+        added += 1;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      }
+
+      if (added >= IMPORT_RUN_LIMIT) {
+        Alert.alert(
+          'Import paused',
+          `Added ${added} photos. Tap the library button again to keep importing.`,
+        );
+      }
     } catch (e) {
+      // One bad asset ends the run rather than looping the same failure.
       const msg = e instanceof Error ? e.message : 'Unknown error';
       const readFail = /load representation|failed to read/i.test(msg);
       Alert.alert(
-        readFail ? "Couldn't read that photo" : 'Upload failed',
+        readFail ? "Couldn't read that photo" : 'Import failed',
         readFail
           ? "iOS couldn't load this image's data. This is common with the iOS Simulator's built-in photos (they're HEIC placeholders) and with iCloud photos that haven't fully downloaded to the device. Try a screenshot as a test image, pick a different photo, or run on a real iPhone."
           : msg,
       );
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -266,11 +355,17 @@ function QuickInspectionNative() {
       });
     }
 
+    // areaTag / captureMode ride each capture into Slope.photoMeta so the
+    // analysis and report layers can bucket hits per mode. Nothing here
+    // aggregates counts — that happens once markers exist.
     attachRawPhotos(targetId, photos);
+    const singles = photos.filter((p) => p.captureMode === 'single_shingle').length;
     logActivity({
       kind: 'photo_captured',
       inspectionId: targetId,
-      message: `Captured ${photos.length} photo${photos.length === 1 ? '' : 's'} for inspection`,
+      message:
+        `Captured ${photos.length} photo${photos.length === 1 ? '' : 's'} for inspection` +
+        (singles > 0 ? ` (${singles} single-shingle)` : ''),
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -293,7 +388,12 @@ function QuickInspectionNative() {
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
       <CameraView ref={camRef} style={StyleSheet.absoluteFill} facing="back" />
-      <CameraHUD selectedSlope={slope} />
+      <CameraHUD
+        selectedSlope={slope}
+        areaTag={areaTag}
+        captureMode={captureMode}
+        bottomInset={dockHeight ? dockHeight + insets.bottom + spacing.sm : undefined}
+      />
       <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
         <View style={styles.topRow}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={styles.topBtn}>
@@ -306,10 +406,11 @@ function QuickInspectionNative() {
           </View>
           <View style={styles.topRightGroup}>
             <Pressable
-              onPress={pickFromLibrary}
+              onPress={importFromLibrary}
               hitSlop={10}
-              style={styles.topBtn}
-              accessibilityLabel="Add a photo from library (tap again for more)"
+              disabled={importing}
+              style={[styles.topBtn, importing && styles.topBtnBusy]}
+              accessibilityLabel="Import photos from library. Keep picking, then tap Cancel when done."
             >
               <Ionicons name="images-outline" size={22} color={colors.textInverse} />
             </Pressable>
@@ -324,19 +425,85 @@ function QuickInspectionNative() {
           </View>
         </View>
 
-        <View style={styles.bottomDock}>
+        <View
+          style={styles.bottomDock}
+          onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
+        >
+          {/* Capture mode. Above everything else because it decides whether a
+              photo's hits can ever count toward the per-square threshold. */}
+          <View style={styles.modeRow}>
+            {CAPTURE_MODE_OPTIONS.map((opt) => {
+              const active = captureMode === opt.mode;
+              return (
+                <Pressable
+                  key={opt.mode}
+                  style={[styles.modeSegment, active && styles.modeSegmentActive]}
+                  onPress={() => selectCaptureMode(opt.mode)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`${opt.label}. ${opt.hint}`}
+                >
+                  <Ionicons
+                    name={opt.icon}
+                    size={18}
+                    color={colors.textInverse}
+                    style={{ opacity: active ? 1 : 0.75 }}
+                  />
+                  <Text
+                    style={[styles.modeSegmentText, active && styles.modeSegmentTextActive]}
+                    numberOfLines={2}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.modeHint} numberOfLines={1}>
+            {captureModeOption(captureMode).hint}
+          </Text>
+
+          {/* Capture subject — the 19 area tags. Rides each photo into the report. */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.slopeRow}
+            contentContainerStyle={styles.chipRow}
           >
+            <Text style={styles.rowLabel}>AREA</Text>
+            {AREA_TAGS.map((tag) => {
+              const active = areaTag === tag;
+              return (
+                <Pressable
+                  key={tag}
+                  style={[styles.areaChip, active && styles.chipActive]}
+                  onPress={() => selectAreaTag(tag)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
+                    {tag}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            <Text style={styles.rowLabel}>SLOPE</Text>
             {SLOPES.map((s) => (
               <Pressable
                 key={s}
-                style={[styles.slopeChip, slope === s && styles.slopeChipActive]}
-                onPress={() => setSlope(s)}
+                style={[styles.slopeChip, slope === s && styles.chipActive]}
+                onPress={() => selectSlope(s)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: slope === s }}
+                accessibilityLabel={`Slope ${s}`}
               >
-                <Text style={[styles.slopeChipText, slope === s && styles.slopeChipTextActive]}>
+                <Text style={[styles.chipText, slope === s && styles.chipTextActive]}>
                   {s}
                 </Text>
               </Pressable>
@@ -363,7 +530,9 @@ function QuickInspectionNative() {
           </View>
 
           <Text style={styles.captureHint}>
-            Capture or upload, then tap Done to run AI damage analysis.
+            {importing
+              ? 'Keep picking photos — tap Cancel in the picker when you are done.'
+              : 'Capture or import, then tap Done to run AI damage analysis.'}
           </Text>
         </View>
       </SafeAreaView>
@@ -371,13 +540,38 @@ function QuickInspectionNative() {
   );
 }
 
+/**
+ * Recent captures with their area tag rendered as an overlay chip. The label
+ * is drawn over the thumbnail, never composited into the JPEG — the stored
+ * pixels stay exactly what the camera saw, which is what an adjuster (and the
+ * vision model) has to be able to trust.
+ */
 function PhotoStrip({ photos }: { photos: CapturedPhoto[] }) {
-  if (photos.length === 0) return <View style={{ width: 56 }} />;
+  if (photos.length === 0) return <View style={styles.stripPlaceholder} />;
+  const recent = photos.slice(-2);
+  const hidden = photos.length - recent.length;
   return (
     <View style={styles.photoStrip}>
-      {photos.slice(-3).map((p, i) => (
-        <Image key={i} source={{ uri: p.uri }} style={styles.thumb} />
+      {recent.map((p, i) => (
+        <View key={`${p.uri}-${i}`} style={styles.thumbWrap}>
+          <Image source={{ uri: p.uri }} style={styles.thumb} />
+          <View style={styles.thumbTag}>
+            <Text style={styles.thumbTagText} numberOfLines={1}>
+              {shortAreaTag(p.areaTag)}
+            </Text>
+          </View>
+          {p.captureMode === 'single_shingle' && (
+            <View style={styles.thumbModeDot}>
+              <Ionicons name="layers" size={10} color={colors.textInverse} />
+            </View>
+          )}
+        </View>
       ))}
+      {hidden > 0 && (
+        <View style={styles.thumbMore}>
+          <Text style={styles.thumbMoreText}>+{hidden}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -408,10 +602,70 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   topRightGroup: { flexDirection: 'row', gap: spacing.sm },
+  topBtnBusy: { opacity: 0.5 },
   topPillText: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   bottomDock: { paddingBottom: spacing.md, backgroundColor: 'rgba(0,0,0,0.55)' },
-  slopeRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, gap: spacing.sm },
+
+  modeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+  },
+  modeSegment: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    height: touchTarget.standard,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    backgroundColor: glass.fillHigh,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeSegmentActive: { backgroundColor: colors.orange },
+  modeSegmentText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    opacity: 0.8,
+    flexShrink: 1,
+    textAlign: 'center',
+  },
+  modeSegmentTextActive: { opacity: 1, fontWeight: fontWeight.bold },
+  modeHint: {
+    // Camera chrome sits on the live preview: token colour + opacity rather
+    // than a baked rgba literal (Drift #11).
+    color: colors.textInverse,
+    opacity: 0.78,
+    fontSize: fontSize.caption,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xs,
+  },
+
+  chipRow: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  rowLabel: {
+    color: colors.textInverse,
+    opacity: 0.6,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    marginRight: spacing.xs,
+  },
+  areaChip: {
+    minWidth: touchTarget.standard,
+    height: touchTarget.standard,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: glass.fillHigh,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   slopeChip: {
     minWidth: touchTarget.standard,
     height: touchTarget.standard,
@@ -421,9 +675,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  slopeChipActive: { backgroundColor: colors.orange },
-  slopeChipText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
-  slopeChipTextActive: { color: colors.textInverse },
+  chipActive: { backgroundColor: colors.orange },
+  chipText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  chipTextActive: { color: colors.textInverse, fontWeight: fontWeight.bold },
 
   shutterRow: {
     flexDirection: 'row',
@@ -457,8 +711,56 @@ const styles = StyleSheet.create({
   doneBtnText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
   doneBtnSub: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
-  photoStrip: { flexDirection: 'row', gap: -16 },
-  thumb: { width: 40, height: 40, borderRadius: 8, borderWidth: 2, borderColor: colors.textInverse, marginRight: -10 },
+  stripPlaceholder: { width: touchTarget.standard },
+  photoStrip: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  thumbWrap: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    borderRadius: radii.sm,
+    borderWidth: 2,
+    borderColor: colors.textInverse,
+    overflow: 'hidden',
+  },
+  thumb: { width: '100%', height: '100%' },
+  thumbTag: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.overlay,
+    paddingVertical: 1,
+    alignItems: 'center',
+  },
+  thumbTagText: {
+    color: colors.textInverse,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+  },
+  thumbModeDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 16,
+    height: 16,
+    borderRadius: radii.pill,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbMore: {
+    minWidth: 28,
+    height: touchTarget.standard,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.xs,
+    backgroundColor: glass.fillHigh,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbMoreText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.bold,
+  },
 
   captureHint: {
     color: 'rgba(240,240,228,0.78)',
