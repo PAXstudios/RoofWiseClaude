@@ -59,6 +59,22 @@ Routes live under `app/`:
 
 ---
 
+## Source documents — read before changing inspection logic
+
+The product truth lives in two places. When they disagree, **the Drive documents
+win on logic and thresholds; the repo wins on structure and file layout.**
+
+| Document | Authority over |
+|---|---|
+| **`docs/HAAG_DECISION_ENGINE.md`** | Functional-damage definition, material thresholds, repairability gates, decision tree, RC cost formula, Claim Viability bands, Safety engine, carrier behavior, capture methodology, accuracy targets |
+| `docs/SPEC.md` | Product scope, IA, feature phases, damage taxonomy |
+| Owner's Drive folder | Original sources. `Haag's full Protocol for Assessment of Hail-Damaged Roofing`, `RoofWise Prompt for HAAG: DECISION ENGINE SYSTEM`, `Quadrant — AI Roof Inspection App` technical spec, `RoofWise_Next_Build_Prompt.md` |
+
+`docs/HAAG_DECISION_ENGINE.md` was reconstructed from those Drive sources and
+**corrected thresholds that earlier code had wrong**. Do not "simplify" it.
+
+---
+
 ## Drift warnings (the non-negotiables)
 
 Pulled from `PROMPT_LOG.md`. The full list is canonical there; this is the short form.
@@ -69,8 +85,8 @@ Pulled from `PROMPT_LOG.md`. The full list is canonical there; this is the short
 4. Storm Alert hero **hides** when there is no active alert. Never a stale placeholder.
 5. **No mocks, no seeded sample data.** App boots empty. Service unreachable → friendly "Not available", never synthesize.
 6. Damage taxonomy is the **13 canonical categories** (`docs/SPEC.md`). Each finding has severity + 0–100 confidence.
-7. HAAG functional-damage thresholds are **material-specific** — table in `lib/services/haagThresholds.ts`.
-8. Decision Engine is **pure logic** — no I/O. Lives in `lib/services/decisionEngine.ts`.
+7. HAAG thresholds are **material-specific** and are defined by **`docs/HAAG_DECISION_ENGINE.md`**, not by memory or convenience. 3-tab asphalt is **>5** hits per test square; laminate/architectural is **>8**. Repairability gates (discontinued material, brittleness FAIL/BORDERLINE, 2+ layers) **override hit counts** and force replacement on their own.
+8. Decision Engine is **pure logic** — no I/O. Lives in `lib/services/decisionEngine.ts`. It must emit `roofwise_recommendation`, `claim_viability`, and `roofer_safety_rating` per `docs/HAAG_DECISION_ENGINE.md` §9.
 9. Gemini model: `gemini-2.5-pro` via Google AI Studio direct REST. No `gemini-3-flash` / `gemini-3.5-flash` (neither exists).
 10. **No LiDAR / ARKit in v1.** Camera-only.
 11. Theme tokens everywhere — no inline hex / font sizes.

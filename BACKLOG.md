@@ -13,6 +13,11 @@ entry does not count as tracked.
 
 ## Now (committed next steps, in order)
 
+- [ ] **Rewrite `decisionEngine.ts` + `haagThresholds.ts` against `docs/HAAG_DECISION_ENGINE.md`** — current code has 3-tab at 8 hits (should be >5) and architectural at 10 (should be >8), is missing the wood/metal/tile/flat material rules, and has none of the repairability gates (discontinued material, brittleness FAIL/BORDERLINE, 2+ layers) that override hit counts entirely. Highest-value correctness fix in the repo — 2026-08-03
+- [ ] **Add Claim Viability engine** (HIGH/MEDIUM/LOW) — the claimability protocol, sourced from the Drive decision-engine doc. Replaces the invented `damageScore()` weights, which cite a spec section that never contained them. Inputs: ±72h date-of-loss match, RCV vs ACV, deductible % of home value, prior claims in 3 years, carrier denial behavior, two-year corroboration limit — 2026-08-03
+- [ ] **Add pre-climb Safety engine** (SAFE / USE_CAUTION / UNSAFE from forecast: wind, gusts, precip, temp, lightning) — gates the Quick Inspection entry point — 2026-08-03
+- [ ] **Restore the desktop/responsive layout.** The scaffold had `theme/useResponsive.ts` plus `Sidebar` + `TopBar` for ≥1100px and bottom tabs under 768px. All three are gone from the current tree; the app is mobile-only. A roofing owner working a desk needs the wide layout — surfaced by the owner's uploaded scaffold-era CLAUDE.md, 2026-08-03
+
 
 - [ ] **Device pass on a real iPhone** — verify (a) rectangle overlays + withheld-detections toast against a live analysis [#39], and (b) the new 2560px analyze profile is actually selected (not the SAFE fallback), with no OOM on a long capture session [#41] · built and typechecked, but not yet seen with live Gemini output
 
