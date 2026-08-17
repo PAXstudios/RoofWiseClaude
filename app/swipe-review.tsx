@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { IconChip } from '@/components/ui/IconChip';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   Extrapolation,
@@ -317,7 +318,7 @@ export default function SwipeReview() {
           <Text style={styles.headerTitle}>Swipe Review</Text>
         </View>
         <View style={styles.empty}>
-          <Ionicons name="checkmark-done-circle-outline" size={28} color={colors.textSubtle} />
+          <IconChip name="checkmark-done-circle-outline" tone="green" />
           <Text style={styles.emptyTitle}>All caught up</Text>
           <Text style={styles.emptyBody}>
             Low-confidence detections from analysis will queue up here for your review.

@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { IconChip } from '@/components/ui/IconChip';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useEstimateStore } from '@/lib/stores/estimateStore';
@@ -181,7 +182,7 @@ export default function CostEstimatorScreen() {
             <View style={{ gap: spacing.lg }}>
               {!draft.measurement && (
                 <View style={styles.card}>
-                  <Ionicons name="globe-outline" size={32} color={colors.orange} />
+                  <IconChip name="globe-outline" tone="orange" />
                   <Text style={styles.cardTitle}>Detect roof from the air</Text>
                   <Text style={styles.cardSub}>
                     {draft.lat !== undefined
@@ -210,7 +211,7 @@ export default function CostEstimatorScreen() {
 
               {draft.measurement && (
                 <View style={styles.card}>
-                  <Ionicons name="layers-outline" size={32} color={colors.orange} />
+                  <IconChip name="layers-outline" tone="green" />
                   <Text style={styles.cardTitle}>{draft.measurement.totalSquares.toFixed(1)} squares</Text>
                   <Text style={styles.cardSub}>
                     {draft.measurement.slopes.length} slopes detected
@@ -384,12 +385,15 @@ const styles = StyleSheet.create({
 
   helper: { fontSize: fontSize.bodyMd, color: colors.slate },
 
+  // Raised content-card rung, matching the crafted cards on Home/Leads/Job.
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
     gap: spacing.sm,
-    ...shadows.card,
+    ...shadows.raised,
   },
   cardTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
   cardSub: { fontSize: fontSize.bodyMd, color: colors.slate },

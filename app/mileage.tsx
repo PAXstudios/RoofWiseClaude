@@ -14,6 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useMileageStore } from '@/lib/stores/mileageStore';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { IconChip } from '@/components/ui/IconChip';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import {
@@ -257,14 +260,16 @@ function MileageNative() {
           </View>
         )}
 
-        <Text style={styles.section}>Recent trips</Text>
+        <SectionHeader title="Recent trips" />
         {trips.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="car-outline" size={28} color={colors.slate} />
-            <Text style={styles.emptyText}>No trips logged yet.</Text>
-          </View>
+          <RichCard>
+            <View style={styles.empty}>
+              <IconChip name="car-outline" tone="quiet" />
+              <Text style={styles.emptyText}>No trips logged yet.</Text>
+            </View>
+          </RichCard>
         ) : (
-          <View style={styles.card}>
+          <RichCard padded={false}>
             {trips.slice(0, 10).map((t, i) => (
               <View key={t.id} style={[styles.tripRow, i > 0 && styles.tripRowBorder]}>
                 <View style={{ flex: 1 }}>
@@ -283,12 +288,18 @@ function MileageNative() {
                 <Text style={styles.tripDeduct}>
                   ${(t.miles * IRS_RATE_PER_MILE).toFixed(2)}
                 </Text>
-                <Pressable onPress={() => remove(t.id)} hitSlop={10}>
+                <Pressable
+                  onPress={() => remove(t.id)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete trip"
+                  style={styles.tripDelete}
+                >
                   <Ionicons name="trash-outline" size={18} color={colors.danger} />
                 </Pressable>
               </View>
             ))}
-          </View>
+          </RichCard>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -353,7 +364,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  purposeChipActive: { backgroundColor: colors.navy },
+  purposeChipActive: { backgroundColor: colors.brand },
   purposeText: { color: colors.navy, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
   purposeTextActive: { color: colors.textInverse },
 
@@ -376,20 +387,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    minHeight: touchTarget.standard,
+  },
+  tripDelete: {
+    minWidth: touchTarget.small,
+    minHeight: touchTarget.small,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tripRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   tripMiles: { fontSize: fontSize.bodyLg, color: colors.navy, fontWeight: fontWeight.semibold },
   tripDate: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
   tripDeduct: { fontSize: fontSize.bodyMd, color: colors.success, fontWeight: fontWeight.semibold },
 
-  empty: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.xxl,
-    alignItems: 'center',
-    gap: spacing.sm,
-    ...shadows.card,
-  },
+  empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   emptyText: { color: colors.slate, fontSize: fontSize.bodyMd },
 
   errorText: { color: colors.danger, fontSize: fontSize.bodySm },

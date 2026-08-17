@@ -2,6 +2,7 @@ import { ScrollView, View, Text, StyleSheet, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import { LEADS_SQL } from '@/lib/services/leadSync';
@@ -11,10 +12,14 @@ import { useToastStore } from '@/lib/stores/toastStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
+import { IconChip } from '@/components/ui/IconChip';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   colors,
   fontSize,
   fontWeight,
+  gradients,
   radii,
   shadows,
   spacing,
@@ -50,24 +55,32 @@ export default function AboutScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <FadeSlideIn index={0}>
-          <View style={styles.brandCard}>
+          {/* The one cinematic moment on this screen: the same royal-black
+              wash the onboarding sky runs on, so "About" reads as the same
+              product as the pitch a contractor saw on day one. */}
+          <LinearGradient
+            colors={gradients.stormNight}
+            style={styles.brandCard}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
             <View style={styles.brandMark}>
               <Text style={styles.brandInitials}>RW</Text>
             </View>
             <Text style={styles.brandName}>RoofWise</Text>
             <Text style={styles.brandTag}>The objective layer between roofing contractors and insurance carriers.</Text>
             <Text style={styles.version}>Version {VERSION}</Text>
-          </View>
+          </LinearGradient>
         </FadeSlideIn>
 
         <FadeSlideIn index={1} style={styles.section}>
-          <Text style={styles.sectionLabel}>Features</Text>
-          <View style={styles.group}>
+          <SectionHeader title="Features" style={styles.sectionHeaderSpacing} />
+          <RichCard padded={false}>
             {FEATURES.map((f, i) => (
               <View key={f.title}>
                 {i > 0 ? <View style={styles.sep} /> : null}
                 <View style={styles.featureRow}>
-                  <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                  <IconChip name="checkmark-circle" tone="green" size="sm" />
                   <View style={styles.featureText}>
                     <Text style={styles.featureTitle}>{f.title}</Text>
                     <Text style={styles.featureDesc}>{f.desc}</Text>
@@ -75,12 +88,12 @@ export default function AboutScreen() {
                 </View>
               </View>
             ))}
-          </View>
+          </RichCard>
         </FadeSlideIn>
 
         <FadeSlideIn index={2} style={styles.section}>
-          <Text style={styles.sectionLabel}>References</Text>
-          <View style={styles.group}>
+          <SectionHeader title="References" style={styles.sectionHeaderSpacing} />
+          <RichCard padded={false}>
             {LINKS.map((l, i) => (
               <View key={l.url}>
                 {i > 0 ? <View style={styles.sep} /> : null}
@@ -90,27 +103,32 @@ export default function AboutScreen() {
                   accessibilityRole="link"
                   accessibilityLabel={l.label}
                 >
-                  <Ionicons name="link-outline" size={18} color={colors.textMuted} />
+                  <IconChip name="link-outline" tone="blue" size="sm" />
                   <Text style={styles.linkText}>{l.label}</Text>
                   <Ionicons name="open-outline" size={16} color={colors.textSubtle} />
                 </PressableScale>
               </View>
             ))}
-          </View>
+          </RichCard>
         </FadeSlideIn>
 
         <FadeSlideIn index={3} style={styles.section}>
-          <Text style={styles.sectionLabel}>Cloud sync setup</Text>
-          <View style={styles.card}>
+          <SectionHeader title="Cloud sync setup" style={styles.sectionHeaderSpacing} />
+          <RichCard icon="cloud-outline" iconTone="purple" title="Supabase provisioning">
             <Text style={styles.featureDesc}>
               Run the following once in your Supabase SQL editor to provision the
               leads table with row-level security. Copy → paste → Run.
             </Text>
-            <View style={styles.sqlBox}>
+            <LinearGradient
+              colors={gradients.stormNight}
+              style={styles.sqlBox}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
               <Text style={styles.sqlText} selectable>{CLOUD_SQL}</Text>
-            </View>
+            </LinearGradient>
             <PressableScale
-              style={styles.sqlBtn}
+              style={styles.sqlBtnShadow}
               onPress={async () => {
                 await Clipboard.setStringAsync(CLOUD_SQL);
                 toast({ tone: 'success', title: 'SQL copied' });
@@ -118,10 +136,17 @@ export default function AboutScreen() {
               accessibilityRole="button"
               accessibilityLabel="Copy SQL"
             >
-              <Ionicons name="copy-outline" size={18} color={colors.textInverse} />
-              <Text style={styles.sqlBtnText}>Copy SQL</Text>
+              <LinearGradient
+                colors={gradients.accent}
+                style={styles.sqlBtn}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="copy-outline" size={18} color={colors.textInverse} />
+                <Text style={styles.sqlBtnText}>Copy SQL</Text>
+              </LinearGradient>
             </PressableScale>
-          </View>
+          </RichCard>
         </FadeSlideIn>
 
         <Text style={styles.tag}>
@@ -142,14 +167,14 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
   },
   section: {},
+  sectionHeaderSpacing: { marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
 
   brandCard: {
-    backgroundColor: colors.navy,
     borderRadius: radii.card,
     padding: spacing.xxl,
     alignItems: 'center',
     gap: spacing.sm,
-    ...shadows.card,
+    ...shadows.hero,
   },
   brandMark: {
     width: 64,
@@ -183,29 +208,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 
-  sectionLabel: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-
-  group: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    overflow: 'hidden',
-    ...shadows.card,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    gap: spacing.sm,
-    ...shadows.card,
-  },
   sep: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.hairline,
@@ -254,7 +256,6 @@ const styles = StyleSheet.create({
   },
 
   sqlBox: {
-    backgroundColor: colors.navy,
     borderRadius: radii.control,
     padding: spacing.md,
     marginTop: spacing.xs,
@@ -265,6 +266,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Courier',
     lineHeight: 16,
   },
+  sqlBtnShadow: { borderRadius: radii.button, marginTop: spacing.xs },
   sqlBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -272,8 +274,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     height: touchTarget.standard,
     borderRadius: radii.button,
-    backgroundColor: colors.accent,
-    marginTop: spacing.xs,
+    overflow: 'hidden',
   },
   sqlBtnText: {
     color: colors.textInverse,

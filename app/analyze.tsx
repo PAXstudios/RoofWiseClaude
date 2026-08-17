@@ -12,6 +12,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { IconChip } from '@/components/ui/IconChip';
 import * as Haptics from 'expo-haptics';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
@@ -27,7 +30,6 @@ import {
   fontSize,
   fontWeight,
   radii,
-  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -100,7 +102,7 @@ export default function AnalyzeView() {
       <SafeAreaView style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.empty}>
-          <Ionicons name="alert-circle-outline" size={36} color={colors.slate} />
+          <IconChip name="alert-circle-outline" tone="quiet" />
           <Text style={styles.emptyText}>Slope not found.</Text>
           <Pressable style={styles.secondaryBtn} onPress={() => router.back()}>
             <Text style={styles.secondaryBtnText}>Back</Text>
@@ -177,16 +179,17 @@ export default function AnalyzeView() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            {slope.photoPaths.length} photo{slope.photoPaths.length === 1 ? '' : 's'} captured
-          </Text>
+        <RichCard
+          icon="images-outline"
+          iconTone="blue"
+          title={`${slope.photoPaths.length} photo${slope.photoPaths.length === 1 ? '' : 's'} captured`}
+        >
           <Text style={styles.cardSub}>
             {unanalyzed.length === 0
               ? 'All photos have been analyzed. Re-run to override existing markers.'
               : `${unanalyzed.length} photo${unanalyzed.length === 1 ? '' : 's'} waiting for analysis.`}
           </Text>
-        </View>
+        </RichCard>
 
         {!isGeminiConfigured && (
           <View style={styles.warnBanner}>
@@ -204,7 +207,7 @@ export default function AnalyzeView() {
           </View>
         )}
 
-        <Text style={styles.section}>Photos</Text>
+        <SectionHeader title="Photos" />
         <Text style={styles.hint}>Tap to edit detections · Long-press to rotate or delete.</Text>
         <View style={styles.grid}>
           {slope.photoPaths.map((uri, i) => {
@@ -319,14 +322,6 @@ const styles = StyleSheet.create({
 
   scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    gap: spacing.xs,
-    ...shadows.card,
-  },
-  cardTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
   cardSub: { fontSize: fontSize.bodyMd, color: colors.slate },
 
   warnBanner: {
@@ -348,12 +343,6 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.danger, fontSize: fontSize.bodySm, flex: 1 },
 
-  section: {
-    fontSize: fontSize.titleMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.navy,
-    marginTop: spacing.md,
-  },
   hint: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: -spacing.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   thumb: { width: 100, height: 100, borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.surfaceMuted },

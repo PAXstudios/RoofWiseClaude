@@ -18,6 +18,9 @@ import Animated, {
 import { Map, MapPin, MapCircle, regionForLatLon } from '@/components/map/Map';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
+import { LinearGradient } from 'expo-linear-gradient';
+import { GlassCard } from '@/components/glass/GlassCard';
+import { IconChip } from '@/components/ui/IconChip';
 import { severityColor, magnitudeLabel, type StormEvent } from '@/lib/noaa';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
 import {
@@ -28,6 +31,7 @@ import {
 import {
   leadsInStormCluster,
   STORM_HISTORY_BROWSE_RADIUS_MILES,
+  type StormLeadCluster,
 } from '@/lib/services/stormWatch';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
@@ -107,6 +111,107 @@ function Rise({
   }));
 
   return <Animated.View style={[style, anim]}>{children}</Animated.View>;
+}
+
+/**
+ * A floating control over the map imagery — real frosted glass (BlurView on
+ * iOS, a tinted-fill fallback elsewhere) so it stays legible in sun no matter
+ * what's under it, per Drift #1. Selected state breaks from glass into a
+ * solid royal fill — glass reads as "available", solid reads as "chosen".
+ */
+function GlassChip({
+  active,
+  icon,
+  label,
+  onPress,
+  accessibilityLabel,
+}: {
+  active: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) {
+  return (
+    <PressableScale
+      style={active ? styles.chipShadow : undefined}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+    >
+      {active ? (
+        // Selection is the royal RAMP with the brand-tinted lift, not a flat
+        // fully-saturated rectangle — that was the one generic-blue moment
+        // left in the app.
+        <View style={[styles.chip, styles.chipActive]}>
+          <LinearGradient
+            colors={gradients.clearDay}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          />
+          <Ionicons name={icon} size={16} color={colors.textInverse} />
+          <Text style={[styles.chipText, styles.chipTextActive]}>{label}</Text>
+        </View>
+      ) : (
+        // Idle chips live INSIDE the glass control bar now, so they carry a
+        // quiet fill rather than each being its own floating glass panel.
+        <View style={[styles.chip, styles.chipIdle]}>
+          <Ionicons name={icon} size={16} color={colors.text} />
+          <Text style={styles.chipText}>{label}</Text>
+        </View>
+      )}
+    </PressableScale>
+  );
+}
+
+/** Hail/wind/severe swatches for the semantic storm palette (Drift #11: theme
+ *  tokens, not the raw per-magnitude hex `severityColor()` plots with). */
+function StormLegend() {
+  return (
+    <View style={styles.legendCard}>
+      <LegendSwatch color={colors.stormHail} label="Hail" />
+      <LegendSwatch color={colors.stormWind} label="Wind" />
+      <LegendSwatch color={colors.stormSevere} label="Severe" />
+    </View>
+  );
+}
+
+function LegendSwatch({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendDot, { backgroundColor: color }]} />
+      <Text style={styles.legendText}>{label}</Text>
+    </View>
+  );
+}
+
+/**
+ * The reference's floating AI-insight pattern — a glass card surfacing the
+ * real storm-matched lead cluster over the map imagery. Only ever mounted
+ * with a genuine cluster (Drift #5): the caller gates on `cluster`.
+ */
+function ClusterInsight({ cluster, onPress }: { cluster: StormLeadCluster; onPress: () => void }) {
+  return (
+    <PressableScale
+      style={styles.insightShadow}
+      accessibilityRole="button"
+      accessibilityLabel={`${cluster.headline}. Shows the matched leads on the map.`}
+      onPress={onPress}
+    >
+      <GlassCard onLight onArt radius={radii.card} style={styles.insightCard}>
+        <IconChip name="thunderstorm" tone="orange" size="md" />
+        <View style={styles.insightText}>
+          <Text style={styles.insightLabel}>STORM MATCH</Text>
+          <Text style={styles.insightHeadline} numberOfLines={2}>
+            {cluster.headline}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+      </GlassCard>
+    </PressableScale>
+  );
 }
 
 export default function MapScreen() {
@@ -233,8 +338,8 @@ export default function MapScreen() {
         />
       </Rise>
 
-      {/* Density: the map fills everything under the header; controls float
-          over the imagery on barFill so they stay readable in sun. */}
+      {/* Density: the map fills everything under the header — the full-bleed
+          cinematic moment. Controls float over the imagery as real glass. */}
       <View style={styles.mapWrap}>
         <Map
           initialRegion={initialRegion}
@@ -320,93 +425,89 @@ export default function MapScreen() {
             ))}
         </Map>
 
-        {/* Floating control chips — barFill ground + hairline + float shadow
-            so they read over imagery; glove-sized (≥56pt). */}
+        {/* ONE floating glass control bar — real BlurView on iOS, tinted-fill
+            fallback elsewhere; glove-sized (≥56pt) either way. Layers, time
+            range and legend used to stack as three separate floating rows
+            down the top third of the map, and the legend pill collided with
+            the pins beneath it. */}
         <View style={styles.overlayTop} pointerEvents="box-none">
-          <Rise index={1}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.chipScroll}
-              contentContainerStyle={styles.chipScrollContent}
-            >
-              {FILTERS.map((f) => (
-                <PressableScale
-                  key={f.id}
-                  style={[styles.chip, filter === f.id && styles.chipActive]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: filter === f.id }}
-                  accessibilityLabel={`Show ${f.label}`}
-                  onPress={() => setFilter(f.id)}
-                >
-                  <Ionicons
-                    name={f.icon}
-                    size={16}
-                    color={filter === f.id ? colors.textInverse : colors.text}
+          <Rise index={1} style={styles.controlBarShadow}>
+            <GlassCard onLight onArt radius={radii.lg} style={styles.controlBar}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.chipScroll}
+                contentContainerStyle={styles.chipScrollContent}
+              >
+                {FILTERS.map((f) => (
+                  <GlassChip
+                    key={f.id}
+                    active={filter === f.id}
+                    icon={f.icon}
+                    label={f.label}
+                    accessibilityLabel={`Show ${f.label}`}
+                    onPress={() => setFilter(f.id)}
                   />
-                  <Text style={[styles.chipText, filter === f.id && styles.chipTextActive]}>
-                    {f.label}
-                  </Text>
-                </PressableScale>
-              ))}
-            </ScrollView>
+                ))}
+              </ScrollView>
+
+              {filter === 'storms' && (
+                <View style={styles.controlBarSecond}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.chipScroll}
+                    contentContainerStyle={styles.chipScrollContent}
+                  >
+                    {LOOKBACK_OPTIONS.map((years) => (
+                      <GlassChip
+                        key={years}
+                        active={lookbackYears === years}
+                        icon="time-outline"
+                        label={`${years} yr`}
+                        accessibilityLabel={`Past ${years} year${years === 1 ? '' : 's'}`}
+                        onPress={() => setLookbackYears(clampLookbackYears(years))}
+                      />
+                    ))}
+                  </ScrollView>
+                  <StormLegend />
+                </View>
+              )}
+            </GlassCard>
           </Rise>
 
-          {filter === 'storms' && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={[styles.chipScroll, styles.chipScrollSecond]}
-              contentContainerStyle={styles.chipScrollContent}
-            >
-              {LOOKBACK_OPTIONS.map((years) => (
-                <PressableScale
-                  key={years}
-                  style={[styles.chip, lookbackYears === years && styles.chipActive]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: lookbackYears === years }}
-                  accessibilityLabel={`Past ${years} year${years === 1 ? '' : 's'}`}
-                  onPress={() => setLookbackYears(clampLookbackYears(years))}
-                >
-                  <Ionicons
-                    name="time-outline"
-                    size={16}
-                    color={lookbackYears === years ? colors.textInverse : colors.text}
-                  />
-                  <Text
-                    style={[styles.chipText, lookbackYears === years && styles.chipTextActive]}
-                  >
-                    {years} yr
-                  </Text>
-                </PressableScale>
-              ))}
-            </ScrollView>
-          )}
-
           {loading && (
-            <View style={styles.loadingPill}>
-              <ActivityIndicator color={colors.navy} />
+            <View style={styles.loadingShadow}>
+              <GlassCard onLight onArt radius={radii.button} style={styles.loadingPill}>
+                <ActivityIndicator color={colors.navy} />
+              </GlassCard>
             </View>
           )}
         </View>
 
-        {/* Count line + error float at the bottom edge of the map. Real
-            numbers only — the cluster line is absent when nothing matched. */}
-        <View style={styles.statBarWrap} pointerEvents="none">
+        {/* Cluster insight + count float at the bottom edge of the map. Real
+            numbers only — both are absent when there's nothing to report. */}
+        <View style={styles.statBarWrap} pointerEvents="box-none">
           {error && (
             <View style={styles.errorCard}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
-          <Rise index={2}>
-            <View style={styles.statBar}>
-              <Text style={styles.statText}>
-                {filter === 'storms' && stormCountLine(events.length, stormPins.length, lookbackYears)}
-                {filter === 'jobs' && `${jobPins.length} of ${inspections.length} jobs mapped`}
-                {filter === 'leads' && `${leadPins.length} of ${leads.length} leads mapped`}
-                {filter === 'knocks' && `${knockPins.length} knock pins`}
-              </Text>
-              {cluster && <Text style={styles.clusterText}>{cluster.headline}</Text>}
+          {cluster && (
+            <Rise index={4}>
+              <ClusterInsight cluster={cluster} onPress={() => setFilter('leads')} />
+            </Rise>
+          )}
+          <Rise index={5}>
+            <View style={styles.statBarShadow}>
+              <GlassCard onLight onArt radius={radii.button} style={styles.statBar}>
+                <Text style={styles.statText}>
+                  {filter === 'storms' && stormCountLine(events.length, stormPins.length, lookbackYears)}
+                  {filter === 'jobs' && `${jobPins.length} of ${inspections.length} jobs mapped`}
+                  {filter === 'leads' && `${leadPins.length} of ${leads.length} leads mapped`}
+                  {filter === 'knocks' && `${knockPins.length} knock pins`}
+                </Text>
+              </GlassCard>
             </View>
           </Rise>
         </View>
@@ -460,26 +561,43 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  chipScroll: { flexGrow: 0 },
-  chipScrollSecond: { marginTop: spacing.sm },
-  chipScrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
-    gap: spacing.sm,
+  // The single floating control bar. Shadow lives on the wrapper so it isn't
+  // clipped by the glass card's own corner radius.
+  controlBarShadow: {
+    marginHorizontal: spacing.lg,
+    borderRadius: radii.lg,
+    ...shadows.float,
   },
+  controlBar: { paddingVertical: spacing.xs },
+  controlBarSecond: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+    paddingTop: spacing.xs,
+  },
+
+  chipScroll: { flexGrow: 0 },
+  chipScrollContent: {
+    // Tightened from `lg`/`sm` so the four layer chips clear a 390pt
+    // viewport: a chip edge meets the bar, not a cut glyph.
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xs,
+  },
+
+  // Chips inside the bar. Selected breaks to the royal RAMP + brand lift;
+  // idle carries a quiet fill. The shadow lives on the PressableScale
+  // wrapper so it isn't clipped by the chip's own corner radius.
+  chipShadow: { borderRadius: radii.button, ...shadows.hero },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     minHeight: touchTarget.standard,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.button,
-    backgroundColor: colors.barFill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    ...shadows.float,
+    overflow: 'hidden',
   },
-  chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  chipIdle: { backgroundColor: colors.fillQuiet },
+  chipActive: { backgroundColor: colors.brand },
   chipText: {
     fontSize: fontSize.bodySm,
     color: colors.text,
@@ -487,17 +605,30 @@ const styles = StyleSheet.create({
   },
   chipTextActive: { color: colors.textInverse },
 
-  loadingPill: {
+  // Storm legend — semantic storm tokens (Drift #11), not the raw per-event
+  // hex. Now a row inside the control bar rather than a pill floating over
+  // (and colliding with) the pins.
+  legendCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.small,
+    paddingHorizontal: spacing.md,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
+
+  loadingShadow: {
     alignSelf: 'flex-start',
     marginLeft: spacing.lg,
     marginTop: spacing.sm,
+    borderRadius: radii.button,
+    ...shadows.float,
+  },
+  loadingPill: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.button,
-    backgroundColor: colors.barFill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    ...shadows.float,
   },
 
   statBarWrap: {
@@ -507,14 +638,33 @@ const styles = StyleSheet.create({
     bottom: spacing.md,
     gap: spacing.sm,
   },
+
+  // Floating AI-insight card — the storm-lead cluster, real counts only.
+  insightShadow: { borderRadius: radii.card, ...shadows.float },
+  insightCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    minHeight: touchTarget.standard,
+  },
+  insightText: { flex: 1, gap: 1 },
+  insightLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    color: colors.accent,
+    letterSpacing: 0.8,
+  },
+  insightHeadline: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+
+  statBarShadow: { borderRadius: radii.button, ...shadows.float },
   statBar: {
-    backgroundColor: colors.barFill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    borderRadius: radii.button,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    ...shadows.float,
   },
   statText: {
     color: colors.text,
@@ -522,13 +672,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
-  },
-  clusterText: {
-    color: colors.danger,
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    textAlign: 'center',
-    marginTop: spacing.xs,
   },
 
   errorCard: {

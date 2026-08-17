@@ -39,6 +39,23 @@ export const glass = {
   // On white surfaces, glass tints toward the brand rather than pure grey.
   lightFill: 'rgba(43,78,245,0.06)',
   lightBorder: 'rgba(43,78,245,0.14)',
+
+  // ── Over ART (gradients, radar, photography) ────────────────────────────
+  // `fill` / `lightFill` are tuned for a FLAT ground: a 6–10% wash is enough
+  // to read as a surface on black or on white. Floated over a hero gradient
+  // they stop being surfaces — the art shows straight through and the copy
+  // lands on whatever hue happens to be behind it. These two are the
+  // over-art pair, weighted so the text contrast is a property of the CARD
+  // and not of the art (Drift #1: sun-readable, always).
+  //
+  // frost: light panel, carries `colors.text`. 13.5:1 over royalInk,
+  //        14.7:1 over royal, 15.2:1 over burnt.
+  frostFill: 'rgba(255,255,255,0.86)',
+  frostBorder: 'rgba(255,255,255,0.72)',
+  // smoke: dark panel, carries `colors.textInverse`. 10.7:1 over royal,
+  //        8.4:1 over burnt — i.e. legible over the brightest hero we ship.
+  smokeFill: 'rgba(10,12,20,0.46)',
+  smokeBorder: 'rgba(255,255,255,0.22)',
 };
 
 export const colors = {
@@ -75,6 +92,13 @@ export const colors = {
   // one flat surface — opacity composites the label subtree as its own layer,
   // which leaves a faint rectangular seam inside the wash on web.
   accentDisabled: 'rgba(217, 84, 30, 0.5)',
+  // Disabled PRIMARY CTA fill. A tinted accent is the wrong answer for a
+  // sticky 88pt button: at full width it still reads as a live primary
+  // control, and white-on-washed-burnt lands near 1.9:1 — unreadable in sun
+  // (Drift #1). A neutral ink wash reads as "off" at a glance and carries
+  // `colors.textMuted` at ~5.6:1, so the label stays legible while the
+  // button stops pretending to be tappable.
+  fillDisabled: 'rgba(14,19,48,0.08)',
 
   brand: brand.royal,
   brandSoft: brand.royalSoft,
@@ -96,7 +120,51 @@ export const colors = {
   stormHail: brand.royal,
   stormWind: brand.burnt,
   stormSevere: '#D93A3F',
+
+  // ── Tile grounds ────────────────────────────────────────────────────────
+  // Soft grounds for icon chips and stat tiles. Colour is how a crafted app
+  // tells modules apart at a glance; a single accent everywhere is what made
+  // v2 read like a Settings list. Each ground ships with its own ink, and
+  // the pair is contrast-checked against WCAG AA (>=4.5:1) because a gloved
+  // roofer reads these outdoors, in sun, at arm's length:
+  //   blue   8.4:1   green 5.5:1   orange 6.6:1   purple 7.5:1
+  // Use the ink for the glyph/label ON its ground — never on white, and
+  // never swap inks between grounds.
+  tileBlue: '#E1E8FF',
+  tileBlueInk: '#1B31A8',
+  tileGreen: '#D8F2E5',
+  tileGreenInk: '#0F6B43',
+  tileOrange: '#FCE6DA',
+  tileOrangeInk: '#8F3210',
+  tilePurple: '#ECE5FD',
+  tilePurpleInk: '#5230A0',
 };
+
+// ── Gradients ─────────────────────────────────────────────────────────────
+// Consumed directly by `<LinearGradient colors={gradients.x} />`. Typed as
+// readonly tuples so a two-stop gradient can never be passed with one stop,
+// and so the arrays stay frozen at the token layer (a screen must not push
+// its own stop onto a shared gradient).
+//
+// Direction is the caller's: these are colour ramps, not compositions. The
+// house default is top-to-bottom (LinearGradient's own default).
+export type GradientStops = readonly [string, string, ...string[]];
+
+export const gradients = {
+  /** Hero ground, calm/night. Deep blue-black — the onboarding sky. */
+  stormNight: [brand.royalInk, brand.black] as const,
+  /** Hero ground, escalated. Burnt bleeding into ink — "act now". */
+  stormSevere: [brand.burntDeep, brand.royalInk] as const,
+  /** Hero ground, clear/day. Saturated royal with depth under it. */
+  clearDay: [brand.royal, brand.royalDeep] as const,
+  /**
+   * Legibility scrim. Lay over art, bottom-anchored, so light copy holds its
+   * contrast no matter what the art underneath is doing.
+   */
+  scrim: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.75)'] as const,
+  /** Primary CTA depth — burnt with a shadowed base so it reads as a solid. */
+  accent: [brand.burnt, brand.burntDeep] as const,
+} satisfies Record<string, GradientStops>;
 
 export const radii = {
   sm: 8,
@@ -206,11 +274,60 @@ const thumbShadow: ViewStyle = Platform.select({
   default: {},
 }) as ViewStyle;
 
+// Real content-card lift. `card` above is deliberately timid (0.05) — right
+// for a flat cell in a grouped list, wrong for a card that should feel like
+// an object you could pick up. Depth is layered, so use exactly one rung:
+// hero (gradient + coloured lift) > raised (content card) > card (flat cell).
+const raisedShadow: ViewStyle = Platform.select({
+  ios: {
+    shadowColor: colors.navy,
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  android: { elevation: 4 },
+  // react-native-web maps the shadow props onto `box-shadow`, so the two
+  // rungs that carry the design's depth are visible in the web export too —
+  // the flat rungs above stay shadowless there, which is exactly the
+  // hierarchy we want.
+  web: {
+    shadowColor: colors.navy,
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  default: {},
+}) as ViewStyle;
+
+// Hero lift — the shadow is BRAND-TINTED rather than neutral, so a hero card
+// appears to glow onto the ground beneath it instead of merely casting. Royal
+// (the primary identity) reads under both the blue and the burnt heroes.
+// Reserve this for the one cinematic element on a screen; on everything else
+// it stops being depth and becomes decoration.
+const heroShadow: ViewStyle = Platform.select({
+  ios: {
+    shadowColor: brand.royal,
+    shadowOpacity: 0.3,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 12 },
+  },
+  android: { elevation: 10 },
+  web: {
+    shadowColor: brand.royal,
+    shadowOpacity: 0.3,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 12 },
+  },
+  default: {},
+}) as ViewStyle;
+
 export const shadows = {
   card: cardShadow,
   pressed: pressedShadow,
   float: floatShadow,
   thumb: thumbShadow,
+  raised: raisedShadow,
+  hero: heroShadow,
 };
 
 export const breakpoints = {
@@ -244,6 +361,7 @@ export const theme = {
   brand,
   glass,
   colors,
+  gradients,
   radii,
   spacing,
   fontSize,

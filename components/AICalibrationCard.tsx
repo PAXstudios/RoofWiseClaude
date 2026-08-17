@@ -1,21 +1,19 @@
 import { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { PressableScale } from '@/components/PressableScale';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
 import { overallAccuracy } from '@/lib/services/learning/localLearningEngine';
-import {
-  colors,
-  fontSize,
-  fontWeight,
-  radii,
-  shadows,
-  spacing,
-  touchTarget,
-} from '@/theme/tokens';
+import { RichCard } from '@/components/ui/RichCard';
+import { ProgressBar } from '@/components/ui/ProgressBar';
+import { colors, fontSize, fontWeight } from '@/theme/tokens';
 
+/**
+ * AI accuracy on the roofer's own jobs — hides entirely below 5 corrections
+ * (Drift #5: no fabricated confidence). Once it renders, the accuracy figure
+ * shares its purple with the icon chip and the progress fill, so the number
+ * and its chrome read as one object rather than a chip beside a stat.
+ */
 export function AICalibrationCard() {
   const router = useRouter();
   const corrections = useCorrectionsStore((s) => s.corrections);
@@ -25,45 +23,32 @@ export function AICalibrationCard() {
   if (accuracy === null) return null;
 
   return (
-    <PressableScale style={styles.card} onPress={() => router.push('/(tabs)/train')}>
-      <View style={styles.row}>
-        <Ionicons name="sparkles-outline" size={22} color={colors.text} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.label}>AI accuracy on your jobs</Text>
-          <Text style={styles.value}>{accuracy}%</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
-      </View>
-      <Text style={styles.sub}>
-        Calibrated from {profile.totalCorrections} correction{profile.totalCorrections === 1 ? '' : 's'}.
-      </Text>
-    </PressableScale>
+    <RichCard
+      onPress={() => router.push('/(tabs)/train')}
+      icon="sparkles-outline"
+      iconTone="purple"
+      title="AI calibration"
+      subtitle={`Calibrated from ${profile.totalCorrections} correction${
+        profile.totalCorrections === 1 ? '' : 's'
+      }`}
+      headerTrailing={<Text style={styles.accuracy}>{accuracy}%</Text>}
+      chevron
+      accessibilityLabel={`AI accuracy on your jobs: ${accuracy}%. Calibrated from ${profile.totalCorrections} corrections.`}
+    >
+      <ProgressBar
+        progress={accuracy / 100}
+        tone="purple"
+        accessibilityLabel={`AI accuracy ${accuracy}%`}
+      />
+    </RichCard>
   );
 }
 
 const styles = StyleSheet.create({
-  // White iOS cell on the grouped ground — hairline + near-zero shadow.
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    padding: spacing.lg,
-    gap: spacing.xs,
-    minHeight: touchTarget.preferred,
-    ...shadows.card,
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  label: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  value: {
+  accuracy: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
-    color: colors.text,
+    color: colors.tilePurpleInk,
     fontVariant: ['tabular-nums'],
-  },
-  sub: {
-    fontSize: fontSize.bodySm,
-    color: colors.textSubtle,
-    marginLeft: spacing.xxxl + 2,
   },
 });

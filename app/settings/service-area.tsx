@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
@@ -20,10 +21,14 @@ import { geocodeText } from '@/lib/services/geocoding';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
+import { IconChip } from '@/components/ui/IconChip';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   colors,
   fontSize,
   fontWeight,
+  gradients,
   radii,
   shadows,
   spacing,
@@ -122,54 +127,64 @@ export default function ServiceAreaScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <FadeSlideIn index={0} style={styles.section}>
-          <View style={styles.inputCell}>
-            <Ionicons name="location-outline" size={18} color={colors.textSubtle} />
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder="Plano, TX or 75024, TX"
-              placeholderTextColor={colors.textSubtle}
-              style={styles.input}
-              autoCapitalize="words"
-              autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={onAdd}
-            />
-            <PressableScale
-              style={styles.addBtn}
-              onPress={onAdd}
-              accessibilityRole="button"
-              accessibilityLabel="Add area"
-            >
-              <Ionicons name="add" size={24} color={colors.textInverse} />
-            </PressableScale>
-          </View>
-          <Text style={styles.footerCaption}>
-            Add the cities or ZIPs you cover. Storm Watch will scan NOAA every 30
-            minutes while the app is open and alert you when hail ≥0.75" or wind
-            ≥58mph hits your areas.
-          </Text>
+          <RichCard
+            icon="location-outline"
+            iconTone="blue"
+            title="Add area"
+            footer={
+              <Text style={styles.footerCaption}>
+                Add the cities or ZIPs you cover. Storm Watch will scan NOAA every 30
+                minutes while the app is open and alert you when hail ≥0.75" or wind
+                ≥58mph hits your areas.
+              </Text>
+            }
+          >
+            <View style={styles.inputRow}>
+              <View style={styles.inputPill}>
+                <TextInput
+                  value={draft}
+                  onChangeText={setDraft}
+                  placeholder="Plano, TX or 75024, TX"
+                  placeholderTextColor={colors.textSubtle}
+                  style={styles.input}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={onAdd}
+                />
+              </View>
+              <PressableScale
+                style={styles.addBtn}
+                onPress={onAdd}
+                accessibilityRole="button"
+                accessibilityLabel="Add area"
+              >
+                <Ionicons name="add" size={24} color={colors.textInverse} />
+              </PressableScale>
+            </View>
+          </RichCard>
         </FadeSlideIn>
 
         <FadeSlideIn index={1} style={styles.section}>
-          {areas.length === 0 ? (
-            <View style={styles.empty}>
-              <Ionicons name="map-outline" size={28} color={colors.textSubtle} />
-              <Text style={styles.emptyTitle}>No areas yet</Text>
-              <Text style={styles.emptyBody}>
-                Add the cities you cover to arm Storm Watch.
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.group}>
-              {areas.map((a, i) => (
+          <SectionHeader title="Your areas" style={styles.sectionHeaderSpacing} />
+          <RichCard padded={areas.length === 0}>
+            {areas.length === 0 ? (
+              <View style={styles.empty}>
+                <IconChip name="map-outline" tone="blue" size="md" />
+                <Text style={styles.emptyTitle}>No areas yet</Text>
+                <Text style={styles.emptyBody}>
+                  Add the cities you cover to arm Storm Watch.
+                </Text>
+              </View>
+            ) : (
+              areas.map((a, i) => (
                 <View key={a.id}>
                   {i > 0 ? <View style={styles.sep} /> : null}
                   <View style={styles.row}>
-                    <Ionicons
+                    <IconChip
                       name={a.kind === 'zip' ? 'mail-outline' : 'business-outline'}
-                      size={20}
-                      color={colors.textMuted}
+                      tone={a.kind === 'zip' ? 'blue' : 'green'}
+                      size="sm"
                     />
                     <Text style={styles.rowLabel}>{a.label}</Text>
                     <PressableScale
@@ -182,27 +197,34 @@ export default function ServiceAreaScreen() {
                     </PressableScale>
                   </View>
                 </View>
-              ))}
-            </View>
-          )}
+              ))
+            )}
+          </RichCard>
         </FadeSlideIn>
 
         <FadeSlideIn index={2}>
           <PressableScale
-            style={[styles.scanBtn, (scanning || areas.length === 0) && styles.scanBtnDisabled]}
+            style={styles.scanBtnShadow}
             disabled={scanning || areas.length === 0}
             onPress={onScan}
             accessibilityRole="button"
             accessibilityLabel="Scan storms now"
           >
-            {scanning ? (
-              <ActivityIndicator color={colors.textInverse} />
-            ) : (
-              <>
-                <Ionicons name="radio-outline" size={20} color={colors.textInverse} />
-                <Text style={styles.scanBtnText}>Scan storms now</Text>
-              </>
-            )}
+            <LinearGradient
+              colors={gradients.accent}
+              style={[styles.scanBtn, (scanning || areas.length === 0) && styles.scanBtnDisabled]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              {scanning ? (
+                <ActivityIndicator color={colors.textInverse} />
+              ) : (
+                <>
+                  <Ionicons name="radio-outline" size={20} color={colors.textInverse} />
+                  <Text style={styles.scanBtnText}>Scan storms now</Text>
+                </>
+              )}
+            </LinearGradient>
           </PressableScale>
         </FadeSlideIn>
       </ScrollView>
@@ -220,21 +242,17 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
   },
   section: {},
+  sectionHeaderSpacing: { marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
 
-  // White cell input with a hairline border — no heavy outlined box.
-  inputCell: {
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  inputPill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    borderRadius: radii.card,
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.xs,
-    paddingVertical: spacing.xs,
-    minHeight: touchTarget.preferred,
-    ...shadows.card,
+    backgroundColor: colors.fillQuiet,
+    borderRadius: radii.control,
+    paddingHorizontal: spacing.lg,
+    minHeight: touchTarget.standard,
   },
   input: {
     flex: 1,
@@ -246,7 +264,7 @@ const styles = StyleSheet.create({
     width: touchTarget.standard,
     height: touchTarget.standard,
     borderRadius: radii.pill,
-    backgroundColor: colors.navy,
+    backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -254,16 +272,8 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
     lineHeight: 18,
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.sm,
   },
 
-  group: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    overflow: 'hidden',
-    ...shadows.card,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -308,12 +318,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  scanBtnShadow: { borderRadius: radii.button, ...shadows.raised },
   scanBtn: {
     flexDirection: 'row',
     gap: spacing.sm,
     height: touchTarget.preferred,
     borderRadius: radii.button,
-    backgroundColor: colors.accent,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -16,11 +16,14 @@ import { useProposalStore } from '@/lib/stores/proposalStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { IconChip } from '@/components/ui/IconChip';
+import { SectionHeader } from '@/components/ui/SectionHeader';
 import { SignaturePad } from '@/components/SignaturePad';
 import {
   colors,
   fontSize,
   fontWeight,
+  gradients,
   radii,
   shadows,
   spacing,
@@ -61,7 +64,7 @@ export default function HomeownerProposalView() {
       <SafeAreaView style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.empty}>
-          <Ionicons name="alert-circle-outline" size={36} color={colors.slate} />
+          <IconChip name="alert-circle-outline" tone="quiet" />
           <Text style={styles.emptyTitle}>Link expired</Text>
           <Text style={styles.emptyBody}>
             This proposal link is no longer valid. Reach out to your contractor for a fresh one.
@@ -94,7 +97,7 @@ export default function HomeownerProposalView() {
           <Image source={{ uri: firstPhoto }} style={styles.hero} />
         ) : (
           <LinearGradient
-            colors={[colors.navy, '#1a2a52']}
+            colors={gradients.stormNight}
             style={styles.hero}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -123,13 +126,13 @@ export default function HomeownerProposalView() {
             </Text>
           </View>
 
-          <Text style={styles.section}>What we're doing</Text>
+          <SectionHeader title="What we're doing" style={styles.sectionSpace} />
           <Text style={styles.body}>{proposal.coverNarrative}</Text>
 
-          <Text style={styles.section}>Scope of work</Text>
+          <SectionHeader title="Scope of work" style={styles.sectionSpace} />
           <Text style={styles.body}>{proposal.scopeOfWork}</Text>
 
-          <Text style={styles.section}>Itemized</Text>
+          <SectionHeader title="Itemized" style={styles.sectionSpace} />
           <View style={styles.lineItems}>
             {proposal.lineItems.map((li, i) => (
               <View key={li.id} style={[styles.row, i > 0 && styles.rowBorder]}>
@@ -150,12 +153,12 @@ export default function HomeownerProposalView() {
             </View>
           </View>
 
-          <Text style={styles.section}>Terms</Text>
+          <SectionHeader title="Terms" style={styles.sectionSpace} />
           <Text style={styles.terms}>{proposal.termsText}</Text>
 
           {inspector.fullName && (
             <View style={styles.inspectorCard}>
-              <Ionicons name="person-circle-outline" size={28} color={colors.orange} />
+              <IconChip name="person-circle-outline" tone="orange" />
               <View style={{ flex: 1 }}>
                 <Text style={styles.inspectorName}>{inspector.fullName}</Text>
                 <Text style={styles.inspectorMeta}>
@@ -178,7 +181,7 @@ export default function HomeownerProposalView() {
             </View>
           ) : (
             <>
-              <Text style={styles.section}>Sign to accept</Text>
+              <SectionHeader title="Sign to accept" style={styles.sectionSpace} />
               <Text style={styles.body}>
                 By signing below you're approving the scope and total above. We'll follow up with a deposit invoice.
               </Text>
@@ -241,7 +244,7 @@ const styles = StyleSheet.create({
   totalAmount: { color: colors.orange, fontSize: 44, fontWeight: fontWeight.bold, marginTop: spacing.sm },
   totalSub: { color: colors.cream, fontSize: fontSize.bodyMd, marginTop: spacing.sm },
 
-  section: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, marginTop: spacing.lg },
+  sectionSpace: { marginTop: spacing.lg },
   body: { fontSize: fontSize.bodyMd, color: colors.navy, lineHeight: 22 },
 
   lineItems: { backgroundColor: colors.surfaceMuted, borderRadius: radii.card, padding: spacing.lg, marginTop: spacing.sm },

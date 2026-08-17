@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAnalysisQueueStore } from '@/lib/stores/analysisQueueStore';
 import { drainAnalysisQueue } from '@/lib/services/analysisQueue';
 import { PressableScale } from '@/components/PressableScale';
+import { IconChip } from '@/components/ui/IconChip';
 import {
   colors,
   fontSize,
@@ -28,7 +29,7 @@ export function AnalysisQueueChip() {
       accessibilityLabel={`AI queue, ${pending.length} slope${pending.length === 1 ? '' : 's'} remaining. Tap to run now.`}
       onPress={() => drainAnalysisQueue().catch(() => {})}
     >
-      <ActivityIndicator size="small" color={colors.textMuted} />
+      <IconChip name="sparkles-outline" tone="purple" size="md" />
       <View style={{ flex: 1 }}>
         <Text style={styles.title}>
           AI queue · {pending.length} slope{pending.length === 1 ? '' : 's'} remaining
@@ -39,14 +40,20 @@ export function AnalysisQueueChip() {
             : 'Tap to run now — completes while the app is open.'}
         </Text>
       </View>
-      <Ionicons name="play" size={18} color={colors.text} />
+      {running ? (
+        <ActivityIndicator size="small" color={colors.textMuted} />
+      ) : (
+        <View style={styles.playBadge}>
+          <Ionicons name="play" size={16} color={colors.textInverse} />
+        </View>
+      )}
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  // Quiet white cell — hairline instead of the old orange stripe; the
-  // spinner is the live signal, not an accent border.
+  // Crafted cell — purple "AI" chip identity + a royal play badge instead of
+  // a bare glyph, matching the rest of Home's colour-chipped language.
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -57,7 +64,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
     padding: spacing.lg,
-    ...shadows.card,
+    ...shadows.raised,
   },
   title: {
     fontSize: fontSize.bodyMd,
@@ -66,4 +73,12 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   sub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  playBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.pill,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

@@ -1,11 +1,15 @@
 import { PressableScale } from '@/components/PressableScale';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { FadeSlideIn } from '@/components/motion';
+import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
 import { formatDateShort } from '@/lib/format/date';
 import { ScrollView, View, Text, StyleSheet, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useToastStore } from '@/lib/stores/toastStore';
@@ -14,12 +18,14 @@ import {
   LEAD_STAGE_LABELS,
   LEAD_STAGE_ORDER,
   leadStageColumn,
+  type Lead,
   type LeadStage,
 } from '@/lib/models/types';
 import {
   colors,
   fontSize,
   fontWeight,
+  gradients,
   radii,
   shadows,
   spacing,
@@ -134,6 +140,27 @@ export default function LeadDetail() {
     ]);
   };
 
+  // Detail rows for the Contact card — built as a list (not four separate
+  // conditionals) so the hairline separators between them are never guessed.
+  const detailRows: { key: string; icon: IoniconName; tone: ChipTone; label: string; value: string }[] = [
+    { key: 'address', icon: 'location-outline', tone: 'blue', label: 'Address', value: lead.address },
+  ];
+  if (lead.customerPhone) {
+    detailRows.push({ key: 'phone', icon: 'call-outline', tone: 'green', label: 'Phone', value: lead.customerPhone });
+  }
+  if (lead.customerEmail) {
+    detailRows.push({ key: 'email', icon: 'mail-outline', tone: 'purple', label: 'Email', value: lead.customerEmail });
+  }
+  if (lead.lastStormMatch) {
+    detailRows.push({
+      key: 'storm',
+      icon: 'thunderstorm-outline',
+      tone: 'orange',
+      label: 'Storm match',
+      value: formatStormMatch(lead.lastStormMatch),
+    });
+  }
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -157,84 +184,74 @@ export default function LeadDetail() {
       />
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Contact actions */}
+        {/* Contact actions — colour-chipped so each action reads before the label does. */}
         <FadeSlideIn index={0} style={styles.actionsRow}>
           <ActionButton
             icon="call-outline"
+            tone="green"
             label="Call"
             disabled={!lead.customerPhone}
             onPress={onCall}
           />
           <ActionButton
             icon="chatbubble-outline"
+            tone="blue"
             label="Text"
             disabled={!lead.customerPhone}
             onPress={onText}
           />
           <ActionButton
             icon="mail-outline"
+            tone="purple"
             label="Email"
             disabled={!lead.customerEmail}
             onPress={onEmail}
           />
-          <ActionButton icon="navigate-outline" label="Directions" onPress={onDirections} />
+          <ActionButton icon="navigate-outline" tone="orange" label="Directions" onPress={onDirections} />
         </FadeSlideIn>
 
-        {/* Grouped inset details — hairline-separated cells. */}
-        <FadeSlideIn index={1} style={styles.group}>
-          <View style={styles.groupRow}>
-            <Text style={styles.rowLabel}>Address</Text>
-            <Text style={styles.rowValue}>{lead.address}</Text>
-          </View>
-          {lead.customerPhone && (
-            <>
-              <View style={styles.rowSeparator} />
-              <View style={styles.groupRow}>
-                <Text style={styles.rowLabel}>Phone</Text>
-                <Text style={styles.rowValue}>{lead.customerPhone}</Text>
+        {/* Contact card — icon-chipped detail rows, hairline-separated. */}
+        <FadeSlideIn index={1}>
+          <RichCard title="Contact" icon="person-outline" iconTone="blue">
+            {detailRows.map((row, i) => (
+              <View key={row.key}>
+                {i > 0 && <View style={styles.detailSeparator} />}
+                <DetailRow icon={row.icon} tone={row.tone} label={row.label} value={row.value} />
               </View>
-            </>
-          )}
-          {lead.customerEmail && (
-            <>
-              <View style={styles.rowSeparator} />
-              <View style={styles.groupRow}>
-                <Text style={styles.rowLabel}>Email</Text>
-                <Text style={styles.rowValue}>{lead.customerEmail}</Text>
-              </View>
-            </>
-          )}
+            ))}
+          </RichCard>
         </FadeSlideIn>
 
         <FadeSlideIn index={2}>
-          <Text style={styles.sectionLabel}>Stage</Text>
-          <View style={styles.chipWrap}>
-            {STAGES.map((s) => {
-              const active = leadStageColumn(lead.stage) === s.id;
-              return (
-                <PressableScale
-                  key={s.id}
-                  pressedScale={0.96}
-                  style={[
-                    styles.chip,
-                    active && (s.id === 'lost' ? styles.chipLost : styles.chipActive),
-                  ]}
-                  onPress={() => setStage(lead.id, s.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
-                </PressableScale>
-              );
-            })}
-          </View>
+          <RichCard title="Stage" icon="git-branch-outline" iconTone="purple">
+            <View style={styles.chipWrap}>
+              {STAGES.map((s) => {
+                const active = leadStageColumn(lead.stage) === s.id;
+                return (
+                  <PressableScale
+                    key={s.id}
+                    pressedScale={0.96}
+                    style={[
+                      styles.chip,
+                      active && (s.id === 'lost' ? styles.chipLost : styles.chipActive),
+                    ]}
+                    onPress={() => setStage(lead.id, s.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
+                  </PressableScale>
+                );
+              })}
+            </View>
+          </RichCard>
         </FadeSlideIn>
 
         <FadeSlideIn index={3}>
-          <Text style={styles.sectionLabel}>Follow up</Text>
+          <SectionHeader title="Follow up" style={styles.sectionHeaderSpacing} />
           {lead.followUpAt && (
             <View style={styles.followUpBanner}>
-              <Ionicons name="alarm-outline" size={18} color={colors.info} />
+              <IconChip name="alarm-outline" tone="blue" size="sm" />
               <Text style={styles.followUpText}>
                 Scheduled for {formatDateShort(lead.followUpAt)}
               </Text>
@@ -260,11 +277,24 @@ export default function LeadDetail() {
           </View>
         </FadeSlideIn>
 
-        {/* The one orange moment on this screen. */}
+        {/* The one accent-gradient moment on this screen. */}
         <FadeSlideIn index={4}>
-          <PressableScale style={styles.primaryBtn} onPress={onConvert}>
-            <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
-            <Text style={styles.primaryBtnText}>Convert to inspection</Text>
+          <PressableScale
+            style={styles.primaryBtn}
+            onPress={onConvert}
+            accessibilityRole="button"
+            accessibilityLabel="Convert to inspection"
+          >
+            <View style={styles.primaryBtnClip}>
+              <LinearGradient
+                colors={gradients.accent}
+                style={StyleSheet.absoluteFill}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              />
+              <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
+              <Text style={styles.primaryBtnText}>Convert to inspection</Text>
+            </View>
           </PressableScale>
         </FadeSlideIn>
       </ScrollView>
@@ -278,13 +308,22 @@ function sourceLabel(source: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** "1.2 mi from storm core, 1.50" hail · Mar 3" — only the fields that exist. */
+function formatStormMatch(match: NonNullable<Lead['lastStormMatch']>): string {
+  const miles = `${match.distanceMiles.toFixed(1)} mi from storm core`;
+  const hail = match.hailInches ? `, ${match.hailInches.toFixed(2)}" hail` : '';
+  return `${miles}${hail} · ${formatDateShort(match.eventDate)}`;
+}
+
 function ActionButton({
   icon,
+  tone,
   label,
   disabled,
   onPress,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IoniconName;
+  tone: ChipTone;
   label: string;
   disabled?: boolean;
   onPress: () => void;
@@ -298,9 +337,33 @@ function ActionButton({
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
     >
-      <Ionicons name={icon} size={22} color={colors.text} />
+      <IconChip name={icon} tone={tone} size="md" />
       <Text style={styles.actionLabel}>{label}</Text>
     </PressableScale>
+  );
+}
+
+function DetailRow({
+  icon,
+  tone,
+  label,
+  value,
+}: {
+  icon: IoniconName;
+  tone: ChipTone;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.detailRow}>
+      <IconChip name={icon} tone={tone} size="sm" />
+      <View style={styles.detailRowBody}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowValue} numberOfLines={2}>
+          {value}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -330,7 +393,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    ...shadows.card,
+    ...shadows.raised,
   },
   actionBtnDisabled: { opacity: 0.35 },
   actionLabel: {
@@ -339,23 +402,18 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
   },
 
-  // Grouped inset list — white group, hairline separators inset 16.
-  group: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    ...shadows.card,
-  },
-  groupRow: {
+  // Contact card — icon-chipped rows, hairline separators inset past the chip.
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     minHeight: touchTarget.standard,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    justifyContent: 'center',
-    gap: 2,
   },
-  rowSeparator: {
+  detailRowBody: { flex: 1, gap: 2 },
+  detailSeparator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.hairline,
-    marginLeft: spacing.lg,
+    marginLeft: 32 + spacing.md,
   },
   rowLabel: {
     fontSize: fontSize.caption,
@@ -366,16 +424,7 @@ const styles = StyleSheet.create({
   },
   rowValue: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
 
-  // iOS grouped-list section header.
-  sectionLabel: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing.sm,
-    marginLeft: spacing.xs,
-  },
+  sectionHeaderSpacing: { marginBottom: spacing.sm },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
@@ -402,16 +451,23 @@ const styles = StyleSheet.create({
   },
   followUpText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium },
 
+  // Convert CTA — outer view carries the (unclipped) lift, inner clip carries
+  // the gradient, same split `heroPrimaryShadow`/`heroPrimaryClip` use on Home:
+  // a clipping layer can't also cast a shadow on iOS.
   primaryBtn: {
-    flexDirection: 'row',
-    gap: spacing.sm,
     height: touchTarget.preferred,
     borderRadius: radii.button,
-    backgroundColor: colors.accent,
+    marginTop: spacing.xs,
+    ...shadows.raised,
+  },
+  primaryBtnClip: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.xs,
-    ...shadows.card,
+    gap: spacing.sm,
+    borderRadius: radii.button,
+    overflow: 'hidden',
   },
   primaryBtnText: {
     color: colors.textInverse,

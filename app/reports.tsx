@@ -12,13 +12,14 @@ import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
 import { overallAccuracy } from '@/lib/services/learning/localLearningEngine';
 import { DAMAGE_CATEGORY_LABELS, type DamageCategory } from '@/lib/models/types';
+import { RichCard } from '@/components/ui/RichCard';
+import { StatCard } from '@/components/ui/StatCard';
+import { Pill } from '@/components/ui/Pill';
 import {
   colors,
   fontSize,
   fontWeight,
   motion,
-  radii,
-  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -89,7 +90,32 @@ export default function ReportsScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Animated.View entering={FadeInDown.duration(motion.enterMs)} style={styles.sections}>
-          <Section title="Revenue">
+          {/* Headline row — the three numbers a roofer checks first. */}
+          <View style={styles.headlineRow}>
+            <StatCard
+              icon="cash-outline"
+              tone="green"
+              value={fmtCurrency(stats.ytdRevenue)}
+              label="Revenue YTD"
+              style={{ flex: 1 }}
+            />
+            <StatCard
+              icon="camera-outline"
+              tone="blue"
+              value={String(stats.ytdInspections)}
+              label="Inspections YTD"
+              style={{ flex: 1 }}
+            />
+            <StatCard
+              icon="sparkles-outline"
+              tone="purple"
+              value={accuracy === null ? `${corrections.length}/5` : `${accuracy}%`}
+              label="AI Accuracy"
+              style={{ flex: 1 }}
+            />
+          </View>
+
+          <Section title="Revenue" icon="cash-outline" tone="green">
             <Stat label="Signed revenue YTD" value={fmtCurrency(stats.ytdRevenue)} />
             <Stat label="Open pipeline" value={fmtCurrency(stats.openPipeline)} />
             <Stat
@@ -98,7 +124,7 @@ export default function ReportsScreen() {
             />
           </Section>
 
-          <Section title="Funnel">
+          <Section title="Funnel" icon="stats-chart-outline" tone="blue">
             <Stat label="Inspections YTD" value={String(stats.ytdInspections)} />
             <Stat label="Proposals sent" value={String(stats.ytdProposalsSent)} />
             <Stat label="Proposals signed" value={String(stats.ytdProposalsSigned)} />
@@ -113,7 +139,7 @@ export default function ReportsScreen() {
             <Stat label="Open leads" value={String(stats.openLeads)} />
           </Section>
 
-          <Section title="Mileage">
+          <Section title="Mileage" icon="car-outline" tone="orange">
             <Stat label="Miles YTD" value={stats.ytdMiles.toFixed(1)} />
             <Stat
               label="Tax deductible"
@@ -122,23 +148,28 @@ export default function ReportsScreen() {
             <Stat label="Trips logged" value={String(trips.length)} />
           </Section>
 
-          <Section title="AI calibration">
+          <Section title="AI calibration" icon="sparkles-outline" tone="purple">
             <Stat
               label="Overall accuracy"
               value={accuracy === null ? `${corrections.length}/5 needed` : `${accuracy}%`}
             />
             <Stat label="Corrections recorded" value={String(corrections.length)} />
-            {topCorrected.length > 0 && (
-              <View style={{ gap: spacing.xs, paddingVertical: spacing.md }}>
-                <Text style={styles.subSection}>Most corrected categories</Text>
+          </Section>
+
+          {topCorrected.length > 0 && (
+            <View style={{ gap: spacing.sm, marginLeft: spacing.lg }}>
+              <Text style={styles.subSection}>Most corrected categories</Text>
+              <View style={styles.pillRow}>
                 {topCorrected.map(({ cat, total }) => (
-                  <Text key={cat} style={styles.bullet}>
-                    • {DAMAGE_CATEGORY_LABELS[cat]} · {total}
-                  </Text>
+                  <Pill
+                    key={cat}
+                    label={`${DAMAGE_CATEGORY_LABELS[cat]} · ${total}`}
+                    tone="neutral"
+                  />
                 ))}
               </View>
-            )}
-          </Section>
+            </View>
+          )}
         </Animated.View>
 
         <View style={{ height: spacing.xxxl }} />
@@ -147,21 +178,28 @@ export default function ReportsScreen() {
   );
 }
 
-// iOS grouped section: 13/uppercase header outside a white inset card whose
-// rows are separated by inset hairlines (never a trailing separator).
-function Section({ title, children }: { title: string; children: ReactNode }) {
+// A named section: colour-chipped RichCard header, tabular-nums rows inside,
+// each row after the first separated by an inset hairline (never trailing).
+function Section({
+  title,
+  icon,
+  tone,
+  children,
+}: {
+  title: string;
+  icon: Parameters<typeof RichCard>[0]['icon'];
+  tone: Parameters<typeof RichCard>[0]['iconTone'];
+  children: ReactNode;
+}) {
   const items = Children.toArray(children);
   return (
-    <View style={{ gap: spacing.sm }}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.card}>
-        {items.map((child, i) => (
-          <View key={i} style={i > 0 ? styles.divided : undefined}>
-            {child}
-          </View>
-        ))}
-      </View>
-    </View>
+    <RichCard title={title} icon={icon} iconTone={tone}>
+      {items.map((child, i) => (
+        <View key={i} style={i > 0 ? styles.divided : undefined}>
+          {child}
+        </View>
+      ))}
+    </RichCard>
   );
 }
 
@@ -203,24 +241,10 @@ const styles = StyleSheet.create({
   sub: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 1 },
 
   scroll: { padding: spacing.lg, paddingTop: spacing.md },
-  sections: { gap: spacing.xl },
+  sections: { gap: spacing.md },
 
-  sectionTitle: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginLeft: spacing.lg,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    paddingHorizontal: spacing.lg,
-    ...shadows.card,
-  },
+  headlineRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs },
+
   divided: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
@@ -249,5 +273,5 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  bullet: { fontSize: fontSize.bodyMd, color: colors.text, paddingVertical: 2 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

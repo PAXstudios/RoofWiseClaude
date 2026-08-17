@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -24,10 +25,15 @@ import { syncCorrections } from '@/lib/services/correctionsSync';
 import { isGeminiConfigured, isSupabaseConfigured } from '@/lib/env';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
+import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { Pill } from '@/components/ui/Pill';
 import {
   colors,
   fontSize,
   fontWeight,
+  gradients,
   motion,
   radii,
   shadows,
@@ -35,10 +41,30 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
+/**
+ * Sync-pending rows read green when caught up, orange while work is queued —
+ * the same "this needs attention" cue the reference's colour chips carry.
+ *
+ * With no cloud target configured there is nothing to be caught up WITH, so
+ * the row goes neutral. A green "Up to date" chip for a backend that does not
+ * exist is exactly the reassuring-but-untrue status Drift #5 forbids — and it
+ * directly contradicted the Integrations group two sections above, which
+ * correctly says "Not configured — data stays on this device".
+ */
+function pendingTone(count: number): ChipTone {
+  if (!isSupabaseConfigured) return 'quiet';
+  return count === 0 ? 'green' : 'orange';
+}
+
+/** Sync-row subtitle. Never claims a sync state without a sync target. */
+function syncSub(count: number): string {
+  if (!isSupabaseConfigured) return 'Not configured — nothing to sync to';
+  return count === 0 ? 'Up to date' : `${count} pending`;
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
   const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
   const correctionsCount = useCorrectionsStore((s) => s.corrections.length);
@@ -96,14 +122,6 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const joined = user?.created_at
-    ? new Date(user.created_at).toLocaleDateString(undefined, {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      })
-    : null;
-
   return (
     <ScrollView
       style={styles.root}
@@ -117,20 +135,12 @@ export default function SettingsScreen() {
     >
       <Text style={styles.title}>Settings</Text>
 
-      <Group index={0} label="Account">
-        <Row icon="mail-outline" title="Email" sub={user?.email ?? 'Not signed in'} />
-        {joined ? (
-          <>
-            <Sep />
-            <Row icon="calendar-outline" title="Joined" sub={joined} />
-          </>
-        ) : null}
-      </Group>
+      <ProfileHeader index={0} />
 
       <Group index={1} label="Integrations">
         <Row
           icon={isGeminiConfigured ? 'checkmark-circle' : 'alert-circle-outline'}
-          iconColor={isGeminiConfigured ? colors.success : colors.warn}
+          tone={isGeminiConfigured ? 'green' : 'orange'}
           title="Gemini Vision (AI damage detection)"
           sub={
             isGeminiConfigured
@@ -141,7 +151,7 @@ export default function SettingsScreen() {
         <Sep />
         <Row
           icon={isSupabaseConfigured ? 'cloud-outline' : 'cloud-offline-outline'}
-          iconColor={isSupabaseConfigured ? colors.info : colors.warn}
+          tone={isSupabaseConfigured ? 'blue' : 'orange'}
           title="Cloud sync"
           sub={
             isSupabaseConfigured
@@ -158,6 +168,7 @@ export default function SettingsScreen() {
       >
         <Row
           icon="person-outline"
+          tone="purple"
           title="Inspector profile"
           sub={
             inspectorProfile.fullName
@@ -170,6 +181,7 @@ export default function SettingsScreen() {
         <Sep />
         <Row
           icon="map-outline"
+          tone="blue"
           title="Service Area"
           sub={
             serviceAreaCount === 0
@@ -184,6 +196,7 @@ export default function SettingsScreen() {
       <Group index={3} label="Business">
         <Row
           icon="bar-chart-outline"
+          tone="purple"
           title="Reports"
           sub="Revenue, funnel, mileage, AI calibration"
           chevron
@@ -192,6 +205,7 @@ export default function SettingsScreen() {
         <Sep />
         <Row
           icon="archive-outline"
+          tone="blue"
           title="Backup & Restore"
           sub="Export everything as JSON, restore on a new device"
           chevron
@@ -200,6 +214,7 @@ export default function SettingsScreen() {
         <Sep />
         <Row
           icon="information-circle-outline"
+          tone="quiet"
           title="About RoofWise"
           sub="Features, references, version"
           chevron
@@ -210,7 +225,7 @@ export default function SettingsScreen() {
       <Group index={4} label="Safety">
         <Row
           icon={preFlightEnabled ? 'shield-checkmark' : 'shield-outline'}
-          iconColor={preFlightEnabled ? colors.success : colors.textMuted}
+          tone={preFlightEnabled ? 'green' : 'quiet'}
           title="Pre-inspection safety check"
           sub={preFlightEnabled ? 'On — runs every 4 hours' : 'Off'}
           trailing={<MiniSwitch on={preFlightEnabled} />}
@@ -225,27 +240,30 @@ export default function SettingsScreen() {
       >
         <Row
           icon="sparkles-outline"
+          tone="purple"
           title="Corrections recorded"
           trailing={<Text style={styles.detail}>{correctionsCount}</Text>}
         />
         <Sep />
         <Row
           icon="cloud-upload-outline"
+          tone={pendingTone(pendingCorrections)}
           title="Sync corrections"
-          sub={pendingCorrections === 0 ? 'Up to date' : `${pendingCorrections} pending`}
-          chevron={!syncing}
+          sub={syncSub(pendingCorrections)}
+          chevron={isSupabaseConfigured && !syncing}
           trailing={syncing ? <ActivityIndicator color={colors.textMuted} /> : undefined}
           onPress={onSyncNow}
-          disabled={syncing}
+          disabled={syncing || !isSupabaseConfigured}
         />
         <Sep />
         <Row
           icon="people-outline"
+          tone={pendingTone(pendingLeads)}
           title="Sync leads to cloud"
-          sub={pendingLeads === 0 ? 'Up to date' : `${pendingLeads} pending`}
-          chevron={!leadsSyncing}
+          sub={syncSub(pendingLeads)}
+          chevron={isSupabaseConfigured && !leadsSyncing}
           trailing={leadsSyncing ? <ActivityIndicator color={colors.textMuted} /> : undefined}
-          disabled={leadsSyncing}
+          disabled={leadsSyncing || !isSupabaseConfigured}
           onPress={async () => {
             setLeadsSyncing(true);
             try {
@@ -265,11 +283,12 @@ export default function SettingsScreen() {
         <Sep />
         <Row
           icon="briefcase-outline"
+          tone={pendingTone(pendingInspections)}
           title="Sync inspections to cloud"
-          sub={pendingInspections === 0 ? 'Up to date' : `${pendingInspections} pending`}
-          chevron={!inspectionsSyncing}
+          sub={syncSub(pendingInspections)}
+          chevron={isSupabaseConfigured && !inspectionsSyncing}
           trailing={inspectionsSyncing ? <ActivityIndicator color={colors.textMuted} /> : undefined}
-          disabled={inspectionsSyncing}
+          disabled={inspectionsSyncing || !isSupabaseConfigured}
           onPress={async () => {
             setInspectionsSyncing(true);
             try {
@@ -289,11 +308,12 @@ export default function SettingsScreen() {
         <Sep />
         <Row
           icon="images-outline"
+          tone={pendingTone(pendingPhotos)}
           title="Upload photos to cloud"
-          sub={pendingPhotos === 0 ? 'Up to date' : `${pendingPhotos} pending`}
-          chevron={!photosSyncing}
+          sub={syncSub(pendingPhotos)}
+          chevron={isSupabaseConfigured && !photosSyncing}
           trailing={photosSyncing ? <ActivityIndicator color={colors.textMuted} /> : undefined}
-          disabled={photosSyncing}
+          disabled={photosSyncing || !isSupabaseConfigured}
           onPress={async () => {
             setPhotosSyncing(true);
             try {
@@ -313,14 +333,14 @@ export default function SettingsScreen() {
       </Group>
 
       <Group index={6} label="Coming soon">
-        <Row title="AI thresholds: minimum confidence, auto-approve cutoffs" muted />
+        <Row icon="options-outline" tone="quiet" title="AI thresholds: minimum confidence, auto-approve cutoffs" muted />
         <Sep />
-        <Row title="Team & roles (Adjuster, Crew Lead, Owner)" muted />
+        <Row icon="people-circle-outline" tone="quiet" title="Team & roles (Adjuster, Crew Lead, Owner)" muted />
         <Sep />
-        <Row title="CRM + accounting integrations (HubSpot, QuickBooks)" muted />
+        <Row icon="link-outline" tone="quiet" title="CRM + accounting integrations (HubSpot, QuickBooks)" muted />
       </Group>
 
-      <Group index={7} footer={user?.email ? `Signed in as ${user.email}` : undefined}>
+      <FadeSlideIn index={7} style={styles.section}>
         <PressableScale
           style={styles.signOutRow}
           onPress={confirmSignOut}
@@ -329,8 +349,102 @@ export default function SettingsScreen() {
         >
           <Text style={styles.signOutText}>Sign out</Text>
         </PressableScale>
-      </Group>
+      </FadeSlideIn>
     </ScrollView>
+  );
+}
+
+// ---------- profile header ----------
+
+/**
+ * Crafted identity module — the first thing under the title, so Settings
+ * opens on the same brand language as onboarding (a gradient disc echoing
+ * the aurora's royal wash) rather than a plain grouped cell. Every field is
+ * read from a real store; there is no synthetic "role" — HAAG certification
+ * is the one true status this product tracks per inspector, so it is the
+ * pill. Tapping goes to the same Inspector profile screen as the Field row
+ * below (Apple ID card pattern: a quick-glance header plus a full row).
+ */
+function ProfileHeader({ index }: { index: number }) {
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const inspectorProfile = useInspectorProfileStore((s) => s.profile);
+
+  // Same derivation Home's greeting uses: a real name from the profile,
+  // else a friendly name derived from the real sign-in email — never a
+  // fabricated one (Drift #5).
+  const emailDerivedName = useMemo(() => {
+    const email = user?.email ?? '';
+    if (!email) return null;
+    const local = email.split('@')[0].split(/[._-]/).filter(Boolean).join(' ');
+    return local ? local.replace(/\b\w/g, (c) => c.toUpperCase()) : null;
+  }, [user]);
+
+  const displayName = inspectorProfile.fullName?.trim() || emailDerivedName;
+
+  const initials = useMemo(() => {
+    if (!displayName) return null;
+    const parts = displayName.split(/\s+/).filter(Boolean);
+    const first = parts[0]?.[0] ?? '';
+    const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+    return (first + last).toUpperCase() || null;
+  }, [displayName]);
+
+  const joined = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    : null;
+
+  const signInLine = user?.email
+    ? `Signed in as ${user.email}`
+    : isSupabaseConfigured
+    ? 'Not signed in'
+    : 'Local only — cloud sync not configured';
+
+  return (
+    <FadeSlideIn index={index} style={styles.section}>
+      <PressableScale
+        style={styles.profileCard}
+        onPress={() => router.push('/settings/inspector-profile')}
+        accessibilityRole="button"
+        accessibilityLabel={
+          displayName ? `${displayName}. Edit inspector profile.` : 'Set up your inspector profile'
+        }
+      >
+        <View style={styles.avatarShadow}>
+          <LinearGradient
+            colors={gradients.clearDay}
+            style={styles.avatar}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            {initials ? (
+              <Text style={styles.avatarText}>{initials}</Text>
+            ) : (
+              <Ionicons name="person" size={26} color={colors.textInverse} />
+            )}
+          </LinearGradient>
+        </View>
+
+        <View style={styles.profileText}>
+          <Text style={styles.profileName} numberOfLines={1}>
+            {displayName ?? 'Add your name'}
+          </Text>
+          <View style={styles.profileMetaRow}>
+            {inspectorProfile.haagCertified ? (
+              <Pill label="HAAG Certified" tone="success" size="sm" icon="shield-checkmark" />
+            ) : (
+              <Pill label="Inspector" tone="brand" size="sm" />
+            )}
+          </View>
+          <Text style={styles.profileSignIn} numberOfLines={1}>
+            {signInLine}
+          </Text>
+        </View>
+
+        <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+      </PressableScale>
+      {joined ? <Text style={styles.footer}>Member since {joined}</Text> : null}
+    </FadeSlideIn>
   );
 }
 
@@ -349,8 +463,8 @@ function Group({
 }) {
   return (
     <FadeSlideIn index={index} style={styles.section}>
-      {label ? <Text style={styles.sectionLabel}>{label}</Text> : null}
-      <View style={styles.group}>{children}</View>
+      {label ? <SectionHeader title={label} style={styles.sectionHeaderSpacing} /> : null}
+      <RichCard padded={false}>{children}</RichCard>
       {footer ? <Text style={styles.footer}>{footer}</Text> : null}
     </FadeSlideIn>
   );
@@ -362,7 +476,7 @@ function Sep() {
 
 function Row({
   icon,
-  iconColor = colors.textMuted,
+  tone = 'quiet',
   title,
   sub,
   trailing,
@@ -371,8 +485,8 @@ function Row({
   disabled,
   muted,
 }: {
-  icon?: keyof typeof Ionicons.glyphMap;
-  iconColor?: string;
+  icon?: IoniconName;
+  tone?: ChipTone;
   title: string;
   sub?: string;
   trailing?: React.ReactNode;
@@ -383,7 +497,7 @@ function Row({
 }) {
   const body = (
     <>
-      {icon ? <Ionicons name={icon} size={20} color={iconColor} /> : null}
+      {icon ? <IconChip name={icon} tone={tone} size="sm" /> : null}
       <View style={styles.rowText}>
         <Text style={[styles.rowTitle, muted && styles.rowTitleMuted]}>{title}</Text>
         {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
@@ -444,27 +558,53 @@ const styles = StyleSheet.create({
   },
 
   section: {},
-  sectionLabel: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  group: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    overflow: 'hidden',
-    ...shadows.card,
-  },
+  sectionHeaderSpacing: { marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
   footer: {
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
     lineHeight: 18,
     paddingHorizontal: spacing.lg,
     marginTop: spacing.sm,
+  },
+
+  // Profile header — gradient disc, name, status pill, sign-in line.
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    ...shadows.raised,
+  },
+  avatarShadow: { borderRadius: radii.pill, ...shadows.raised },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: colors.textInverse,
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 0.5,
+  },
+  profileText: { flex: 1, gap: 5 },
+  profileName: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  profileMetaRow: { flexDirection: 'row', gap: spacing.xs },
+  profileSignIn: {
+    fontSize: fontSize.bodySm,
+    color: colors.textMuted,
   },
 
   row: {

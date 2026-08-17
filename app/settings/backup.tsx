@@ -1,27 +1,21 @@
 import { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import { exportBackup, restoreFromUri } from '@/lib/services/backup';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
+import { RichCard } from '@/components/ui/RichCard';
 import {
   colors,
   fontSize,
   fontWeight,
+  gradients,
   radii,
-  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -92,37 +86,51 @@ export default function BackupScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <FadeSlideIn index={0} style={styles.section}>
-          <View style={styles.card}>
-            <View style={styles.cardHead}>
-              <Ionicons name="cloud-upload-outline" size={24} color={colors.textMuted} />
-              <Text style={styles.cardTitle}>Export everything</Text>
-            </View>
+          <RichCard
+            icon="cloud-upload-outline"
+            iconTone="blue"
+            title="Export everything"
+            footer={
+              <Text style={styles.footerCaption}>
+                One JSON file with every inspection, lead, proposal, mileage trip,
+                correction, and your profile. Photos stay where they are.
+              </Text>
+            }
+          >
             <PressableScale
-              style={[styles.primaryBtn, busy === 'export' && styles.btnBusy]}
+              style={styles.primaryBtnShadow}
               disabled={busy !== null}
               onPress={onExport}
               accessibilityRole="button"
               accessibilityLabel="Export backup"
             >
-              {busy === 'export' ? (
-                <ActivityIndicator color={colors.textInverse} />
-              ) : (
-                <Text style={styles.primaryBtnText}>Export backup</Text>
-              )}
+              <LinearGradient
+                colors={gradients.accent}
+                style={[styles.primaryBtn, busy === 'export' && styles.btnBusy]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                {busy === 'export' ? (
+                  <ActivityIndicator color={colors.textInverse} />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Export backup</Text>
+                )}
+              </LinearGradient>
             </PressableScale>
-          </View>
-          <Text style={styles.footerCaption}>
-            One JSON file with every inspection, lead, proposal, mileage trip,
-            correction, and your profile. Photos stay where they are.
-          </Text>
+          </RichCard>
         </FadeSlideIn>
 
         <FadeSlideIn index={1} style={styles.section}>
-          <View style={styles.card}>
-            <View style={styles.cardHead}>
-              <Ionicons name="cloud-download-outline" size={24} color={colors.textMuted} />
-              <Text style={styles.cardTitle}>Restore from backup</Text>
-            </View>
+          <RichCard
+            icon="cloud-download-outline"
+            iconTone="purple"
+            title="Restore from backup"
+            footer={
+              <Text style={styles.footerCaption}>
+                Pick a previously-exported JSON file. We'll replace all local data.
+              </Text>
+            }
+          >
             <PressableScale
               style={[styles.secondaryBtn, busy === 'restore' && styles.btnBusy]}
               disabled={busy !== null}
@@ -136,10 +144,7 @@ export default function BackupScreen() {
                 <Text style={styles.secondaryBtnText}>Pick backup file</Text>
               )}
             </PressableScale>
-          </View>
-          <Text style={styles.footerCaption}>
-            Pick a previously-exported JSON file. We'll replace all local data.
-          </Text>
+          </RichCard>
         </FadeSlideIn>
       </ScrollView>
     </SafeAreaView>
@@ -157,35 +162,17 @@ const styles = StyleSheet.create({
   },
   section: {},
 
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    gap: spacing.md,
-    ...shadows.card,
-  },
-  cardHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  cardTitle: {
-    fontSize: fontSize.bodyLg,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-  },
   footerCaption: {
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
     lineHeight: 18,
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.sm,
   },
 
+  primaryBtnShadow: { borderRadius: radii.button },
   primaryBtn: {
     height: touchTarget.preferred,
     borderRadius: radii.button,
-    backgroundColor: colors.accent,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'stretch',

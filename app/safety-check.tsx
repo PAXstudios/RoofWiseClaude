@@ -15,6 +15,7 @@ import {
   colors,
   fontSize,
   fontWeight,
+  glass,
   radii,
   shadows,
   spacing,
@@ -91,6 +92,9 @@ export default function SafetyCheckScreen() {
         </View>
 
         <Pressable
+          style={styles.skipBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Stop showing this before camera"
           onPress={() => {
             setPreFlightEnabled(false);
             router.replace({
@@ -129,7 +133,7 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
 
   heroCard: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: glass.fillLow,
     borderRadius: radii.card,
     padding: spacing.xxl,
     alignItems: 'center',
@@ -139,7 +143,7 @@ const styles = StyleSheet.create({
   heroBody: { fontSize: fontSize.bodyMd, color: 'rgba(240,240,228,0.82)', textAlign: 'center' },
 
   list: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: glass.fillLow,
     borderRadius: radii.card,
     padding: spacing.lg,
   },
@@ -150,10 +154,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     minHeight: touchTarget.preferred,
   },
-  rowBorder: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
+  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: glass.border },
   itemText: { flex: 1, fontSize: fontSize.bodyLg, color: 'rgba(240,240,228,0.78)' },
   itemTextOn: { color: colors.cream, fontWeight: fontWeight.semibold },
 
+  // Secondary opt-out still takes a glove-sized target (Drift #1).
+  skipBtn: { minHeight: touchTarget.standard, justifyContent: 'center' },
   skipText: {
     color: 'rgba(240,240,228,0.62)',
     fontSize: fontSize.bodySm,

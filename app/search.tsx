@@ -13,12 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
+import { RichCard } from '@/components/ui/RichCard';
+import { IconChip } from '@/components/ui/IconChip';
 import {
   colors,
   fontSize,
   fontWeight,
   radii,
-  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -136,24 +137,28 @@ export default function SearchScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {hits.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="search-outline" size={36} color={colors.slate} />
-            <Text style={styles.emptyTitle}>
-              {query.trim().length < 2 ? 'Start typing' : 'No matches'}
-            </Text>
-            <Text style={styles.emptyBody}>
-              Search inspections, leads, and proposals. Try a customer name, claim #, address, or report ID.
-            </Text>
-          </View>
+          <RichCard>
+            <View style={styles.empty}>
+              <IconChip name="search-outline" tone="quiet" />
+              <Text style={styles.emptyTitle}>
+                {query.trim().length < 2 ? 'Start typing' : 'No matches'}
+              </Text>
+              <Text style={styles.emptyBody}>
+                Search inspections, leads, and proposals. Try a customer name, claim #, address, or report ID.
+              </Text>
+            </View>
+          </RichCard>
         ) : (
-          <View style={styles.card}>
+          <RichCard padded={false}>
             {hits.map((hit, i) => (
               <Pressable
                 key={`${hit.kind}:${'id' in hit ? hit.id : ''}`}
                 style={[styles.row, i > 0 && styles.rowBorder]}
                 onPress={() => openHit(hit)}
               >
-                <Ionicons
+                {/* One hue per result kind, so a mixed result list is
+                    scannable by colour before it is read. */}
+                <IconChip
                   name={
                     hit.kind === 'inspection'
                       ? 'briefcase-outline'
@@ -161,18 +166,20 @@ export default function SearchScreen() {
                       ? 'person-outline'
                       : 'document-attach-outline'
                   }
-                  size={20}
-                  color={colors.orange}
+                  tone={
+                    hit.kind === 'inspection' ? 'blue' : hit.kind === 'lead' ? 'green' : 'purple'
+                  }
+                  size="sm"
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.primary}>{hit.primary}</Text>
                   <Text style={styles.secondary}>{hit.secondary}</Text>
                   <Text style={styles.meta}>{hit.meta}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+                <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
               </Pressable>
             ))}
-          </View>
+          </RichCard>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -205,31 +212,20 @@ const styles = StyleSheet.create({
 
   scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    ...shadows.card,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    minHeight: touchTarget.standard,
   },
-  rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
+  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   primary: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
   secondary: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
   meta: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2, textTransform: 'capitalize' },
 
-  empty: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.xxl,
-    alignItems: 'center',
-    gap: spacing.sm,
-    ...shadows.card,
-  },
+  empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   emptyTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, marginTop: spacing.sm },
   emptyBody: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },
 });

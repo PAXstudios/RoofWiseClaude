@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -18,10 +19,13 @@ import { useToastStore } from '@/lib/stores/toastStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   colors,
   fontSize,
   fontWeight,
+  gradients,
   motion,
   radii,
   shadows,
@@ -132,7 +136,7 @@ export default function InspectorProfileScreen() {
 
         <FadeSlideIn index={4}>
           <PressableScale
-            style={styles.doneBtn}
+            style={styles.doneBtnShadow}
             onPress={() => {
               toast({ tone: 'success', title: 'Profile saved' });
               router.back();
@@ -140,7 +144,14 @@ export default function InspectorProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="Done"
           >
-            <Text style={styles.doneBtnText}>Done</Text>
+            <LinearGradient
+              colors={gradients.accent}
+              style={styles.doneBtn}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={styles.doneBtnText}>Done</Text>
+            </LinearGradient>
           </PressableScale>
         </FadeSlideIn>
       </ScrollView>
@@ -159,8 +170,8 @@ function Section({
 }) {
   return (
     <FadeSlideIn index={index} style={styles.section}>
-      <Text style={styles.sectionLabel}>{title}</Text>
-      <View style={styles.group}>{children}</View>
+      <SectionHeader title={title} style={styles.sectionHeaderSpacing} />
+      <RichCard padded={false}>{children}</RichCard>
     </FadeSlideIn>
   );
 }
@@ -223,21 +234,7 @@ const styles = StyleSheet.create({
   },
 
   section: {},
-  sectionLabel: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  group: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    overflow: 'hidden',
-    ...shadows.card,
-  },
+  sectionHeaderSpacing: { marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
   sep: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.hairline,
@@ -294,10 +291,11 @@ const styles = StyleSheet.create({
     ...shadows.thumb,
   },
 
+  doneBtnShadow: { borderRadius: radii.button, ...shadows.raised },
   doneBtn: {
     height: touchTarget.sticky,
     borderRadius: radii.button,
-    backgroundColor: colors.accent,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -21,9 +21,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Aurora } from '@/components/glass/Aurora';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
+import { IconChip, CHIP_TONES, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { Pill, type PillTone } from '@/components/ui/Pill';
+import { ProgressBar, type ProgressTone } from '@/components/ui/ProgressBar';
 import { isValidDate } from '@/lib/format/date';
 import type { Lead, LeadStage } from '@/lib/models/types';
 import {
@@ -32,9 +37,12 @@ import {
   leadStageColumn,
 } from '@/lib/models/types';
 import {
+  brand,
   colors,
   fontSize,
   fontWeight,
+  glass,
+  gradients,
   motion,
   radii,
   shadows,
@@ -119,6 +127,13 @@ export default function LeadsScreen() {
         }
       />
 
+      {/* Always mounted, including at zero. Gating the header on
+          `leads.length > 0` meant the screen's designated cinematic moment
+          was missing in exactly the state a new user opens it in, leaving a
+          grey void under the filter chips. Real zeros in the branded frame
+          are honest AND give the screen a top. */}
+      <PipelineSummary leads={leads} />
+
       <ViewSegmented value={view} onChange={switchView} />
 
       {view === 'list' ? (
@@ -185,22 +200,53 @@ export default function LeadsScreen() {
                       pressedScale={0.98}
                       onPress={() => router.push(`/lead/${lead.id}` as any)}
                       accessibilityRole="button"
-                      accessibilityLabel={`${lead.customerName}, ${lead.address}`}
+                      accessibilityLabel={`${lead.customerName}, ${lead.address}, ${
+                        LEAD_STAGE_LABELS[leadStageColumn(lead.stage)]
+                      }${lead.lastStormMatch ? ', storm matched' : ''}`}
                     >
-                      <View style={styles.initialDisc}>
-                        <Text style={styles.initialText}>{leadInitial(lead.customerName)}</Text>
+                      <View
+                        style={[
+                          styles.initialDisc,
+                          { backgroundColor: CHIP_TONES[avatarTone(lead.id)].bg },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.initialText,
+                            { color: CHIP_TONES[avatarTone(lead.id)].fg },
+                          ]}
+                        >
+                          {leadInitial(lead.customerName)}
+                        </Text>
                       </View>
                       <View style={styles.leadRowBody}>
-                        <Text style={styles.leadName} numberOfLines={1}>
-                          {lead.customerName}
-                        </Text>
-                        <Text style={styles.leadAddress} numberOfLines={1}>
-                          {lead.address}
-                        </Text>
+                        <View style={styles.leadNameRow}>
+                          <Text style={styles.leadName} numberOfLines={1}>
+                            {lead.customerName}
+                          </Text>
+                          {lead.lastStormMatch && (
+                            <Pill label="Storm" tone="accent" size="sm" icon="thunderstorm-outline" />
+                          )}
+                        </View>
+                        <View style={styles.leadMetaRow}>
+                          <Text style={styles.leadAddress} numberOfLines={1}>
+                            {lead.address}
+                          </Text>
+                          {stageAgeLabel(lead) && (
+                            <>
+                              <Text style={styles.metaDot}>·</Text>
+                              <Text style={styles.metaDays} numberOfLines={1}>
+                                {stageAgeLabel(lead)}
+                              </Text>
+                            </>
+                          )}
+                        </View>
                       </View>
-                      <Text style={styles.leadStage} numberOfLines={1}>
-                        {LEAD_STAGE_LABELS[leadStageColumn(lead.stage)]}
-                      </Text>
+                      <Pill
+                        label={LEAD_STAGE_LABELS[leadStageColumn(lead.stage)]}
+                        tone={stagePillTone(leadStageColumn(lead.stage))}
+                        size="sm"
+                      />
                       <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
                     </PressableScale>
                   </View>
@@ -219,6 +265,179 @@ export default function LeadsScreen() {
 function leadInitial(name: string): string {
   const c = name.trim().charAt(0);
   return c ? c.toUpperCase() : '?';
+}
+
+/** Rotation of tile hues for the avatar disc — deterministic, not random. */
+const AVATAR_TONES: ChipTone[] = ['blue', 'green', 'orange', 'purple'];
+
+/**
+ * Picks one of the four tile tones from the lead's id, so every disc has a
+ * stable colour across renders/sessions without a `color` field in the model.
+ * A simple string hash, not `Math.random()` — the same lead is always the
+ * same colour.
+ */
+function avatarTone(id: string): ChipTone {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return AVATAR_TONES[hash % AVATAR_TONES.length];
+}
+
+/** Stage → Pill tone, grouped the same way `stageAccent` groups colours. */
+function stagePillTone(stage: LeadStage): PillTone {
+  switch (stage) {
+    case 'inspection_scheduled':
+    case 'inspected':
+      return 'info';
+    case 'proposal_sent':
+    case 'estimate_sent':
+    case 'invoiced':
+      return 'warn';
+    case 'install_scheduled':
+    case 'in_progress':
+      return 'accent';
+    case 'signed':
+    case 'completed':
+    case 'paid':
+      return 'success';
+    case 'lost':
+      return 'danger';
+    case 'new':
+    case 'contacted':
+    default:
+      return 'neutral';
+  }
+}
+
+/** Stage → ProgressBar tone, for the pipeline board's per-column strip. */
+function stageProgressTone(stage: LeadStage): ProgressTone {
+  switch (stage) {
+    case 'inspection_scheduled':
+    case 'inspected':
+      return 'brand';
+    case 'proposal_sent':
+    case 'estimate_sent':
+    case 'invoiced':
+      return 'warn';
+    case 'install_scheduled':
+    case 'in_progress':
+      return 'accent';
+    case 'signed':
+    case 'completed':
+    case 'paid':
+      return 'success';
+    case 'lost':
+      return 'danger';
+    case 'new':
+    case 'contacted':
+    default:
+      return 'quiet';
+  }
+}
+
+/** "$128.4K" / "$950" — compact, tabular-friendly currency for tight rows. */
+function formatShort(amount: number): string {
+  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K`;
+  return String(Math.round(amount));
+}
+
+/** "4d in stage" / "New today" — null when the stage-change date is unknown. */
+function stageAgeLabel(lead: Lead): string | null {
+  const days = daysInStage(lead);
+  if (days === null) return null;
+  return days === 0 ? 'New today' : `${days}d in stage`;
+}
+
+/**
+ * Compact pipeline header — the screen's one cinematic moment. Real
+ * aggregate counts only: pipeline value is entirely omitted (not shown as
+ * $0) when no lead in the pipeline carries a `value` (Drift #5).
+ */
+function PipelineSummary({ leads }: { leads: Lead[] }) {
+  const active = useMemo(
+    () => leads.filter((l) => leadStageColumn(l.stage) !== 'lost'),
+    [leads],
+  );
+  const totalValue = useMemo(
+    () => active.reduce((sum, l) => sum + (l.value ?? 0), 0),
+    [active],
+  );
+  const dueFollowUps = useMemo(() => {
+    const now = Date.now();
+    return leads.filter((l) => l.followUpAt && new Date(l.followUpAt).getTime() <= now).length;
+  }, [leads]);
+
+  return (
+    <FadeSlideIn style={styles.summaryWrap}>
+      {/* The screen's one cinematic moment, in the onboarding's language:
+          the brand sky (`gradients.stormNight`) with the same drifting
+          `Aurora` the welcome flow uses, rather than another white cell on
+          grey. One per screen — the list below stays light and quiet. */}
+      <View style={styles.summaryHero}>
+        <LinearGradient
+          colors={gradients.stormNight}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        <Aurora transparent />
+        <View style={styles.summaryRow}>
+          <SummaryStat
+            icon="people-outline"
+            tone="blue"
+            value={String(active.length)}
+            label="Active leads"
+          />
+          <View style={styles.summaryDivider} />
+          <SummaryStat
+            icon="alarm-outline"
+            tone="orange"
+            value={String(dueFollowUps)}
+            label="Follow-ups due"
+          />
+          {totalValue > 0 && (
+            <>
+              <View style={styles.summaryDivider} />
+              <SummaryStat
+                icon="cash-outline"
+                tone="green"
+                value={`$${formatShort(totalValue)}`}
+                label="Pipeline value"
+              />
+            </>
+          )}
+        </View>
+      </View>
+    </FadeSlideIn>
+  );
+}
+
+function SummaryStat({
+  icon,
+  tone,
+  value,
+  label,
+}: {
+  icon: IoniconName;
+  tone: ChipTone;
+  value: string;
+  label: string;
+}) {
+  return (
+    <View style={styles.summaryStat} accessibilityLabel={`${label}: ${value}`}>
+      <IconChip name={icon} tone={tone} size="sm" />
+      <View style={styles.summaryStatBody}>
+        <Text style={styles.summaryValue} numberOfLines={1}>
+          {value}
+        </Text>
+        <Text style={styles.summaryLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </View>
+  );
 }
 
 // -----------------------------------------------------------------------------
@@ -448,6 +667,7 @@ function PipelineBoard({
               <ColumnPage
                 stage={col}
                 columnLeads={byColumn.get(col) ?? EMPTY_COLUMN}
+                totalLeads={leads.length}
                 onOpen={(id) => router.push(`/lead/${id}` as any)}
                 onRequestMove={setMoveTarget}
               />
@@ -537,11 +757,13 @@ function PipelineBoard({
 function ColumnPage({
   stage,
   columnLeads,
+  totalLeads,
   onOpen,
   onRequestMove,
 }: {
   stage: LeadStage;
   columnLeads: Lead[];
+  totalLeads: number;
   onOpen: (id: string) => void;
   onRequestMove: (lead: Lead) => void;
 }) {
@@ -583,8 +805,29 @@ function ColumnPage({
     );
   }
 
+  // Per-stage summary strip — real count + value for this column, plus a
+  // progress bar showing this stage's share of the whole pipeline.
+  const columnValue = columnLeads.reduce((sum, l) => sum + (l.value ?? 0), 0);
+  const columnProgress = totalLeads > 0 ? columnLeads.length / totalLeads : 0;
+
   return (
     <Animated.View style={[styles.columnFill, enterStyle]}>
+      <View style={styles.stageSummary}>
+        <View style={styles.stageSummaryRow}>
+          <Text style={styles.stageSummaryCount}>
+            {columnLeads.length} {columnLeads.length === 1 ? 'lead' : 'leads'}
+          </Text>
+          {columnValue > 0 && (
+            <Text style={styles.stageSummaryValue}>${formatShort(columnValue)}</Text>
+          )}
+        </View>
+        <ProgressBar
+          progress={columnProgress}
+          tone={stageProgressTone(stage)}
+          height={6}
+          accessibilityLabel={`${LEAD_STAGE_LABELS[stage]}, ${columnLeads.length} of ${totalLeads} leads in the pipeline`}
+        />
+      </View>
       <ScrollView style={styles.columnScroll} contentContainerStyle={styles.columnContent}>
         {columnLeads.map((lead, i) => (
           <FadeSlideIn key={lead.id} index={Math.min(i, 6)}>
@@ -696,6 +939,43 @@ const styles = StyleSheet.create({
     ...shadows.float,
   },
 
+  // --- Pipeline summary (the screen's one cinematic moment) -------------
+  summaryWrap: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm,
+  },
+  summaryHero: {
+    borderRadius: radii.xl,
+    overflow: 'hidden',
+    padding: spacing.lg,
+    // Painted under the gradient so the card is never briefly transparent.
+    backgroundColor: brand.royalInk,
+    ...shadows.hero,
+  },
+  summaryRow: { flexDirection: 'row', alignItems: 'center' },
+  summaryStat: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  summaryStatBody: { flexShrink: 1, gap: 1 },
+  summaryDivider: {
+    width: StyleSheet.hairlineWidth * 2,
+    height: 32,
+    backgroundColor: glass.border,
+    marginHorizontal: spacing.sm,
+  },
+  summaryValue: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    color: colors.textInverse,
+    letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'],
+  },
+  summaryLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+    color: colors.brandSoft,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+
   // --- iOS-17 segmented control ----------------------------------------
   segmentedWrap: {
     minHeight: touchTarget.standard,
@@ -772,11 +1052,11 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
 
-  // --- Lead cells (Instagram-clean rows in one inset group) --------------
+  // --- Lead cells (crafted rows in one inset group) ----------------------
   listGroup: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    ...shadows.card,
+    ...shadows.raised,
   },
   leadRow: {
     flexDirection: 'row',
@@ -792,31 +1072,34 @@ const styles = StyleSheet.create({
     backgroundColor: colors.hairline,
     marginLeft: spacing.lg + 40 + spacing.md,
   },
+  // Tone comes from `avatarTone(lead.id)` — deterministic, not a flat grey disc.
   initialDisc: {
     width: 40,
     height: 40,
     borderRadius: radii.pill,
-    backgroundColor: colors.fillQuiet,
     alignItems: 'center',
     justifyContent: 'center',
   },
   initialText: {
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
-    color: colors.text,
   },
-  leadRowBody: { flex: 1, gap: 2 },
+  leadRowBody: { flex: 1, gap: 3 },
+  leadNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   leadName: {
+    flexShrink: 1,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     color: colors.text,
   },
-  leadAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  leadStage: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.medium,
+  leadMetaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  leadAddress: { flexShrink: 1, fontSize: fontSize.bodySm, color: colors.textMuted },
+  metaDot: { fontSize: fontSize.bodySm, color: colors.textSubtle },
+  metaDays: {
+    flexShrink: 0,
+    fontSize: fontSize.bodySm,
     color: colors.textSubtle,
-    maxWidth: 96,
+    fontVariant: ['tabular-nums'],
   },
 
   // --- Empty state: compact, top-anchored, no tinted circle, no card -----
@@ -836,18 +1119,23 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
   },
+  // Royal fill, per the spec's `brand.royal = primary interactive` rule. The
+  // previous 5%-ink wash was all but invisible against the grey ground, so
+  // the empty state's only action read as decoration.
   emptyBtn: {
     minHeight: touchTarget.standard,
-    paddingHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xxl,
     borderRadius: radii.button,
-    backgroundColor: colors.fillQuiet,
+    backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.raised,
   },
   emptyBtnText: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
-    color: colors.text,
+    color: colors.textInverse,
   },
 
   // --- Pipeline board ---------------------------------------------------
@@ -863,6 +1151,33 @@ const styles = StyleSheet.create({
 
   pager: { flex: 1 },
   columnFill: { flex: 1 },
+
+  // Per-stage summary strip — static header above the scrolling card list,
+  // so a column's count/value/share is visible without scrolling.
+  stageSummary: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  stageSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  stageSummaryCount: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.textMuted,
+    fontVariant: ['tabular-nums'],
+  },
+  stageSummaryValue: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+
   columnScroll: { flex: 1 },
   columnContent: {
     paddingHorizontal: spacing.xl,
@@ -877,7 +1192,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    ...shadows.card,
+    ...shadows.raised,
   },
   boardCardAccent: {
     width: 4,

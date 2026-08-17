@@ -4,12 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { RichCard } from '@/components/ui/RichCard';
+import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import {
   colors,
   fontSize,
   fontWeight,
   radii,
-  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -54,7 +55,13 @@ export default function ActivityScreen() {
         </Pressable>
         <Text style={styles.title}>Activity</Text>
         {events.length > 0 && (
-          <Pressable onPress={clear} hitSlop={10}>
+          <Pressable
+            onPress={clear}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Clear activity"
+            style={styles.clearBtn}
+          >
             <Text style={styles.clear}>Clear</Text>
           </Pressable>
         )}
@@ -81,39 +88,66 @@ export default function ActivityScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         {filtered.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="time-outline" size={36} color={colors.slate} />
-            <Text style={styles.emptyTitle}>
-              {events.length === 0 ? 'No activity yet' : 'No activity in this filter'}
-            </Text>
-            <Text style={styles.emptyBody}>
-              {events.length === 0
-                ? 'Inspections, photo captures, knocks, and proposal events will appear here.'
-                : 'Try a different filter chip above.'}
-            </Text>
-          </View>
+          <RichCard>
+            <View style={styles.empty}>
+              <IconChip name="time-outline" tone="quiet" />
+              <Text style={styles.emptyTitle}>
+                {events.length === 0 ? 'No activity yet' : 'No activity in this filter'}
+              </Text>
+              <Text style={styles.emptyBody}>
+                {events.length === 0
+                  ? 'Inspections, photo captures, knocks, and proposal events will appear here.'
+                  : 'Try a different filter chip above.'}
+              </Text>
+            </View>
+          </RichCard>
         ) : (
-          <View style={styles.card}>
+          <RichCard padded={false}>
             {filtered.map((evt, i) => (
               <View
                 key={evt.id}
                 style={[styles.row, i > 0 && styles.rowBorder]}
               >
-                <Ionicons name={iconFor(evt.kind)} size={20} color={colors.orange} />
+                <IconChip name={iconFor(evt.kind)} tone={toneFor(evt.kind)} size="sm" />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.msg}>{evt.message}</Text>
                   <Text style={styles.time}>{formatTime(evt.createdAt)}</Text>
                 </View>
               </View>
             ))}
-          </View>
+          </RichCard>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function iconFor(kind: string): keyof typeof Ionicons.glyphMap {
+/** Colour family per event kind, so the feed groups by meaning at a glance:
+ *  green = something completed, blue = capture/analysis, purple = AI,
+ *  orange = outbound/field work. */
+function toneFor(kind: string): ChipTone {
+  switch (kind) {
+    case 'inspection_completed':
+    case 'proposal_signed':
+    case 'route_completed':
+      return 'green';
+    case 'photo_captured':
+    case 'analysis_ran':
+    case 'job_created':
+      return 'blue';
+    case 'ai_calibration_updated':
+      return 'purple';
+    case 'proposal_sent':
+    case 'knock_logged':
+    case 'knock_converted_to_lead':
+    case 'storm_alert_received':
+      return 'orange';
+    default:
+      return 'quiet';
+  }
+}
+
+function iconFor(kind: string): IoniconName {
   switch (kind) {
     case 'job_created': return 'briefcase-outline';
     case 'inspection_completed': return 'checkmark-circle-outline';
@@ -152,6 +186,7 @@ const styles = StyleSheet.create({
   },
   headerBtn: { padding: spacing.xs },
   title: { flex: 1, fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
+  clearBtn: { minHeight: touchTarget.small, justifyContent: 'center' },
   clear: { color: colors.orange, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
   chipScroll: { maxHeight: 56 },
@@ -165,32 +200,28 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     justifyContent: 'center',
   },
-  chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  chipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   chipText: { fontSize: fontSize.bodySm, color: colors.navy, fontWeight: fontWeight.medium },
   chipTextActive: { color: colors.textInverse },
 
   content: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.md },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    ...shadows.card,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.md },
-  rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  msg: { fontSize: fontSize.bodyMd, color: colors.navy },
-  time: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2 },
+  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
+  msg: { fontSize: fontSize.bodyMd, color: colors.text },
+  time: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
 
   empty: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.xxl,
     alignItems: 'center',
     gap: spacing.sm,
-    minHeight: 220,
+    minHeight: 180,
     justifyContent: 'center',
-    ...shadows.card,
   },
   emptyTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, marginTop: spacing.sm },
   emptyBody: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },

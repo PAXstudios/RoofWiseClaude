@@ -27,12 +27,20 @@ import type MapView from 'react-native-maps';
 import { Map, MapHeatmap, MapPin } from '@/components/map/Map';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
+import { GlassCard } from '@/components/glass/GlassCard';
+import { IconChip } from '@/components/ui/IconChip';
 import { type StormEvent } from '@/lib/noaa';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
 import { fetchAddressStormHistory } from '@/lib/services/stormMatch';
-import { STORM_HISTORY_BROWSE_RADIUS_MILES } from '@/lib/services/stormWatch';
+import {
+  leadsInStormCluster,
+  STORM_HISTORY_BROWSE_RADIUS_MILES,
+  type StormLeadCluster,
+} from '@/lib/services/stormWatch';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
+import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import {
   colors,
   fontSize,
@@ -170,6 +178,92 @@ function Segmented<T extends string>({
   );
 }
 
+/**
+ * A floating control over the map imagery — real frosted glass (BlurView on
+ * iOS, tinted-fill fallback elsewhere), so it stays legible in sun no matter
+ * what's under it (Drift #1). Selected state breaks from glass into a solid
+ * royal fill — glass reads "available", solid reads "chosen".
+ */
+function GlassChip({
+  active,
+  label,
+  onPress,
+  accessibilityLabel,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) {
+  return (
+    <PressableScale
+      style={styles.chipShadow}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+    >
+      {active ? (
+        <View style={[styles.chip, styles.chipActive]}>
+          <Text style={[styles.chipText, styles.chipTextActive]}>{label}</Text>
+        </View>
+      ) : (
+        <GlassCard onLight onArt radius={radii.button} style={styles.chip}>
+          <Text style={styles.chipText}>{label}</Text>
+        </GlassCard>
+      )}
+    </PressableScale>
+  );
+}
+
+/** Wind / hail swatches for the semantic storm palette (Drift #11). */
+function StormLegend() {
+  return (
+    <View style={styles.legendShadow}>
+      <GlassCard onLight onArt radius={radii.pill} style={styles.legendCard}>
+        <LegendSwatch color={colors.stormWind} label="Wind report" />
+        <LegendSwatch color={colors.stormSevere} label={'Hail ≥1.5" report'} />
+      </GlassCard>
+    </View>
+  );
+}
+
+function LegendSwatch({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendDot, { backgroundColor: color }]} />
+      <Text style={styles.legendText}>{label}</Text>
+    </View>
+  );
+}
+
+/**
+ * The reference's floating AI-insight pattern — a glass card surfacing the
+ * real storm-matched lead cluster over the map imagery. Only ever mounted
+ * with a genuine cluster (Drift #5): the caller gates on `cluster`.
+ */
+function ClusterInsight({ cluster, onPress }: { cluster: StormLeadCluster; onPress: () => void }) {
+  return (
+    <PressableScale
+      style={styles.insightShadow}
+      accessibilityRole="button"
+      accessibilityLabel={`${cluster.headline}. Opens the map filtered to matched leads.`}
+      onPress={onPress}
+    >
+      <GlassCard onLight onArt radius={radii.card} style={styles.insightCard}>
+        <IconChip name="thunderstorm" tone="orange" size="md" />
+        <View style={styles.insightText}>
+          <Text style={styles.insightLabel}>STORM MATCH</Text>
+          <Text style={styles.insightHeadline} numberOfLines={2}>
+            {cluster.headline}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+      </GlassCard>
+    </PressableScale>
+  );
+}
+
 export default function HailTracerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -188,11 +282,23 @@ export default function HailTracerScreen() {
   // state's storms — real data in the wrong place, which reads as correct.
   const areas = useServiceAreaStore((s) => s.areas);
   const inspections = useInspectionStore((s) => s.inspections);
+  const leads = useLeadStore((s) => s.leads);
+  const alerts = useStormAlertStore((s) => s.alerts);
   const { state: serviceState, ...center } = useMemo(
     () => resolveServiceCenter(),
     // Recompute when the inputs that feed resolution change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [areas, inspections],
+  );
+
+  // Storm-matched lead cluster for the live alert, re-derived from persisted
+  // leads (same source Home/Map read) — a real cross-reference between the
+  // history this screen browses and the leads it's actually worth. Null
+  // when nothing matched: the insight card is simply absent (Drift #5).
+  const activeAlert = useMemo(() => alerts.find((a) => a.status === 'new'), [alerts]);
+  const cluster = useMemo(
+    () => (activeAlert ? leadsInStormCluster(leads, activeAlert) : null),
+    [leads, activeAlert],
   );
 
   // Shared, validation-floored, 4-year-clamped lookback (stormMatch.ts) rather
@@ -280,8 +386,8 @@ export default function HailTracerScreen() {
         />
       </Rise>
 
-      {/* Density: the map fills everything below the layer control; range and
-          magnitude chips float over the imagery on barFill. */}
+      {/* Density: the map fills everything below the layer control — the
+          cinematic moment. Range/magnitude controls float over it as glass. */}
       <View style={styles.mapWrap}>
         <Map
           ref={mapRef}
@@ -312,7 +418,7 @@ export default function HailTracerScreen() {
               <MapPin
                 key={e.id}
                 coordinate={{ latitude: e.lat, longitude: e.lon }}
-                pinColor={colors.info}
+                pinColor={colors.stormWind}
                 onPress={() => setSelected(e)}
               />
             ))}
@@ -323,14 +429,14 @@ export default function HailTracerScreen() {
               <MapPin
                 key={e.id}
                 coordinate={{ latitude: e.lat, longitude: e.lon }}
-                pinColor={colors.danger}
+                pinColor={colors.stormSevere}
                 onPress={() => setSelected(e)}
               />
             ))}
         </Map>
 
-        {/* Floating control chips — barFill + hairline + float shadow so
-            they read over imagery; glove-sized (≥56pt). */}
+        {/* Floating glass controls — real BlurView on iOS, tinted-fill
+            fallback elsewhere; glove-sized (≥56pt) either way. */}
         <View style={styles.overlayTop} pointerEvents="box-none">
           <ScrollView
             horizontal
@@ -339,18 +445,13 @@ export default function HailTracerScreen() {
             contentContainerStyle={styles.chipScrollContent}
           >
             {(Object.keys(RANGE_LABELS) as Range[]).map((r) => (
-              <PressableScale
+              <GlassChip
                 key={r}
-                style={[styles.chip, range === r && styles.chipActive]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: range === r }}
+                active={range === r}
+                label={RANGE_LABELS[r]}
                 accessibilityLabel={RANGE_LABELS[r]}
                 onPress={() => setRange(r)}
-              >
-                <Text style={[styles.chipText, range === r && styles.chipTextActive]}>
-                  {RANGE_LABELS[r]}
-                </Text>
-              </PressableScale>
+              />
             ))}
           </ScrollView>
 
@@ -366,24 +467,25 @@ export default function HailTracerScreen() {
               { id: 'hail_15', label: '≥1.5" hail' },
               { id: 'wind_58', label: '≥58 mph wind' },
             ] as const).map((m) => (
-              <PressableScale
+              <GlassChip
                 key={m.id}
-                style={[styles.chip, magnitude === m.id && styles.chipActive]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: magnitude === m.id }}
+                active={magnitude === m.id}
+                label={m.label}
                 accessibilityLabel={m.label}
                 onPress={() => setMagnitude(m.id)}
-              >
-                <Text style={[styles.chipText, magnitude === m.id && styles.chipTextActive]}>
-                  {m.label}
-                </Text>
-              </PressableScale>
+              />
             ))}
           </ScrollView>
 
+          <View style={styles.legendRow}>
+            <StormLegend />
+          </View>
+
           {loading && (
-            <View style={styles.loadingPill}>
-              <ActivityIndicator color={colors.navy} />
+            <View style={styles.loadingShadow}>
+              <GlassCard onLight onArt radius={radii.button} style={styles.loadingPill}>
+                <ActivityIndicator color={colors.navy} />
+              </GlassCard>
             </View>
           )}
         </View>
@@ -400,38 +502,50 @@ export default function HailTracerScreen() {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
+
+          {cluster && (
+            <ClusterInsight
+              cluster={cluster}
+              onPress={() =>
+                router.push({ pathname: '/(tabs)/map', params: { focus: 'storm-leads' } } as any)
+              }
+            />
+          )}
+
           {selected && (
-            <View style={styles.detailSheet}>
-              <View style={styles.detailHead}>
-                <Text style={styles.detailTitle}>
-                  {selected.type === 'hail' ? 'Hail event' : 'Wind event'}
-                  {selected.magnitude ? (
-                    selected.type === 'hail'
-                      ? ` · ${selected.magnitude.toFixed(2)}"`
-                      : ` · ${Math.round(selected.magnitude)} kt`
-                  ) : null}
-                </Text>
-              </View>
-              <Text style={styles.detailLine}>
-                {new Date(selected.occurredAt).toLocaleString()}
-              </Text>
-              {selected.city && (
+            <View style={styles.detailShadow}>
+              <GlassCard onLight onArt radius={radii.card} style={styles.detailSheet}>
+                <View style={styles.detailHead}>
+                  <Text style={styles.detailTitle}>
+                    {selected.type === 'hail' ? 'Hail event' : 'Wind event'}
+                    {selected.magnitude ? (
+                      selected.type === 'hail'
+                        ? ` · ${selected.magnitude.toFixed(2)}"`
+                        : ` · ${Math.round(selected.magnitude)} kt`
+                    ) : null}
+                  </Text>
+                </View>
                 <Text style={styles.detailLine}>
-                  {selected.city}{selected.state ? `, ${selected.state}` : ''}
+                  {new Date(selected.occurredAt).toLocaleString()}
                 </Text>
-              )}
-              {selected.remarks && (
-                <Text style={styles.detailRemarks}>{selected.remarks}</Text>
-              )}
-              {/* Real 56pt close target floated over the sheet corner. */}
-              <Pressable
-                style={styles.detailClose}
-                accessibilityRole="button"
-                accessibilityLabel="Close event details"
-                onPress={() => setSelected(null)}
-              >
-                <Ionicons name="close" size={22} color={colors.text} />
-              </Pressable>
+                {selected.city && (
+                  <Text style={styles.detailLine}>
+                    {selected.city}{selected.state ? `, ${selected.state}` : ''}
+                  </Text>
+                )}
+                {selected.remarks && (
+                  <Text style={styles.detailRemarks}>{selected.remarks}</Text>
+                )}
+                {/* Real 56pt close target floated over the sheet corner. */}
+                <Pressable
+                  style={styles.detailClose}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close event details"
+                  onPress={() => setSelected(null)}
+                >
+                  <Ionicons name="close" size={22} color={colors.text} />
+                </Pressable>
+              </GlassCard>
             </View>
           )}
         </View>
@@ -511,17 +625,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     gap: spacing.sm,
   },
+
+  // Glass chip — real frosted panel; shadow lives on the PressableScale
+  // wrapper so it isn't clipped by the card's own corner radius.
+  chipShadow: { borderRadius: radii.button, ...shadows.float },
   chip: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.button,
-    backgroundColor: colors.barFill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
     justifyContent: 'center',
-    ...shadows.float,
   },
-  chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  chipActive: { backgroundColor: colors.brand },
   chipText: {
     fontSize: fontSize.bodySm,
     color: colors.text,
@@ -529,24 +642,56 @@ const styles = StyleSheet.create({
   },
   chipTextActive: { color: colors.textInverse },
 
-  loadingPill: {
+  // Storm legend — semantic storm tokens (Drift #11).
+  legendRow: { marginTop: spacing.sm, paddingHorizontal: spacing.lg },
+  legendShadow: { alignSelf: 'flex-start', borderRadius: radii.pill, ...shadows.float },
+  legendCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.small,
+    paddingHorizontal: spacing.md,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
+
+  loadingShadow: {
     alignSelf: 'flex-start',
     marginLeft: spacing.lg,
     marginTop: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
     borderRadius: radii.button,
-    backgroundColor: colors.barFill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
     ...shadows.float,
   },
+  loadingPill: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
 
   overlayBottom: {
     position: 'absolute',
     left: spacing.lg,
     right: spacing.lg,
     gap: spacing.sm,
+  },
+
+  // Floating AI-insight card — the storm-lead cluster, real counts only.
+  insightShadow: { borderRadius: radii.card, ...shadows.float },
+  insightCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    minHeight: touchTarget.standard,
+  },
+  insightText: { flex: 1, gap: 1 },
+  insightLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    color: colors.accent,
+    letterSpacing: 0.8,
+  },
+  insightHeadline: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
   },
 
   errorCard: {
@@ -560,14 +705,10 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.danger, fontSize: fontSize.bodySm, flex: 1 },
 
+  detailShadow: { borderRadius: radii.card, ...shadows.float },
   detailSheet: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
     padding: spacing.lg,
     gap: spacing.xs,
-    ...shadows.float,
   },
   detailHead: {
     flexDirection: 'row',

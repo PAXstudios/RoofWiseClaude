@@ -16,6 +16,9 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { ROOF_MATERIAL_LABELS, type InspectionStatus } from '@/lib/models/types';
 import { CLAIM_VIABILITY_LABELS } from '@/lib/services/decisionEngine';
 import { resolveEngineResult } from '@/lib/services/storedEngine';
+import { RichCard } from '@/components/ui/RichCard';
+import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { Pill, type PillTone } from '@/components/ui/Pill';
 import {
   colors,
   fontSize,
@@ -34,6 +37,22 @@ const STATUSES: { id: 'all' | InspectionStatus; label: string }[] = [
   { id: 'complete', label: 'Complete' },
   { id: 'lead', label: 'Lead' },
 ];
+
+/**
+ * Per-status chrome — icon, chip colour, and pill tone all keyed off the
+ * SAME status, so the leading chip and the trailing badge always agree
+ * (craft rule: shared colour between a chip and its data). Mirrors the
+ * PillTone map Home already ships for this exact status set.
+ */
+const STATUS_META: Record<
+  InspectionStatus,
+  { icon: IoniconName; chipTone: ChipTone; pillTone: PillTone }
+> = {
+  lead: { icon: 'flag-outline', chipTone: 'quiet', pillTone: 'neutral' },
+  scheduled: { icon: 'calendar-outline', chipTone: 'blue', pillTone: 'info' },
+  in_progress: { icon: 'construct-outline', chipTone: 'orange', pillTone: 'warn' },
+  complete: { icon: 'checkmark-circle-outline', chipTone: 'green', pillTone: 'success' },
+};
 
 export default function InspectionsList() {
   const router = useRouter();
@@ -114,7 +133,7 @@ export default function InspectionsList() {
         {filtered.length === 0 ? (
           // Compact, top-anchored, honest — a setup panel, never a centered void.
           <Animated.View entering={FadeInDown.duration(motion.enterMs)} style={styles.empty}>
-            <Ionicons name="briefcase-outline" size={28} color={colors.textSubtle} />
+            <IconChip name="briefcase-outline" tone="quiet" size="md" />
             <Text style={styles.emptyTitle}>
               {inspections.length === 0 ? 'No inspections yet' : 'No matches'}
             </Text>
@@ -140,8 +159,8 @@ export default function InspectionsList() {
             )}
           </Animated.View>
         ) : (
-          <Animated.View entering={FadeInDown.duration(motion.enterMs)} style={styles.group}>
-            {filtered.map((ins, index) => {
+          <Animated.View entering={FadeInDown.duration(motion.enterMs)} style={styles.list}>
+            {filtered.map((ins) => {
               // Same read path as the job screen: the stored determination when
               // it still speaks for the current inputs. Showing the deprecated
               // 0-100 score here would put a different number next to the same
@@ -151,39 +170,29 @@ export default function InspectionsList() {
               const { haag, decision } = resolveEngineResult(ins, Date.now(), {
                 honorFreeze: false,
               });
-              const tone = statusTone(ins.status);
+              const meta = STATUS_META[ins.status];
+              const statusLabel = ins.status.replace(/_/g, ' ');
               return (
-                <View key={ins.id}>
-                  {index > 0 && <View style={styles.sep} />}
-                  <PressableScale
-                    style={styles.row}
-                    onPress={() => router.push(`/job/${ins.id}` as any)}
-                  >
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <View style={styles.rowTop}>
-                        <Text style={styles.rowName} numberOfLines={1}>
-                          {ins.customerName}
-                        </Text>
-                        <View style={[styles.statusBadge, { backgroundColor: tone.bg }]}>
-                          <Text style={[styles.statusBadgeText, { color: tone.fg }]}>
-                            {ins.status.replace(/_/g, ' ')}
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={styles.rowAddress} numberOfLines={1}>
-                        {ins.address}
-                      </Text>
-                      <Text style={styles.rowMeta} numberOfLines={1}>
-                        {ins.reportId} · {ROOF_MATERIAL_LABELS[ins.material]} · {ins.ageYears}yr
-                        {' · '}
-                        {CLAIM_VIABILITY_LABELS[haag.claim_viability]}
-                        {' · '}
-                        {decision.roofRecommendation.replace(/_/g, ' ')}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
-                  </PressableScale>
-                </View>
+                <RichCard
+                  key={ins.id}
+                  onPress={() => router.push(`/job/${ins.id}` as any)}
+                  icon={meta.icon}
+                  iconTone={meta.chipTone}
+                  title={ins.customerName}
+                  subtitle={ins.address}
+                  headerTrailing={<Pill label={statusLabel} tone={meta.pillTone} size="sm" />}
+                  chevron
+                  footer={
+                    <Text style={styles.rowMeta} numberOfLines={1}>
+                      {ins.reportId} · {ROOF_MATERIAL_LABELS[ins.material]} · {ins.ageYears}yr
+                      {' · '}
+                      {CLAIM_VIABILITY_LABELS[haag.claim_viability]}
+                      {' · '}
+                      {decision.roofRecommendation.replace(/_/g, ' ')}
+                    </Text>
+                  }
+                  accessibilityLabel={`${ins.customerName}, ${ins.address}, ${statusLabel}. ${ins.reportId}.`}
+                />
               );
             })}
           </Animated.View>
@@ -191,19 +200,6 @@ export default function InspectionsList() {
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-function statusTone(status: InspectionStatus): { bg: string; fg: string } {
-  switch (status) {
-    case 'complete':
-      return { bg: colors.successSoft, fg: colors.success };
-    case 'in_progress':
-      return { bg: colors.accentSoft, fg: colors.accent };
-    case 'scheduled':
-      return { bg: colors.brandSoft, fg: colors.brand };
-    default:
-      return { bg: colors.fillQuiet, fg: colors.textMuted };
-  }
 }
 
 const styles = StyleSheet.create({
@@ -232,11 +228,12 @@ const styles = StyleSheet.create({
     marginTop: 1,
     fontVariant: ['tabular-nums'],
   },
+  // Royal — the primary-interactive brand hue (FAB).
   fab: {
     width: touchTarget.standard,
     height: touchTarget.standard,
     borderRadius: radii.pill,
-    backgroundColor: colors.navy,
+    backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.float,
@@ -271,60 +268,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
     justifyContent: 'center',
   },
-  chipActive: { backgroundColor: colors.navy },
+  chipActive: { backgroundColor: colors.brand },
   chipText: { fontSize: fontSize.bodySm, color: colors.text, fontWeight: fontWeight.semibold },
   chipTextActive: { color: colors.textInverse },
 
   content: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxxl },
 
-  // Grouped inset list: one white card, hairline-separated 64pt cells.
-  group: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    overflow: 'hidden',
-    ...shadows.card,
-  },
-  sep: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.hairline,
-    marginLeft: spacing.lg,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: touchTarget.preferred,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  rowName: {
-    flex: 1,
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-  },
-  rowAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  // Individually crafted cards, not a continuous grouped list — that
+  // continuous-hairline pattern is exactly the "iOS Settings" look this pass
+  // exists to leave behind.
+  list: { gap: spacing.md },
+
   rowMeta: {
     fontSize: fontSize.caption,
     color: colors.textSubtle,
     textTransform: 'capitalize',
     fontVariant: ['tabular-nums'],
   },
-  statusBadge: {
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  statusBadgeText: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'capitalize',
-  },
 
-  // Compact top-anchored empty state — no card, no tinted circle, one button.
+  // Compact top-anchored empty state — no tinted circle, one button.
   empty: {
     alignItems: 'flex-start',
     gap: spacing.sm,

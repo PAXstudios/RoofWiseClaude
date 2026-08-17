@@ -12,16 +12,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { PressableScale } from '@/components/PressableScale';
+import { FadeSlideIn } from '@/components/motion';
+import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   colors,
   fontSize,
   fontWeight,
+  gradients,
   radii,
   shadows,
   spacing,
@@ -117,44 +123,59 @@ export default function NewLead() {
         keyboardVerticalOffset={88}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Field
-            label="Customer name *"
-            value={customerName}
-            onChangeText={setCustomerName}
-            placeholder="Jane Doe"
-          />
-          <Field
-            label="Phone"
-            value={customerPhone}
-            onChangeText={setCustomerPhone}
-            keyboardType="phone-pad"
-            placeholder="(555) 555-1234"
-          />
-          <Field
-            label="Email"
-            value={customerEmail}
-            onChangeText={setCustomerEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            placeholder="Optional"
-          />
-          <AddressAutocomplete
-            label="Address *"
-            value={address}
-            onChangeText={(t) => {
-              setAddress(t);
-              setLat(undefined);
-              setLng(undefined);
-            }}
-            onPlaceSelected={(p) => {
-              setAddress(p.description);
-              setLat(p.lat);
-              setLng(p.lng);
-            }}
-          />
+          <FadeSlideIn index={0}>
+            <RichCard title="Contact" icon="person-add-outline" iconTone="blue">
+              <View style={styles.fieldGroup}>
+                <Field
+                  label="Customer name *"
+                  icon="person-outline"
+                  tone="blue"
+                  value={customerName}
+                  onChangeText={setCustomerName}
+                  placeholder="Jane Doe"
+                />
+                <Field
+                  label="Phone"
+                  icon="call-outline"
+                  tone="green"
+                  value={customerPhone}
+                  onChangeText={setCustomerPhone}
+                  keyboardType="phone-pad"
+                  placeholder="(555) 555-1234"
+                />
+                <Field
+                  label="Email"
+                  icon="mail-outline"
+                  tone="purple"
+                  value={customerEmail}
+                  onChangeText={setCustomerEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholder="Optional"
+                />
+              </View>
+            </RichCard>
+          </FadeSlideIn>
 
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Follow up</Text>
+          <FadeSlideIn index={1}>
+            <AddressAutocomplete
+              label="Address *"
+              value={address}
+              onChangeText={(t) => {
+                setAddress(t);
+                setLat(undefined);
+                setLng(undefined);
+              }}
+              onPlaceSelected={(p) => {
+                setAddress(p.description);
+                setLat(p.lat);
+                setLng(p.lng);
+              }}
+            />
+          </FadeSlideIn>
+
+          <FadeSlideIn index={2}>
+            <SectionHeader title="Follow up" style={styles.sectionHeaderSpacing} />
             <View style={styles.chipRow}>
               {([
                 { label: 'None', days: null },
@@ -181,18 +202,30 @@ export default function NewLead() {
                 </PressableScale>
               ))}
             </View>
-          </View>
+          </FadeSlideIn>
         </ScrollView>
 
         <View style={styles.footer}>
           <PressableScale
-            style={[styles.primaryBtn, !canSave && styles.primaryBtnDisabled]}
+            style={styles.primaryBtn}
             disabled={!canSave}
             onPress={onSave}
             accessibilityRole="button"
             accessibilityState={{ disabled: !canSave }}
           >
-            <Text style={styles.primaryBtnText}>Save lead</Text>
+            <View style={styles.primaryBtnClip}>
+              {canSave && (
+                <LinearGradient
+                  colors={gradients.accent}
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
+              )}
+              <Text style={[styles.primaryBtnText, !canSave && styles.primaryBtnTextDisabled]}>
+                Save lead
+              </Text>
+            </View>
           </PressableScale>
         </View>
       </KeyboardAvoidingView>
@@ -200,14 +233,25 @@ export default function NewLead() {
   );
 }
 
+/**
+ * Crafted field — a colour-chipped icon inside a soft filled row, not a
+ * hairline-outlined box. Sits inside the Contact `RichCard`, so the row
+ * itself stays flat (`colors.surfaceMuted`, no shadow) — the card above it
+ * already owns the one rung of lift this section gets.
+ */
 function Field({
   label,
+  icon,
+  tone,
   ...rest
-}: { label: string } & React.ComponentProps<typeof TextInput>) {
+}: { label: string; icon: IoniconName; tone: ChipTone } & React.ComponentProps<typeof TextInput>) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput style={styles.input} placeholderTextColor={colors.textSubtle} {...rest} />
+      <View style={styles.inputRow}>
+        <IconChip name={icon} tone={tone} size="sm" />
+        <TextInput style={styles.input} placeholderTextColor={colors.textSubtle} {...rest} />
+      </View>
     </View>
   );
 }
@@ -245,6 +289,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
   },
 
+  fieldGroup: { gap: spacing.lg },
   field: { gap: spacing.sm },
   // iOS grouped-list section header language for field labels.
   fieldLabel: {
@@ -253,8 +298,23 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginLeft: spacing.xs,
   },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.control,
+    backgroundColor: colors.surfaceMuted,
+  },
+  input: {
+    flex: 1,
+    fontSize: fontSize.bodyLg,
+    color: colors.text,
+  },
+
+  sectionHeaderSpacing: { marginBottom: spacing.sm },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     minHeight: touchTarget.standard,
@@ -267,16 +327,6 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.text },
   chipText: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.semibold },
   chipTextActive: { color: colors.textInverse },
-  input: {
-    minHeight: touchTarget.standard,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    borderRadius: radii.control,
-    paddingHorizontal: spacing.lg,
-    fontSize: fontSize.bodyLg,
-    color: colors.text,
-  },
 
   footer: {
     padding: spacing.xl,
@@ -284,19 +334,29 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
   },
-  // Sticky primary CTA — the one orange moment on this screen.
+  // Sticky primary CTA — the one accent-gradient moment on this screen. The
+  // gradient is withheld while disabled so the flat neutral `fillDisabled`
+  // wash (painted into `primaryBtnClip`'s background) shows through instead —
+  // one flat surface, not a gradient dimmed by opacity. Neutral rather than
+  // washed-burnt: a tinted accent at 88pt full width still reads as live, and
+  // white on it lands near 1.9:1 (Drift #1).
   primaryBtn: {
     height: touchTarget.sticky,
     borderRadius: radii.button,
-    backgroundColor: colors.accent,
+    ...shadows.raised,
+  },
+  primaryBtnClip: {
+    flex: 1,
+    borderRadius: radii.button,
+    overflow: 'hidden',
+    backgroundColor: colors.fillDisabled,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.card,
   },
-  primaryBtnDisabled: { opacity: 0.5 },
   primaryBtnText: {
     color: colors.textInverse,
     fontWeight: fontWeight.bold,
     fontSize: fontSize.bodyLg,
   },
+  primaryBtnTextDisabled: { color: colors.textMuted },
 });

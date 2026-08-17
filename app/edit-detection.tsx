@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { IconChip } from '@/components/ui/IconChip';
 import * as Haptics from 'expo-haptics';
 import {
   colors,
@@ -79,7 +80,7 @@ export default function EditDetectionView() {
       <SafeAreaView style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.empty}>
-          <Ionicons name="alert-circle-outline" size={36} color={colors.slate} />
+          <IconChip name="alert-circle-outline" tone="quiet" />
           <Text style={styles.emptyText}>Photo not found.</Text>
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
             <Text style={styles.backBtnText}>Back</Text>

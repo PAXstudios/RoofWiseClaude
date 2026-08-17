@@ -30,6 +30,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { Aurora } from '@/components/glass/Aurora';
+import { GlassCard } from '@/components/glass/GlassCard';
 import { AppleSignInButton } from '@/components/AppleSignInButton';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { useToastStore } from '@/lib/stores/toastStore';
@@ -134,7 +135,13 @@ export default function Welcome() {
 
   return (
     <View style={styles.root}>
-      <Stack.Screen options={{ headerShown: false }} />
+      {/* Fade rather than slide on the way in from onboarding and on the way
+          out into the app — a hard slide-cut is what makes a dark/glass
+          screen and a light one read as two different products; a fade lets
+          the aurora glow dissolve instead of getting yanked offscreen. Auth
+          logic and provider buttons are unchanged — this is presentation
+          only, scoped to this screen's own transition. */}
+      <Stack.Screen options={{ headerShown: false, animation: 'fade' }} />
       <StatusBar style="light" />
       <Aurora />
 
@@ -164,27 +171,32 @@ export default function Welcome() {
 
             <Animated.View
               entering={FadeInDown.duration(motion.enterMs).delay(60)}
-              style={styles.segment}
               onLayout={(e) => setSegWidth(e.nativeEvent.layout.width)}
             >
-              {segThumbW > 0 && (
-                <Animated.View
-                  style={[styles.segmentThumb, { width: segThumbW }, segThumbStyle]}
-                />
-              )}
-              {(['signup', 'signin'] as Mode[]).map((m) => (
-                <Pressable
-                  key={m}
-                  onPress={() => setMode(m)}
-                  style={styles.segmentItem}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: mode === m }}
-                >
-                  <Text style={[styles.segmentText, mode === m && styles.segmentTextActive]}>
-                    {m === 'signup' ? 'Sign up' : 'Sign in'}
-                  </Text>
-                </Pressable>
-              ))}
+              {/* Real frosted glass (BlurView on iOS) rather than a flat
+                  tint — the segmented control is the first thing a returning
+                  user's thumb touches, so it is the one control on this
+                  screen worth the literal onboarding surface. */}
+              <GlassCard level="base" radius={radii.control + 2} style={styles.segment}>
+                {segThumbW > 0 && (
+                  <Animated.View
+                    style={[styles.segmentThumb, { width: segThumbW }, segThumbStyle]}
+                  />
+                )}
+                {(['signup', 'signin'] as Mode[]).map((m) => (
+                  <Pressable
+                    key={m}
+                    onPress={() => setMode(m)}
+                    style={styles.segmentItem}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: mode === m }}
+                  >
+                    <Text style={[styles.segmentText, mode === m && styles.segmentTextActive]}>
+                      {m === 'signup' ? 'Sign up' : 'Sign in'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </GlassCard>
             </Animated.View>
 
             <Animated.View
@@ -382,10 +394,10 @@ const styles = StyleSheet.create({
   },
   subtitle: { color: 'rgba(255,255,255,0.6)', fontSize: fontSize.bodyMd, lineHeight: 21 },
 
+  // Background/border/radius now come from the wrapping GlassCard; this
+  // style only positions the two segment items inside it.
   segment: {
     flexDirection: 'row',
-    backgroundColor: glass.fill,
-    borderRadius: radii.control + 2,
     padding: spacing.xs,
     minHeight: touchTarget.standard,
   },

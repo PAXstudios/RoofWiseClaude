@@ -6,6 +6,9 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { IconChip } from '@/components/ui/IconChip';
 import {
   colors,
   fontSize,
@@ -105,31 +108,33 @@ export default function StormAlertDetail() {
           <Stat label="In range" value={String(alert.propertyCount)} />
         </View>
 
-        <Text style={styles.sectionLabel}>Your properties in the impacted area</Text>
+        <SectionHeader title="Your properties in the impacted area" />
         {inAreaInspections.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Ionicons name="home-outline" size={28} color={colors.slate} />
-            <Text style={styles.emptyCardText}>
-              None of your saved properties are in this area yet.
-            </Text>
-          </View>
+          <RichCard>
+            <View style={styles.emptyCardInner}>
+              <IconChip name="home-outline" tone="quiet" />
+              <Text style={styles.emptyCardText}>
+                None of your saved properties are in this area yet.
+              </Text>
+            </View>
+          </RichCard>
         ) : (
-          <View style={styles.card}>
+          <RichCard padded={false}>
             {inAreaInspections.map((ins, i) => (
               <Pressable
                 key={ins.id}
                 style={[styles.row, i > 0 && styles.rowBorder]}
                 onPress={() => router.push(`/job/${ins.id}` as any)}
               >
-                <Ionicons name="home" size={20} color={colors.orange} />
+                <IconChip name="home" tone="orange" size="sm" />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowTitle}>{ins.customerName}</Text>
                   <Text style={styles.rowSub}>{ins.address}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+                <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
               </Pressable>
             ))}
-          </View>
+          </RichCard>
         )}
 
         <Pressable style={styles.primaryBtn} onPress={onAct}>
@@ -197,34 +202,20 @@ const styles = StyleSheet.create({
   statValue: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.orange },
   statLabel: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: spacing.xs },
 
-  sectionLabel: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },
-
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    ...shadows.card,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
     minHeight: touchTarget.standard,
   },
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
   rowSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
 
-  emptyCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.xxl,
-    alignItems: 'center',
-    gap: spacing.sm,
-    ...shadows.card,
-  },
-  emptyCardText: { color: colors.slate, fontSize: fontSize.bodyMd, textAlign: 'center' },
+  emptyCardInner: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
+  emptyCardText: { color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },
 
   primaryBtn: {
     flexDirection: 'row',

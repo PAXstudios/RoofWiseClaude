@@ -2,6 +2,7 @@ import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { RichCard } from '@/components/ui/RichCard';
 import {
   DAMAGE_CATEGORIES,
   DAMAGE_CATEGORY_LABELS,
@@ -11,8 +12,6 @@ import {
   colors,
   fontSize,
   fontWeight,
-  radii,
-  shadows,
   spacing,
 } from '@/theme/tokens';
 
@@ -174,8 +173,13 @@ export default function DamageExplainerScreen() {
         {DAMAGE_CATEGORIES.map((cat) => {
           const info = DAMAGE_INFO[cat];
           return (
-            <View key={cat} style={styles.card}>
-              <Text style={styles.catTitle}>{DAMAGE_CATEGORY_LABELS[cat]}</Text>
+            <RichCard
+              key={cat}
+              title={DAMAGE_CATEGORY_LABELS[cat]}
+              icon="albums-outline"
+              iconTone="orange"
+              contentStyle={styles.cardBody}
+            >
               <Text style={styles.what}>{info.what}</Text>
 
               <Text style={styles.subSection}>Visual characteristics</Text>
@@ -200,7 +204,7 @@ export default function DamageExplainerScreen() {
 
               <Text style={styles.subSection}>Coverage</Text>
               <Text style={styles.coverage}>{info.coverage}</Text>
-            </View>
+            </RichCard>
           );
         })}
       </ScrollView>
@@ -223,15 +227,8 @@ const styles = StyleSheet.create({
 
   scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    gap: spacing.xs,
-    ...shadows.card,
-  },
-  catTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.orange },
-  what: { fontSize: fontSize.bodyLg, color: colors.navy, marginTop: 2 },
+  cardBody: { gap: spacing.xs },
+  what: { fontSize: fontSize.bodyLg, color: colors.text },
 
   subSection: {
     fontSize: fontSize.caption,

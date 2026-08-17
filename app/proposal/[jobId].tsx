@@ -11,6 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { RichCard } from '@/components/ui/RichCard';
+import { IconChip } from '@/components/ui/IconChip';
 import * as Clipboard from 'expo-clipboard';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
@@ -73,7 +75,7 @@ export default function ProposalView() {
       <SafeAreaView style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.empty}>
-          <Ionicons name="alert-circle-outline" size={36} color={colors.slate} />
+          <IconChip name="alert-circle-outline" tone="quiet" />
           <Text style={styles.emptyText}>Job not found.</Text>
           <Pressable style={styles.secondaryBtn} onPress={() => router.back()}>
             <Text style={styles.secondaryBtnText}>Back</Text>
@@ -150,13 +152,11 @@ export default function ProposalView() {
           </Text>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.section}>Scope</Text>
+        <RichCard title="Scope" icon="document-text-outline" iconTone="blue" contentStyle={styles.cardBody}>
           <Text style={styles.body}>{proposal.scopeOfWork}</Text>
-        </View>
+        </RichCard>
 
-        <View style={styles.card}>
-          <Text style={styles.section}>Line items</Text>
+        <RichCard title="Line items" icon="list-outline" iconTone="green" contentStyle={styles.cardBody}>
           {proposal.lineItems.map((li) => (
             <View key={li.id} style={styles.row}>
               <View style={{ flex: 1 }}>
@@ -180,15 +180,13 @@ export default function ProposalView() {
             <Text style={styles.grandLabel}>Total</Text>
             <Text style={styles.grandValue}>${proposal.total.toLocaleString()}</Text>
           </View>
-        </View>
+        </RichCard>
 
-        <View style={styles.card}>
-          <Text style={styles.section}>Terms</Text>
+        <RichCard title="Terms" icon="shield-checkmark-outline" iconTone="purple" contentStyle={styles.cardBody}>
           <Text style={styles.body}>{proposal.termsText}</Text>
-        </View>
+        </RichCard>
 
-        <View style={styles.card}>
-          <Text style={styles.section}>Share link</Text>
+        <RichCard title="Share link" icon="link-outline" iconTone="orange" contentStyle={styles.cardBody}>
           {(() => {
             const existing = allLinks.find((l) => l.proposalId === proposal.id);
             if (!existing) {
@@ -254,10 +252,9 @@ export default function ProposalView() {
               </>
             );
           })()}
-        </View>
+        </RichCard>
 
-        <View style={styles.card}>
-          <Text style={styles.section}>Homeowner signature</Text>
+        <RichCard title="Homeowner signature" icon="create-outline" iconTone="blue" contentStyle={styles.cardBody}>
           <Text style={styles.body}>
             Have the homeowner sign below before sending the proposal.
           </Text>
@@ -279,7 +276,7 @@ export default function ProposalView() {
               <Text style={styles.signedText}>Signed</Text>
             </View>
           )}
-        </View>
+        </RichCard>
 
         <Pressable style={styles.secondaryBtn} onPress={onRegenerate}>
           <Ionicons name="refresh-outline" size={18} color={colors.navy} />
@@ -355,6 +352,7 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   section: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
+  cardBody: { gap: spacing.sm },
   body: { fontSize: fontSize.bodyMd, color: colors.navy, lineHeight: 20 },
 
   row: {

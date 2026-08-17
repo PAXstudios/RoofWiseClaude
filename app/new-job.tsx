@@ -590,12 +590,18 @@ export default function NewJobWizard() {
               style={[styles.primaryBtn, !canAdvance && styles.primaryBtnDisabled]}
               onPress={onNext}
               disabled={!canAdvance}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canAdvance }}
             >
-              <Text style={styles.primaryBtnText}>
+              <Text style={[styles.primaryBtnText, !canAdvance && styles.primaryBtnTextDisabled]}>
                 {stepKey === 'review' ? 'Save job' : 'Next'}
               </Text>
               {stepKey !== 'review' && (
-                <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
+                <Ionicons
+                  name="arrow-forward"
+                  size={20}
+                  color={canAdvance ? colors.textInverse : colors.textMuted}
+                />
               )}
             </Pressable>
           </View>
@@ -1748,10 +1754,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  // Flat washed fill, not element opacity — opacity composites the label into
-  // its own layer and paints a visible seam inside the disabled surface.
-  primaryBtnDisabled: { backgroundColor: colors.accentDisabled },
+  // Flat neutral fill, not a washed accent and not element opacity: a tinted
+  // burnt fill at 88pt full width still reads as a live primary button (so a
+  // gloved roofer taps a dead control), and white on it measures ~1.9:1.
+  // Neutral fill + muted ink reads as disabled AND stays legible in sun.
+  primaryBtnDisabled: { backgroundColor: colors.fillDisabled },
   primaryBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  primaryBtnTextDisabled: { color: colors.textMuted },
 
   secondaryBtn: {
     flexDirection: 'row',

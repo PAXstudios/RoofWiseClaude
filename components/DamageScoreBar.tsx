@@ -1,27 +1,27 @@
-import { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import {
   claimWorthiness,
   type ClaimViabilityBand,
   type ClaimWorthiness,
   type DecisionEngineResult,
 } from '@/lib/services/decisionEngine';
+import { ProgressBar, type ProgressTone } from '@/components/ui/ProgressBar';
+import { Pill, type PillTone } from '@/components/ui/Pill';
+import type { IoniconName } from '@/components/ui/IconChip';
 import {
   colors,
   fontSize,
   fontWeight,
-  motion,
   radii,
+  shadows,
   spacing,
 } from '@/theme/tokens';
 
 /**
- * Claim viability, as a BAND.
+ * Claim viability, as a BAND — rendered as the screen's authoritative verdict
+ * block: a big band word, a semantic-toned progress track, and (optionally)
+ * the evidence counts that back it up.
  *
  * This component used to render the deprecated 0–100 "damage score". That
  * number is not part of the HAAG spec — its weights were never in any source
@@ -33,7 +33,9 @@ import {
  * Pass `band` — the engine's `claim_viability`. The `score` prop is kept for
  * call sites that still hold the deprecated number and is mapped to a band
  * through the engine's own `claimWorthiness()` (see below), never through
- * thresholds restated here.
+ * thresholds restated here. `stats` is a purely presentational, optional
+ * addendum — pre-formatted counts (slopes, photos, findings…) that give the
+ * verdict evidentiary weight without this component knowing what they mean.
  */
 type Props = {
   /** The §6 claim-viability band from the decision engine. Preferred. */
@@ -43,6 +45,13 @@ type Props = {
    * Pass `band` instead — see `decisionEngine.damageScore()`'s deprecation note.
    */
   score?: number;
+  /**
+   * Supporting evidence counts — e.g. slopes evaluated, photos captured,
+   * findings documented. Pre-formatted by the caller and rendered in tabular
+   * figures under the verdict. Omit entirely when there is nothing real to
+   * show (Drift #5: never invent a count).
+   */
+  stats?: { label: string; value: string }[];
 };
 
 const BAND_LABEL: Record<ClaimViabilityBand, string> = {
@@ -54,17 +63,27 @@ const BAND_LABEL: Record<ClaimViabilityBand, string> = {
 /** Ordinal position on the LOW → MEDIUM → HIGH scale (fills the meter). */
 const BAND_RANK: Record<ClaimViabilityBand, number> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
 
-const BAND_TONE: Record<ClaimViabilityBand, { fg: string; soft: string }> = {
-  HIGH: { fg: colors.success, soft: colors.successSoft },
-  MEDIUM: { fg: colors.warn, soft: colors.warnSoft },
-  LOW: { fg: colors.danger, soft: colors.dangerSoft },
-};
-
 /** Short, plain-language meaning — mirrors the Long Report's §6 wording. */
 const BAND_CAPTION: Record<ClaimViabilityBand, string> = {
   HIGH: 'Damage, storm corroboration, and policy posture support approval.',
   MEDIUM: 'Supportable, but a carrier has room to contest it.',
   LOW: 'As documented, this does not support a claim.',
+};
+
+const BAND_TONE: Record<
+  ClaimViabilityBand,
+  { fg: string; pill: PillTone; progress: ProgressTone; icon: IoniconName }
+> = {
+  HIGH: { fg: colors.success, pill: 'success', progress: 'success', icon: 'shield-checkmark' },
+  MEDIUM: { fg: colors.warn, pill: 'warn', progress: 'warn', icon: 'alert-circle' },
+  LOW: { fg: colors.danger, pill: 'danger', progress: 'danger', icon: 'close-circle' },
+};
+
+const UNASSESSED_TONE = {
+  fg: colors.textMuted,
+  pill: 'neutral' as PillTone,
+  progress: 'quiet' as ProgressTone,
+  icon: 'help-circle-outline' as IoniconName,
 };
 
 /**
@@ -99,47 +118,42 @@ export function bandFromDeprecatedScore(score: number): ClaimViabilityBand {
   return WORTHINESS_TO_BAND[claimWorthiness(NUMERIC_PROBE, clamped)];
 }
 
-export function DamageScoreBar({ band, score }: Props) {
+export function DamageScoreBar({ band, score, stats }: Props) {
   const resolved: ClaimViabilityBand | null =
     band ?? (typeof score === 'number' ? bandFromDeprecatedScore(score) : null);
 
   // Nothing evaluated yet reads as "not assessed" — never as a zero band
   // (Drift #5: an absent determination is stated, never synthesized).
-  const tone = resolved
-    ? BAND_TONE[resolved]
-    : { fg: colors.textMuted, soft: colors.fillQuiet };
+  const tone = resolved ? BAND_TONE[resolved] : UNASSESSED_TONE;
   const rank = resolved ? BAND_RANK[resolved] : 0;
   const label = resolved ? BAND_LABEL[resolved] : 'Not assessed';
   const caption = resolved
     ? BAND_CAPTION[resolved]
     : 'Analyze the slopes to get a claim-viability band.';
 
-  // The track springs up to the band's rank — the analysis payoff moment.
-  const progress = useSharedValue(0);
-  useEffect(() => {
-    progress.value = withSpring(rank, motion.snappy);
-  }, [rank, progress]);
-
-  const fillStyle = useAnimatedStyle(() => ({
-    width: `${(Math.min(3, Math.max(0, progress.value)) / 3) * 100}%`,
-  }));
-
   return (
     <View
-      style={styles.wrap}
+      style={styles.card}
       accessibilityRole="summary"
       accessibilityLabel={`Claim viability ${label}. ${caption}`}
     >
       <View style={styles.headerRow}>
-        <Text style={styles.label}>Claim viability</Text>
-        <View style={[styles.badge, { backgroundColor: tone.soft }]}>
-          <Text style={[styles.badgeText, { color: tone.fg }]}>{label}</Text>
+        <View style={styles.eyebrowGroup}>
+          <Ionicons name={tone.icon} size={16} color={tone.fg} />
+          <Text style={styles.eyebrow}>Claim viability</Text>
         </View>
+        <Pill label={label} tone={tone.pill} solid size="sm" />
       </View>
 
-      <View style={styles.track}>
-        <Animated.View style={[styles.fill, { backgroundColor: tone.fg }, fillStyle]} />
-      </View>
+      <Text style={[styles.headline, { color: tone.fg }]}>{label}</Text>
+
+      <ProgressBar
+        progress={rank / 3}
+        tone={tone.progress}
+        height={10}
+        style={styles.track}
+        accessibilityLabel={`Claim viability ${label} of Low, Medium, High`}
+      />
 
       <View style={styles.legendRow}>
         <Text style={[styles.legend, styles.legendStart]}>Low</Text>
@@ -148,6 +162,22 @@ export function DamageScoreBar({ band, score }: Props) {
       </View>
 
       <Text style={styles.caption}>{caption}</Text>
+
+      {stats && stats.length > 0 && (
+        <View style={styles.statsRow}>
+          {stats.map((s) => (
+            <View key={s.label} style={styles.statCell}>
+              <Text style={styles.statValue} numberOfLines={1}>
+                {s.value}
+              </Text>
+              <Text style={styles.statLabel} numberOfLines={1}>
+                {s.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
       <Text style={styles.footnote}>
         {band === undefined && typeof score === 'number'
           ? 'HAAG §6 band, estimated from the legacy damage score.'
@@ -158,33 +188,34 @@ export function DamageScoreBar({ band, score }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.sm },
+  // The authoritative verdict block — a document a carrier respects, so it
+  // carries the `raised` rung rather than a flat cell.
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    padding: spacing.lg,
+    gap: spacing.md,
+    ...shadows.raised,
+  },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  label: {
+  eyebrowGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  eyebrow: {
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
     fontWeight: fontWeight.semibold,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
-  // iOS-style band badge: semantic soft ground + semantic text, never a blob.
-  badge: {
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+  // The big band word — the typographic contrast the design calls for: a
+  // huge, confident label carrying the semantic colour, not a plain number.
+  headline: {
+    fontSize: fontSize.display,
+    fontWeight: fontWeight.bold,
+    letterSpacing: -1,
   },
-  badgeText: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-  },
-  // Thin iOS progress track; the fill springs to the band's rank on mount.
-  track: {
-    height: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.fillQuiet,
-    overflow: 'hidden',
-  },
-  fill: { height: 6, borderRadius: radii.pill },
+  track: { marginTop: 2 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   legend: { flex: 1, fontSize: fontSize.caption, color: colors.textSubtle },
   legendStart: { textAlign: 'left' },
@@ -194,6 +225,28 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodySm,
     color: colors.textMuted,
     lineHeight: 18,
+  },
+  // Supporting counts — the evidence behind the verdict, tabular so the
+  // figures line up the way a carrier's own exhibits would.
+  statsRow: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+    paddingTop: spacing.md,
+  },
+  statCell: { flex: 1, gap: 2 },
+  statValue: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  statLabel: {
+    fontSize: fontSize.caption,
+    color: colors.textSubtle,
+    fontWeight: fontWeight.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   footnote: { fontSize: fontSize.caption, color: colors.textSubtle },
 });

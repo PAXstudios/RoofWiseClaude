@@ -79,13 +79,20 @@ function AuroraOrb({ orb, base }: { orb: Orb; base: number }) {
  * Slow-drifting brand-colored light behind the onboarding glass. Gives the
  * black background depth without ever competing with the foreground copy —
  * the orbs are low-opacity radial gradients, not shapes you'd read as objects.
+ *
+ * `transparent` drops the black ground so the orbs can be layered OVER a
+ * gradient (e.g. `gradients.stormNight`) instead of replacing it — that's how
+ * the in-app heroes quote the onboarding sky without losing the ramp under it.
  */
-export function Aurora() {
+export function Aurora({ transparent = false }: { transparent?: boolean } = {}) {
   const { width, height } = useWindowDimensions();
   const base = Math.min(width, height);
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.root]} pointerEvents="none">
+    <View
+      style={[StyleSheet.absoluteFill, styles.root, transparent && styles.transparent]}
+      pointerEvents="none"
+    >
       {ORBS.map((orb) => (
         <AuroraOrb key={orb.color} orb={orb} base={base} />
       ))}
@@ -95,4 +102,5 @@ export function Aurora() {
 
 const styles = StyleSheet.create({
   root: { backgroundColor: brand.black, overflow: 'hidden' },
+  transparent: { backgroundColor: 'transparent' },
 });

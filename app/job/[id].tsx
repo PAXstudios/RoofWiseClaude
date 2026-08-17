@@ -1,10 +1,12 @@
 import { PressableScale } from '@/components/PressableScale';
 import { formatDate, formatDateShort, formatRelative } from '@/lib/format/date';
 import { useRef, useState } from 'react';
-import { ScrollView, View, Text, StyleSheet, Alert, Image, Share, TextInput } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, Alert, Share, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
@@ -23,6 +25,8 @@ import {
   CLAIM_VIABILITY_LABELS,
   ROOFWISE_RECOMMENDATION_LABELS,
   SAFETY_RATING_LABELS,
+  type ClaimViabilityBand,
+  type RoofwiseRecommendation,
 } from '@/lib/services/decisionEngine';
 import {
   resolveEngineResult,
@@ -43,10 +47,16 @@ import {
   type Slope,
   type SlopeVerdict,
 } from '@/lib/models/types';
+import { RichCard } from '@/components/ui/RichCard';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { Pill, type PillTone } from '@/components/ui/Pill';
 import {
+  brand,
   colors,
   fontSize,
   fontWeight,
+  gradients,
   radii,
   shadows,
   spacing,
@@ -61,6 +71,43 @@ const COLLATERAL_ITEMS = [
   { key: 'window_screens', label: 'Hail damage on window screens / siding' },
   { key: 'gutters_dented', label: 'Dents in gutters or downspouts' },
 ];
+
+/** Claim-viability band → the Pill tone that carries it on the photo hero. */
+const BAND_PILL_TONE: Record<ClaimViabilityBand, PillTone> = {
+  HIGH: 'success',
+  MEDIUM: 'warn',
+  LOW: 'danger',
+};
+
+/** Roofwise recommendation → icon chip colour/glyph for the HAAG verdict card. */
+const RECOMMENDATION_TONE: Record<RoofwiseRecommendation, ChipTone> = {
+  FULL_REPLACEMENT: 'orange',
+  PARTIAL_REPLACEMENT: 'orange',
+  REPAIR: 'green',
+  NO_STORM_DAMAGE: 'quiet',
+};
+const RECOMMENDATION_ICON: Record<RoofwiseRecommendation, IoniconName> = {
+  FULL_REPLACEMENT: 'hammer-outline',
+  PARTIAL_REPLACEMENT: 'construct-outline',
+  REPAIR: 'checkmark-done-outline',
+  NO_STORM_DAMAGE: 'close-circle-outline',
+};
+
+/** Per-slope verdict → Pill tone + label. Same semantics the old hand-rolled
+ * VerdictPill used (accent/warn/info/neutral), just spoken through the
+ * shared `Pill` primitive instead of a bespoke badge. */
+const SLOPE_VERDICT_PILL_TONE: Record<SlopeVerdict, PillTone> = {
+  full_replace: 'accent',
+  partial_replace: 'warn',
+  verify_with_inspector: 'info',
+  repair: 'neutral',
+};
+const SLOPE_VERDICT_LABEL: Record<SlopeVerdict, string> = {
+  full_replace: 'Full replace',
+  partial_replace: 'Partial',
+  verify_with_inspector: 'Verify',
+  repair: 'Repair',
+};
 
 export default function JobDetail() {
   const router = useRouter();
@@ -116,6 +163,41 @@ export default function JobDetail() {
   const { haag, decision } = resolveEngineResult(inspection, Date.now(), { honorFreeze: false });
   const engineFreshness = storedEngineFreshness(inspection);
   const isClaim = inspection.kind === 'insurance_claim';
+
+  // The hero's photo — the job's real first captured photo, across any
+  // slope. Never stock imagery: no photo yet means the crafted gradient
+  // placeholder below, not a synthesized image.
+  const heroPhoto = inspection.slopes.flatMap((sl) => sl.photoPaths)[0];
+  const totalPhotos = inspection.slopes.reduce((a, sl) => a + sl.photoPaths.length, 0);
+  const totalFindings = inspection.slopes.reduce(
+    (a, sl) => a + (sl.aiFindings ?? []).filter((f) => f.detected).length,
+    0,
+  );
+
+  // Pre-formatted insurance body lines — computed once so the RichCard below
+  // can pass `null` (no body at all) rather than an array of `false`s when
+  // there is nothing real to show.
+  const insurancePolicyLine =
+    inspection.policyNumber || inspection.claimNumber
+      ? [
+          inspection.policyNumber && `Policy ${inspection.policyNumber}`,
+          inspection.claimNumber && `Claim ${inspection.claimNumber}`,
+        ]
+          .filter(Boolean)
+          .join('  ·  ')
+      : null;
+  const claimDetailLine = isClaim
+    ? [
+        inspection.causeOfLoss && CAUSE_OF_LOSS_LABELS[inspection.causeOfLoss],
+        inspection.policyType && POLICY_TYPE_LABELS[inspection.policyType],
+        inspection.deductible != null && `$${inspection.deductible.toLocaleString()} deductible`,
+        // Formatted, never raw: the stored value is an ISO timestamp and a
+        // raw one reads as broken on a claim screen.
+        inspection.dateOfLoss && `DOL ${formatDateShort(inspection.dateOfLoss)}`,
+      ]
+        .filter(Boolean)
+        .join('  ·  ') || 'Claim details not recorded yet'
+    : null;
 
   const onDelete = () => {
     Alert.alert(
@@ -289,114 +371,102 @@ export default function JobDetail() {
       </View>
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll}>
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Address</Text>
-          <Text style={styles.cardValue}>{inspection.address}</Text>
-        </View>
+        {/* The screen's cinematic moment: the job's own photo, the address,
+            the claim-viability call, and the verdict — a document a carrier
+            respects, not a settings row. */}
+        <JobHero
+          photoUri={heroPhoto}
+          reportId={inspection.reportId}
+          address={inspection.address}
+          band={haag.claim_viability}
+          recommendation={haag.roofwise_recommendation}
+        />
 
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Roof System</Text>
-          <Text style={styles.cardValue}>{ROOF_MATERIAL_LABELS[inspection.material]}</Text>
-          <Text style={styles.cardSub}>
-            {inspection.geometry} · {inspection.ageYears} yr · {inspection.condition}
-          </Text>
-        </View>
+        <SectionHeader title="Property" style={styles.sectionSpacing} />
+
+        <RichCard
+          icon="layers-outline"
+          iconTone="blue"
+          title={ROOF_MATERIAL_LABELS[inspection.material]}
+          subtitle={`${inspection.geometry} · ${inspection.ageYears} yr · ${inspection.condition}`}
+        />
 
         {(inspection.carrier || isClaim) && (
-          <View style={styles.card}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-              <Text style={styles.cardLabel}>Insurance</Text>
-              {isClaim && (
-                <View style={styles.claimBadge}>
-                  <Text style={styles.claimBadgeText}>Insurance Claim</Text>
-                </View>
-              )}
-            </View>
-            {inspection.carrier && (
-              <Text style={styles.cardValue}>{INSURANCE_CARRIER_LABELS[inspection.carrier]}</Text>
-            )}
-            {(inspection.policyNumber || inspection.claimNumber) && (
-              <Text style={styles.cardSub}>
-                {inspection.policyNumber && `Policy ${inspection.policyNumber}`}
-                {inspection.policyNumber && inspection.claimNumber && '  ·  '}
-                {inspection.claimNumber && `Claim ${inspection.claimNumber}`}
-              </Text>
-            )}
-            {isClaim && (
-              <Text style={styles.cardSub}>
-                {[
-                  inspection.causeOfLoss && CAUSE_OF_LOSS_LABELS[inspection.causeOfLoss],
-                  inspection.policyType && POLICY_TYPE_LABELS[inspection.policyType],
-                  inspection.deductible != null &&
-                    `$${inspection.deductible.toLocaleString()} deductible`,
-                  // Formatted, never raw: the stored value is an ISO
-                  // timestamp and a raw one reads as broken on a claim screen.
-                  inspection.dateOfLoss && `DOL ${formatDateShort(inspection.dateOfLoss)}`,
-                ]
-                  .filter(Boolean)
-                  .join('  ·  ') || 'Claim details not recorded yet'}
-              </Text>
-            )}
-          </View>
+          <RichCard
+            icon="shield-outline"
+            iconTone="purple"
+            title={inspection.carrier ? INSURANCE_CARRIER_LABELS[inspection.carrier] : 'Insurance'}
+            headerTrailing={isClaim ? <Pill label="Insurance Claim" tone="accent" size="sm" /> : undefined}
+            contentStyle={styles.bodyRows}
+          >
+            {insurancePolicyLine || claimDetailLine ? (
+              <>
+                {insurancePolicyLine && <Text style={styles.cardSub}>{insurancePolicyLine}</Text>}
+                {claimDetailLine && <Text style={styles.cardSub}>{claimDetailLine}</Text>}
+              </>
+            ) : null}
+          </RichCard>
         )}
 
         {inspection.event && (
-          <View style={styles.card}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-              <Ionicons name="thunderstorm" size={20} color={colors.accent} />
-              <Text style={styles.cardLabel}>Storm match</Text>
-            </View>
-            <Text style={styles.cardValue}>
-              {inspection.event.kind === 'hail'
+          <RichCard
+            icon="thunderstorm"
+            iconTone="orange"
+            title={
+              inspection.event.kind === 'hail'
                 ? `${inspection.event.hailSizeInches?.toFixed(2) ?? ''}" hail`
-                : `${inspection.event.windSpeedMph ?? ''} mph wind`}
-            </Text>
-            <Text style={styles.cardSub}>
-              {formatDate(inspection.event.date, 'Date unavailable')}
-              {inspection.event.distanceMiles
-                ? ` · ${inspection.event.distanceMiles.toFixed(1)} mi away`
-                : ''}
-              {' · '}
-              {inspection.event.source}
-              {inspection.event.noaaEventId ? ` · ${inspection.event.noaaEventId}` : ''}
-            </Text>
-          </View>
+                : `${inspection.event.windSpeedMph ?? ''} mph wind`
+            }
+            subtitle={`${formatDate(inspection.event.date, 'Date unavailable')}${
+              inspection.event.distanceMiles ? ` · ${inspection.event.distanceMiles.toFixed(1)} mi away` : ''
+            } · ${inspection.event.source}${
+              inspection.event.noaaEventId ? ` · ${inspection.event.noaaEventId}` : ''
+            }`}
+          />
         )}
 
-        <View style={styles.card}>
-          <DamageScoreBar band={haag.claim_viability} />
-        </View>
+        <SectionHeader title="Assessment" style={styles.sectionSpacing} />
 
-        <View style={styles.statsRow}>
-          <Stat label="Slopes" value={String(inspection.slopes.length)} />
-          <Stat label="Photos" value={String(inspection.slopes.reduce((a, sl) => a + sl.photoPaths.length, 0))} />
-          <Stat label="Claim" value={CLAIM_VIABILITY_LABELS[haag.claim_viability]} />
-        </View>
+        <DamageScoreBar
+          band={haag.claim_viability}
+          stats={[
+            { label: 'Slopes', value: String(inspection.slopes.length) },
+            { label: 'Photos', value: String(totalPhotos) },
+            { label: 'Findings', value: String(totalFindings) },
+          ]}
+        />
 
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>HAAG verdict</Text>
-          <Text style={styles.cardValue}>
-            {ROOFWISE_RECOMMENDATION_LABELS[haag.roofwise_recommendation]}
-          </Text>
+        <RichCard
+          icon={RECOMMENDATION_ICON[haag.roofwise_recommendation]}
+          iconTone={RECOMMENDATION_TONE[haag.roofwise_recommendation]}
+          title="HAAG Verdict"
+          subtitle={ROOFWISE_RECOMMENDATION_LABELS[haag.roofwise_recommendation]}
+        >
           <Text style={styles.cardSub}>{decision.roofVerdictReasoning}</Text>
-          <Text style={styles.cardSub}>
-            Roofer safety: {SAFETY_RATING_LABELS[haag.roofer_safety_rating]}
-          </Text>
-        </View>
+          <View style={styles.safetyRow}>
+            <Ionicons name="shield-outline" size={15} color={colors.textMuted} />
+            <Text style={styles.safetyText}>
+              Roofer safety: {SAFETY_RATING_LABELS[haag.roofer_safety_rating]}
+            </Text>
+          </View>
+        </RichCard>
 
-        <PressableScale
-          style={styles.primaryBtn}
+        <RichCard
           onPress={() =>
             router.push({ pathname: '/quick-inspection', params: { jobId: inspection.id } })
           }
-        >
-          <Ionicons name="scan-outline" size={20} color={colors.text} />
-          <Text style={styles.primaryBtnText}>Start Quick Inspection</Text>
-        </PressableScale>
+          icon="scan-outline"
+          iconTone="blue"
+          title="Start Quick Inspection"
+          subtitle="Capture more photos for this job"
+          chevron
+        />
+
+        <SectionHeader title="Roof Slopes" style={styles.sectionSpacing} />
 
         {inspection.slopes.length === 0 ? (
           <View style={styles.placeholderBox}>
-            <Ionicons name="camera-outline" size={28} color={colors.textSubtle} />
+            <IconChip name="camera-outline" tone="quiet" size="md" />
             <Text style={styles.placeholderText}>
               No slopes captured yet. Tap Start Quick Inspection to take photos.
             </Text>
@@ -417,24 +487,22 @@ export default function JobDetail() {
           })
         )}
 
-        <PressableScale
-          style={styles.proposalCard}
+        <RichCard
           onPress={() => router.push(`/proposal/${inspection.id}` as any)}
-        >
-          <Ionicons name="document-attach-outline" size={22} color={colors.text} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.proposalTitle}>
-              {proposal ? `Proposal · $${proposal.total.toLocaleString()}` : 'Generate proposal'}
-            </Text>
-            <Text style={styles.proposalSub}>
-              {proposal ? `${proposal.status} · ${proposal.lineItems.length} line items` : 'From Decision Engine + Solar squares + regional pricing'}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
-        </PressableScale>
+          icon="document-attach-outline"
+          iconTone={proposal ? 'green' : 'blue'}
+          title={proposal ? `Proposal · $${proposal.total.toLocaleString()}` : 'Generate proposal'}
+          subtitle={
+            proposal
+              ? `${proposal.status} · ${proposal.lineItems.length} line items`
+              : 'From Decision Engine + Solar squares + regional pricing'
+          }
+          chevron
+        />
 
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Collateral checklist</Text>
+        <SectionHeader title="Collateral" style={styles.sectionSpacing} />
+
+        <RichCard icon="checkbox-outline" iconTone="blue" title="Collateral Checklist" contentStyle={styles.bodyRows}>
           {COLLATERAL_ITEMS.map((item) => {
             const checked = !!inspection.collateralChecklist[item.key];
             return (
@@ -454,130 +522,136 @@ export default function JobDetail() {
               </PressableScale>
             );
           })}
-        </View>
+        </RichCard>
 
         {isClaim && (
           <View
-            style={styles.card}
             onLayout={(e) => {
               evidenceCardY.current = e.nativeEvent.layout.y;
             }}
           >
-            <Text style={styles.cardLabel}>Claim evidence</Text>
-            {COLLATERAL_ZONES.map((zone) => {
-              const item = inspection.collateralEvidence?.[zone] ?? { checked: false, photoIds: [] };
-              return (
-                <View key={zone} style={styles.zoneRow}>
-                  <PressableScale
-                    style={[styles.collateralRow, { flex: 1 }]}
-                    onPress={() =>
-                      setCollateralZone(inspection.id, zone, { checked: !item.checked })
-                    }
-                  >
-                    <Ionicons
-                      name={item.checked ? 'checkbox' : 'square-outline'}
-                      size={22}
-                      color={item.checked ? colors.success : colors.textSubtle}
-                    />
-                    <Text style={styles.collateralLabel}>{COLLATERAL_ZONE_LABELS[zone]}</Text>
-                  </PressableScale>
-                  <PressableScale
-                    style={styles.zonePhotoBtn}
-                    accessibilityLabel={`Add photo for ${COLLATERAL_ZONE_LABELS[zone]}`}
-                    onPress={() =>
-                      void pickEvidencePhoto((uri) => {
-                        // Re-read: the picker is async and the record may have
-                        // changed while the camera was open.
-                        const current = useInspectionStore
-                          .getState()
-                          .getById(inspection.id)?.collateralEvidence?.[zone];
-                        setCollateralZone(inspection.id, zone, {
-                          photoIds: [...(current?.photoIds ?? []), uri],
-                          // A photographed zone is a checked zone — a clean
-                          // photo still proves the zone was worked.
-                          checked: true,
-                        });
-                      })
-                    }
-                  >
-                    <Ionicons name="camera-outline" size={20} color={colors.text} />
-                    {item.photoIds.length > 0 && (
-                      <Text style={styles.zonePhotoCount}>{item.photoIds.length}</Text>
-                    )}
-                  </PressableScale>
-                </View>
-              );
-            })}
-
-            <Text style={[styles.cardLabel, { marginTop: spacing.md }]}>Brittleness test</Text>
-            <Text style={styles.cardSub}>
-              Lift shingle corners in an undamaged area and photograph the test — the photo is
-              required evidence on an insurance report.
-            </Text>
-            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-              {(['PASS', 'FAIL', 'BORDERLINE'] as BrittlenessResult[]).map((r) => {
-                const active = inspection.brittlenessProtocol?.result === r;
+            <RichCard
+              icon="shield-checkmark-outline"
+              iconTone="purple"
+              title="Claim Evidence"
+              contentStyle={styles.bodyRows}
+            >
+              {COLLATERAL_ZONES.map((zone) => {
+                const item = inspection.collateralEvidence?.[zone] ?? { checked: false, photoIds: [] };
                 return (
-                  <PressableScale
-                    key={r}
-                    style={[styles.britChip, active && styles.britChipActive]}
-                    onPress={() =>
-                      setBrittlenessProtocol(inspection.id, {
-                        result: r,
-                        photoIds: inspection.brittlenessProtocol?.photoIds ?? [],
-                        notes: inspection.brittlenessProtocol?.notes,
-                      })
-                    }
-                  >
-                    <Text style={[styles.britChipText, active && styles.britChipTextActive]}>
-                      {r === 'PASS' ? 'Pass' : r === 'FAIL' ? 'Fail' : 'Borderline'}
-                    </Text>
-                  </PressableScale>
+                  <View key={zone} style={styles.zoneRow}>
+                    <PressableScale
+                      style={[styles.collateralRow, { flex: 1 }]}
+                      onPress={() =>
+                        setCollateralZone(inspection.id, zone, { checked: !item.checked })
+                      }
+                    >
+                      <Ionicons
+                        name={item.checked ? 'checkbox' : 'square-outline'}
+                        size={22}
+                        color={item.checked ? colors.success : colors.textSubtle}
+                      />
+                      <Text style={styles.collateralLabel}>{COLLATERAL_ZONE_LABELS[zone]}</Text>
+                    </PressableScale>
+                    <PressableScale
+                      style={styles.zonePhotoBtn}
+                      accessibilityLabel={`Add photo for ${COLLATERAL_ZONE_LABELS[zone]}`}
+                      onPress={() =>
+                        void pickEvidencePhoto((uri) => {
+                          // Re-read: the picker is async and the record may have
+                          // changed while the camera was open.
+                          const current = useInspectionStore
+                            .getState()
+                            .getById(inspection.id)?.collateralEvidence?.[zone];
+                          setCollateralZone(inspection.id, zone, {
+                            photoIds: [...(current?.photoIds ?? []), uri],
+                            // A photographed zone is a checked zone — a clean
+                            // photo still proves the zone was worked.
+                            checked: true,
+                          });
+                        })
+                      }
+                    >
+                      <Ionicons name="camera-outline" size={20} color={colors.text} />
+                      {item.photoIds.length > 0 && (
+                        <Text style={styles.zonePhotoCount}>{item.photoIds.length}</Text>
+                      )}
+                    </PressableScale>
+                  </View>
                 );
               })}
-            </View>
-            <PressableScale
-              style={styles.analyzeBtn}
-              onPress={() => {
-                if (!inspection.brittlenessProtocol) {
-                  Alert.alert(
-                    'Pick a result first',
-                    'Record the test result (Pass / Fail / Borderline), then attach the photo of the test process.',
-                  );
-                  return;
-                }
-                void pickEvidencePhoto((uri) => {
-                  const current = useInspectionStore
-                    .getState()
-                    .getById(inspection.id)?.brittlenessProtocol;
-                  if (!current) return;
-                  setBrittlenessProtocol(inspection.id, {
-                    ...current,
-                    photoIds: [...current.photoIds, uri],
-                  });
-                });
-              }}
-            >
-              <Ionicons name="camera-outline" size={18} color={colors.text} />
-              <Text style={styles.analyzeBtnText}>
-                Add test photo
-                {(inspection.brittlenessProtocol?.photoIds.length ?? 0) > 0
-                  ? ` (${inspection.brittlenessProtocol?.photoIds.length})`
-                  : ''}
+
+              <Text style={[styles.cardLabel, { marginTop: spacing.md }]}>Brittleness test</Text>
+              <Text style={styles.cardSub}>
+                Lift shingle corners in an undamaged area and photograph the test — the photo is
+                required evidence on an insurance report.
               </Text>
-            </PressableScale>
-            {inspection.brittlenessProtocol &&
-              inspection.brittlenessProtocol.photoIds.length === 0 && (
-                <Text style={styles.evidenceWarn}>
-                  Photo of the test process is still required before this result can go to a
-                  carrier.
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                {(['PASS', 'FAIL', 'BORDERLINE'] as BrittlenessResult[]).map((r) => {
+                  const active = inspection.brittlenessProtocol?.result === r;
+                  return (
+                    <PressableScale
+                      key={r}
+                      style={[styles.britChip, active && styles.britChipActive]}
+                      onPress={() =>
+                        setBrittlenessProtocol(inspection.id, {
+                          result: r,
+                          photoIds: inspection.brittlenessProtocol?.photoIds ?? [],
+                          notes: inspection.brittlenessProtocol?.notes,
+                        })
+                      }
+                    >
+                      <Text style={[styles.britChipText, active && styles.britChipTextActive]}>
+                        {r === 'PASS' ? 'Pass' : r === 'FAIL' ? 'Fail' : 'Borderline'}
+                      </Text>
+                    </PressableScale>
+                  );
+                })}
+              </View>
+              <PressableScale
+                style={styles.analyzeBtn}
+                onPress={() => {
+                  if (!inspection.brittlenessProtocol) {
+                    Alert.alert(
+                      'Pick a result first',
+                      'Record the test result (Pass / Fail / Borderline), then attach the photo of the test process.',
+                    );
+                    return;
+                  }
+                  void pickEvidencePhoto((uri) => {
+                    const current = useInspectionStore
+                      .getState()
+                      .getById(inspection.id)?.brittlenessProtocol;
+                    if (!current) return;
+                    setBrittlenessProtocol(inspection.id, {
+                      ...current,
+                      photoIds: [...current.photoIds, uri],
+                    });
+                  });
+                }}
+              >
+                <Ionicons name="camera-outline" size={18} color={colors.text} />
+                <Text style={styles.analyzeBtnText}>
+                  Add test photo
+                  {(inspection.brittlenessProtocol?.photoIds.length ?? 0) > 0
+                    ? ` (${inspection.brittlenessProtocol?.photoIds.length})`
+                    : ''}
                 </Text>
-              )}
+              </PressableScale>
+              {inspection.brittlenessProtocol &&
+                inspection.brittlenessProtocol.photoIds.length === 0 && (
+                  <Text style={styles.evidenceWarn}>
+                    Photo of the test process is still required before this result can go to a
+                    carrier.
+                  </Text>
+                )}
+            </RichCard>
           </View>
         )}
 
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Notes</Text>
+        <SectionHeader title="Documentation" style={styles.sectionSpacing} />
+
+        <RichCard icon="create-outline" iconTone="blue" title="Notes">
           <TextInput
             value={inspection.notes ?? ''}
             onChangeText={(t) => setNotes(inspection.id, t)}
@@ -587,7 +661,7 @@ export default function JobDetail() {
             multiline
             textAlignVertical="top"
           />
-        </View>
+        </RichCard>
 
         <VoiceNoteRecorder
           notes={inspection.audioNotes ?? []}
@@ -618,9 +692,12 @@ export default function JobDetail() {
           }}
         />
 
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Inspector signature</Text>
-          <Text style={styles.cardSub}>Sign below to seal the HAAG report.</Text>
+        <RichCard
+          icon="finger-print-outline"
+          iconTone="purple"
+          title="Inspector Signature"
+          subtitle="Sign below to seal the HAAG report."
+        >
           <View style={{ alignItems: 'center', marginTop: spacing.md }}>
             <SignaturePad
               onChange={(svg) => {
@@ -634,21 +711,35 @@ export default function JobDetail() {
               <Text style={styles.signedBadgeText}>Signed</Text>
             </View>
           )}
-        </View>
+        </RichCard>
 
+        {/* THE one orange moment on this screen: generate the report / claim
+            packet. Everything else on the page is quiet by comparison. */}
         <PressableScale
-          style={[styles.reportCta, generating && { opacity: 0.5 }]}
+          style={[styles.reportCtaShadow, generating && styles.reportCtaDisabled]}
           disabled={generating}
           onPress={onGenerateHaagReport}
+          accessibilityRole="button"
+          accessibilityLabel={isClaim ? 'Generate HAAG claim packet PDF' : 'Generate HAAG report PDF'}
         >
-          <Ionicons name="document-text-outline" size={20} color={colors.textInverse} />
-          <Text style={styles.reportCtaText}>
-            {generating
-              ? 'Generating…'
-              : isClaim
-                ? 'Generate HAAG claim packet (PDF)'
-                : 'Generate HAAG report (PDF)'}
-          </Text>
+          <View style={styles.reportCtaClip}>
+            <LinearGradient
+              colors={gradients.accent}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
+            <View style={styles.reportCtaContent}>
+              <Ionicons name="document-text-outline" size={20} color={colors.textInverse} />
+              <Text style={styles.reportCtaText}>
+                {generating
+                  ? 'Generating…'
+                  : isClaim
+                    ? 'Generate HAAG claim packet (PDF)'
+                    : 'Generate HAAG report (PDF)'}
+              </Text>
+            </View>
+          </View>
         </PressableScale>
         {isClaim && brittlenessGap && (
           <Text style={styles.gateHint}>
@@ -745,6 +836,81 @@ async function pickEvidencePhoto(onPicked: (uri: string) => void) {
   }
 }
 
+const HERO_HEIGHT = 300;
+
+/**
+ * The job screen's one cinematic moment: the real primary inspection photo
+ * (first captured photo across any slope), scrimmed for legibility, carrying
+ * the address, the §6 claim-viability call, and the roofwise verdict.
+ *
+ * No photo yet → a crafted gradient ground with the roof glyph, never stock
+ * imagery (Drift #5 extends to imagery: nothing here is synthesized).
+ */
+function JobHero({
+  photoUri,
+  reportId,
+  address,
+  band,
+  recommendation,
+}: {
+  photoUri?: string;
+  reportId: string;
+  address: string;
+  band: ClaimViabilityBand;
+  recommendation: RoofwiseRecommendation;
+}) {
+  return (
+    <View style={[styles.heroShell, shadows.hero]}>
+      <View style={styles.heroCard}>
+        {photoUri ? (
+          <Image
+            source={{ uri: photoUri }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={200}
+          />
+        ) : (
+          <LinearGradient
+            colors={gradients.clearDay}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          >
+            <View style={styles.heroPlaceholder}>
+              <Ionicons name="home-outline" size={72} color={colors.textInverse} style={styles.heroPlaceholderIcon} />
+            </View>
+          </LinearGradient>
+        )}
+        <LinearGradient
+          colors={gradients.scrim}
+          start={{ x: 0, y: 0.15 }}
+          end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <View style={styles.heroContent}>
+          <Text style={styles.heroEyebrow}>{reportId}</Text>
+          <Text style={styles.heroAddress} numberOfLines={2}>
+            {address}
+          </Text>
+          <View style={styles.heroBadgeRow}>
+            <Pill
+              label={CLAIM_VIABILITY_LABELS[band]}
+              tone={BAND_PILL_TONE[band]}
+              solid
+              size="md"
+              icon="shield-checkmark"
+            />
+            <Text style={styles.heroVerdict} numberOfLines={1}>
+              {ROOFWISE_RECOMMENDATION_LABELS[recommendation]}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function SlopeBlock({
   inspection,
   slope,
@@ -763,12 +929,12 @@ function SlopeBlock({
   const threshold = thresholdFor(inspection.material);
 
   return (
-    <View style={styles.card}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={styles.cardValue}>Slope {slope.orientation}</Text>
-        <VerdictPill verdict={verdict} />
-      </View>
-
+    <RichCard
+      icon="home-outline"
+      iconTone="blue"
+      title={`Slope ${slope.orientation}`}
+      headerTrailing={<Pill label={SLOPE_VERDICT_LABEL[verdict]} tone={SLOPE_VERDICT_PILL_TONE[verdict]} size="sm" />}
+    >
       <PressableScale
         style={styles.analyzeBtn}
         onPress={() =>
@@ -795,7 +961,16 @@ function SlopeBlock({
                   })
                 }
               >
-                <Image source={{ uri }} style={styles.photoTile} />
+                <View style={styles.photoTile}>
+                  {/* backgroundColor on the wrapper is the loading state: a
+                      neutral tile shows until the real photo fades in. */}
+                  <Image
+                    source={{ uri }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                    transition={150}
+                  />
+                </View>
                 <View style={styles.editBadge}>
                   <Ionicons name="create-outline" size={12} color={colors.textInverse} />
                 </View>
@@ -831,33 +1006,7 @@ function SlopeBlock({
           {confidenceAvg > 0 ? ` (avg confidence ${Math.round(confidenceAvg)}%)` : ''}
         </Text>
       )}
-    </View>
-  );
-}
-
-function VerdictPill({ verdict }: { verdict: SlopeVerdict }) {
-  const tone = (() => {
-    switch (verdict) {
-      // iOS badge language: semantic soft ground + semantic text, never a blob.
-      case 'full_replace': return { bg: colors.accentSoft, fg: colors.accent, label: 'Full replace' };
-      case 'partial_replace': return { bg: colors.warnSoft, fg: colors.warn, label: 'Partial' };
-      case 'verify_with_inspector': return { bg: colors.infoSoft, fg: colors.info, label: 'Verify' };
-      default: return { bg: colors.fillQuiet, fg: colors.textMuted, label: 'Repair' };
-    }
-  })();
-  return (
-    <View style={[styles.verdictPill, { backgroundColor: tone.bg }]}>
-      <Text style={[styles.verdictText, { color: tone.fg }]}>{tone.label}</Text>
-    </View>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </RichCard>
   );
 }
 
@@ -895,16 +1044,64 @@ const styles = StyleSheet.create({
   statusToggleText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
 
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
-  // White inset cards on the grouped ground: hairline + near-zero shadow.
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+
+  sectionSpacing: { marginBottom: spacing.sm },
+
+  // ── Hero ──────────────────────────────────────────────────────────────
+  heroShell: { borderRadius: radii.xl },
+  heroCard: {
+    height: HERO_HEIGHT,
+    borderRadius: radii.xl,
+    overflow: 'hidden',
+    // Painted under the gradient/photo so the card is never briefly
+    // transparent while the image loads.
+    backgroundColor: brand.royalInk,
+  },
+  heroPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  heroPlaceholderIcon: { opacity: 0.4 },
+  heroContent: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     padding: spacing.lg,
     gap: spacing.xs,
-    ...shadows.card,
   },
+  heroEyebrow: {
+    color: colors.textInverse,
+    opacity: 0.72,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  heroAddress: {
+    color: colors.textInverse,
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+    letterSpacing: -0.3,
+    lineHeight: 28,
+  },
+  heroBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  heroVerdict: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    opacity: 0.92,
+    flexShrink: 1,
+  },
+
+  // Uniform child spacing inside a multi-row RichCard body — mirrors the old
+  // flat `card` style's `gap: spacing.xs`, which used to space every direct
+  // child (label, rows, footnotes) the same way.
+  bodyRows: { gap: spacing.xs },
+
   cardLabel: {
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
@@ -912,46 +1109,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  cardValue: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text, textTransform: 'capitalize' },
   cardSub: { fontSize: fontSize.bodyMd, color: colors.textMuted },
 
-  statsRow: { flexDirection: 'row', gap: spacing.sm },
-  // Quiet iOS stat cells: ink tabular numbers, 13 muted labels — never orange.
-  stat: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    padding: spacing.md,
-    alignItems: 'center',
-    ...shadows.card,
-  },
-  statValue: {
-    fontSize: fontSize.titleMd,
-    fontWeight: fontWeight.bold,
-    color: colors.text,
-    fontVariant: ['tabular-nums'],
-  },
-  statLabel: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.medium,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
-  },
-
-  // Quiet capture action — orange is reserved for the report-generation CTA.
-  primaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    height: touchTarget.preferred,
-    borderRadius: radii.button,
-    backgroundColor: colors.fillQuiet,
-    marginTop: spacing.xs,
-  },
-  primaryBtnText: { color: colors.text, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  safetyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
+  safetyText: { fontSize: fontSize.bodySm, color: colors.textMuted },
 
   // Honest, compact empty module — real state, thin icon, no tinted circle.
   placeholderBox: {
@@ -967,15 +1128,17 @@ const styles = StyleSheet.create({
   placeholderText: { color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },
 
   // THE one orange moment on this screen: generate the report/claim packet.
-  reportCta: {
+  // Shadow lives on the outer (unclipped) layer so the brand-tinted lift
+  // isn't clipped by the gradient's rounded corners.
+  reportCtaShadow: { borderRadius: radii.button, ...shadows.raised, marginTop: spacing.sm },
+  reportCtaDisabled: { opacity: 0.5 },
+  reportCtaClip: { height: touchTarget.preferred, borderRadius: radii.button, overflow: 'hidden' },
+  reportCtaContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    height: touchTarget.preferred,
-    borderRadius: radii.button,
-    backgroundColor: colors.accent,
-    marginTop: spacing.sm,
   },
   reportCtaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
 
@@ -991,21 +1154,6 @@ const styles = StyleSheet.create({
   },
   quietCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
-  proposalCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    padding: spacing.lg,
-    minHeight: touchTarget.preferred,
-    ...shadows.card,
-  },
-  proposalTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
-  proposalSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2, textTransform: 'capitalize' },
-
   signedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1019,21 +1167,6 @@ const styles = StyleSheet.create({
   },
   signedBadgeText: { color: colors.success, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
-  // Soft-ground badge, not an orange blob — same claim-mode language as bands.
-  claimBadge: {
-    backgroundColor: colors.accentSoft,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-  },
-  claimBadgeText: {
-    color: colors.accentPressed,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-
   britChip: {
     flex: 1,
     minHeight: touchTarget.standard,
@@ -1042,7 +1175,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.control,
     backgroundColor: colors.fillQuiet,
   },
-  britChipActive: { backgroundColor: colors.navy },
+  britChipActive: { backgroundColor: colors.brand },
   britChipText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   britChipTextActive: { color: colors.textInverse },
   evidenceWarn: {
@@ -1103,12 +1236,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 
+  // The wrapper carries the loading-state ground colour + clip; expo-image
+  // fades the real photo in over it via `transition`.
   photoTile: {
     width: 140,
     height: 100,
     borderRadius: radii.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
+    overflow: 'hidden',
+    backgroundColor: colors.fillQuiet,
   },
   editBadge: {
     position: 'absolute',
@@ -1138,13 +1275,6 @@ const styles = StyleSheet.create({
   },
   testSquareLine: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
   testSquareRule: { fontSize: fontSize.bodySm, color: colors.textMuted },
-
-  verdictPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-  },
-  verdictText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   analyzeBtn: {
     flexDirection: 'row',
