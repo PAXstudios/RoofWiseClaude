@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import {
   View,
   Text,
@@ -6,12 +12,21 @@ import {
   Pressable,
   ActivityIndicator,
   ScrollView,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import type MapView from 'react-native-maps';
 import { Map, MapHeatmap, MapPin } from '@/components/map/Map';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { PressableScale } from '@/components/PressableScale';
 import { type StormEvent } from '@/lib/noaa';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
 import { fetchAddressStormHistory } from '@/lib/services/stormMatch';
@@ -22,6 +37,7 @@ import {
   colors,
   fontSize,
   fontWeight,
+  motion,
   radii,
   shadows,
   spacing,
@@ -62,8 +78,101 @@ const BROWSE_REGION_DELTA = (STORM_HISTORY_BROWSE_RADIUS_MILES * 2 * 1.1) / 69;
 type Layer = 'hail' | 'wind' | 'both';
 type Magnitude = 'all' | 'hail_1' | 'hail_15' | 'wind_58';
 
+/**
+ * Subtle iOS entrance: 8pt rise + fade on the snappy spring, staggered by
+ * index — same pattern as the tab roots. A pushed screen mounts fresh, so
+ * it plays on each visit (its own first paint).
+ */
+function Rise({
+  index = 0,
+  style,
+  children,
+}: PropsWithChildren<{ index?: number; style?: StyleProp<ViewStyle> }>) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      progress.value = withSpring(1, motion.snappy);
+    }, index * motion.staggerDelayMs);
+    return () => clearTimeout(id);
+    // Entrance runs once per mount by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const anim = useAnimatedStyle(() => ({
+    opacity: Math.min(1, progress.value),
+    transform: [{ translateY: (1 - progress.value) * spacing.sm }],
+  }));
+
+  return <Animated.View style={[style, anim]}>{children}</Animated.View>;
+}
+
+// iOS-17 segmented control: fillQuiet track, white thumb sliding on the
+// snappy spring. 56pt wrapper + vertical hitSlop keeps the glove floor.
+const SEG_PAD = spacing.xs;
+
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { id: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  const [trackW, setTrackW] = useState(0);
+  const idx = Math.max(0, options.findIndex((o) => o.id === value));
+  const segW = trackW > 0 ? (trackW - SEG_PAD * 2) / options.length : 0;
+  const x = useSharedValue(0);
+  const laidOut = useRef(false);
+
+  useEffect(() => {
+    if (segW <= 0) return;
+    if (!laidOut.current) {
+      // First layout: place the thumb without animating.
+      laidOut.current = true;
+      x.value = idx * segW;
+      return;
+    }
+    x.value = withSpring(idx * segW, motion.snappy);
+  }, [idx, segW, x]);
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }],
+  }));
+
+  return (
+    <View style={styles.segWrap}>
+      <View
+        style={styles.segTrack}
+        onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
+      >
+        {segW > 0 && (
+          <Animated.View style={[styles.segThumb, { width: segW }, thumbStyle]} />
+        )}
+        {options.map((o) => (
+          <Pressable
+            key={o.id}
+            style={styles.segBtn}
+            hitSlop={{ top: 8, bottom: 8 }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: value === o.id }}
+            accessibilityLabel={o.label}
+            onPress={() => onChange(o.id)}
+          >
+            <Text style={[styles.segLabel, value === o.id && styles.segLabelActive]}>
+              {o.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function HailTracerScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const [range, setRange] = useState<Range>('24m');
   const [layer, setLayer] = useState<Layer>('both');
@@ -150,80 +259,29 @@ export default function HailTracerScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Hail Tracer</Text>
-          <Text style={styles.sub}>
-            {filtered.length} event{filtered.length === 1 ? '' : 's'} · {RANGE_LABELS[range]} ·
-            within {STORM_HISTORY_BROWSE_RADIUS_MILES} mi
-          </Text>
-        </View>
-      </View>
+      {/* Inline sub-screen header — plain chevron, honest count subtitle. */}
+      <Rise index={0}>
+        <ScreenHeader
+          title="Hail Tracer"
+          subtitle={`${filtered.length} event${filtered.length === 1 ? '' : 's'} · ${RANGE_LABELS[range]} · within ${STORM_HISTORY_BROWSE_RADIUS_MILES} mi`}
+          back={() => router.back()}
+        />
+      </Rise>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipScroll}
-        contentContainerStyle={styles.chipScrollContent}
-      >
-        {(Object.keys(RANGE_LABELS) as Range[]).map((r) => (
-          <Pressable
-            key={r}
-            style={[styles.chip, range === r && styles.chipActive]}
-            onPress={() => setRange(r)}
-          >
-            <Text style={[styles.chipText, range === r && styles.chipTextActive]}>
-              {RANGE_LABELS[r]}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <Rise index={1} style={styles.segmentedWrap}>
+        <Segmented
+          options={[
+            { id: 'hail', label: 'Hail' },
+            { id: 'wind', label: 'Wind' },
+            { id: 'both', label: 'Both' },
+          ] as const}
+          value={layer}
+          onChange={setLayer}
+        />
+      </Rise>
 
-      <View style={styles.toggleRow}>
-        {([
-          { id: 'hail', label: 'Hail' },
-          { id: 'wind', label: 'Wind' },
-          { id: 'both', label: 'Both' },
-        ] as const).map((t) => (
-          <Pressable
-            key={t.id}
-            style={[styles.toggle, layer === t.id && styles.toggleActive]}
-            onPress={() => setLayer(t.id)}
-          >
-            <Text style={[styles.toggleText, layer === t.id && styles.toggleTextActive]}>
-              {t.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipScroll}
-        contentContainerStyle={styles.chipScrollContent}
-      >
-        {([
-          { id: 'all', label: 'All' },
-          { id: 'hail_1', label: '≥1" hail' },
-          { id: 'hail_15', label: '≥1.5" hail' },
-          { id: 'wind_58', label: '≥58 mph wind' },
-        ] as const).map((m) => (
-          <Pressable
-            key={m.id}
-            style={[styles.chip, magnitude === m.id && styles.chipActive]}
-            onPress={() => setMagnitude(m.id)}
-          >
-            <Text style={[styles.chipText, magnitude === m.id && styles.chipTextActive]}>
-              {m.label}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
+      {/* Density: the map fills everything below the layer control; range and
+          magnitude chips float over the imagery on barFill. */}
       <View style={styles.mapWrap}>
         <Map
           ref={mapRef}
@@ -271,47 +329,113 @@ export default function HailTracerScreen() {
             ))}
         </Map>
 
-        {loading && (
-          <View style={styles.loading}>
-            <ActivityIndicator color={colors.textInverse} />
-          </View>
-        )}
-        {error && (
-          <View style={styles.errorBanner}>
-            <Ionicons name="warning-outline" size={18} color={colors.danger} />
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-      </View>
+        {/* Floating control chips — barFill + hairline + float shadow so
+            they read over imagery; glove-sized (≥56pt). */}
+        <View style={styles.overlayTop} pointerEvents="box-none">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
+            contentContainerStyle={styles.chipScrollContent}
+          >
+            {(Object.keys(RANGE_LABELS) as Range[]).map((r) => (
+              <PressableScale
+                key={r}
+                style={[styles.chip, range === r && styles.chipActive]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: range === r }}
+                accessibilityLabel={RANGE_LABELS[r]}
+                onPress={() => setRange(r)}
+              >
+                <Text style={[styles.chipText, range === r && styles.chipTextActive]}>
+                  {RANGE_LABELS[r]}
+                </Text>
+              </PressableScale>
+            ))}
+          </ScrollView>
 
-      {selected && (
-        <View style={styles.detailSheet}>
-          <View style={styles.detailHead}>
-            <Text style={styles.detailTitle}>
-              {selected.type === 'hail' ? 'Hail event' : 'Wind event'}
-              {selected.magnitude ? (
-                selected.type === 'hail'
-                  ? ` · ${selected.magnitude.toFixed(2)}"`
-                  : ` · ${Math.round(selected.magnitude)} kt`
-              ) : null}
-            </Text>
-            <Pressable onPress={() => setSelected(null)} hitSlop={10}>
-              <Ionicons name="close" size={22} color={colors.navy} />
-            </Pressable>
-          </View>
-          <Text style={styles.detailLine}>
-            {new Date(selected.occurredAt).toLocaleString()}
-          </Text>
-          {selected.city && (
-            <Text style={styles.detailLine}>
-              {selected.city}{selected.state ? `, ${selected.state}` : ''}
-            </Text>
-          )}
-          {selected.remarks && (
-            <Text style={styles.detailRemarks}>{selected.remarks}</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={[styles.chipScroll, styles.chipScrollSecond]}
+            contentContainerStyle={styles.chipScrollContent}
+          >
+            {([
+              { id: 'all', label: 'All' },
+              { id: 'hail_1', label: '≥1" hail' },
+              { id: 'hail_15', label: '≥1.5" hail' },
+              { id: 'wind_58', label: '≥58 mph wind' },
+            ] as const).map((m) => (
+              <PressableScale
+                key={m.id}
+                style={[styles.chip, magnitude === m.id && styles.chipActive]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: magnitude === m.id }}
+                accessibilityLabel={m.label}
+                onPress={() => setMagnitude(m.id)}
+              >
+                <Text style={[styles.chipText, magnitude === m.id && styles.chipTextActive]}>
+                  {m.label}
+                </Text>
+              </PressableScale>
+            ))}
+          </ScrollView>
+
+          {loading && (
+            <View style={styles.loadingPill}>
+              <ActivityIndicator color={colors.navy} />
+            </View>
           )}
         </View>
-      )}
+
+        {/* Bottom overlays clear the home indicator — the map runs to the
+            screen edge, so the sheet carries the inset itself. */}
+        <View
+          style={[styles.overlayBottom, { bottom: insets.bottom + spacing.md }]}
+          pointerEvents="box-none"
+        >
+          {error && (
+            <View style={styles.errorCard}>
+              <Ionicons name="warning-outline" size={18} color={colors.danger} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+          {selected && (
+            <View style={styles.detailSheet}>
+              <View style={styles.detailHead}>
+                <Text style={styles.detailTitle}>
+                  {selected.type === 'hail' ? 'Hail event' : 'Wind event'}
+                  {selected.magnitude ? (
+                    selected.type === 'hail'
+                      ? ` · ${selected.magnitude.toFixed(2)}"`
+                      : ` · ${Math.round(selected.magnitude)} kt`
+                  ) : null}
+                </Text>
+              </View>
+              <Text style={styles.detailLine}>
+                {new Date(selected.occurredAt).toLocaleString()}
+              </Text>
+              {selected.city && (
+                <Text style={styles.detailLine}>
+                  {selected.city}{selected.state ? `, ${selected.state}` : ''}
+                </Text>
+              )}
+              {selected.remarks && (
+                <Text style={styles.detailRemarks}>{selected.remarks}</Text>
+              )}
+              {/* Real 56pt close target floated over the sheet corner. */}
+              <Pressable
+                style={styles.detailClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close event details"
+                onPress={() => setSelected(null)}
+              >
+                <Ionicons name="close" size={22} color={colors.text} />
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
@@ -337,95 +461,134 @@ function filterByMagnitude(events: StormEvent[], m: Magnitude): StormEvent[] {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
-  },
-  headerBtn: { padding: spacing.xs },
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
-  sub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
 
-  chipScroll: { maxHeight: 56 },
-  chipScrollContent: { paddingHorizontal: spacing.xl, gap: spacing.sm },
-  chip: {
-    minHeight: touchTarget.small,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
+  // iOS-17 segmented control on the grouped ground.
+  segmentedWrap: { paddingHorizontal: spacing.xl },
+  segWrap: { minHeight: touchTarget.standard, justifyContent: 'center' },
+  segTrack: {
+    flexDirection: 'row',
+    height: 44,
+    borderRadius: radii.md,
+    backgroundColor: colors.fillQuiet,
+    padding: SEG_PAD,
+  },
+  segThumb: {
+    position: 'absolute',
+    top: SEG_PAD,
+    bottom: SEG_PAD,
+    left: SEG_PAD,
+    borderRadius: radii.control,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
+    ...shadows.thumb,
   },
-  chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
-  chipText: { fontSize: fontSize.bodySm, color: colors.navy, fontWeight: fontWeight.medium },
-  chipTextActive: { color: colors.textInverse },
+  segBtn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  segLabel: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    color: colors.textMuted,
+  },
+  segLabelActive: { color: colors.text },
 
-  toggleRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-  },
-  toggle: {
-    flex: 1,
-    minHeight: touchTarget.small,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toggleActive: { backgroundColor: colors.orange },
-  toggleText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
-  toggleTextActive: { color: colors.textInverse },
-
+  // Full-bleed map under a hairline — the screen's content IS the map.
   mapWrap: {
     flex: 1,
-    margin: spacing.xl,
     marginTop: spacing.sm,
-    borderRadius: radii.card,
-    overflow: 'hidden',
     backgroundColor: colors.surfaceMuted,
-    ...shadows.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
-  loading: {
+
+  overlayTop: {
     position: 'absolute',
     top: spacing.md,
-    left: spacing.md,
+    left: 0,
+    right: 0,
+  },
+  chipScroll: { flexGrow: 0 },
+  chipScrollSecond: { marginTop: spacing.sm },
+  chipScrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    gap: spacing.sm,
+  },
+  chip: {
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.button,
+    backgroundColor: colors.barFill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    justifyContent: 'center',
+    ...shadows.float,
+  },
+  chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  chipText: {
+    fontSize: fontSize.bodySm,
+    color: colors.text,
+    fontWeight: fontWeight.semibold,
+  },
+  chipTextActive: { color: colors.textInverse },
+
+  loadingPill: {
+    alignSelf: 'flex-start',
+    marginLeft: spacing.lg,
+    marginTop: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: colors.scrim,
+    borderRadius: radii.button,
+    backgroundColor: colors.barFill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    ...shadows.float,
   },
-  errorBanner: {
+
+  overlayBottom: {
     position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    gap: spacing.sm,
+  },
+
+  errorCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    left: spacing.md,
-    right: spacing.md,
-    bottom: spacing.md,
     backgroundColor: colors.dangerSoft,
     padding: spacing.md,
-    borderRadius: radii.md,
+    borderRadius: radii.button,
+    ...shadows.float,
   },
   errorText: { color: colors.danger, fontSize: fontSize.bodySm, flex: 1 },
 
   detailSheet: {
-    position: 'absolute',
-    bottom: spacing.lg,
-    left: spacing.xl,
-    right: spacing.xl,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
     gap: spacing.xs,
-    ...shadows.pressed,
+    ...shadows.float,
   },
-  detailHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  detailTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.navy },
-  detailLine: { fontSize: fontSize.bodyMd, color: colors.navy },
-  detailRemarks: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: spacing.xs },
+  detailHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: touchTarget.standard,
+  },
+  detailClose: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailTitle: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  detailLine: { fontSize: fontSize.bodyMd, color: colors.text },
+  detailRemarks: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: spacing.xs },
 });

@@ -43,6 +43,9 @@ export type MapProps = {
   children?: ReactNode;
   onMapReady?: () => void;
   onLongPress?: (coord: MapCoordinate) => void;
+  /** Web only (Map.web.tsx): top-anchors the no-map fallback panel. The
+   *  native map fills the screen, so this is a no-op here. */
+  fallbackTopOffset?: number;
 };
 
 export const Map = forwardRef(function Map(

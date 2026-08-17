@@ -42,6 +42,12 @@ export type MapProps = {
   region?: Region;
   onMapReady?: () => void;
   onLongPress?: (coord: MapCoordinate) => void;
+  /**
+   * Web only: top-anchor the no-map fallback panel this many points from the
+   * top instead of centering it. Tab roots pass this so the panel sits right
+   * under their floating chip rows (centered empties are for sub-screens).
+   */
+  fallbackTopOffset?: number;
   children?: ReactNode;
 };
 
@@ -139,9 +145,14 @@ function cssFill(color?: string): { color?: string; opacity?: number } {
 const hasWebKey = env.GOOGLE_MAPS_WEB_KEY.length > 0;
 
 export const Map = forwardRef(function Map(
-  { style, initialRegion, region, onMapReady, onLongPress, children }: MapProps,
+  { style, initialRegion, region, onMapReady, onLongPress, fallbackTopOffset, children }: MapProps,
   ref: Ref<unknown>,
 ) {
+  // Tab roots anchor the fallback under their chip rows; sub-screens center.
+  const fallbackAnchor =
+    fallbackTopOffset != null
+      ? { justifyContent: 'flex-start' as const, paddingTop: fallbackTopOffset }
+      : null;
   const divRef = useRef<HTMLDivElement | null>(null);
   const [map, setMap] = useState<any>(null);
   const [failed, setFailed] = useState(false);
@@ -234,7 +245,7 @@ export const Map = forwardRef(function Map(
 
   if (!hasWebKey) {
     return (
-      <View style={[styles.wrap, style as ViewStyle]}>
+      <View style={[styles.wrap, style as ViewStyle, fallbackAnchor]}>
         <View style={styles.inner}>
           <View style={styles.pinGlyph}>
             <View style={styles.pinHead} />
@@ -252,7 +263,7 @@ export const Map = forwardRef(function Map(
 
   if (failed) {
     return (
-      <View style={[styles.wrap, style as ViewStyle]}>
+      <View style={[styles.wrap, style as ViewStyle, fallbackAnchor]}>
         <View style={styles.inner}>
           <View style={styles.pinGlyph}>
             <View style={styles.pinHead} />

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  Pressable,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
@@ -14,6 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { exportBackup, restoreFromUri } from '@/lib/services/backup';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { PressableScale } from '@/components/PressableScale';
+import { FadeSlideIn } from '@/components/motion';
 import {
   colors,
   fontSize,
@@ -86,52 +88,59 @@ export default function BackupScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
-        <Text style={styles.title}>Backup & Restore</Text>
-      </View>
+      <ScreenHeader title="Backup & Restore" back />
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.card}>
-          <Ionicons name="cloud-upload-outline" size={32} color={colors.orange} />
-          <Text style={styles.cardTitle}>Export everything</Text>
-          <Text style={styles.cardBody}>
+        <FadeSlideIn index={0} style={styles.section}>
+          <View style={styles.card}>
+            <View style={styles.cardHead}>
+              <Ionicons name="cloud-upload-outline" size={24} color={colors.textMuted} />
+              <Text style={styles.cardTitle}>Export everything</Text>
+            </View>
+            <PressableScale
+              style={[styles.primaryBtn, busy === 'export' && styles.btnBusy]}
+              disabled={busy !== null}
+              onPress={onExport}
+              accessibilityRole="button"
+              accessibilityLabel="Export backup"
+            >
+              {busy === 'export' ? (
+                <ActivityIndicator color={colors.textInverse} />
+              ) : (
+                <Text style={styles.primaryBtnText}>Export backup</Text>
+              )}
+            </PressableScale>
+          </View>
+          <Text style={styles.footerCaption}>
             One JSON file with every inspection, lead, proposal, mileage trip,
             correction, and your profile. Photos stay where they are.
           </Text>
-          <Pressable
-            style={[styles.primaryBtn, busy === 'export' && { opacity: 0.5 }]}
-            disabled={busy !== null}
-            onPress={onExport}
-          >
-            {busy === 'export' ? (
-              <ActivityIndicator color={colors.textInverse} />
-            ) : (
-              <Text style={styles.primaryBtnText}>Export backup</Text>
-            )}
-          </Pressable>
-        </View>
+        </FadeSlideIn>
 
-        <View style={styles.card}>
-          <Ionicons name="cloud-download-outline" size={32} color={colors.navy} />
-          <Text style={styles.cardTitle}>Restore from backup</Text>
-          <Text style={styles.cardBody}>
+        <FadeSlideIn index={1} style={styles.section}>
+          <View style={styles.card}>
+            <View style={styles.cardHead}>
+              <Ionicons name="cloud-download-outline" size={24} color={colors.textMuted} />
+              <Text style={styles.cardTitle}>Restore from backup</Text>
+            </View>
+            <PressableScale
+              style={[styles.secondaryBtn, busy === 'restore' && styles.btnBusy]}
+              disabled={busy !== null}
+              onPress={onRestore}
+              accessibilityRole="button"
+              accessibilityLabel="Pick backup file"
+            >
+              {busy === 'restore' ? (
+                <ActivityIndicator color={colors.text} />
+              ) : (
+                <Text style={styles.secondaryBtnText}>Pick backup file</Text>
+              )}
+            </PressableScale>
+          </View>
+          <Text style={styles.footerCaption}>
             Pick a previously-exported JSON file. We'll replace all local data.
           </Text>
-          <Pressable
-            style={[styles.secondaryBtn, busy === 'restore' && { opacity: 0.5 }]}
-            disabled={busy !== null}
-            onPress={onRestore}
-          >
-            {busy === 'restore' ? (
-              <ActivityIndicator color={colors.navy} />
-            ) : (
-              <Text style={styles.secondaryBtnText}>Pick backup file</Text>
-            )}
-          </Pressable>
-        </View>
+        </FadeSlideIn>
       </ScrollView>
     </SafeAreaView>
   );
@@ -139,50 +148,67 @@ export default function BackupScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
-  },
-  headerBtn: { padding: spacing.xs },
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
 
-  scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
+  scroll: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xxxl,
+    gap: spacing.xl,
+  },
+  section: {},
 
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    padding: spacing.xxl,
+    padding: spacing.lg,
     gap: spacing.md,
-    alignItems: 'flex-start',
     ...shadows.card,
   },
-  cardTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.navy },
-  cardBody: { fontSize: fontSize.bodyMd, color: colors.slate, lineHeight: 20 },
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  cardTitle: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+  footerCaption: {
+    fontSize: fontSize.bodySm,
+    color: colors.textSubtle,
+    lineHeight: 18,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+  },
 
   primaryBtn: {
     height: touchTarget.preferred,
-    paddingHorizontal: spacing.xxxl,
-    borderRadius: radii.pill,
-    backgroundColor: colors.orange,
+    borderRadius: radii.button,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'stretch',
   },
-  primaryBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  primaryBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+  },
 
   secondaryBtn: {
     height: touchTarget.preferred,
-    paddingHorizontal: spacing.xxxl,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.navy,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'stretch',
   },
-  secondaryBtnText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  secondaryBtnText: {
+    color: colors.text,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+  },
+
+  btnBusy: { opacity: 0.5 },
 });

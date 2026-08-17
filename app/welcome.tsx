@@ -5,7 +5,7 @@
 // Google, email) and a name is required on sign-up: it goes on every HAAG
 // report and proposal this inspector produces, so we ask once, here.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -22,7 +22,13 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { Aurora } from '@/components/glass/Aurora';
 import { AppleSignInButton } from '@/components/AppleSignInButton';
 import { useAuthStore } from '@/lib/auth/authStore';
@@ -36,6 +42,7 @@ import {
   glass,
   motion,
   radii,
+  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -57,6 +64,22 @@ export default function Welcome() {
   const [showPassword, setShowPassword] = useState(false);
 
   const isSignUp = mode === 'signup';
+
+  // iOS-17 segmented control — a glass thumb spring-slides between the
+  // two options instead of each option repainting its own background.
+  const [segWidth, setSegWidth] = useState(0);
+  const segThumbX = useSharedValue(0);
+  const segThumbW = segWidth > 0 ? (segWidth - spacing.xs * 2) / 2 : 0;
+
+  useEffect(() => {
+    if (segWidth > 0) {
+      segThumbX.value = withSpring(isSignUp ? 0 : segThumbW, motion.snappy);
+    }
+  }, [isSignUp, segWidth, segThumbW, segThumbX]);
+
+  const segThumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: segThumbX.value }],
+  }));
 
   const passwordChecks = useMemo(
     () => [
@@ -142,12 +165,18 @@ export default function Welcome() {
             <Animated.View
               entering={FadeInDown.duration(motion.enterMs).delay(60)}
               style={styles.segment}
+              onLayout={(e) => setSegWidth(e.nativeEvent.layout.width)}
             >
+              {segThumbW > 0 && (
+                <Animated.View
+                  style={[styles.segmentThumb, { width: segThumbW }, segThumbStyle]}
+                />
+              )}
               {(['signup', 'signin'] as Mode[]).map((m) => (
                 <Pressable
                   key={m}
                   onPress={() => setMode(m)}
-                  style={[styles.segmentItem, mode === m && styles.segmentItemActive]}
+                  style={styles.segmentItem}
                   accessibilityRole="button"
                   accessibilityState={{ selected: mode === m }}
                 >
@@ -355,20 +384,26 @@ const styles = StyleSheet.create({
 
   segment: {
     flexDirection: 'row',
-    backgroundColor: glass.fillLow,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: glass.border,
-    padding: 4,
+    backgroundColor: glass.fill,
+    borderRadius: radii.control + 2,
+    padding: spacing.xs,
+    minHeight: touchTarget.standard,
+  },
+  segmentThumb: {
+    position: 'absolute',
+    top: spacing.xs,
+    bottom: spacing.xs,
+    left: spacing.xs,
+    borderRadius: radii.control,
+    backgroundColor: glass.fillHigh,
+    ...shadows.thumb,
   },
   segmentItem: {
     flex: 1,
-    minHeight: touchTarget.small,
-    borderRadius: radii.pill,
+    borderRadius: radii.control,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  segmentItemActive: { backgroundColor: glass.fillHigh },
   segmentText: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: fontSize.bodyMd,
@@ -437,7 +472,7 @@ const styles = StyleSheet.create({
   ctaDisabled: { backgroundColor: 'rgba(255,255,255,0.12)' },
   ctaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
 
-  link: { alignSelf: 'center', minHeight: touchTarget.small, justifyContent: 'center' },
+  link: { alignSelf: 'center', minHeight: touchTarget.standard, justifyContent: 'center' },
   linkText: { color: 'rgba(255,255,255,0.6)', fontSize: fontSize.bodyMd },
 
   explore: {

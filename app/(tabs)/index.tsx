@@ -1,10 +1,25 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Image, RefreshControl, Alert } from 'react-native';
+import {
+  ScrollView,
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Image,
+  RefreshControl,
+  Alert,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import Animated, { FadeInUp } from 'react-native-reanimated';
-import { useMemo, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+import { useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { syncLeads } from '@/lib/services/leadSync';
 import { syncCorrections } from '@/lib/services/correctionsSync';
@@ -17,11 +32,12 @@ import { useEstimateStore } from '@/lib/stores/estimateStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
+import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { AICalibrationCard } from '@/components/AICalibrationCard';
 import { WeatherTile } from '@/components/WeatherTile';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { PressableScale } from '@/components/PressableScale';
-import { AnimatedCounter, FadeSlideIn, PulseRing } from '@/components/motion';
+import { AnimatedCounter, PulseRing } from '@/components/motion';
 import {
   LEAD_STAGE_LABELS,
   LEAD_STAGE_ORDER,
@@ -44,8 +60,45 @@ function tap() {
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 }
 
+// First-paint-only entrance gate. Module-scoped so returning to the Home tab
+// (which remounts the screen under expo-router's Slot) renders statically
+// instead of replaying the stagger. Dev fast-refresh resets it, which is fine.
+let homeEntrancePlayed = false;
+
+/**
+ * Subtle iOS entrance: 8pt rise + fade on the snappy spring, staggered by
+ * index. Built from the same reanimated primitives the repo already ships on
+ * web (useSharedValue / useAnimatedStyle / withSpring). Sections that mount
+ * later in the session (e.g. a storm alert landing) appear without animation.
+ */
+function Rise({
+  index = 0,
+  style,
+  children,
+}: PropsWithChildren<{ index?: number; style?: StyleProp<ViewStyle> }>) {
+  const progress = useSharedValue(homeEntrancePlayed ? 1 : 0);
+
+  useEffect(() => {
+    if (progress.value === 1) return;
+    const id = setTimeout(() => {
+      progress.value = withSpring(1, motion.snappy);
+    }, index * motion.staggerDelayMs);
+    return () => clearTimeout(id);
+    // Entrance runs once per mount by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const anim = useAnimatedStyle(() => ({
+    opacity: Math.min(1, progress.value),
+    transform: [{ translateY: (1 - progress.value) * spacing.sm }],
+  }));
+
+  return <Animated.View style={[style, anim]}>{children}</Animated.View>;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const inspections = useInspectionStore((s) => s.inspections);
   const alerts = useStormAlertStore((s) => s.alerts);
@@ -60,6 +113,13 @@ export default function HomeScreen() {
   const proposals = useProposalStore((s) => s.proposals);
   const leads = useLeadStore((s) => s.leads);
   const inspectorName = useInspectorProfileStore((s) => s.profile.fullName);
+  const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
+
+  // Flip the entrance gate after the first mount's children have scheduled
+  // their animations (child effects run before this parent effect).
+  useEffect(() => {
+    homeEntrancePlayed = true;
+  }, []);
 
   // Leads this alert's storm actually passed over. Re-derived from each lead's
   // persisted `lastStormMatch` (Storm Watch stamps `matchedAt` with the
@@ -117,19 +177,29 @@ export default function HomeScreen() {
     ]);
   };
 
+  // Optional first name — null when we genuinely have nothing, so the
+  // greeting reads complete either way ("Up early." / "Up early, Dan.").
+  // Never a dangling filler word.
   const firstName = useMemo(() => {
-    if (inspectorName?.trim()) {
-      return inspectorName.trim().split(/\s+/)[0];
-    }
+    const fromProfile = inspectorName?.trim();
+    if (fromProfile) return fromProfile.split(/\s+/)[0];
     const email = user?.email ?? '';
-    if (!email) return 'there';
-    return email.split('@')[0].split(/[._-]/)[0].replace(/^\w/, (c) => c.toUpperCase());
+    if (!email) return null;
+    const derived = email
+      .split('@')[0]
+      .split(/[._-]/)[0]
+      .replace(/^\w/, (c) => c.toUpperCase());
+    return derived || null;
   }, [user, inspectorName]);
+
+  const hour = new Date().getHours();
+  const greetingBase =
+    hour < 5 ? 'Up early' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greeting = firstName ? `${greetingBase}, ${firstName}.` : `${greetingBase}.`;
 
   // Real per-stage lead counts, folded onto board columns exactly as the Leads
   // Pipeline board buckets them. Stages with no leads are omitted rather than
-  // rendered as zero cards: the previous row hardcoded `Contacted: 0` and
-  // `Proposal: 0`, which read as real counts of an empty stage (Drift #5).
+  // rendered as zero cards (Drift #5).
   const pipelineStages = useMemo(() => {
     const counts = new Map<LeadStage, number>();
     for (const l of leads) {
@@ -143,75 +213,92 @@ export default function HomeScreen() {
     }));
   }, [leads]);
 
-  const hour = new Date().getHours();
-  const greeting =
-    hour < 5 ? 'Up early' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  // Honest setup checklist — every state read from a real persisted store,
+  // every row lands on the real screen (density spec: structured setup
+  // content instead of a void; Drift #5: nothing fabricated).
+  const setupSteps = useMemo(
+    () =>
+      [
+        {
+          key: 'area',
+          icon: 'map-outline' as const,
+          title: 'Set your service area',
+          sub: 'Storm Watch scans it for hail and wind',
+          done: serviceAreaCount > 0,
+          href: '/settings/service-area',
+        },
+        {
+          key: 'profile',
+          icon: 'person-outline' as const,
+          title: 'Fill out your inspector profile',
+          sub: 'Shows on every claim packet you send',
+          done: Boolean(inspectorName?.trim()),
+          href: '/settings/inspector-profile',
+        },
+        {
+          key: 'lead',
+          icon: 'people-outline' as const,
+          title: 'Add your first lead',
+          sub: 'Track knocks, proposals, and signatures',
+          done: leads.length > 0,
+          href: '/new-lead',
+        },
+        {
+          key: 'inspection',
+          icon: 'scan-outline' as const,
+          title: 'Run your first inspection',
+          sub: 'Camera → AI → HAAG claim packet',
+          done: inspections.length > 0,
+          href: '/quick-inspection',
+        },
+      ] as const,
+    [serviceAreaCount, inspectorName, leads.length, inspections.length],
+  );
+  const setupDone = setupSteps.filter((s) => s.done).length;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[
+        styles.container,
+        // Clears the tab bar + home indicator + floating FAB so the last
+        // module is never clipped behind chrome.
+        { paddingBottom: insets.bottom + touchTarget.preferred + spacing.xl },
+      ]}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor={colors.orange}
+          tintColor={colors.accent}
         />
       }
     >
-      {/* Navy hero header card — greeting + KPIs */}
-      <FadeSlideIn index={0}>
-        <LinearGradient
-          colors={[colors.navy, '#16275f']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.headerCard}
-        >
-          <View style={styles.headerRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.greeting}>{greeting},</Text>
-              <Text style={styles.name}>{firstName}</Text>
-            </View>
-            <Pressable
-              style={styles.iconBtn}
+      {/* Large-title greeting on the grouped ground — no card. */}
+      <Rise index={0}>
+        <View style={styles.headerRow}>
+          <Text style={styles.greeting} accessibilityRole="header">
+            {greeting}
+          </Text>
+          <View style={styles.headerActions}>
+            <HeaderIconButton
+              icon="search-outline"
+              label="Search"
               onPress={() => router.push('/search')}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Search"
-            >
-              <Ionicons name="search" size={20} color={colors.cream} />
-            </Pressable>
-            <Pressable
-              style={styles.iconBtn}
+            />
+            <HeaderIconButton
+              icon="person-circle-outline"
+              label="Settings"
               onPress={() => router.push('/settings')}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Settings"
-            >
-              <Ionicons name="person" size={20} color={colors.cream} />
-            </Pressable>
+            />
           </View>
-
-          <View style={styles.kpiRow}>
-            <Kpi label="Revenue YTD" value={revenueYTD} format={(n) => `$${formatShort(n)}`} />
-            <View style={styles.kpiDivider} />
-            <Kpi label="Leads" value={openLeads} />
-            <View style={styles.kpiDivider} />
-            <Kpi label="Pipeline" value={pipelineValue} format={(n) => `$${formatShort(n)}`} />
-          </View>
-        </LinearGradient>
-      </FadeSlideIn>
-
-      <FadeSlideIn index={1} style={styles.section}>
-        <WeatherTile />
-        <AnalysisQueueChip />
-      </FadeSlideIn>
+        </View>
+      </Rise>
 
       {/* Storm Alert hero — hides when no active alert (Drift #4). */}
       {activeAlert && (
-        <FadeSlideIn index={1}>
+        <Rise index={1}>
           <PressableScale
             onPress={() =>
               router.push({ pathname: '/storm-alert/[id]', params: { id: activeAlert.id } } as any)
@@ -226,12 +313,6 @@ export default function HomeScreen() {
                   {activeAlert.eventKind === 'hail' ? 'Severe Hail' : 'Severe Wind'}
                 </Text>
               </View>
-              <Pressable
-                onPress={() => dismissAlert(activeAlert.id)}
-                hitSlop={10}
-              >
-                <Ionicons name="close" size={20} color={colors.cream} />
-              </Pressable>
             </View>
             <Text style={styles.stormHeroTitle}>{activeAlert.areaLabel}</Text>
             <Text style={styles.stormHeroSub}>
@@ -259,8 +340,17 @@ export default function HomeScreen() {
               <Text style={styles.stormHeroCtaText}>View impacted properties</Text>
               <Ionicons name="arrow-forward" size={20} color={colors.navy} />
             </View>
+            {/* Real 56pt dismiss target, floated over the card corner. */}
+            <Pressable
+              style={styles.stormHeroClose}
+              onPress={() => dismissAlert(activeAlert.id)}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss storm alert"
+            >
+              <Ionicons name="close" size={20} color={colors.textInverse} />
+            </Pressable>
           </PressableScale>
-        </FadeSlideIn>
+        </Rise>
       )}
 
       {!activeAlert && __DEV__ && (
@@ -275,76 +365,165 @@ export default function HomeScreen() {
             })
           }
         >
-          <Ionicons name="bug-outline" size={14} color={colors.slate} />
+          <Ionicons name="bug-outline" size={14} color={colors.textMuted} />
           <Text style={styles.debugStormText}>Inject demo storm alert</Text>
         </Pressable>
       )}
 
-      {/* Hero CTAs */}
-      <FadeSlideIn index={2} style={styles.heroRow}>
+      {/* Stats — three quiet white cells, tabular-nums ink numbers. */}
+      <Rise index={2}>
+        <View style={styles.statsCard}>
+          <StatCell label="Revenue YTD" value={revenueYTD} format={(n) => `$${formatShort(n)}`} />
+          <View style={styles.statDivider} />
+          <StatCell label="Leads" value={openLeads} />
+          <View style={styles.statDivider} />
+          <StatCell label="Pipeline" value={pipelineValue} format={(n) => `$${formatShort(n)}`} />
+        </View>
+      </Rise>
+
+      {/* Hero CTAs — side by side (Drift #3). Quick Inspection is the one
+          orange moment on this screen; New Job goes quiet. */}
+      <Rise index={3} style={styles.heroRow}>
         <PressableScale
-          style={styles.heroCta}
+          style={[styles.heroCta, styles.heroPrimary]}
+          accessibilityRole="button"
+          accessibilityLabel="Quick Inspection. Camera to AI to claim packet."
           onPress={() => {
             tap();
             router.push('/quick-inspection');
           }}
         >
-          <LinearGradient
-            colors={[colors.orange, '#FF8A3D']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroPrimaryInner}
-          >
-            <View style={styles.heroIconWrap}>
-              <Ionicons name="scan-outline" size={26} color={colors.textInverse} />
-            </View>
+          <Ionicons name="scan-outline" size={26} color={colors.textInverse} />
+          <View>
             <Text style={styles.heroPrimaryText}>Quick{'\n'}Inspection</Text>
             <Text style={styles.heroPrimarySub}>Camera → AI → Claim packet</Text>
-          </LinearGradient>
+          </View>
         </PressableScale>
 
         <PressableScale
-          style={[styles.heroCta, styles.heroSecondary]}
+          style={[styles.heroCta, styles.heroQuiet]}
+          accessibilityRole="button"
+          accessibilityLabel="New Job. Customer, insurance, roof."
           onPress={() => {
             tap();
             router.push('/new-job');
           }}
         >
-          <View style={[styles.heroIconWrap, styles.heroIconWrapNavy]}>
-            <Ionicons name="briefcase-outline" size={26} color={colors.navy} />
+          <Ionicons name="briefcase-outline" size={26} color={colors.text} />
+          <View>
+            <Text style={styles.heroQuietText}>New{'\n'}Job</Text>
+            <Text style={styles.heroQuietSub}>Customer · Insurance · Roof</Text>
           </View>
-          <Text style={styles.heroSecondaryText}>New{'\n'}Job</Text>
-          <Text style={styles.heroSecondarySub}>Customer · Insurance · Roof</Text>
         </PressableScale>
-      </FadeSlideIn>
+      </Rise>
 
-      {/* Field tools */}
-      <FadeSlideIn index={3} style={styles.utilityRow}>
-        <UtilityCta icon="thunderstorm" title="Hail Tracer" sub="NOAA map" onPress={() => router.push('/hail-tracer')} />
+      {/* Field tools — quiet iOS cells, thin icons, no tinted circles. */}
+      <Rise index={4} style={styles.utilityRow}>
+        <UtilityCta icon="thunderstorm-outline" title="Hail Tracer" sub="NOAA map" onPress={() => router.push('/hail-tracer')} />
         <UtilityCta icon="calculator-outline" title="Estimator" sub="Solar + cost" onPress={() => router.push('/estimator')} />
         <UtilityCta icon="car-outline" title="Mileage" sub="Tax log" onPress={() => router.push('/mileage')} />
-      </FadeSlideIn>
+      </Rise>
 
-      <FadeSlideIn index={4}>
+      <Rise index={5} style={styles.stack}>
+        <WeatherTile />
+        <AnalysisQueueChip />
+      </Rise>
+
+      <Rise index={6}>
         <AICalibrationCard />
-      </FadeSlideIn>
+      </Rise>
 
-      {/* Recent Jobs */}
-      <FadeSlideIn index={5}>
-        <Pressable onPress={() => router.push('/inspections')} hitSlop={6}>
+      {/* Density: with no jobs yet, the first session renders structured,
+          honest setup content instead of a column of "No X yet" voids.
+          Every state below is read from a real store (Drift #5). */}
+      {inspections.length === 0 && (
+        <Rise index={7}>
           <View style={styles.sectionHeaderRow}>
-            <SectionTitle title="Recent Jobs" />
-            {inspections.length > 0 && (
-              <Text style={styles.viewAll}>View all</Text>
-            )}
+            <SectionTitle title="Get set up" />
+            <Text style={styles.sectionMeta}>
+              {setupDone} of {setupSteps.length}
+            </Text>
           </View>
-        </Pressable>
-        {inspections.length === 0 ? (
-          <EmptyCard
-            icon="hammer-outline"
-            message="No jobs yet. Tap New Job above to create your first."
-          />
-        ) : (
+          <View style={styles.groupCard}>
+            {setupSteps.map((step, i) => (
+              <PressableScale
+                key={step.key}
+                style={[styles.groupRow, i > 0 && styles.groupRowBorder]}
+                accessibilityRole="button"
+                accessibilityLabel={`${step.title}. ${step.done ? 'Done.' : step.sub}`}
+                onPress={() => router.push(step.href as any)}
+              >
+                <Ionicons
+                  name={step.done ? 'checkmark-circle' : step.icon}
+                  size={22}
+                  color={step.done ? colors.success : colors.textMuted}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.groupTitle}>{step.title}</Text>
+                  <Text style={styles.groupSub}>{step.sub}</Text>
+                </View>
+                {!step.done && (
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+                )}
+              </PressableScale>
+            ))}
+          </View>
+        </Rise>
+      )}
+
+      {inspections.length === 0 && (
+        <Rise index={8}>
+          <SectionTitle title="What RoofWise does" />
+          <View style={styles.groupCard}>
+            <PressableScale
+              style={styles.groupRow}
+              accessibilityRole="button"
+              accessibilityLabel="Hail Tracer. See where hail actually fell, straight from NOAA radar."
+              onPress={() => router.push('/hail-tracer')}
+            >
+              <Ionicons name="thunderstorm-outline" size={22} color={colors.textMuted} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.groupTitle}>Hail Tracer</Text>
+                <Text style={styles.groupSub}>
+                  See where hail actually fell, straight from NOAA radar
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+            </PressableScale>
+            <PressableScale
+              style={[styles.groupRow, styles.groupRowBorder]}
+              accessibilityRole="button"
+              accessibilityLabel="Quick Inspection. Photos become a HAAG-ready claim packet."
+              onPress={() => router.push('/quick-inspection')}
+            >
+              <Ionicons name="scan-outline" size={22} color={colors.textMuted} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.groupTitle}>Quick Inspection</Text>
+                <Text style={styles.groupSub}>
+                  Photos become a HAAG-ready claim packet
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+            </PressableScale>
+          </View>
+        </Rise>
+      )}
+
+      {/* Recent Jobs — rendered only when jobs exist; the setup module above
+          owns the first-run state. */}
+      {inspections.length > 0 && (
+        <Rise index={7}>
+          <Pressable
+            onPress={() => router.push('/inspections')}
+            accessibilityRole="button"
+            accessibilityLabel="Recent jobs. View all."
+            style={styles.sectionHeaderPressable}
+          >
+            <View style={styles.sectionHeaderRow}>
+              <SectionTitle title="Recent Jobs" />
+              <Text style={styles.viewAll}>View all</Text>
+            </View>
+          </Pressable>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -362,7 +541,7 @@ export default function HomeScreen() {
                     <Image source={{ uri: firstPhoto }} style={styles.recentImage} />
                   ) : (
                     <View style={styles.recentImagePlaceholder}>
-                      <Ionicons name="image-outline" size={28} color={colors.slate} />
+                      <Ionicons name="image-outline" size={28} color={colors.textSubtle} />
                     </View>
                   )}
                   <View style={styles.recentBody}>
@@ -384,18 +563,13 @@ export default function HomeScreen() {
               );
             })}
           </ScrollView>
-        )}
-      </FadeSlideIn>
+        </Rise>
+      )}
 
-      {/* Pipeline mini-Kanban */}
-      <FadeSlideIn index={6}>
-        <SectionTitle title="Pipeline" />
-        {pipelineStages.length === 0 ? (
-          <EmptyCard
-            icon="funnel-outline"
-            message="No leads in the pipeline yet. Add a lead and it shows up here."
-          />
-        ) : (
+      {/* Pipeline mini-Kanban — only occupied stages (Drift #5). */}
+      {pipelineStages.length > 0 && (
+        <Rise index={8}>
+          <SectionTitle title="Pipeline" />
           <View style={styles.pipelineRow}>
             {pipelineStages.map(({ stage, label, count }) => (
               <View key={stage} style={styles.pipelineCard}>
@@ -406,17 +580,8 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
-        )}
-      </FadeSlideIn>
-
-      {/* Today's Plan */}
-      <FadeSlideIn index={7}>
-        <SectionTitle title="Today's Plan" />
-        <EmptyCard
-          icon="calendar-outline"
-          message="Nothing scheduled. Add jobs to your plan to see them here."
-        />
-      </FadeSlideIn>
+        </Rise>
+      )}
 
       {/* Saved Estimates */}
       {estimates.length > 0 && (
@@ -451,22 +616,21 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Activity */}
-      <View>
-        <Pressable onPress={() => router.push('/activity')} hitSlop={6}>
-          <View style={styles.sectionHeaderRow}>
-            <SectionTitle title="Recent Activity" />
-            {recentActivity.length > 0 && (
+      {/* Activity — hidden until real events exist; lifecycle hooks fill it
+          from the first job onward. */}
+      {recentActivity.length > 0 && (
+        <View>
+          <Pressable
+            onPress={() => router.push('/activity')}
+            accessibilityRole="button"
+            accessibilityLabel="Recent activity. View all."
+            style={styles.sectionHeaderPressable}
+          >
+            <View style={styles.sectionHeaderRow}>
+              <SectionTitle title="Recent Activity" />
               <Text style={styles.viewAll}>View all</Text>
-            )}
-          </View>
-        </Pressable>
-        {recentActivity.length === 0 ? (
-          <EmptyCard
-            icon="time-outline"
-            message="Inspections, knocks, and saves will show up here."
-          />
-        ) : (
+            </View>
+          </Pressable>
           <View style={styles.activityCard}>
             {recentActivity.map((evt, i) => (
               <View
@@ -474,7 +638,7 @@ export default function HomeScreen() {
                 style={[styles.activityRow, i > 0 && styles.activityRowBorder]}
               >
                 <View style={styles.activityIconWrap}>
-                  <Ionicons name={iconFor(evt.kind)} size={16} color={colors.orange} />
+                  <Ionicons name={iconFor(evt.kind)} size={18} color={colors.textMuted} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.activityMsg}>{evt.message}</Text>
@@ -483,19 +647,14 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
-        )}
-      </View>
-
-      <View style={{ height: spacing.xxxl * 2 }} />
+        </View>
+      )}
     </ScrollView>
 
-    <Animated.View
-      entering={FadeInUp.duration(motion.enterMs).delay(motion.staggerDelayMs * 8)}
-      style={styles.fabWrap}
-    >
+    <Rise index={9} style={styles.fabWrap}>
       <PressableScale
         style={styles.fab}
-        pressedScale={0.92}
+        pressedScale={0.9}
         accessibilityRole="button"
         accessibilityLabel="Quick add: inspection, job, lead, or estimate"
         onPress={() => {
@@ -503,9 +662,9 @@ export default function HomeScreen() {
           onQuickAdd();
         }}
       >
-        <Ionicons name="add" size={30} color={colors.textInverse} />
+        <Ionicons name="add" size={28} color={colors.textInverse} />
       </PressableScale>
-    </Animated.View>
+    </Rise>
     </View>
   );
 }
@@ -540,7 +699,30 @@ function formatRelative(iso: string): string {
   return `${d}d ago`;
 }
 
-function Kpi({
+function HeaderIconButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <PressableScale
+      style={styles.iconBtn}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+    >
+      <View style={styles.iconBtnFill}>
+        <Ionicons name={icon} size={22} color={colors.text} />
+      </View>
+    </PressableScale>
+  );
+}
+
+function StatCell({
   label,
   value,
   format,
@@ -550,20 +732,16 @@ function Kpi({
   format?: (n: number) => string;
 }) {
   return (
-    <View style={styles.kpiCell}>
-      <AnimatedCounter value={value} format={format} style={styles.kpiValue} />
-      <Text style={styles.kpiLabel}>{label}</Text>
+    <View style={styles.statCell}>
+      <AnimatedCounter value={value} format={format} style={styles.statValue} />
+      <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
+/** iOS grouped-list section label — 13/semibold uppercase, textSubtle. */
 function SectionTitle({ title }: { title: string }) {
-  return (
-    <View style={styles.sectionTitleRow}>
-      <View style={styles.sectionTick} />
-      <Text style={styles.sectionTitle}>{title}</Text>
-    </View>
-  );
+  return <Text style={styles.sectionTitle}>{title}</Text>;
 }
 
 function UtilityCta({
@@ -578,248 +756,282 @@ function UtilityCta({
   onPress: () => void;
 }) {
   return (
-    <PressableScale style={styles.utilityCta} onPress={onPress}>
-      <View style={styles.utilityIconWrap}>
-        <Ionicons name={icon} size={20} color={colors.orange} />
-      </View>
+    <PressableScale
+      style={styles.utilityCta}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${sub}.`}
+      onPress={onPress}
+    >
+      <Ionicons name={icon} size={22} color={colors.text} />
       <Text style={styles.utilityTitle}>{title}</Text>
       <Text style={styles.utilitySub}>{sub}</Text>
     </PressableScale>
   );
 }
 
-function EmptyCard({
-  icon,
-  message,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  message: string;
-}) {
-  return (
-    <View style={styles.emptyCard}>
-      <View style={styles.emptyIconWrap}>
-        <Ionicons name={icon} size={24} color={colors.orange} />
-      </View>
-      <Text style={styles.emptyText}>{message}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
-    padding: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
     gap: spacing.lg,
-    paddingBottom: spacing.xxxl,
   },
 
-  headerCard: {
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    gap: spacing.xl,
-    ...shadows.pressed,
+  // Large-title header on the grouped ground.
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center' },
-  greeting: { fontSize: fontSize.bodyMd, color: 'rgba(240,240,228,0.72)' },
-  name: {
-    fontSize: fontSize.titleXl,
+  greeting: {
+    flex: 1,
+    fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
-    color: colors.cream,
+    color: colors.text,
     letterSpacing: -0.5,
   },
+  headerActions: { flexDirection: 'row' },
   iconBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnFill: {
     width: touchTarget.small,
     height: touchTarget.small,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: colors.fillQuiet,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: spacing.sm,
   },
 
-  kpiRow: {
+  // Stats — quiet white cells with hairline separation.
+  statsCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     paddingVertical: spacing.lg,
+    ...shadows.card,
   },
-  kpiCell: { flex: 1, alignItems: 'center' },
-  kpiDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.14)' },
-  kpiValue: {
-    fontSize: fontSize.titleMd,
+  statCell: { flex: 1, alignItems: 'center' },
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+    marginVertical: spacing.xs,
+    backgroundColor: colors.hairline,
+  },
+  statValue: {
+    fontSize: fontSize.titleLg,
     fontWeight: fontWeight.bold,
-    color: colors.orange,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
   },
-  kpiLabel: {
-    fontSize: fontSize.caption,
-    color: 'rgba(240,240,228,0.72)',
+  statLabel: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.medium,
+    color: colors.textMuted,
     marginTop: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
 
-  section: { gap: spacing.lg },
+  stack: { gap: spacing.md },
 
+  // Hero CTAs — one orange moment + one quiet surface, side by side.
   heroRow: { flexDirection: 'row', gap: spacing.md },
   heroCta: {
     flex: 1,
-    minHeight: 150,
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-    ...shadows.pressed,
-  },
-  heroPrimaryInner: {
-    flex: 1,
+    minHeight: 128,
+    borderRadius: radii.card,
     padding: spacing.lg,
     justifyContent: 'space-between',
   },
-  heroIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.md,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  heroPrimary: {
+    backgroundColor: colors.accent,
+    ...shadows.card,
   },
-  heroIconWrapNavy: { backgroundColor: colors.brandSoft },
   heroPrimaryText: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.textInverse,
     lineHeight: 24,
-    marginTop: spacing.sm,
   },
   heroPrimarySub: {
     fontSize: fontSize.caption,
-    color: 'rgba(255,255,255,0.92)',
+    color: colors.textInverse,
+    opacity: 0.9,
+    marginTop: spacing.xs,
   },
-  heroSecondary: {
+  heroQuiet: {
     backgroundColor: colors.surface,
-    padding: spacing.lg,
-    justifyContent: 'space-between',
-  },
-  heroSecondaryText: {
-    fontSize: fontSize.titleMd,
-    fontWeight: fontWeight.bold,
-    color: colors.navy,
-    lineHeight: 24,
-    marginTop: spacing.sm,
-  },
-  heroSecondarySub: { fontSize: fontSize.caption, color: colors.slate },
-
-  sectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  sectionTick: {
-    width: 4,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: colors.orange,
-  },
-  sectionTitle: {
-    fontSize: fontSize.titleMd,
-    fontWeight: fontWeight.bold,
-    color: colors.navy,
-    letterSpacing: -0.3,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  viewAll: { color: colors.orange, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
-
-  emptyCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.xl,
-    alignItems: 'center',
-    gap: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     ...shadows.card,
   },
-  emptyIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+  heroQuietText: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    lineHeight: 24,
   },
-  emptyText: {
-    fontSize: fontSize.bodyMd,
-    color: colors.slate,
-    textAlign: 'center',
-    lineHeight: 20,
+  heroQuietSub: {
+    fontSize: fontSize.caption,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
   },
 
-  // Wraps: the number of cards is the number of OCCUPIED stages now, which
-  // ranges from 1 to 11 rather than a fixed 5.
+  // iOS grouped-list section headers.
+  sectionTitle: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+  },
+  sectionHeaderPressable: { minHeight: touchTarget.standard, justifyContent: 'center' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  sectionMeta: {
+    fontSize: fontSize.bodySm,
+    color: colors.textSubtle,
+    fontVariant: ['tabular-nums'],
+  },
+  viewAll: {
+    color: colors.text,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+  },
+
+  // Grouped white cards with 56pt rows — setup + education modules.
+  groupCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    overflow: 'hidden',
+    ...shadows.card,
+  },
+  groupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  groupRowBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+  },
+  groupTitle: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+  groupSub: {
+    fontSize: fontSize.bodySm,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+
   pipelineRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   pipelineCard: {
     flexGrow: 1,
     flexBasis: 88,
     backgroundColor: colors.surface,
     borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.md,
     alignItems: 'center',
     minHeight: touchTarget.standard,
     justifyContent: 'center',
-    borderBottomWidth: 3,
-    borderBottomColor: colors.orange,
     ...shadows.card,
   },
   pipelineCount: {
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
-    color: colors.orange,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
   },
   pipelineLabel: {
     fontSize: fontSize.caption,
-    color: colors.slate,
+    color: colors.textMuted,
     marginTop: spacing.xs,
     textAlign: 'center',
   },
 
+  // Storm hero — severity is a sanctioned accent moment; card itself is ink.
   stormHero: {
     backgroundColor: colors.navy,
-    borderRadius: radii.lg,
+    borderRadius: radii.card,
     padding: spacing.lg,
     gap: spacing.sm,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.orange,
-    ...shadows.pressed,
+    ...shadows.card,
   },
-  stormHeroChipRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stormHeroChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 40,
+  },
   stormHeroChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: colors.orange,
+    backgroundColor: colors.accent,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
     borderRadius: radii.pill,
   },
-  stormHeroChipText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.bold, textTransform: 'uppercase' },
-  stormHeroTitle: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.textInverse },
-  stormHeroSub: { fontSize: fontSize.bodyMd, color: 'rgba(240,240,228,0.85)' },
+  stormHeroChipText: {
+    color: colors.textInverse,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  stormHeroClose: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stormHeroTitle: {
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+    color: colors.textInverse,
+  },
+  stormHeroSub: {
+    fontSize: fontSize.bodyMd,
+    color: colors.textInverse,
+    opacity: 0.85,
+  },
   // Drift #1: a one-line text link is ~19pt tall on its own. The gloved-roofer
   // floor is a real 56pt target, not text height plus hitSlop.
   stormClusterLink: { minHeight: touchTarget.standard, justifyContent: 'center' },
   stormHeroCta: {
-    marginTop: spacing.md,
-    height: touchTarget.preferred,
-    borderRadius: radii.pill,
-    backgroundColor: colors.cream,
+    marginTop: spacing.sm,
+    height: touchTarget.standard,
+    borderRadius: radii.button,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  stormHeroCtaText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  stormHeroCtaText: {
+    color: colors.navy,
+    fontWeight: fontWeight.semibold,
+    fontSize: fontSize.bodyMd,
+  },
 
   debugStorm: {
     flexDirection: 'row',
@@ -829,38 +1041,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.fillQuiet,
   },
-  debugStormText: { color: colors.slate, fontSize: fontSize.caption, fontWeight: fontWeight.medium },
+  debugStormText: {
+    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.medium,
+  },
 
   utilityRow: { flexDirection: 'row', gap: spacing.md },
   utilityCta: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    paddingVertical: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    minHeight: touchTarget.standard,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
+    justifyContent: 'center',
     ...shadows.card,
   },
-  utilityIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
+  utilityTitle: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+    marginTop: spacing.xs,
   },
-  utilityTitle: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.navy },
-  utilitySub: { fontSize: fontSize.caption, color: colors.slate },
+  utilitySub: { fontSize: fontSize.caption, color: colors.textMuted },
 
   recentRow: { gap: spacing.md, paddingRight: spacing.xl },
   recentCard: {
     width: 260,
     backgroundColor: colors.surface,
-    borderRadius: radii.lg,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     overflow: 'hidden',
     ...shadows.card,
   },
@@ -868,43 +1086,83 @@ const styles = StyleSheet.create({
   recentImagePlaceholder: {
     width: '100%',
     height: 120,
-    backgroundColor: colors.brandSoft,
+    backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
   recentBody: { padding: spacing.lg, gap: spacing.xs },
-  recentTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  recentReport: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold, letterSpacing: 0.3 },
+  recentTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  recentReport: {
+    fontSize: fontSize.caption,
+    color: colors.textSubtle,
+    fontWeight: fontWeight.semibold,
+    letterSpacing: 0.3,
+  },
   statusPill: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radii.pill,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.fillQuiet,
   },
-  statusText: { fontSize: fontSize.caption, color: colors.orange, fontWeight: fontWeight.semibold, textTransform: 'capitalize' },
-  recentCustomer: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
-  recentAddress: { fontSize: fontSize.bodySm, color: colors.slate },
-  recentMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: spacing.xs },
+  statusText: {
+    fontSize: fontSize.caption,
+    color: colors.textMuted,
+    fontWeight: fontWeight.semibold,
+    textTransform: 'capitalize',
+  },
+  recentCustomer: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+  recentAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  recentMeta: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: spacing.xs },
 
   estimateCard: {
     width: 200,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
     gap: 4,
-    borderTopWidth: 3,
-    borderTopColor: colors.orange,
     ...shadows.card,
   },
-  estimateAmount: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.orange },
-  estimateRange: { fontSize: fontSize.caption, color: colors.slate },
-  estimateAddress: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium, marginTop: spacing.xs },
-  estimateMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2, textTransform: 'capitalize' },
+  estimateAmount: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  estimateRange: {
+    fontSize: fontSize.caption,
+    color: colors.textMuted,
+    fontVariant: ['tabular-nums'],
+  },
+  estimateAddress: {
+    fontSize: fontSize.bodyMd,
+    color: colors.text,
+    fontWeight: fontWeight.medium,
+    marginTop: spacing.xs,
+  },
+  estimateMeta: {
+    fontSize: fontSize.caption,
+    color: colors.textMuted,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
 
   activityCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     ...shadows.card,
   },
   activityRow: {
@@ -913,17 +1171,17 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.sm,
   },
-  activityRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  activityIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+  activityRowBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
-  activityMsg: { fontSize: fontSize.bodyMd, color: colors.navy },
-  activityTime: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2 },
+  activityIconWrap: {
+    width: 24,
+    alignItems: 'center',
+    marginTop: 1,
+  },
+  activityMsg: { fontSize: fontSize.bodyMd, color: colors.text },
+  activityTime: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
 
   fabWrap: {
     position: 'absolute',
@@ -931,12 +1189,12 @@ const styles = StyleSheet.create({
     bottom: spacing.xl,
   },
   fab: {
-    width: touchTarget.sticky,
-    height: touchTarget.sticky,
-    borderRadius: touchTarget.sticky / 2,
-    backgroundColor: colors.orange,
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    borderRadius: radii.pill,
+    backgroundColor: colors.navy,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.pressed,
+    ...shadows.float,
   },
 });

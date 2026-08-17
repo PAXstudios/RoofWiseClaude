@@ -22,10 +22,13 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, {
+  Easing,
   FadeIn,
   FadeInDown,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
+  withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
@@ -197,12 +200,40 @@ export default function Onboarding() {
   );
 }
 
+/**
+ * Slow ambient drift on the scene art — a few points of translate on the
+ * ambient loop, out of phase with the Aurora orbs behind it, so the hero
+ * reads as parallax depth rather than a static cutout.
+ */
+function AmbientDrift({ children }: { children: React.ReactNode }) {
+  const t = useSharedValue(0);
+
+  useEffect(() => {
+    t.value = withRepeat(
+      withTiming(1, { duration: motion.ambientMs, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true, // reverse so the drift never snaps back
+    );
+  }, [t]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: t.value * 6 },
+      { translateY: t.value * -8 },
+    ],
+  }));
+
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
+
 function SceneSlide({ scene, active, width }: { scene: Scene; active: boolean; width: number }) {
   const { Illustration } = scene;
   return (
     <View style={[styles.slide, { width }]}>
       <View style={styles.stageWrap}>
-        <Illustration active={active} />
+        <AmbientDrift>
+          <Illustration active={active} />
+        </AmbientDrift>
       </View>
 
       {active && (
@@ -238,13 +269,25 @@ function SceneSlide({ scene, active, width }: { scene: Scene; active: boolean; w
 function Dot({ active }: { active: boolean }) {
   const w = useSharedValue(active ? 26 : 7);
   const o = useSharedValue(active ? 1 : 0.35);
+  const s = useSharedValue(1);
 
   useEffect(() => {
-    w.value = withSpring(active ? 26 : 7, motion.quick);
+    w.value = withSpring(active ? 26 : 7, motion.snappy);
     o.value = withTiming(active ? 1 : 0.35, { duration: 220 });
-  }, [active, w, o]);
+    if (active) {
+      // Small overshoot pop as the carousel advances onto this dot.
+      s.value = withSequence(
+        withSpring(1.2, motion.snappy),
+        withSpring(1, motion.snappy),
+      );
+    }
+  }, [active, w, o, s]);
 
-  const style = useAnimatedStyle(() => ({ width: w.value, opacity: o.value }));
+  const style = useAnimatedStyle(() => ({
+    width: w.value,
+    opacity: o.value,
+    transform: [{ scale: s.value }],
+  }));
   return <Animated.View style={[styles.dot, style]} />;
 }
 
@@ -275,7 +318,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   skip: {
-    minHeight: touchTarget.small,
+    minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
     justifyContent: 'center',
     borderRadius: radii.pill,
@@ -320,7 +363,7 @@ const styles = StyleSheet.create({
     lineHeight: 25,
   },
 
-  footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.lg },
+  footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.md },
   dots: { flexDirection: 'row', gap: spacing.sm, alignSelf: 'center' },
   dot: { height: 7, borderRadius: 4, backgroundColor: colors.textInverse },
 
@@ -340,7 +383,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     letterSpacing: -0.2,
   },
-  secondary: { alignSelf: 'center', minHeight: touchTarget.small, justifyContent: 'center' },
+  secondary: { alignSelf: 'center', minHeight: touchTarget.standard, justifyContent: 'center' },
   secondaryText: {
     color: 'rgba(255,255,255,0.55)',
     fontSize: fontSize.bodyMd,

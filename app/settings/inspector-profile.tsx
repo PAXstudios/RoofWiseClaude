@@ -1,20 +1,28 @@
+import { useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
-  Pressable,
   StyleSheet,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { PressableScale } from '@/components/PressableScale';
+import { FadeSlideIn } from '@/components/motion';
 import {
   colors,
   fontSize,
   fontWeight,
+  motion,
   radii,
   shadows,
   spacing,
@@ -30,26 +38,24 @@ export default function InspectorProfileScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
-        <Text style={styles.title}>Inspector profile</Text>
-      </View>
+      <ScreenHeader title="Inspector profile" back />
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.help}>
-          Appears on HAAG reports and proposals. Trust-weighted in the recursive
-          learning loop when HAAG-certified.
-        </Text>
+        <FadeSlideIn index={0}>
+          <Text style={styles.help}>
+            Appears on HAAG reports and proposals. Trust-weighted in the recursive
+            learning loop when HAAG-certified.
+          </Text>
+        </FadeSlideIn>
 
-        <Section title="Identity">
+        <Section index={1} title="Identity">
           <Field
             label="Full name"
             value={profile.fullName}
             onChangeText={(t) => update({ fullName: t })}
             placeholder="Derrick Robinson"
           />
+          <Sep />
           <Field
             label="Phone"
             value={profile.phone}
@@ -57,6 +63,7 @@ export default function InspectorProfileScreen() {
             placeholder="(555) 555-0100"
             keyboardType="phone-pad"
           />
+          <Sep />
           <Field
             label="State license number"
             value={profile.licenseNumber ?? ''}
@@ -66,40 +73,37 @@ export default function InspectorProfileScreen() {
           />
         </Section>
 
-        <Section title="HAAG certification">
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1 }}>
+        <Section index={2} title="HAAG certification">
+          <PressableScale
+            style={styles.toggleRow}
+            onPress={() => update({ haagCertified: !profile.haagCertified })}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: profile.haagCertified }}
+            accessibilityLabel="I'm HAAG certified"
+          >
+            <View style={styles.toggleText}>
               <Text style={styles.toggleLabel}>I'm HAAG certified</Text>
               <Text style={styles.toggleSub}>
                 Trust-weighted 5x in retraining. Required for some insurance carriers.
               </Text>
             </View>
-            <Pressable
-              style={[
-                styles.toggle,
-                profile.haagCertified && styles.toggleOn,
-              ]}
-              onPress={() => update({ haagCertified: !profile.haagCertified })}
-            >
-              <View
-                style={[
-                  styles.toggleThumb,
-                  profile.haagCertified && styles.toggleThumbOn,
-                ]}
-              />
-            </Pressable>
-          </View>
+            <SwitchVisual on={profile.haagCertified} />
+          </PressableScale>
 
           {profile.haagCertified && (
-            <Field
-              label="HAAG certification number"
-              value={profile.haagCertificationNumber ?? ''}
-              onChangeText={(t) => update({ haagCertificationNumber: t })}
-              placeholder="e.g. HAAG-12345"
-              autoCapitalize="characters"
-            />
+            <>
+              <Sep />
+              <Field
+                label="HAAG certification number"
+                value={profile.haagCertificationNumber ?? ''}
+                onChangeText={(t) => update({ haagCertificationNumber: t })}
+                placeholder="e.g. HAAG-12345"
+                autoCapitalize="characters"
+              />
+            </>
           )}
 
+          <Sep />
           <Field
             label="Years of experience"
             value={String(profile.yearsExperience)}
@@ -109,13 +113,14 @@ export default function InspectorProfileScreen() {
           />
         </Section>
 
-        <Section title="Safety">
+        <Section index={3} title="Safety">
           <Field
             label="Emergency contact name"
             value={profile.emergencyContact ?? ''}
             onChangeText={(t) => update({ emergencyContact: t })}
             placeholder="Optional"
           />
+          <Sep />
           <Field
             label="Emergency contact phone"
             value={profile.emergencyPhone ?? ''}
@@ -125,35 +130,53 @@ export default function InspectorProfileScreen() {
           />
         </Section>
 
-        <Pressable
-          style={styles.doneBtn}
-          onPress={() => {
-            toast({ tone: 'success', title: 'Profile saved' });
-            router.back();
-          }}
-        >
-          <Text style={styles.doneBtnText}>Done</Text>
-        </Pressable>
+        <FadeSlideIn index={4}>
+          <PressableScale
+            style={styles.doneBtn}
+            onPress={() => {
+              toast({ tone: 'success', title: 'Profile saved' });
+              router.back();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Done"
+          >
+            <Text style={styles.doneBtnText}>Done</Text>
+          </PressableScale>
+        </FadeSlideIn>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  index,
+  children,
+}: {
+  title: string;
+  index: number;
+  children: React.ReactNode;
+}) {
   return (
-    <View style={{ gap: spacing.sm }}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.card}>{children}</View>
-    </View>
+    <FadeSlideIn index={index} style={styles.section}>
+      <Text style={styles.sectionLabel}>{title}</Text>
+      <View style={styles.group}>{children}</View>
+    </FadeSlideIn>
   );
 }
 
+function Sep() {
+  return <View style={styles.sep} />;
+}
+
+/** A grouped-list input cell: 13pt label over a borderless 17pt input.
+ *  The white cell itself is the field — no heavy outlined box. */
 function Field({
   label,
   ...rest
 }: { label: string } & React.ComponentProps<typeof TextInput>) {
   return (
-    <View style={styles.field}>
+    <View style={styles.fieldCell}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         style={styles.input}
@@ -164,71 +187,123 @@ function Field({
   );
 }
 
+/** iOS-style switch visual — the enclosing 56pt row is the touch target. */
+function SwitchVisual({ on }: { on: boolean }) {
+  const x = useSharedValue(on ? 20 : 0);
+
+  useEffect(() => {
+    x.value = withSpring(on ? 20 : 0, motion.snappy);
+  }, [on, x]);
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }],
+  }));
+
+  return (
+    <View style={[styles.switchTrack, on && styles.switchTrackOn]}>
+      <Animated.View style={[styles.switchThumb, thumbStyle]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+
+  scroll: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xxxl,
+    gap: spacing.xl,
   },
-  headerBtn: { padding: spacing.xs },
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
+  help: {
+    fontSize: fontSize.bodySm,
+    color: colors.textSubtle,
+    lineHeight: 18,
+    paddingHorizontal: spacing.lg,
+  },
 
-  scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
-  help: { fontSize: fontSize.bodyMd, color: colors.slate, lineHeight: 20 },
-
-  sectionTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
-  card: {
+  section: {},
+  sectionLabel: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  group: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    padding: spacing.lg,
-    gap: spacing.md,
+    overflow: 'hidden',
     ...shadows.card,
   },
-
-  field: { gap: spacing.xs },
-  fieldLabel: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.medium },
-  input: {
-    minHeight: touchTarget.standard,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.lg,
-    fontSize: fontSize.bodyLg,
-    color: colors.navy,
+  sep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.hairline,
+    marginLeft: spacing.lg,
   },
 
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  toggleLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
-  toggleSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
-  toggle: {
-    width: 52,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceMuted,
+  fieldCell: {
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    justifyContent: 'center',
+  },
+  fieldLabel: {
+    fontSize: fontSize.bodySm,
+    color: colors.textMuted,
+    fontWeight: fontWeight.medium,
+  },
+  input: {
+    fontSize: fontSize.bodyLg,
+    color: colors.text,
+    paddingVertical: spacing.xs,
+  },
+
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  toggleText: { flex: 1 },
+  toggleLabel: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.medium,
+    color: colors.text,
+  },
+  toggleSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+
+  switchTrack: {
+    width: 51,
+    height: 31,
+    borderRadius: radii.pill,
+    backgroundColor: colors.fillQuiet,
     padding: 2,
     justifyContent: 'center',
   },
-  toggleOn: { backgroundColor: colors.success },
-  toggleThumb: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  switchTrackOn: { backgroundColor: colors.success },
+  switchThumb: {
+    width: 27,
+    height: 27,
+    borderRadius: radii.pill,
     backgroundColor: colors.surface,
-    ...shadows.card,
+    ...shadows.thumb,
   },
-  toggleThumbOn: { transform: [{ translateX: 20 }] },
 
   doneBtn: {
     height: touchTarget.sticky,
-    borderRadius: radii.pill,
-    backgroundColor: colors.orange,
+    borderRadius: radii.button,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.md,
   },
-  doneBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  doneBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+  },
 });

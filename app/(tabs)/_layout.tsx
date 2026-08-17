@@ -44,8 +44,10 @@ export default function TabsLayout() {
   }
 
   // Phones and tablets keep the native glove-first shell unchanged.
+  // Bottom inset is owned by BottomTabs itself (nested SafeAreaView) so the
+  // bar renders edge-to-edge under the home indicator.
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.content}>
         <Slot />
       </View>

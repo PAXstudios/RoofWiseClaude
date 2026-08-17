@@ -105,28 +105,23 @@ export function DamageScoreBar({ band, score }: Props) {
 
   // Nothing evaluated yet reads as "not assessed" — never as a zero band
   // (Drift #5: an absent determination is stated, never synthesized).
-  const tone = resolved ? BAND_TONE[resolved] : { fg: colors.slate, soft: colors.surfaceMuted };
+  const tone = resolved
+    ? BAND_TONE[resolved]
+    : { fg: colors.textMuted, soft: colors.fillQuiet };
   const rank = resolved ? BAND_RANK[resolved] : 0;
   const label = resolved ? BAND_LABEL[resolved] : 'Not assessed';
   const caption = resolved
     ? BAND_CAPTION[resolved]
     : 'Analyze the slopes to get a claim-viability band.';
 
-  // The meter springs up to the band's rank — the analysis payoff moment.
+  // The track springs up to the band's rank — the analysis payoff moment.
   const progress = useSharedValue(0);
   useEffect(() => {
-    progress.value = withSpring(rank, motion.gentle);
+    progress.value = withSpring(rank, motion.snappy);
   }, [rank, progress]);
 
-  // Three fixed segments → three fixed hooks (no loops, no conditional hooks).
-  const seg0 = useAnimatedStyle(() => ({
-    width: `${Math.min(1, Math.max(0, progress.value)) * 100}%`,
-  }));
-  const seg1 = useAnimatedStyle(() => ({
-    width: `${Math.min(1, Math.max(0, progress.value - 1)) * 100}%`,
-  }));
-  const seg2 = useAnimatedStyle(() => ({
-    width: `${Math.min(1, Math.max(0, progress.value - 2)) * 100}%`,
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${(Math.min(3, Math.max(0, progress.value)) / 3) * 100}%`,
   }));
 
   return (
@@ -137,15 +132,13 @@ export function DamageScoreBar({ band, score }: Props) {
     >
       <View style={styles.headerRow}>
         <Text style={styles.label}>Claim viability</Text>
-        <Text style={[styles.value, { color: tone.fg }]}>{label}</Text>
+        <View style={[styles.badge, { backgroundColor: tone.soft }]}>
+          <Text style={[styles.badgeText, { color: tone.fg }]}>{label}</Text>
+        </View>
       </View>
 
-      <View style={styles.meter}>
-        {[seg0, seg1, seg2].map((fillStyle, i) => (
-          <View key={i} style={styles.segment}>
-            <Animated.View style={[styles.fill, { backgroundColor: tone.fg }, fillStyle]} />
-          </View>
-        ))}
+      <View style={styles.track}>
+        <Animated.View style={[styles.fill, { backgroundColor: tone.fg }, fillStyle]} />
       </View>
 
       <View style={styles.legendRow}>
@@ -154,9 +147,7 @@ export function DamageScoreBar({ band, score }: Props) {
         <Text style={[styles.legend, styles.legendEnd]}>High</Text>
       </View>
 
-      <Text style={[styles.caption, { backgroundColor: tone.soft, color: tone.fg }]}>
-        {caption}
-      </Text>
+      <Text style={styles.caption}>{caption}</Text>
       <Text style={styles.footnote}>
         {band === undefined && typeof score === 'number'
           ? 'HAAG §6 band, estimated from the legacy damage score.'
@@ -170,35 +161,39 @@ const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   label: {
-    fontSize: fontSize.caption,
-    color: colors.slate,
+    fontSize: fontSize.bodySm,
+    color: colors.textSubtle,
     fontWeight: fontWeight.semibold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  value: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold },
-  meter: { flexDirection: 'row', gap: spacing.xs },
-  segment: {
-    flex: 1,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.surfaceMuted,
+  // iOS-style band badge: semantic soft ground + semantic text, never a blob.
+  badge: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  badgeText: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+  },
+  // Thin iOS progress track; the fill springs to the band's rank on mount.
+  track: {
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.fillQuiet,
     overflow: 'hidden',
   },
-  fill: { height: 12, borderRadius: 6 },
+  fill: { height: 6, borderRadius: radii.pill },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  legend: { flex: 1, fontSize: fontSize.caption, color: colors.slate },
+  legend: { flex: 1, fontSize: fontSize.caption, color: colors.textSubtle },
   legendStart: { textAlign: 'left' },
   legendMid: { textAlign: 'center' },
   legendEnd: { textAlign: 'right' },
   caption: {
     fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    lineHeight: 20,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.md,
-    overflow: 'hidden',
+    color: colors.textMuted,
+    lineHeight: 18,
   },
   footnote: { fontSize: fontSize.caption, color: colors.textSubtle },
 });

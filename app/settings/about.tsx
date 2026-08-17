@@ -1,6 +1,6 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, Linking } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
@@ -8,6 +8,9 @@ import { LEADS_SQL } from '@/lib/services/leadSync';
 import { INSPECTIONS_SQL } from '@/lib/services/inspectionSync';
 import { PHOTOS_SQL } from '@/lib/services/photoSync';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { PressableScale } from '@/components/PressableScale';
+import { FadeSlideIn } from '@/components/motion';
 import {
   colors,
   fontSize,
@@ -38,77 +41,88 @@ const LINKS = [
 ];
 
 export default function AboutScreen() {
-  const router = useRouter();
   const toast = useToastStore((s) => s.show);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
-        <Text style={styles.title}>About RoofWise</Text>
-      </View>
+      <ScreenHeader title="About RoofWise" back />
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.brandCard}>
-          <View style={styles.brandMark}>
-            <Text style={styles.brandInitials}>RW</Text>
-          </View>
-          <Text style={styles.brandName}>RoofWise</Text>
-          <Text style={styles.brandTag}>The objective layer between roofing contractors and insurance carriers.</Text>
-          <Text style={styles.version}>Version {VERSION}</Text>
-        </View>
-
-        <Text style={styles.sectionLabel}>Features</Text>
-        <View style={styles.card}>
-          {FEATURES.map((f, i) => (
-            <View key={f.title} style={[styles.featureRow, i > 0 && styles.rowBorder]}>
-              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.featureTitle}>{f.title}</Text>
-                <Text style={styles.featureDesc}>{f.desc}</Text>
-              </View>
+        <FadeSlideIn index={0}>
+          <View style={styles.brandCard}>
+            <View style={styles.brandMark}>
+              <Text style={styles.brandInitials}>RW</Text>
             </View>
-          ))}
-        </View>
-
-        <Text style={styles.sectionLabel}>References</Text>
-        <View style={styles.card}>
-          {LINKS.map((l, i) => (
-            <Pressable
-              key={l.url}
-              style={[styles.linkRow, i > 0 && styles.rowBorder]}
-              onPress={() => Linking.openURL(l.url)}
-            >
-              <Ionicons name="link-outline" size={18} color={colors.accent} />
-              <Text style={styles.linkText}>{l.label}</Text>
-              <Ionicons name="open-outline" size={16} color={colors.slate} />
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={styles.sectionLabel}>Cloud sync setup</Text>
-        <View style={styles.card}>
-          <Text style={styles.featureDesc}>
-            Run the following once in your Supabase SQL editor to provision the
-            leads table with row-level security. Copy → paste → Run.
-          </Text>
-          <View style={styles.sqlBox}>
-            <Text style={styles.sqlText} selectable>{CLOUD_SQL}</Text>
+            <Text style={styles.brandName}>RoofWise</Text>
+            <Text style={styles.brandTag}>The objective layer between roofing contractors and insurance carriers.</Text>
+            <Text style={styles.version}>Version {VERSION}</Text>
           </View>
-          <Pressable
-            style={styles.sqlBtn}
-            onPress={async () => {
-              await Clipboard.setStringAsync(CLOUD_SQL);
-              toast({ tone: 'success', title: 'SQL copied' });
-            }}
-          >
-            <Ionicons name="copy-outline" size={18} color={colors.textInverse} />
-            <Text style={styles.sqlBtnText}>Copy SQL</Text>
-          </Pressable>
-        </View>
+        </FadeSlideIn>
+
+        <FadeSlideIn index={1} style={styles.section}>
+          <Text style={styles.sectionLabel}>Features</Text>
+          <View style={styles.group}>
+            {FEATURES.map((f, i) => (
+              <View key={f.title}>
+                {i > 0 ? <View style={styles.sep} /> : null}
+                <View style={styles.featureRow}>
+                  <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                  <View style={styles.featureText}>
+                    <Text style={styles.featureTitle}>{f.title}</Text>
+                    <Text style={styles.featureDesc}>{f.desc}</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </FadeSlideIn>
+
+        <FadeSlideIn index={2} style={styles.section}>
+          <Text style={styles.sectionLabel}>References</Text>
+          <View style={styles.group}>
+            {LINKS.map((l, i) => (
+              <View key={l.url}>
+                {i > 0 ? <View style={styles.sep} /> : null}
+                <PressableScale
+                  style={styles.linkRow}
+                  onPress={() => Linking.openURL(l.url)}
+                  accessibilityRole="link"
+                  accessibilityLabel={l.label}
+                >
+                  <Ionicons name="link-outline" size={18} color={colors.textMuted} />
+                  <Text style={styles.linkText}>{l.label}</Text>
+                  <Ionicons name="open-outline" size={16} color={colors.textSubtle} />
+                </PressableScale>
+              </View>
+            ))}
+          </View>
+        </FadeSlideIn>
+
+        <FadeSlideIn index={3} style={styles.section}>
+          <Text style={styles.sectionLabel}>Cloud sync setup</Text>
+          <View style={styles.card}>
+            <Text style={styles.featureDesc}>
+              Run the following once in your Supabase SQL editor to provision the
+              leads table with row-level security. Copy → paste → Run.
+            </Text>
+            <View style={styles.sqlBox}>
+              <Text style={styles.sqlText} selectable>{CLOUD_SQL}</Text>
+            </View>
+            <PressableScale
+              style={styles.sqlBtn}
+              onPress={async () => {
+                await Clipboard.setStringAsync(CLOUD_SQL);
+                toast({ tone: 'success', title: 'SQL copied' });
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Copy SQL"
+            >
+              <Ionicons name="copy-outline" size={18} color={colors.textInverse} />
+              <Text style={styles.sqlBtnText}>Copy SQL</Text>
+            </PressableScale>
+          </View>
+        </FadeSlideIn>
 
         <Text style={styles.tag}>
           Built for the roofer in gloves on a hot roof.
@@ -120,17 +134,14 @@ export default function AboutScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
-  },
-  headerBtn: { padding: spacing.xs },
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
 
-  scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
+  scroll: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xxxl,
+    gap: spacing.xl,
+  },
+  section: {},
 
   brandCard: {
     backgroundColor: colors.navy,
@@ -140,50 +151,117 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card,
   },
-  brandMark: { width: 64, height: 64, borderRadius: radii.lg, backgroundColor: colors.orange, alignItems: 'center', justifyContent: 'center' },
-  brandInitials: { color: colors.textInverse, fontSize: fontSize.titleLg, fontWeight: fontWeight.bold },
-  brandName: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.cream },
-  brandTag: { fontSize: fontSize.bodyMd, color: 'rgba(240,240,228,0.82)', textAlign: 'center', lineHeight: 22 },
-  version: { fontSize: fontSize.caption, color: 'rgba(240,240,228,0.62)', marginTop: spacing.sm },
+  brandMark: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandInitials: {
+    color: colors.textInverse,
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+  },
+  brandName: {
+    fontSize: fontSize.titleXl,
+    fontWeight: fontWeight.bold,
+    color: colors.textInverse,
+  },
+  brandTag: {
+    fontSize: fontSize.bodyMd,
+    color: colors.textInverse,
+    opacity: 0.8,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  version: {
+    fontSize: fontSize.caption,
+    color: colors.textInverse,
+    opacity: 0.6,
+    marginTop: spacing.sm,
+  },
 
-  sectionLabel: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  sectionLabel: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
 
+  group: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    overflow: 'hidden',
+    ...shadows.card,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
     padding: spacing.lg,
+    gap: spacing.sm,
     ...shadows.card,
   },
+  sep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.hairline,
+    marginLeft: spacing.lg,
+  },
+
   featureRow: {
     flexDirection: 'row',
     gap: spacing.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     alignItems: 'flex-start',
   },
-  rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  featureTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
-  featureDesc: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2, lineHeight: 18 },
+  featureText: { flex: 1 },
+  featureTitle: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.medium,
+    color: colors.text,
+  },
+  featureDesc: {
+    fontSize: fontSize.bodySm,
+    color: colors.textMuted,
+    marginTop: 2,
+    lineHeight: 18,
+  },
 
   linkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.md,
     minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
   },
-  linkText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
+  linkText: {
+    flex: 1,
+    fontSize: fontSize.bodyMd,
+    color: colors.text,
+    fontWeight: fontWeight.medium,
+  },
 
-  tag: { fontSize: fontSize.bodySm, color: colors.slate, textAlign: 'center', fontStyle: 'italic', marginTop: spacing.xl },
+  tag: {
+    fontSize: fontSize.bodySm,
+    color: colors.textSubtle,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
 
   sqlBox: {
     backgroundColor: colors.navy,
-    borderRadius: radii.md,
+    borderRadius: radii.control,
     padding: spacing.md,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
   sqlText: {
-    fontSize: 11,
-    color: colors.cream,
+    fontSize: fontSize.caption,
+    color: colors.textInverse,
     fontFamily: 'Courier',
     lineHeight: 16,
   },
@@ -193,9 +271,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     height: touchTarget.standard,
-    borderRadius: radii.pill,
-    backgroundColor: colors.orange,
-    marginTop: spacing.md,
+    borderRadius: radii.button,
+    backgroundColor: colors.accent,
+    marginTop: spacing.xs,
   },
-  sqlBtnText: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  sqlBtnText: {
+    color: colors.textInverse,
+    fontWeight: fontWeight.semibold,
+    fontSize: fontSize.bodyMd,
+  },
 });

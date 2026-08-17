@@ -16,10 +16,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import {
   colors,
   fontSize,
   fontWeight,
+  motion,
   radii,
   shadows,
   spacing,
@@ -278,6 +285,18 @@ export default function NewJobWizard() {
   const steps = draft.kind === 'insurance_claim' ? CLAIM_STEPS : GENERAL_STEPS;
   const stepKey = steps[stepIndex];
 
+  // Thin ink progress bar — the fill springs to the new step's fraction
+  // instead of snapping (motion.snappy, measured track width).
+  const [progressTrackW, setProgressTrackW] = useState(0);
+  const progressW = useSharedValue(0);
+  const progressFraction = (stepIndex + 1) / steps.length;
+  useEffect(() => {
+    if (progressTrackW > 0) {
+      progressW.value = withSpring(progressTrackW * progressFraction, motion.snappy);
+    }
+  }, [progressTrackW, progressFraction, progressW]);
+  const progressStyle = useAnimatedStyle(() => ({ width: progressW.value }));
+
   // Hydrate from the prefill store (e.g. Lead → Convert flow). One-shot.
   useEffect(() => {
     const prefill = consumePrefill();
@@ -526,10 +545,11 @@ export default function NewJobWizard() {
           </View>
         </View>
 
-        <View style={styles.progressTrack}>
-          <View
-            style={[styles.progressFill, { width: `${((stepIndex + 1) / steps.length) * 100}%` }]}
-          />
+        <View
+          style={styles.progressTrack}
+          onLayout={(e) => setProgressTrackW(e.nativeEvent.layout.width)}
+        >
+          <Animated.View style={[styles.progressFill, progressStyle]} />
         </View>
 
         <KeyboardAvoidingView
@@ -542,19 +562,27 @@ export default function NewJobWizard() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {stepKey === 'customer' && <CustomerStep draft={draft} setDraft={setDraft} />}
-            {stepKey === 'insurance' && <InsuranceStep draft={draft} setDraft={setDraft} />}
-            {stepKey === 'claim' && (
-              <ClaimStep draft={draft} setDraft={setDraft} stormLookup={stormLookup} />
-            )}
-            {stepKey === 'roof' && <RoofStep draft={draft} setDraft={setDraft} />}
-            {stepKey === 'evidence' && <EvidenceStep draft={draft} setDraft={setDraft} />}
-            {stepKey === 'review' && (
-              <ReviewStep
-                draft={draft}
-                onEdit={(k) => setStepIndex(Math.max(0, steps.indexOf(k)))}
-              />
-            )}
+            <Animated.View
+              key={stepKey}
+              entering={FadeInDown.springify()
+                .mass(motion.snappy.mass)
+                .damping(motion.snappy.damping)
+                .stiffness(motion.snappy.stiffness)}
+            >
+              {stepKey === 'customer' && <CustomerStep draft={draft} setDraft={setDraft} />}
+              {stepKey === 'insurance' && <InsuranceStep draft={draft} setDraft={setDraft} />}
+              {stepKey === 'claim' && (
+                <ClaimStep draft={draft} setDraft={setDraft} stormLookup={stormLookup} />
+              )}
+              {stepKey === 'roof' && <RoofStep draft={draft} setDraft={setDraft} />}
+              {stepKey === 'evidence' && <EvidenceStep draft={draft} setDraft={setDraft} />}
+              {stepKey === 'review' && (
+                <ReviewStep
+                  draft={draft}
+                  onEdit={(k) => setStepIndex(Math.max(0, steps.indexOf(k)))}
+                />
+              )}
+            </Animated.View>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -1598,8 +1626,8 @@ function ReviewBlock({
     <View style={styles.reviewCard}>
       <View style={styles.reviewHead}>
         <Text style={styles.reviewTitle}>{title}</Text>
-        <Pressable onPress={onEdit} hitSlop={10}>
-          <Ionicons name="pencil-outline" size={18} color={colors.orange} />
+        <Pressable onPress={onEdit} hitSlop={10} style={styles.reviewEdit}>
+          <Ionicons name="pencil-outline" size={18} color={colors.navy} />
         </Pressable>
       </View>
       <View style={{ gap: spacing.xs }}>{children}</View>
@@ -1680,18 +1708,25 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     gap: spacing.md,
   },
-  headerBtn: { padding: spacing.xs },
-  headerStep: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold },
-  headerTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  headerBtn: {
+    width: touchTarget.small,
+    height: touchTarget.small,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerStep: { fontSize: fontSize.caption, color: colors.textSubtle, fontWeight: fontWeight.semibold },
+  // Inline wizard title — iOS sub-screen bar: 17/semibold ink.
+  headerTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
 
+  // Progress is a thin ink bar, not an orange pill (orange is saved for the CTA).
   progressTrack: {
-    height: 4,
-    backgroundColor: colors.surfaceMuted,
+    height: 3,
+    backgroundColor: colors.fillQuiet,
     marginHorizontal: spacing.xl,
-    borderRadius: 2,
+    borderRadius: radii.pill,
     overflow: 'hidden',
   },
-  progressFill: { height: 4, backgroundColor: colors.orange, borderRadius: 2 },
+  progressFill: { height: 3, backgroundColor: colors.navy, borderRadius: radii.pill },
 
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.lg },
   stepBody: { gap: spacing.lg },
@@ -1699,20 +1734,23 @@ const styles = StyleSheet.create({
 
   footer: {
     padding: spacing.xl,
-    backgroundColor: colors.bg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    backgroundColor: colors.barFill,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
+  // The screen's one orange moment (Drift #1: sticky 88pt CTA).
   primaryBtn: {
     height: touchTarget.sticky,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     backgroundColor: colors.orange,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  primaryBtnDisabled: { opacity: 0.5 },
+  // Flat washed fill, not element opacity — opacity composites the label into
+  // its own layer and paints a visible seam inside the disabled surface.
+  primaryBtnDisabled: { backgroundColor: colors.accentDisabled },
   primaryBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
 
   secondaryBtn: {
@@ -1721,21 +1759,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     height: touchTarget.preferred,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.navy,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
   },
   secondaryBtnText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
   field: { gap: spacing.xs },
   fieldLabel: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.medium },
+  // Grouped white input cells — hairline edge on the grouped ground.
   input: {
     minHeight: touchTarget.standard,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    borderRadius: radii.control,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     fontSize: fontSize.bodyLg,
@@ -1743,56 +1780,61 @@ const styles = StyleSheet.create({
   },
   inputMultiline: { minHeight: 88, textAlignVertical: 'top' },
 
-  subSection: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy, marginBottom: spacing.sm },
+  // iOS grouped-list section header.
+  subSection: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+  },
 
   carrierGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   carrier: {
     width: '48%',
     minHeight: touchTarget.preferred,
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
   },
-  carrierSelected: { backgroundColor: colors.navy, borderColor: colors.navy },
+  carrierSelected: { backgroundColor: colors.navy },
   carrierLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy, textAlign: 'center' },
   carrierLabelSelected: { color: colors.textInverse },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // Quiet grey-fill cells; selection is ink, never saturated orange.
   bigChip: {
     minHeight: touchTarget.preferred,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bigChipSelected: { backgroundColor: colors.navy, borderColor: colors.navy },
-  bigChipText: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
+  bigChipSelected: { backgroundColor: colors.navy },
+  bigChipText: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.semibold },
   bigChipTextSelected: { color: colors.textInverse },
 
+  // Stepper as a quiet track with white thumb-style buttons (segmented language).
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.lg,
-    backgroundColor: colors.surface,
-    borderRadius: radii.pill,
-    padding: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.fillQuiet,
+    borderRadius: radii.button,
+    padding: spacing.xs,
   },
   stepperBtn: {
     width: touchTarget.standard,
     height: touchTarget.standard,
-    borderRadius: radii.pill,
+    borderRadius: radii.control,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surface,
+    ...shadows.thumb,
   },
   stepperValue: {
     flex: 1,
@@ -1810,7 +1852,15 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  reviewTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
+  reviewTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
+  reviewEdit: {
+    width: touchTarget.small,
+    height: touchTarget.small,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: -spacing.sm,
+    marginRight: -spacing.sm,
+  },
   reviewLine: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   reviewLabel: { fontSize: fontSize.bodySm, color: colors.slate, flex: 1 },
   reviewValue: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium, flex: 2, textAlign: 'right' },
@@ -1823,11 +1873,12 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.sticky,
     borderRadius: radii.card,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
     gap: spacing.xs,
     justifyContent: 'center',
+    ...shadows.card,
   },
   kindCardSelected: { backgroundColor: colors.navy, borderColor: colors.navy },
   kindTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
@@ -1851,7 +1902,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: colors.warnSoft,
-    borderRadius: radii.md,
+    borderRadius: radii.control,
     padding: spacing.md,
   },
 
@@ -1868,8 +1919,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.md,
+    backgroundColor: colors.fillQuiet,
+    borderRadius: radii.control,
     padding: spacing.md,
   },
   noaaText: { flex: 1, fontSize: fontSize.bodySm, color: colors.slate },
@@ -1878,7 +1929,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: colors.successSoft,
-    borderRadius: radii.md,
+    borderRadius: radii.control,
     padding: spacing.md,
   },
   noaaMatchText: {
@@ -1893,10 +1944,11 @@ const styles = StyleSheet.create({
   zoneCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
     gap: spacing.md,
+    ...shadows.card,
   },
   zoneCheckRow: {
     flexDirection: 'row',
@@ -1908,8 +1960,8 @@ const styles = StyleSheet.create({
   zoneHint: { fontSize: fontSize.bodySm, color: colors.slate },
   zoneNote: {
     minHeight: touchTarget.standard,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.md,
+    backgroundColor: colors.fillQuiet,
+    borderRadius: radii.control,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     fontSize: fontSize.bodyMd,
@@ -1930,7 +1982,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
+    borderRadius: radii.control,
     borderWidth: 1,
     borderColor: colors.borderStrong,
     borderStyle: 'dashed',

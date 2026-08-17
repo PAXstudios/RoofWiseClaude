@@ -21,12 +21,20 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
 import * as Haptics from 'expo-haptics';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import {
+  brand,
   colors,
   fontSize,
   fontWeight,
   glass,
+  motion,
   radii,
+  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -58,6 +66,9 @@ const INITIAL_SLOPE: SlopeOrientation = 'S';
  */
 const IMPORT_RUN_LIMIT = 24;
 
+/** Inner inset of the capture-mode segmented track (the thumb slides inside it). */
+const MODE_TRACK_PAD = spacing.xs;
+
 type CapturedPhoto = {
   uri: string;
   slope: SlopeOrientation;
@@ -83,9 +94,7 @@ function QuickInspectionWebNotice() {
     <SafeAreaView style={webStyles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={webStyles.wrap}>
-        <View style={webStyles.iconWrap}>
-          <Ionicons name="camera-outline" size={36} color={colors.brand} />
-        </View>
+        <Ionicons name="camera-outline" size={28} color={colors.textSubtle} />
         <Text style={webStyles.title}>Quick Inspection uses the phone camera</Text>
         <Text style={webStyles.body}>
           This tool runs on the RoofWise mobile app — your jobs, leads,
@@ -108,15 +117,6 @@ const webStyles = StyleSheet.create({
     padding: spacing.xxl,
     gap: spacing.md,
   },
-  iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: radii.pill,
-    backgroundColor: colors.brandSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
   title: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
@@ -133,7 +133,7 @@ const webStyles = StyleSheet.create({
   cta: {
     height: touchTarget.preferred,
     paddingHorizontal: spacing.xxxl,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
@@ -168,6 +168,28 @@ function QuickInspectionNative() {
   // The bottom dock grew three rows; the HUD's bottom-left stack tracks its
   // measured height instead of a constant that drifts every layout change.
   const [dockHeight, setDockHeight] = useState(0);
+
+  // iOS-17 on-glass segmented control for capture mode: a white thumb springs
+  // between segments on a glass track. Purely presentational chrome — the
+  // selection logic (selectCaptureMode) is untouched.
+  const [modeTrackW, setModeTrackW] = useState(0);
+  const modeThumbX = useSharedValue(0);
+  const activeModeIndex = Math.max(
+    0,
+    CAPTURE_MODE_OPTIONS.findIndex((o) => o.mode === captureMode),
+  );
+  const modeSegW =
+    modeTrackW > 0
+      ? (modeTrackW - MODE_TRACK_PAD * 2) / CAPTURE_MODE_OPTIONS.length
+      : 0;
+  useEffect(() => {
+    if (modeSegW > 0) {
+      modeThumbX.value = withSpring(MODE_TRACK_PAD + activeModeIndex * modeSegW, motion.snappy);
+    }
+  }, [modeSegW, activeModeIndex, modeThumbX]);
+  const modeThumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: modeThumbX.value }],
+  }));
 
   const selectSlope = (next: SlopeOrientation) => {
     setSlope(next);
@@ -430,14 +452,23 @@ function QuickInspectionNative() {
           onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
         >
           {/* Capture mode. Above everything else because it decides whether a
-              photo's hits can ever count toward the per-square threshold. */}
-          <View style={styles.modeRow}>
+              photo's hits can ever count toward the per-square threshold.
+              iOS-17 on-glass segmented: glass track, white sliding thumb. */}
+          <View
+            style={styles.modeTrack}
+            onLayout={(e) => setModeTrackW(e.nativeEvent.layout.width)}
+          >
+            {modeSegW > 0 && (
+              <Animated.View
+                style={[styles.modeThumb, { width: modeSegW }, modeThumbStyle]}
+              />
+            )}
             {CAPTURE_MODE_OPTIONS.map((opt) => {
               const active = captureMode === opt.mode;
               return (
                 <Pressable
                   key={opt.mode}
-                  style={[styles.modeSegment, active && styles.modeSegmentActive]}
+                  style={styles.modeSegment}
                   onPress={() => selectCaptureMode(opt.mode)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
@@ -446,7 +477,7 @@ function QuickInspectionNative() {
                   <Ionicons
                     name={opt.icon}
                     size={18}
-                    color={colors.textInverse}
+                    color={active ? colors.text : colors.textInverse}
                     style={{ opacity: active ? 1 : 0.75 }}
                   />
                   <Text
@@ -577,7 +608,7 @@ function PhotoStrip({ photos }: { photos: CapturedPhoto[] }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
+  root: { flex: 1, backgroundColor: brand.black },
   overlay: { flex: 1, justifyContent: 'space-between' },
 
   topRow: {
@@ -591,7 +622,7 @@ const styles = StyleSheet.create({
     width: touchTarget.standard,
     height: touchTarget.standard,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -599,32 +630,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: colors.overlay,
   },
   topRightGroup: { flexDirection: 'row', gap: spacing.sm },
   topBtnBusy: { opacity: 0.5 },
   topPillText: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
-  bottomDock: { paddingBottom: spacing.md, backgroundColor: 'rgba(0,0,0,0.55)' },
+  bottomDock: {
+    paddingBottom: spacing.md,
+    backgroundColor: colors.scrim,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: glass.border,
+  },
 
-  modeRow: {
+  // On-glass segmented track + sliding white thumb (iOS-17 pattern).
+  modeTrack: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.md,
+    height: touchTarget.standard,
+    borderRadius: radii.md,
+    backgroundColor: glass.fill,
+    padding: MODE_TRACK_PAD,
+  },
+  modeThumb: {
+    position: 'absolute',
+    top: MODE_TRACK_PAD,
+    bottom: MODE_TRACK_PAD,
+    left: 0,
+    borderRadius: radii.control,
+    backgroundColor: colors.surface,
+    ...shadows.thumb,
   },
   modeSegment: {
     flex: 1,
     flexDirection: 'row',
     gap: spacing.xs,
-    height: touchTarget.standard,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    backgroundColor: glass.fillHigh,
+    paddingHorizontal: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modeSegmentActive: { backgroundColor: colors.orange },
   modeSegmentText: {
     color: colors.textInverse,
     fontSize: fontSize.bodySm,
@@ -633,7 +678,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: 'center',
   },
-  modeSegmentTextActive: { opacity: 1, fontWeight: fontWeight.bold },
+  modeSegmentTextActive: { color: colors.text, opacity: 1, fontWeight: fontWeight.bold },
   modeHint: {
     // Camera chrome sits on the live preview: token colour + opacity rather
     // than a baked rgba literal (Drift #11).
@@ -657,10 +702,12 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     marginRight: spacing.xs,
   },
+  // Picker chips share the on-glass language: glass rest state, white fill +
+  // ink text when active (selection matches the segmented thumb, not orange).
   areaChip: {
     minWidth: touchTarget.standard,
     height: touchTarget.standard,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     paddingHorizontal: spacing.lg,
     backgroundColor: glass.fillHigh,
     alignItems: 'center',
@@ -669,15 +716,15 @@ const styles = StyleSheet.create({
   slopeChip: {
     minWidth: touchTarget.standard,
     height: touchTarget.standard,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     paddingHorizontal: spacing.lg,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: glass.fillHigh,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipActive: { backgroundColor: colors.orange },
+  chipActive: { backgroundColor: colors.surface },
   chipText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
-  chipTextActive: { color: colors.textInverse, fontWeight: fontWeight.bold },
+  chipTextActive: { color: colors.text, fontWeight: fontWeight.bold },
 
   shutterRow: {
     flexDirection: 'row',
@@ -686,23 +733,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
   },
+  // Clean shutter: thin white ring around an ink core.
   shutter: {
     width: 76,
     height: 76,
-    borderRadius: 38,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: radii.pill,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 4,
     borderColor: colors.textInverse,
   },
-  shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.textInverse },
+  shutterInner: { width: 60, height: 60, borderRadius: radii.pill, backgroundColor: colors.navy },
 
+  // The screen's one orange moment — Done hands off to analysis.
   doneBtn: {
     minWidth: touchTarget.preferred,
     paddingHorizontal: spacing.lg,
     height: touchTarget.preferred,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     backgroundColor: colors.orange,
     alignItems: 'center',
     justifyContent: 'center',
@@ -763,7 +812,8 @@ const styles = StyleSheet.create({
   },
 
   captureHint: {
-    color: 'rgba(240,240,228,0.78)',
+    color: colors.textInverse,
+    opacity: 0.78,
     fontSize: fontSize.caption,
     textAlign: 'center',
     paddingHorizontal: spacing.xl,
@@ -773,11 +823,11 @@ const styles = StyleSheet.create({
   permRoot: { flex: 1, backgroundColor: colors.navy },
   permWrap: { flex: 1, padding: spacing.xxl, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   permTitle: { color: colors.textInverse, fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, textAlign: 'center' },
-  permBody: { color: 'rgba(255,255,255,0.82)', fontSize: fontSize.bodyMd, textAlign: 'center' },
+  permBody: { color: colors.textInverse, opacity: 0.82, fontSize: fontSize.bodyMd, textAlign: 'center' },
   permBtn: {
     height: touchTarget.sticky,
     paddingHorizontal: spacing.xxxl,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     backgroundColor: colors.orange,
     alignItems: 'center',
     justifyContent: 'center',

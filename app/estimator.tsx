@@ -497,10 +497,15 @@ const styles = StyleSheet.create({
   lineItemLabel: { fontSize: fontSize.bodyMd, color: colors.navy },
   lineItemValue: { fontSize: fontSize.bodyMd, color: colors.slate, fontWeight: fontWeight.medium },
 
-  footer: { padding: spacing.xl, backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.border },
+  footer: {
+    padding: spacing.xl,
+    backgroundColor: colors.barFill,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+  },
   primaryBtn: {
     height: touchTarget.sticky,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     backgroundColor: colors.orange,
     alignItems: 'center',
     justifyContent: 'center',

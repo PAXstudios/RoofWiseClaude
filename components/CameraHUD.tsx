@@ -97,7 +97,7 @@ export function CameraHUD({ selectedSlope, areaTag, captureMode, bottomInset }: 
       >
         {!!areaTag && (
           <View style={[styles.dataChip, styles.areaChip]}>
-            <Ionicons name="pricetag" size={14} color={colors.textInverse} />
+            <Ionicons name="pricetag" size={14} color={colors.text} />
             <Text style={[styles.dataChipText, styles.areaChipText]} numberOfLines={1}>
               {areaTag}
             </Text>
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: 'rgba(12,24,60,0.72)',
+    backgroundColor: colors.scrim,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -158,14 +158,14 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.orange,
   },
   compassChip: {
-    backgroundColor: 'rgba(12,24,60,0.72)',
+    backgroundColor: colors.scrim,
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
     borderRadius: radii.pill,
     alignItems: 'center',
   },
   compassText: { color: colors.cream, fontSize: fontSize.bodySm, fontWeight: fontWeight.bold },
-  compassSub: { color: 'rgba(240,240,228,0.78)', fontSize: fontSize.caption },
+  compassSub: { color: colors.textInverse, opacity: 0.78, fontSize: fontSize.caption },
 
   bullseyeOuter: {
     width: 60,
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bullseyeMid: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: 'rgba(240,240,228,0.45)', position: 'absolute' },
+  bullseyeMid: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: colors.textInverse, opacity: 0.45, position: 'absolute' },
   bullseyeDot: { width: 16, height: 16, borderRadius: 8 },
   hudCaption: { color: colors.cream, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: 'rgba(12,24,60,0.72)',
+    backgroundColor: colors.scrim,
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
     borderRadius: radii.pill,
@@ -191,9 +191,10 @@ const styles = StyleSheet.create({
   },
   dataChipText: { color: colors.cream, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
-  // The subject label rides the photo into the report, so it gets the accent.
-  areaChip: { backgroundColor: colors.orange, maxWidth: '100%' },
-  areaChipText: { color: colors.textInverse, flexShrink: 1 },
+  // The subject label rides the photo into the report. White fill + ink text —
+  // the camera chrome's "active" language (matches the dock's selected chips).
+  areaChip: { backgroundColor: colors.surface, maxWidth: '100%' },
+  areaChipText: { color: colors.text, flexShrink: 1 },
   // Single-shingle is the mode that does NOT feed the per-square threshold;
   // it must never be mistaken for the default at a glance.
   modeChipSingle: { backgroundColor: colors.brand },

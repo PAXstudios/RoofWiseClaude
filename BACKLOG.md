@@ -20,6 +20,11 @@ entry does not count as tracked.
 
 ## Soon (from the 2026-08-16 Drive synthesis — after Now clears)
 
+- [ ] Hoist the duplicated UI primitives from #52 into shared components — SegmentedControl, Rise (entrance), MiniSwitch are file-local copies in leads/plan/hail-tracer/welcome/settings/inspector-profile because parallel builders couldn't create shared files; converge on `components/` versions — #52
+- [ ] Owner review of #52's deliberate design divergences: leads rows dropped the per-row Convert-to-inspection button (now only in lead detail) and the Source meta line; settings icons went textMuted; VerdictPill "Full replace" softened to accentSoft — confirm or restore — #52
+- [ ] Add a `lineHeight` scale to `theme/tokens.ts` — numeric literals (18/22) are current repo practice and predate #52 — #52
+- [ ] Device motion pass — springs, segmented thumb slide, swipe card stack, tab icon pop are unverifiable on web; judge "does it feel iOS" on hardware; also verify fontVariant tabular-nums and Android elevation clipping in horizontal ScrollViews — #52 integrator risks
+
 - [ ] **Homeowner-summary copy rewrite needs owner sign-off** — a straight band re-key would have printed "the damage on your roof is below the threshold a carrier uses" (LOW) on reports whose Sections 02/05 say the opposite, so the reports-core builder rewrote the opening clauses in `longReport.ts` to resolve the contradiction. That is approved-copy drift made for a good reason; read it and confirm — #51
 - [ ] Watch Train-tab queue volume — the new <80% expert-review gate queues far more photos than the old avg<60 rule (store caps at 500); consider queueing only the sub-80 subset per photo — #50
 - [ ] `lib/noaa.ts` `severityColor` still keys hail colors at 0.75" with inline hex (pre-existing Drift #11 debt) — #50
@@ -42,7 +47,6 @@ entry does not count as tracked.
 - [ ] Add an explicit state picker to `app/settings/service-area.tsx` so storm-query resolution is deterministic rather than parsed from free-text labels — #43
 
 - [ ] Welcome screen pre-checks `isSupabaseConfigured` and shows a banner before first submit — #35
-- [ ] Settings screen "backend: not configured / connected" indicator — #35 · faster field debugging
 - [ ] Device pass on motion layer: confirm 60fps dashboard stagger with long lists; profile `AnimatedCounter` setState cost — #34
 - [ ] Capture web-preview launch recipe as a project skill via `/run-skill-generator` — #38 · so future sessions don't rediscover the expo-web + Playwright dance
 - [ ] Configure EAS (`eas.json` + EAS Secrets for the `EXPO_PUBLIC_*` keys) for TestFlight distribution — asked 2026-07-22 · required to put builds in contractors' hands for field trials; needs Apple Developer Program ($99/yr). Expo Go is fine for solo testing until then.
@@ -76,6 +80,8 @@ entry does not count as tracked.
 
 ## Done (most recent first)
 
+- [x] iOS × Instagram UI redesign — grouped ground, one-orange-moment discipline, edge-to-edge tab bar, iOS-17 segmented controls, spring motion layer, density pass (Get-set-up checklist, no zero-state voids), greeting bug dead; screenshot-verified by a visual auditor — closed by #52
+- [x] Settings "backend: not configured / connected" indicator — Cloud sync row now reads `isSupabaseConfigured` honestly (was hardcoded "Connected") — closed by #52 (was #35)
 - [x] 19-area slope/subject tagging + Single-Shingle vs 10×10-Square capture modes with separately aggregated counts (`AREA_TAGS`, `captureSession.ts`, `Slope.squareHitCount`/`singleShingleHitCount`) — closed by #51
 - [x] Photo-library import wired into the inspection flow, through the same `prepareCapturedPhoto` pipeline and analysis queue as camera captures — closed by #51
 - [x] Persist the engine result on the inspection — `storedEngine.ts`; reports restate a stored `HaagEngineResult`, freshness by SHA-256 input fingerprint (stronger than a timestamp), with a write-side freeze so a finalized report can't be silently re-snapshotted — closed by #51

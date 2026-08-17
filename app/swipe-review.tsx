@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,6 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming,
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -248,10 +247,12 @@ export default function SwipeReview() {
       const horizontal = Math.abs(x.value) > Math.abs(y.value);
 
       if (horizontal && x.value > H_THRESHOLD) {
-        x.value = withTiming(SCREEN_W * 1.5);
+        // Fly-outs are springs (motion.snappy), so the exit keeps the card's
+        // momentum and rotation instead of a linear glide.
+        x.value = withSpring(SCREEN_W * 1.5, motion.snappy);
         runOnJS(handleVerdict)('accept', current);
       } else if (horizontal && x.value < -H_THRESHOLD) {
-        x.value = withTiming(-SCREEN_W * 1.5);
+        x.value = withSpring(-SCREEN_W * 1.5, motion.snappy);
         runOnJS(handleVerdict)('reject', current);
       } else if (!horizontal && y.value < -V_THRESHOLD) {
         // Correct hands off to the editor and comes back to this same card,
@@ -260,7 +261,7 @@ export default function SwipeReview() {
         y.value = withSpring(0, motion.quick);
         runOnJS(handleVerdict)('correct', current);
       } else if (!horizontal && y.value > V_THRESHOLD) {
-        y.value = withTiming(SCREEN_H);
+        y.value = withSpring(SCREEN_H, motion.snappy);
         runOnJS(handleVerdict)('skip', current);
       } else {
         x.value = withSpring(0, motion.quick);
@@ -275,6 +276,22 @@ export default function SwipeReview() {
       { rotateZ: `${(x.value / SCREEN_W) * 15}deg` },
     ],
   }));
+
+  // The next card peeks from behind at 0.95 scale and grows toward full size
+  // as the top card is dragged toward any commit threshold.
+  const nextCardStyle = useAnimatedStyle(() => {
+    const progress = Math.min(
+      1,
+      Math.max(Math.abs(x.value) / H_THRESHOLD, Math.abs(y.value) / V_THRESHOLD),
+    );
+    return {
+      opacity: interpolate(progress, [0, 1], [0.7, 1], Extrapolation.CLAMP),
+      transform: [
+        { translateY: interpolate(progress, [0, 1], [spacing.sm, 0], Extrapolation.CLAMP) },
+        { scale: interpolate(progress, [0, 1], [0.95, 1], Extrapolation.CLAMP) },
+      ],
+    };
+  });
 
   const acceptCue = useAnimatedStyle(() => ({
     opacity: interpolate(x.value, [0, H_THRESHOLD], [0, 1], Extrapolation.CLAMP),
@@ -300,7 +317,7 @@ export default function SwipeReview() {
           <Text style={styles.headerTitle}>Swipe Review</Text>
         </View>
         <View style={styles.empty}>
-          <Ionicons name="checkmark-done-circle" size={64} color={colors.success} />
+          <Ionicons name="checkmark-done-circle-outline" size={28} color={colors.textSubtle} />
           <Text style={styles.emptyTitle}>All caught up</Text>
           <Text style={styles.emptyBody}>
             Low-confidence detections from analysis will queue up here for your review.
@@ -313,13 +330,7 @@ export default function SwipeReview() {
     );
   }
 
-  const detected = current.originalAnalysis.findings.filter((f) => f.detected);
-  const avgConfidence = current.originalAnalysis.markers.length === 0
-    ? 0
-    : Math.round(
-        current.originalAnalysis.markers.reduce((s, m) => s + m.confidence, 0) /
-          current.originalAnalysis.markers.length,
-      );
+  const next = deck[index + 1];
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -334,48 +345,42 @@ export default function SwipeReview() {
       </View>
 
       <View style={styles.cardWrap}>
-        <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.card, cardStyle]}>
-            <Image source={{ uri: current.photoPath }} style={styles.cardImage} />
+        <View style={styles.stack}>
+          {next && (
+            <Animated.View
+              style={[styles.card, styles.cardBehind, nextCardStyle]}
+              pointerEvents="none"
+            >
+              <CardFace item={next} />
+            </Animated.View>
+          )}
+          <GestureDetector gesture={pan}>
+            <Animated.View style={[styles.card, cardStyle]}>
+              <CardFace item={current} />
 
-            <View style={styles.cardMeta}>
-              <Text style={styles.cardHeader}>
-                {detected.length > 0
-                  ? DAMAGE_CATEGORY_LABELS[detected[0].label].toUpperCase()
-                  : 'NO DAMAGE'}
-              </Text>
-              <Text style={styles.cardSub}>
-                {current.originalAnalysis.markers.length} markers · {avgConfidence}% confidence
-              </Text>
-              {detected.slice(0, 3).map((f) => (
-                <Text key={f.label} style={styles.findingLine}>
-                  • {DAMAGE_CATEGORY_LABELS[f.label]} × {f.count}
-                </Text>
-              ))}
-            </View>
-
-            <View style={styles.cueLayer} pointerEvents="none">
-              <Animated.View style={[styles.cue, correctCue]}>
-                <Ionicons name="arrow-up" size={20} color={colors.accent} />
-                <Text style={[styles.cueText, { color: colors.accent }]}>CORRECT</Text>
-              </Animated.View>
-              <View style={styles.cueMiddle}>
-                <Animated.View style={[styles.cue, rejectCue]}>
-                  <Ionicons name="arrow-back" size={20} color={colors.slate} />
-                  <Text style={[styles.cueText, { color: colors.slate }]}>REJECT</Text>
+              <View style={styles.cueLayer} pointerEvents="none">
+                <Animated.View style={[styles.cue, correctCue]}>
+                  <Ionicons name="arrow-up" size={20} color={colors.accent} />
+                  <Text style={[styles.cueText, { color: colors.accent }]}>CORRECT</Text>
                 </Animated.View>
-                <Animated.View style={[styles.cue, acceptCue]}>
-                  <Text style={[styles.cueText, { color: colors.success }]}>ACCEPT</Text>
-                  <Ionicons name="arrow-forward" size={20} color={colors.success} />
+                <View style={styles.cueMiddle}>
+                  <Animated.View style={[styles.cue, rejectCue]}>
+                    <Ionicons name="arrow-back" size={20} color={colors.slate} />
+                    <Text style={[styles.cueText, { color: colors.slate }]}>REJECT</Text>
+                  </Animated.View>
+                  <Animated.View style={[styles.cue, acceptCue]}>
+                    <Text style={[styles.cueText, { color: colors.success }]}>ACCEPT</Text>
+                    <Ionicons name="arrow-forward" size={20} color={colors.success} />
+                  </Animated.View>
+                </View>
+                <Animated.View style={[styles.cue, skipCue]}>
+                  <Ionicons name="arrow-down" size={20} color={colors.info} />
+                  <Text style={[styles.cueText, { color: colors.info }]}>SKIP</Text>
                 </Animated.View>
               </View>
-              <Animated.View style={[styles.cue, skipCue]}>
-                <Ionicons name="arrow-down" size={20} color={colors.info} />
-                <Text style={[styles.cueText, { color: colors.info }]}>SKIP</Text>
-              </Animated.View>
-            </View>
-          </Animated.View>
-        </GestureDetector>
+            </Animated.View>
+          </GestureDetector>
+        </View>
       </View>
 
       <View style={styles.hintRow}>
@@ -420,26 +425,20 @@ export default function SwipeReview() {
       >
         <View style={styles.sheetScrim}>
           <View style={styles.sheet}>
+            <View style={styles.sheetGrabber} />
             <Text style={styles.sheetTitle}>How sure are you?</Text>
             <Text style={styles.sheetBody}>
               Tells the learning loop how much to trust this correction.
             </Text>
             <View style={styles.starRow}>
               {STARS.map((n) => (
-                <Pressable
+                <Star
                   key={n}
-                  style={styles.starBtn}
-                  onPressIn={() => setPreviewStars(n)}
-                  onPress={() => commitRating(n)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${n} of 5 confidence`}
-                >
-                  <Ionicons
-                    name={n <= previewStars ? 'star' : 'star-outline'}
-                    size={38}
-                    color={n <= previewStars ? colors.accent : colors.borderStrong}
-                  />
-                </Pressable>
+                  n={n}
+                  filled={n <= previewStars}
+                  onPreview={() => setPreviewStars(n)}
+                  onCommit={() => commitRating(n)}
+                />
               ))}
             </View>
             <Pressable style={styles.sheetSkip} onPress={dismissRating}>
@@ -449,6 +448,75 @@ export default function SwipeReview() {
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+/** Photo + detection summary — shared by the top card and the peeking next card. */
+function CardFace({ item }: { item: TrainingItem }) {
+  const detected = item.originalAnalysis.findings.filter((f) => f.detected);
+  const markers = item.originalAnalysis.markers;
+  const avgConfidence =
+    markers.length === 0
+      ? 0
+      : Math.round(markers.reduce((s, m) => s + m.confidence, 0) / markers.length);
+  return (
+    <>
+      <Image source={{ uri: item.photoPath }} style={styles.cardImage} />
+      <View style={styles.cardMeta}>
+        <Text style={styles.cardHeader}>
+          {detected.length > 0
+            ? DAMAGE_CATEGORY_LABELS[detected[0].label].toUpperCase()
+            : 'NO DAMAGE'}
+        </Text>
+        <Text style={styles.cardSub}>
+          {markers.length} markers · {avgConfidence}% confidence
+        </Text>
+        {detected.slice(0, 3).map((f) => (
+          <Text key={f.label} style={styles.findingLine}>
+            • {DAMAGE_CATEGORY_LABELS[f.label]} × {f.count}
+          </Text>
+        ))}
+      </View>
+    </>
+  );
+}
+
+/** Thin-outline star that pops with a spring when it fills (accent on select). */
+function Star({
+  n,
+  filled,
+  onPreview,
+  onCommit,
+}: {
+  n: ConfidenceStars;
+  filled: boolean;
+  onPreview: () => void;
+  onCommit: () => void;
+}) {
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    if (filled) {
+      scale.value = 0.6;
+      scale.value = withSpring(1, motion.bouncy);
+    }
+  }, [filled, scale]);
+  const pop = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Pressable
+      style={styles.starBtn}
+      onPressIn={onPreview}
+      onPress={onCommit}
+      accessibilityRole="button"
+      accessibilityLabel={`${n} of 5 confidence`}
+    >
+      <Animated.View style={pop}>
+        <Ionicons
+          name={filled ? 'star' : 'star-outline'}
+          size={36}
+          color={filled ? colors.accent : colors.textSubtle}
+        />
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -482,12 +550,12 @@ function ActionButton({
 }) {
   return (
     <Pressable
-      style={[styles.actionBtn, { backgroundColor: tone }]}
+      style={styles.actionBtn}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Ionicons name={icon} size={26} color={colors.textInverse} />
+      <Ionicons name={icon} size={26} color={tone} />
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
   );
@@ -502,18 +570,34 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     gap: spacing.md,
   },
-  headerBtn: { padding: spacing.xs },
-  headerTitle: { flex: 1, fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy, textAlign: 'center' },
+  headerBtn: {
+    width: touchTarget.small,
+    height: touchTarget.small,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    color: colors.navy,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
 
   cardWrap: { flex: 1, padding: spacing.xl, alignItems: 'center', justifyContent: 'center' },
+  // Fixed-size stage the two cards stack inside; the next card sits behind
+  // the draggable one at 0.95 scale.
+  stack: { width: '100%', height: 460 },
   card: {
     width: '100%',
-    height: 460,
+    height: '100%',
     borderRadius: radii.xl,
     backgroundColor: colors.surface,
     overflow: 'hidden',
     ...shadows.pressed,
   },
+  cardBehind: { position: 'absolute', top: 0, left: 0 },
   cardImage: { flex: 1, width: '100%' },
   cardMeta: { padding: spacing.lg, backgroundColor: colors.surface, gap: 4 },
   cardHeader: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.orange, letterSpacing: 0.5 },
@@ -559,7 +643,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.fillQuiet,
   },
   hintText: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: fontWeight.semibold },
 
@@ -569,16 +653,20 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.sm,
   },
+  // Quiet white cells with tinted icons — no saturated color blobs.
   actionBtn: {
     flex: 1,
     minHeight: touchTarget.sticky,
-    borderRadius: radii.card,
+    borderRadius: radii.button,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
     ...shadows.card,
   },
-  actionLabel: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  actionLabel: { color: colors.text, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   sheetScrim: { flex: 1, backgroundColor: colors.scrim, justifyContent: 'flex-end' },
   sheet: {
@@ -586,13 +674,21 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radii.xl,
     borderTopRightRadius: radii.xl,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.xxl,
     gap: spacing.sm,
   },
+  sheetGrabber: {
+    alignSelf: 'center',
+    width: 36,
+    height: 5,
+    borderRadius: radii.pill,
+    backgroundColor: colors.hairline,
+    marginBottom: spacing.sm,
+  },
   sheetTitle: {
-    fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
     color: colors.navy,
     textAlign: 'center',
   },
@@ -607,6 +703,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.md,
   },
+  // Bare thin-outline stars — the glove target stays 56×88, the tile goes away.
   starBtn: {
     flex: 1,
     minWidth: touchTarget.standard,
@@ -614,7 +711,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.card,
-    backgroundColor: colors.surfaceMuted,
   },
   sheetSkip: {
     marginTop: spacing.md,
@@ -624,17 +720,19 @@ const styles = StyleSheet.create({
   },
   sheetSkipText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textMuted },
 
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyTitle: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.navy },
-  emptyBody: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },
+  // Sub-screen empty state: thin icon, 15pt message, one quiet button — no
+  // icon-in-tinted-circle (spec empty-state pattern).
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
+  emptyTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
+  emptyBody: { fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center' },
   doneBtn: {
-    marginTop: spacing.xl,
-    height: touchTarget.preferred,
+    marginTop: spacing.lg,
+    height: touchTarget.standard,
     paddingHorizontal: spacing.xxl,
-    borderRadius: radii.pill,
-    backgroundColor: colors.navy,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  doneBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  doneBtnText: { color: colors.navy, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
 });

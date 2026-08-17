@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  Pressable,
   StyleSheet,
   ScrollView,
   KeyboardAvoidingView,
@@ -18,6 +17,7 @@ import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import { PressableScale } from '@/components/PressableScale';
 import {
   colors,
   fontSize,
@@ -99,14 +99,20 @@ export default function NewLead() {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false, presentation: 'modal' }} />
       <View style={styles.header}>
-        <Pressable onPress={onCancel} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="close" size={26} color={colors.navy} />
-        </Pressable>
+        <PressableScale
+          onPress={onCancel}
+          hitSlop={8}
+          style={styles.headerBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
+          <Ionicons name="close" size={26} color={colors.text} />
+        </PressableScale>
         <Text style={styles.title}>New lead</Text>
       </View>
 
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={styles.fill}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={88}
       >
@@ -156,10 +162,13 @@ export default function NewLead() {
                 { label: '3 days', days: 3 },
                 { label: '1 week', days: 7 },
               ] as const).map((opt) => (
-                <Pressable
+                <PressableScale
                   key={opt.label}
+                  pressedScale={0.96}
                   style={[styles.chip, followUpDays === opt.days && styles.chipActive]}
                   onPress={() => setFollowUpDays(opt.days)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: followUpDays === opt.days }}
                 >
                   <Text
                     style={[
@@ -169,20 +178,22 @@ export default function NewLead() {
                   >
                     {opt.label}
                   </Text>
-                </Pressable>
+                </PressableScale>
               ))}
             </View>
           </View>
         </ScrollView>
 
         <View style={styles.footer}>
-          <Pressable
+          <PressableScale
             style={[styles.primaryBtn, !canSave && styles.primaryBtnDisabled]}
             disabled={!canSave}
             onPress={onSave}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canSave }}
           >
             <Text style={styles.primaryBtnText}>Save lead</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -203,59 +214,89 @@ function Field({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  fill: { flex: 1 },
+
+  // Modal header — inline 17/semibold title, ≥56pt close target.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    minHeight: touchTarget.standard,
+    paddingLeft: spacing.xs,
+    paddingRight: spacing.xl,
+    gap: spacing.xs,
   },
-  headerBtn: { padding: spacing.xs },
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
-
-  scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
-
-  field: { gap: spacing.xs },
-  fieldLabel: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.medium },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    minHeight: touchTarget.preferred,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+  headerBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
-  chipText: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
+  title: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+    letterSpacing: -0.2,
+  },
+
+  scroll: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    gap: spacing.lg,
+    paddingBottom: spacing.xxxl,
+  },
+
+  field: { gap: spacing.sm },
+  // iOS grouped-list section header language for field labels.
+  fieldLabel: {
+    fontSize: fontSize.bodySm,
+    color: colors.textSubtle,
+    fontWeight: fontWeight.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginLeft: spacing.xs,
+  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipActive: { backgroundColor: colors.text },
+  chipText: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.semibold },
   chipTextActive: { color: colors.textInverse },
   input: {
     minHeight: touchTarget.standard,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
+    borderColor: colors.hairline,
+    borderRadius: radii.control,
     paddingHorizontal: spacing.lg,
     fontSize: fontSize.bodyLg,
-    color: colors.navy,
+    color: colors.text,
   },
 
   footer: {
     padding: spacing.xl,
     backgroundColor: colors.bg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
+  // Sticky primary CTA — the one orange moment on this screen.
   primaryBtn: {
     height: touchTarget.sticky,
-    borderRadius: radii.pill,
-    backgroundColor: colors.orange,
+    borderRadius: radii.button,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.card,
   },
   primaryBtnDisabled: { opacity: 0.5 },
-  primaryBtnText: { color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
+  primaryBtnText: {
+    color: colors.textInverse,
+    fontWeight: fontWeight.bold,
+    fontSize: fontSize.bodyLg,
+  },
 });

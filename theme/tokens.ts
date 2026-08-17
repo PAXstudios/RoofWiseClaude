@@ -48,12 +48,19 @@ export const colors = {
   cream: '#FFFFFF',
   slate: '#5A6180',
 
-  bg: '#FFFFFF',
+  // iOS grouped ground — white cards sit on this so content reads as content
+  // even when compact. Keeps the house blue bias.
+  bg: '#F6F6FA',
   surface: '#FFFFFF',
   // Neutrals carry a slight blue bias so they read as chosen, not defaulted.
   surfaceMuted: '#F5F6FA',
   border: '#E6E8F0',
   borderStrong: '#CFD3E2',
+
+  // iOS chrome fills — ink at low alpha so they sit on any light surface.
+  hairline: 'rgba(14,19,48,0.10)',      // separators, bar borders
+  barFill: 'rgba(255,255,255,0.92)',    // tab/nav bars (rgba stands in for blur)
+  fillQuiet: 'rgba(14,19,48,0.05)',     // grey-fill secondary buttons, segmented tracks
 
   text: '#0E1330',
   textMuted: '#5A6180',
@@ -63,6 +70,11 @@ export const colors = {
   accent: brand.burnt,
   accentSoft: brand.burntSoft,
   accentPressed: brand.burntDeep,
+  // Burnt @ 50%, as a flat *fill* for disabled primary CTAs. Painting the wash
+  // into the background (instead of element-level `opacity`) keeps the button
+  // one flat surface — opacity composites the label subtree as its own layer,
+  // which leaves a faint rectangular seam inside the wash on web.
+  accentDisabled: 'rgba(217, 84, 30, 0.5)',
 
   brand: brand.royal,
   brandSoft: brand.royalSoft,
@@ -93,6 +105,10 @@ export const radii = {
   lg: 20,
   xl: 24,
   pill: 999,
+
+  // iOS-17 control shapes — buttons and inputs stop being full pills.
+  button: 14,
+  control: 10,
 };
 
 export const spacing = {
@@ -141,15 +157,16 @@ export const touchTarget = {
   sticky: 88,        // sticky primary CTAs in thumb zone
 };
 
+// iOS-subtle: cards lean on the grouped ground + hairline, not on shadow.
 const cardShadow: ViewStyle = Platform.select({
   ios: {
     shadowColor: colors.navy,
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 1 },
   },
   android: {
-    elevation: 2,
+    elevation: 1,
   },
   default: {},
 }) as ViewStyle;
@@ -165,9 +182,35 @@ const pressedShadow: ViewStyle = Platform.select({
   default: {},
 }) as ViewStyle;
 
+// Floating chrome — bars, FABs, toasts. Slightly more present than a card.
+const floatShadow: ViewStyle = Platform.select({
+  ios: {
+    shadowColor: colors.navy,
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  android: { elevation: 6 },
+  default: {},
+}) as ViewStyle;
+
+// Segmented-control thumb — the tight little iOS slider shadow.
+const thumbShadow: ViewStyle = Platform.select({
+  ios: {
+    shadowColor: colors.navy,
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  android: { elevation: 2 },
+  default: {},
+}) as ViewStyle;
+
 export const shadows = {
   card: cardShadow,
   pressed: pressedShadow,
+  float: floatShadow,
+  thumb: thumbShadow,
 };
 
 export const breakpoints = {
@@ -178,10 +221,12 @@ export const breakpoints = {
 // Motion tokens — every withTiming/withSpring/etc should reference these.
 export const motion = {
   quick: { mass: 1, damping: 18, stiffness: 320 },
+  snappy: { mass: 1, damping: 20, stiffness: 280 },   // iOS default-feel spring
+
   standard: { mass: 1, damping: 16, stiffness: 200 },
   gentle: { mass: 1, damping: 16, stiffness: 130 },
   bouncy: { mass: 1, damping: 11, stiffness: 200 },
-  staggerDelayMs: 60,
+  staggerDelayMs: 40,  // spec: entrance stagger reads as one wave, not a parade
   enterMs: 360,     // screen-element entrance (FadeSlideIn)
   countUpMs: 800,   // KPI counter roll-up
   pulseMs: 1600,    // live-indicator halo loop

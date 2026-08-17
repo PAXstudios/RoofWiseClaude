@@ -191,7 +191,14 @@ export function AddressAutocomplete({
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.xs },
-  label: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.medium },
+  label: {
+    fontSize: fontSize.bodySm,
+    color: colors.textSubtle,
+    fontWeight: fontWeight.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginLeft: spacing.xs,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -199,22 +206,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     gap: spacing.sm,
-    borderRadius: radii.md,
+    borderRadius: radii.control,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.hairline,
   },
   input: {
     flex: 1,
     fontSize: fontSize.bodyLg,
-    color: colors.navy,
+    color: colors.text,
     paddingVertical: 4,
   },
   dropdown: {
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
+    borderRadius: radii.control,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.hairline,
     overflow: 'hidden',
     ...shadows.card,
   },

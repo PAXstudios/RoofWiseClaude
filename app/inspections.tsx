@@ -10,6 +10,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { PressableScale } from '@/components/PressableScale';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { ROOF_MATERIAL_LABELS, type InspectionStatus } from '@/lib/models/types';
 import { CLAIM_VIABILITY_LABELS } from '@/lib/services/decisionEngine';
@@ -18,6 +20,7 @@ import {
   colors,
   fontSize,
   fontWeight,
+  motion,
   radii,
   shadows,
   spacing,
@@ -58,19 +61,23 @@ export default function InspectionsList() {
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Inspections</Text>
           <Text style={styles.sub}>{inspections.length} total</Text>
         </View>
-        <Pressable style={styles.fab} onPress={() => router.push('/new-job')}>
-          <Ionicons name="add" size={24} color={colors.textInverse} />
-        </Pressable>
+        <PressableScale
+          style={styles.fab}
+          accessibilityLabel="New job"
+          onPress={() => router.push('/new-job')}
+        >
+          <Ionicons name="add" size={26} color={colors.textInverse} />
+        </PressableScale>
       </View>
 
       <View style={styles.searchRow}>
-        <Ionicons name="search" size={18} color={colors.slate} />
+        <Ionicons name="search" size={18} color={colors.textSubtle} />
         <TextInput
           style={styles.searchInput}
           value={search}
@@ -81,7 +88,7 @@ export default function InspectionsList() {
         />
         {search.length > 0 && (
           <Pressable onPress={() => setSearch('')} hitSlop={10}>
-            <Ionicons name="close-circle" size={18} color={colors.slate} />
+            <Ionicons name="close-circle" size={18} color={colors.textSubtle} />
           </Pressable>
         )}
       </View>
@@ -93,170 +100,247 @@ export default function InspectionsList() {
         contentContainerStyle={styles.chipScrollContent}
       >
         {STATUSES.map((s) => (
-          <Pressable
-            key={s.id}
-            style={[styles.chip, status === s.id && styles.chipActive]}
-            onPress={() => setStatus(s.id)}
-          >
-            <Text style={[styles.chipText, status === s.id && styles.chipTextActive]}>
-              {s.label}
-            </Text>
+          <Pressable key={s.id} style={styles.chipHit} onPress={() => setStatus(s.id)}>
+            <View style={[styles.chip, status === s.id && styles.chipActive]}>
+              <Text style={[styles.chipText, status === s.id && styles.chipTextActive]}>
+                {s.label}
+              </Text>
+            </View>
           </Pressable>
         ))}
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.content}>
         {filtered.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="briefcase-outline" size={36} color={colors.slate} />
+          // Compact, top-anchored, honest — a setup panel, never a centered void.
+          <Animated.View entering={FadeInDown.duration(motion.enterMs)} style={styles.empty}>
+            <Ionicons name="briefcase-outline" size={28} color={colors.textSubtle} />
             <Text style={styles.emptyTitle}>
-              {inspections.length === 0
-                ? 'No inspections yet'
-                : 'No matches'}
+              {inspections.length === 0 ? 'No inspections yet' : 'No matches'}
             </Text>
             <Text style={styles.emptyBody}>
               {inspections.length === 0
                 ? 'Create your first inspection from a New Job.'
                 : 'Adjust the filter or search.'}
             </Text>
-          </View>
-        ) : (
-          filtered.map((ins) => {
-            // Same read path as the job screen: the stored determination when
-            // it still speaks for the current inputs. Showing the deprecated
-            // 0-100 score here would put a different number next to the same
-            // roof. `honorFreeze: false` for the same reason the job screen
-            // uses it — a list of jobs describes them as they stand, not as a
-            // report signed before the last edit described them.
-            const { haag, decision } = resolveEngineResult(ins, Date.now(), {
-              honorFreeze: false,
-            });
-            return (
-              <Pressable
-                key={ins.id}
-                style={styles.jobCard}
-                onPress={() => router.push(`/job/${ins.id}` as any)}
+            {inspections.length === 0 ? (
+              <PressableScale style={styles.emptyBtn} onPress={() => router.push('/new-job')}>
+                <Text style={styles.emptyBtnText}>New Job</Text>
+              </PressableScale>
+            ) : (
+              <PressableScale
+                style={styles.emptyBtn}
+                onPress={() => {
+                  setSearch('');
+                  setStatus('all');
+                }}
               >
-                <View style={styles.jobHeader}>
-                  <Text style={styles.jobReport}>{ins.reportId}</Text>
-                  <View style={[styles.statusPill, statusTone(ins.status)]}>
-                    <Text style={styles.statusPillText}>
-                      {ins.status.replace(/_/g, ' ')}
-                    </Text>
-                  </View>
+                <Text style={styles.emptyBtnText}>Clear filters</Text>
+              </PressableScale>
+            )}
+          </Animated.View>
+        ) : (
+          <Animated.View entering={FadeInDown.duration(motion.enterMs)} style={styles.group}>
+            {filtered.map((ins, index) => {
+              // Same read path as the job screen: the stored determination when
+              // it still speaks for the current inputs. Showing the deprecated
+              // 0-100 score here would put a different number next to the same
+              // roof. `honorFreeze: false` for the same reason the job screen
+              // uses it — a list of jobs describes them as they stand, not as a
+              // report signed before the last edit described them.
+              const { haag, decision } = resolveEngineResult(ins, Date.now(), {
+                honorFreeze: false,
+              });
+              const tone = statusTone(ins.status);
+              return (
+                <View key={ins.id}>
+                  {index > 0 && <View style={styles.sep} />}
+                  <PressableScale
+                    style={styles.row}
+                    onPress={() => router.push(`/job/${ins.id}` as any)}
+                  >
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <View style={styles.rowTop}>
+                        <Text style={styles.rowName} numberOfLines={1}>
+                          {ins.customerName}
+                        </Text>
+                        <View style={[styles.statusBadge, { backgroundColor: tone.bg }]}>
+                          <Text style={[styles.statusBadgeText, { color: tone.fg }]}>
+                            {ins.status.replace(/_/g, ' ')}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.rowAddress} numberOfLines={1}>
+                        {ins.address}
+                      </Text>
+                      <Text style={styles.rowMeta} numberOfLines={1}>
+                        {ins.reportId} · {ROOF_MATERIAL_LABELS[ins.material]} · {ins.ageYears}yr
+                        {' · '}
+                        {CLAIM_VIABILITY_LABELS[haag.claim_viability]}
+                        {' · '}
+                        {decision.roofRecommendation.replace(/_/g, ' ')}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+                  </PressableScale>
                 </View>
-                <Text style={styles.jobName}>{ins.customerName}</Text>
-                <Text style={styles.jobAddress} numberOfLines={1}>
-                  {ins.address}
-                </Text>
-                <View style={styles.jobStats}>
-                  <Text style={styles.jobStat}>{ROOF_MATERIAL_LABELS[ins.material]}</Text>
-                  <Text style={styles.jobStat}>· {ins.ageYears}yr</Text>
-                  <Text style={styles.jobStat}>
-                    · {CLAIM_VIABILITY_LABELS[haag.claim_viability]}
-                  </Text>
-                  <Text style={styles.jobStat}>· {decision.roofRecommendation.replace(/_/g, ' ')}</Text>
-                </View>
-              </Pressable>
-            );
-          })
+              );
+            })}
+          </Animated.View>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function statusTone(status: InspectionStatus) {
+function statusTone(status: InspectionStatus): { bg: string; fg: string } {
   switch (status) {
     case 'complete':
-      return { backgroundColor: colors.successSoft };
+      return { bg: colors.successSoft, fg: colors.success };
     case 'in_progress':
-      return { backgroundColor: colors.accentSoft };
+      return { bg: colors.accentSoft, fg: colors.accent };
     case 'scheduled':
-      return { backgroundColor: colors.brandSoft };
+      return { bg: colors.brandSoft, fg: colors.brand };
     default:
-      return { backgroundColor: colors.surfaceMuted };
+      return { bg: colors.fillQuiet, fg: colors.textMuted };
   }
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  // Sub-screen inline bar: plain chevron, 17/semibold, hairline underline.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.xl,
-    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     gap: spacing.md,
+    backgroundColor: colors.barFill,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
   },
-  headerBtn: { padding: spacing.xs },
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
-  sub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  headerBtn: {
+    width: touchTarget.small,
+    height: touchTarget.small,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
+  sub: {
+    fontSize: fontSize.caption,
+    color: colors.textSubtle,
+    marginTop: 1,
+    fontVariant: ['tabular-nums'],
+  },
   fab: {
     width: touchTarget.standard,
     height: touchTarget.standard,
     borderRadius: radii.pill,
-    backgroundColor: colors.orange,
+    backgroundColor: colors.navy,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.card,
+    ...shadows.float,
   },
 
+  // iOS search field: quiet grey fill, no border.
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginHorizontal: spacing.xl,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
     paddingHorizontal: spacing.md,
     height: touchTarget.standard,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.fillQuiet,
+    borderRadius: radii.control,
   },
-  searchInput: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy },
+  searchInput: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
 
-  chipScroll: { maxHeight: 56, marginTop: spacing.sm },
-  chipScrollContent: { paddingHorizontal: spacing.xl, gap: spacing.sm },
+  chipScroll: { maxHeight: touchTarget.standard, marginTop: spacing.xs, flexGrow: 0 },
+  chipScrollContent: { paddingHorizontal: spacing.lg, alignItems: 'center' },
+  // 56pt hit area wrapping a compact 36pt visual pill — glove target, iOS look.
+  chipHit: {
+    height: touchTarget.standard,
+    justifyContent: 'center',
+    paddingRight: spacing.sm,
+  },
   chip: {
-    minHeight: touchTarget.small,
+    height: 36,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.fillQuiet,
     justifyContent: 'center',
   },
-  chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
-  chipText: { fontSize: fontSize.bodySm, color: colors.navy, fontWeight: fontWeight.medium },
+  chipActive: { backgroundColor: colors.navy },
+  chipText: { fontSize: fontSize.bodySm, color: colors.text, fontWeight: fontWeight.semibold },
   chipTextActive: { color: colors.textInverse },
 
-  content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
+  content: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxxl },
 
-  jobCard: {
+  // Grouped inset list: one white card, hairline-separated 64pt cells.
+  group: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    padding: spacing.lg,
-    gap: spacing.xs,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    overflow: 'hidden',
     ...shadows.card,
   },
-  jobHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  jobReport: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.semibold },
-  jobName: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
-  jobAddress: { fontSize: fontSize.bodySm, color: colors.slate },
-  jobStats: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  jobStat: { fontSize: fontSize.caption, color: colors.slate, textTransform: 'capitalize' },
-
-  statusPill: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radii.pill },
-  statusPillText: { fontSize: fontSize.caption, color: colors.navy, fontWeight: fontWeight.semibold, textTransform: 'capitalize' },
-
-  empty: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.xxl,
+  sep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.hairline,
+    marginLeft: spacing.lg,
+  },
+  row: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    ...shadows.card,
+    gap: spacing.md,
+    minHeight: touchTarget.preferred,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  emptyTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, marginTop: spacing.sm },
-  emptyBody: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rowName: {
+    flex: 1,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+  rowAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  rowMeta: {
+    fontSize: fontSize.caption,
+    color: colors.textSubtle,
+    textTransform: 'capitalize',
+    fontVariant: ['tabular-nums'],
+  },
+  statusBadge: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  statusBadgeText: {
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+    textTransform: 'capitalize',
+  },
+
+  // Compact top-anchored empty state — no card, no tinted circle, one button.
+  empty: {
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
+  emptyTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  emptyBody: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  emptyBtn: {
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xs,
+  },
+  emptyBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
 });

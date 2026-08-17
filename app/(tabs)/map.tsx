@@ -1,8 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
+import { useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { Map, MapPin, MapCircle, regionForLatLon } from '@/components/map/Map';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { PressableScale } from '@/components/PressableScale';
 import { severityColor, magnitudeLabel, type StormEvent } from '@/lib/noaa';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
 import {
@@ -24,6 +39,7 @@ import {
   fontSize,
   fontWeight,
   glass,
+  motion,
   radii,
   shadows,
   spacing,
@@ -59,6 +75,40 @@ const MAX_STORM_PINS = 300;
  */
 export const FOCUS_STORM_LEADS = 'storm-leads';
 
+// First-paint-only entrance gate — same pattern as Home. Returning to the
+// Map tab (remounted under expo-router's Slot) renders statically instead of
+// replaying the stagger. Dev fast-refresh resets it, which is fine.
+let mapEntrancePlayed = false;
+
+/**
+ * Subtle iOS entrance: 8pt rise + fade on the snappy spring, staggered by
+ * index. Same reanimated primitives the repo already ships on web.
+ */
+function Rise({
+  index = 0,
+  style,
+  children,
+}: PropsWithChildren<{ index?: number; style?: StyleProp<ViewStyle> }>) {
+  const progress = useSharedValue(mapEntrancePlayed ? 1 : 0);
+
+  useEffect(() => {
+    if (progress.value === 1) return;
+    const id = setTimeout(() => {
+      progress.value = withSpring(1, motion.snappy);
+    }, index * motion.staggerDelayMs);
+    return () => clearTimeout(id);
+    // Entrance runs once per mount by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const anim = useAnimatedStyle(() => ({
+    opacity: Math.min(1, progress.value),
+    transform: [{ translateY: (1 - progress.value) * spacing.sm }],
+  }));
+
+  return <Animated.View style={[style, anim]}>{children}</Animated.View>;
+}
+
 export default function MapScreen() {
   const router = useRouter();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
@@ -76,6 +126,12 @@ export default function MapScreen() {
   const [events, setEvents] = useState<StormEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Flip the entrance gate after the first mount's children have scheduled
+  // their animations (child effects run before this parent effect).
+  useEffect(() => {
+    mapEntrancePlayed = true;
+  }, []);
 
   // Follows the saved Service Area rather than assuming Texas.
   const { state: serviceState, ...center } = useMemo(
@@ -156,73 +212,43 @@ export default function MapScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Map</Text>
-        <Pressable
-          style={styles.knockBtn}
-          onPress={() => router.push('/door-knocking')}
-          hitSlop={8}
-        >
-          <Ionicons name="walk-outline" size={18} color={colors.textInverse} />
-          <Text style={styles.knockBtnText}>Knock mode</Text>
-        </Pressable>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipScrollContent}
-        style={styles.chipScroll}
-      >
-        {FILTERS.map((f) => (
-          <Pressable
-            key={f.id}
-            style={[styles.chip, filter === f.id && styles.chipActive]}
-            onPress={() => setFilter(f.id)}
-          >
-            <Ionicons
-              name={f.icon}
-              size={16}
-              color={filter === f.id ? colors.textInverse : colors.navy}
-            />
-            <Text style={[styles.chipText, filter === f.id && styles.chipTextActive]}>
-              {f.label}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
-      {filter === 'storms' && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipScrollContent}
-          style={styles.chipScroll}
-        >
-          {LOOKBACK_OPTIONS.map((years) => (
-            <Pressable
-              key={years}
-              hitSlop={8}
-              style={[styles.chip, lookbackYears === years && styles.chipActive]}
-              onPress={() => setLookbackYears(clampLookbackYears(years))}
+      {/* Large title on the grouped ground. Knock mode is this screen's single
+          accent action — everything else over the map goes quiet. */}
+      <Rise index={0}>
+        <ScreenHeader
+          title="Map"
+          right={
+            <PressableScale
+              style={styles.knockBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Knock mode"
+              onPress={() => router.push('/door-knocking')}
             >
-              <Ionicons
-                name="time-outline"
-                size={16}
-                color={lookbackYears === years ? colors.textInverse : colors.navy}
-              />
-              <Text
-                style={[styles.chipText, lookbackYears === years && styles.chipTextActive]}
-              >
-                {years} yr
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
+              <View style={styles.knockBtnFill}>
+                <Ionicons name="walk-outline" size={18} color={colors.textInverse} />
+                <Text style={styles.knockBtnText}>Knock mode</Text>
+              </View>
+            </PressableScale>
+          }
+        />
+      </Rise>
 
+      {/* Density: the map fills everything under the header; controls float
+          over the imagery on barFill so they stay readable in sun. */}
       <View style={styles.mapWrap}>
-        <Map initialRegion={initialRegion}>
+        <Map
+          initialRegion={initialRegion}
+          // Web preview only: the fallback panel top-anchors under the two
+          // floating chip rows (list-screen empty-state pattern) instead of
+          // centering in the void. Offset = overlay top inset + two chip rows
+          // (56pt chips + row padding) + inter-row gap + breathing room.
+          fallbackTopOffset={
+            spacing.md +
+            2 * (touchTarget.standard + 2 * spacing.xs) +
+            spacing.sm +
+            spacing.xl
+          }
+        >
           {serviceAreas
             .filter((a) => typeof a.centroidLat === 'number' && typeof a.centroidLng === 'number')
             .map((a) => (
@@ -293,27 +319,97 @@ export default function MapScreen() {
               />
             ))}
         </Map>
-        {loading && (
-          <View style={styles.loading}>
-            <ActivityIndicator color={colors.textInverse} />
-          </View>
-        )}
-        {error && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-      </View>
 
-      <View style={styles.statBar}>
-        <Text style={styles.statText}>
-          {filter === 'storms' && stormCountLine(events.length, stormPins.length, lookbackYears)}
-          {filter === 'jobs' && `${jobPins.length} of ${inspections.length} jobs mapped`}
-          {filter === 'leads' && `${leadPins.length} of ${leads.length} leads mapped`}
-          {filter === 'knocks' && `${knockPins.length} knock pins`}
-        </Text>
-        {/* Real numbers only — the line is absent when nothing matched. */}
-        {cluster && <Text style={styles.clusterText}>{cluster.headline}</Text>}
+        {/* Floating control chips — barFill ground + hairline + float shadow
+            so they read over imagery; glove-sized (≥56pt). */}
+        <View style={styles.overlayTop} pointerEvents="box-none">
+          <Rise index={1}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.chipScroll}
+              contentContainerStyle={styles.chipScrollContent}
+            >
+              {FILTERS.map((f) => (
+                <PressableScale
+                  key={f.id}
+                  style={[styles.chip, filter === f.id && styles.chipActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: filter === f.id }}
+                  accessibilityLabel={`Show ${f.label}`}
+                  onPress={() => setFilter(f.id)}
+                >
+                  <Ionicons
+                    name={f.icon}
+                    size={16}
+                    color={filter === f.id ? colors.textInverse : colors.text}
+                  />
+                  <Text style={[styles.chipText, filter === f.id && styles.chipTextActive]}>
+                    {f.label}
+                  </Text>
+                </PressableScale>
+              ))}
+            </ScrollView>
+          </Rise>
+
+          {filter === 'storms' && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={[styles.chipScroll, styles.chipScrollSecond]}
+              contentContainerStyle={styles.chipScrollContent}
+            >
+              {LOOKBACK_OPTIONS.map((years) => (
+                <PressableScale
+                  key={years}
+                  style={[styles.chip, lookbackYears === years && styles.chipActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: lookbackYears === years }}
+                  accessibilityLabel={`Past ${years} year${years === 1 ? '' : 's'}`}
+                  onPress={() => setLookbackYears(clampLookbackYears(years))}
+                >
+                  <Ionicons
+                    name="time-outline"
+                    size={16}
+                    color={lookbackYears === years ? colors.textInverse : colors.text}
+                  />
+                  <Text
+                    style={[styles.chipText, lookbackYears === years && styles.chipTextActive]}
+                  >
+                    {years} yr
+                  </Text>
+                </PressableScale>
+              ))}
+            </ScrollView>
+          )}
+
+          {loading && (
+            <View style={styles.loadingPill}>
+              <ActivityIndicator color={colors.navy} />
+            </View>
+          )}
+        </View>
+
+        {/* Count line + error float at the bottom edge of the map. Real
+            numbers only — the cluster line is absent when nothing matched. */}
+        <View style={styles.statBarWrap} pointerEvents="none">
+          {error && (
+            <View style={styles.errorCard}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+          <Rise index={2}>
+            <View style={styles.statBar}>
+              <Text style={styles.statText}>
+                {filter === 'storms' && stormCountLine(events.length, stormPins.length, lookbackYears)}
+                {filter === 'jobs' && `${jobPins.length} of ${inspections.length} jobs mapped`}
+                {filter === 'leads' && `${leadPins.length} of ${leads.length} leads mapped`}
+                {filter === 'knocks' && `${knockPins.length} knock pins`}
+              </Text>
+              {cluster && <Text style={styles.clusterText}>{cluster.headline}</Text>}
+            </View>
+          </Rise>
+        </View>
       </View>
     </View>
   );
@@ -332,88 +428,101 @@ function stormCountLine(total: number, shown: number, years: number): string {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.xl,
-    paddingBottom: spacing.md,
-    gap: spacing.md,
-  },
-  title: {
-    flex: 1,
-    fontSize: fontSize.titleXl,
-    fontWeight: fontWeight.bold,
-    color: colors.navy,
-  },
-  knockBtn: {
+
+  // Header action — 56pt target around a 44pt accent button (home pattern).
+  knockBtn: { minHeight: touchTarget.standard, justifyContent: 'center' },
+  knockBtnFill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     height: touchTarget.small,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
-    backgroundColor: colors.orange,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.button,
+    backgroundColor: colors.accent,
   },
-  knockBtnText: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  knockBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+  },
 
-  // Drift #1: the strip has to clear the chips it holds, and `touchTarget.small`
-  // is explicitly "not for primary actions" — filter and lookback chips are the
-  // only controls on this screen.
-  chipScroll: { maxHeight: touchTarget.preferred },
-  chipScrollContent: { paddingHorizontal: spacing.xl, gap: spacing.sm },
+  // Full-bleed map under a hairline — the screen's content IS the map.
+  mapWrap: {
+    flex: 1,
+    backgroundColor: colors.surfaceMuted,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+  },
+
+  overlayTop: {
+    position: 'absolute',
+    top: spacing.md,
+    left: 0,
+    right: 0,
+  },
+  chipScroll: { flexGrow: 0 },
+  chipScrollSecond: { marginTop: spacing.sm },
+  chipScrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    gap: spacing.sm,
+  },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radii.button,
+    backgroundColor: colors.barFill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    ...shadows.float,
   },
   chipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
-  chipText: { fontSize: fontSize.bodySm, color: colors.navy, fontWeight: fontWeight.medium },
+  chipText: {
+    fontSize: fontSize.bodySm,
+    color: colors.text,
+    fontWeight: fontWeight.semibold,
+  },
   chipTextActive: { color: colors.textInverse },
 
-  mapWrap: {
-    flex: 1,
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.md,
-    borderRadius: radii.card,
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceMuted,
-    ...shadows.card,
-  },
-  loading: {
-    position: 'absolute',
-    top: spacing.md,
-    left: spacing.md,
+  loadingPill: {
+    alignSelf: 'flex-start',
+    marginLeft: spacing.lg,
+    marginTop: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: colors.scrim,
+    borderRadius: radii.button,
+    backgroundColor: colors.barFill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    ...shadows.float,
   },
-  errorBanner: {
-    position: 'absolute',
-    left: spacing.md,
-    right: spacing.md,
-    bottom: spacing.md,
-    backgroundColor: colors.dangerSoft,
-    padding: spacing.md,
-    borderRadius: radii.md,
-  },
-  errorText: { color: colors.danger, fontSize: fontSize.bodySm },
 
-  statBar: {
-    margin: spacing.xl,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    ...shadows.card,
+  statBarWrap: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.md,
+    gap: spacing.sm,
   },
-  statText: { color: colors.slate, fontSize: fontSize.bodySm, textAlign: 'center' },
+  statBar: {
+    backgroundColor: colors.barFill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    borderRadius: radii.button,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    ...shadows.float,
+  },
+  statText: {
+    color: colors.text,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.medium,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
   clusterText: {
     color: colors.danger,
     fontSize: fontSize.bodySm,
@@ -421,4 +530,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xs,
   },
+
+  errorCard: {
+    backgroundColor: colors.dangerSoft,
+    padding: spacing.md,
+    borderRadius: radii.button,
+    ...shadows.float,
+  },
+  errorText: { color: colors.danger, fontSize: fontSize.bodySm, textAlign: 'center' },
 });

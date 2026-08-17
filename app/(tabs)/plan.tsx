@@ -1,17 +1,31 @@
-import { ScrollView, View, Text, StyleSheet } from 'react-native';
+import {
+  ScrollView,
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { useRouter } from 'expo-router';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
-import { AnimatedCounter, FadeSlideIn, PulseRing } from '@/components/motion';
+import { AnimatedCounter, PulseRing } from '@/components/motion';
 import {
   colors,
   fontSize,
   fontWeight,
+  motion,
   radii,
   shadows,
   spacing,
@@ -20,6 +34,100 @@ import {
 
 type PlanView = 'today' | 'week';
 
+// First-paint-only entrance gate — same pattern as Home. Returning to the
+// tab renders statically instead of replaying the stagger.
+let planEntrancePlayed = false;
+
+/** Subtle iOS entrance: 8pt rise + fade on the snappy spring, by index. */
+function Rise({
+  index = 0,
+  style,
+  children,
+}: PropsWithChildren<{ index?: number; style?: StyleProp<ViewStyle> }>) {
+  const progress = useSharedValue(planEntrancePlayed ? 1 : 0);
+
+  useEffect(() => {
+    if (progress.value === 1) return;
+    const id = setTimeout(() => {
+      progress.value = withSpring(1, motion.snappy);
+    }, index * motion.staggerDelayMs);
+    return () => clearTimeout(id);
+    // Entrance runs once per mount by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const anim = useAnimatedStyle(() => ({
+    opacity: Math.min(1, progress.value),
+    transform: [{ translateY: (1 - progress.value) * spacing.sm }],
+  }));
+
+  return <Animated.View style={[style, anim]}>{children}</Animated.View>;
+}
+
+// iOS-17 segmented control: fillQuiet track, white thumb sliding on the
+// snappy spring. The 56pt wrapper + vertical hitSlop keeps the glove floor
+// even though the visual track is 44pt.
+const SEG_PAD = spacing.xs;
+
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { id: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  const [trackW, setTrackW] = useState(0);
+  const idx = Math.max(0, options.findIndex((o) => o.id === value));
+  const segW = trackW > 0 ? (trackW - SEG_PAD * 2) / options.length : 0;
+  const x = useSharedValue(0);
+  const laidOut = useRef(false);
+
+  useEffect(() => {
+    if (segW <= 0) return;
+    if (!laidOut.current) {
+      // First layout: place the thumb without animating.
+      laidOut.current = true;
+      x.value = idx * segW;
+      return;
+    }
+    x.value = withSpring(idx * segW, motion.snappy);
+  }, [idx, segW, x]);
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }],
+  }));
+
+  return (
+    <View style={styles.segWrap}>
+      <View
+        style={styles.segTrack}
+        onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
+      >
+        {segW > 0 && (
+          <Animated.View style={[styles.segThumb, { width: segW }, thumbStyle]} />
+        )}
+        {options.map((o) => (
+          <Pressable
+            key={o.id}
+            style={styles.segBtn}
+            hitSlop={{ top: 8, bottom: 8 }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: value === o.id }}
+            accessibilityLabel={o.label}
+            onPress={() => onChange(o.id)}
+          >
+            <Text style={[styles.segLabel, value === o.id && styles.segLabelActive]}>
+              {o.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function PlanScreen() {
   const router = useRouter();
   const [view, setView] = useState<PlanView>('today');
@@ -27,6 +135,12 @@ export default function PlanScreen() {
   const archive = useKnockSessionStore((s) => s.archive);
   const active = useKnockSessionStore((s) => s.activeSession);
   const leads = useLeadStore((s) => s.leads);
+
+  // Flip the entrance gate after the first mount's children have scheduled
+  // their animations (child effects run before this parent effect).
+  useEffect(() => {
+    planEntrancePlayed = true;
+  }, []);
 
   const followUpsDue = useMemo(() => {
     const endOfDay = new Date();
@@ -77,64 +191,76 @@ export default function PlanScreen() {
   return (
     <View style={styles.root}>
     <ScreenHeader title="Plan" subtitle={today} />
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <FadeSlideIn index={0} style={styles.statsRow}>
-        <StatTile label="Inspections" value={todayInspections.length} />
-        <StatTile label="Knocks today" value={todayKnocks} />
-        <StatTile
-          label="Active route"
-          value={active ? active.knocks.length : null}
-          live={!!active}
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Quiet iOS stat cells — ink tabular-nums numbers, hairline dividers. */}
+      <Rise index={0}>
+        <View style={styles.statsCard}>
+          <StatCell label="Inspections" value={todayInspections.length} />
+          <View style={styles.statDivider} />
+          <StatCell label="Knocks today" value={todayKnocks} />
+          <View style={styles.statDivider} />
+          <StatCell
+            label="Active route"
+            value={active ? active.knocks.length : null}
+            live={!!active}
+          />
+        </View>
+      </Rise>
+
+      <Rise index={1}>
+        <Segmented
+          options={[
+            { id: 'today', label: 'Today' },
+            { id: 'week', label: 'This week' },
+          ] as const}
+          value={view}
+          onChange={setView}
         />
-      </FadeSlideIn>
+      </Rise>
 
-      <FadeSlideIn index={1} style={styles.segmented}>
-        {(['today', 'week'] as const).map((v) => (
-          <PressableScale
-            key={v}
-            pressedScale={0.96}
-            style={[styles.seg, view === v && styles.segActive]}
-            onPress={() => setView(v)}
-          >
-            <Text style={[styles.segText, view === v && styles.segTextActive]}>
-              {v === 'today' ? 'Today' : 'This week'}
+      {/* Day section — iOS grouped list; route stops are 64pt cells. */}
+      <Rise index={2}>
+        <Text style={styles.sectionLabel}>{view === 'today' ? 'Today' : 'This week'}</Text>
+        {todayInspections.length === 0 ? (
+          // Compact, top-anchored, honest — a hint in the flow, not a void.
+          <View style={styles.empty}>
+            <Ionicons name="calendar-outline" size={28} color={colors.textSubtle} />
+            <Text style={styles.emptyTitle}>Nothing scheduled</Text>
+            <Text style={styles.emptyBody}>
+              Inspections, installs, and meetings will appear here once you add jobs.
             </Text>
-          </PressableScale>
-        ))}
-      </FadeSlideIn>
-
-      {todayInspections.length === 0 ? (
-        <FadeSlideIn index={2} style={styles.empty}>
-          <Ionicons name="calendar-outline" size={40} color={colors.slate} />
-          <Text style={styles.emptyTitle}>Nothing scheduled</Text>
-          <Text style={styles.emptyBody}>
-            Inspections, installs, and meetings will appear here once you add jobs.
-          </Text>
-        </FadeSlideIn>
-      ) : (
-        <FadeSlideIn index={2} style={styles.card}>
-          {todayInspections.map((ins, i) => (
-            <PressableScale
-              key={ins.id}
-              style={[styles.row, i > 0 && styles.rowBorder]}
-              onPress={() => router.push(`/job/${ins.id}` as any)}
-            >
-              <Ionicons name="briefcase-outline" size={20} color={colors.orange} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>{ins.customerName}</Text>
-                <Text style={styles.rowSub}>{ins.address}</Text>
-                <Text style={styles.rowMeta}>{ins.reportId}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.slate} />
-            </PressableScale>
-          ))}
-        </FadeSlideIn>
-      )}
+          </View>
+        ) : (
+          <View style={styles.card}>
+            {todayInspections.map((ins, i) => (
+              <PressableScale
+                key={ins.id}
+                style={[styles.row, i > 0 && styles.rowBorder]}
+                accessibilityRole="button"
+                accessibilityLabel={`${ins.customerName}, ${ins.address}`}
+                onPress={() => router.push(`/job/${ins.id}` as any)}
+              >
+                <Ionicons name="briefcase-outline" size={22} color={colors.textMuted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>{ins.customerName}</Text>
+                  <Text style={styles.rowSub}>{ins.address}</Text>
+                  <Text style={styles.rowMeta}>{ins.reportId}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+              </PressableScale>
+            ))}
+          </View>
+        )}
+      </Rise>
 
       {followUpsDue.length > 0 && (
-        <FadeSlideIn index={3}>
+        <Rise index={3}>
           <Text style={styles.sectionLabel}>Follow-ups due</Text>
-          <View style={[styles.card, { marginTop: spacing.sm }]}>
+          <View style={styles.card}>
             {followUpsDue.map((lead, i) => {
               const overdue =
                 new Date(lead.followUpAt!).getTime() <
@@ -143,12 +269,14 @@ export default function PlanScreen() {
                 <PressableScale
                   key={lead.id}
                   style={[styles.row, i > 0 && styles.rowBorder]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${lead.customerName}, ${overdue ? 'overdue' : 'due today'}`}
                   onPress={() => router.push(`/lead/${lead.id}` as any)}
                 >
                   <Ionicons
                     name={overdue ? 'alert-circle' : 'call-outline'}
-                    size={20}
-                    color={overdue ? colors.danger : colors.orange}
+                    size={22}
+                    color={overdue ? colors.danger : colors.textMuted}
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowTitle}>{lead.customerName}</Text>
@@ -159,42 +287,56 @@ export default function PlanScreen() {
                         : 'Due today'}
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
                 </PressableScale>
               );
             })}
           </View>
-        </FadeSlideIn>
+        </Rise>
       )}
 
-      <FadeSlideIn index={4}>
+      {/* Door-knocking is Plan's single accent moment; the rest stays quiet. */}
+      <Rise index={4}>
         <Text style={styles.sectionLabel}>Quick actions</Text>
-        <View style={[styles.card, { marginTop: spacing.sm }]}>
-          <PressableScale style={styles.actionRow} onPress={() => router.push('/door-knocking')}>
-            <Ionicons name="walk-outline" size={20} color={colors.orange} />
+        <View style={styles.card}>
+          <PressableScale
+            style={styles.actionRow}
+            accessibilityRole="button"
+            accessibilityLabel="Start door-knocking route"
+            onPress={() => router.push('/door-knocking')}
+          >
+            <Ionicons name="walk-outline" size={22} color={colors.accent} />
             <Text style={styles.actionText}>Start door-knocking route</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+            <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
           </PressableScale>
-          <PressableScale style={[styles.actionRow, styles.rowBorder]} onPress={() => router.push('/mileage')}>
-            <Ionicons name="car-outline" size={20} color={colors.orange} />
+          <PressableScale
+            style={[styles.actionRow, styles.rowBorder]}
+            accessibilityRole="button"
+            accessibilityLabel="Start mileage tracking"
+            onPress={() => router.push('/mileage')}
+          >
+            <Ionicons name="car-outline" size={22} color={colors.textMuted} />
             <Text style={styles.actionText}>Start mileage tracking</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+            <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
           </PressableScale>
-          <PressableScale style={[styles.actionRow, styles.rowBorder]} onPress={() => router.push('/new-job')}>
-            <Ionicons name="add-circle-outline" size={20} color={colors.orange} />
+          <PressableScale
+            style={[styles.actionRow, styles.rowBorder]}
+            accessibilityRole="button"
+            accessibilityLabel="New job"
+            onPress={() => router.push('/new-job')}
+          >
+            <Ionicons name="add-circle-outline" size={22} color={colors.textMuted} />
             <Text style={styles.actionText}>New job</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+            <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
           </PressableScale>
         </View>
-      </FadeSlideIn>
-
-      <View style={{ height: spacing.xxxl }} />
+      </Rise>
     </ScrollView>
     </View>
   );
 }
 
-function StatTile({
+function StatCell({
   label,
   value,
   live = false,
@@ -204,13 +346,15 @@ function StatTile({
   live?: boolean;
 }) {
   return (
-    <View style={styles.statTile}>
-      {live && <PulseRing size={8} color={colors.success} style={styles.statLiveDot} />}
-      {value === null ? (
-        <Text style={styles.statValue}>—</Text>
-      ) : (
-        <AnimatedCounter value={value} style={styles.statValue} />
-      )}
+    <View style={styles.statCell}>
+      <View style={styles.statValueRow}>
+        {live && <PulseRing size={8} color={colors.success} />}
+        {value === null ? (
+          <Text style={styles.statValue}>—</Text>
+        ) : (
+          <AnimatedCounter value={value} style={styles.statValue} />
+        )}
+      </View>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
@@ -218,86 +362,142 @@ function StatTile({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
-  header: {},
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
-  sub: { fontSize: fontSize.bodyMd, color: colors.slate, marginTop: spacing.xs },
+  content: {
+    padding: spacing.xl,
+    paddingTop: spacing.sm,
+    gap: spacing.lg,
+    paddingBottom: spacing.xxxl,
+  },
 
-  statsRow: { flexDirection: 'row', gap: spacing.sm },
-  statTile: {
-    flex: 1,
+  // Stats — one white card, hairline dividers, ink tabular-nums numbers.
+  statsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    padding: spacing.lg,
-    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    paddingVertical: spacing.lg,
     ...shadows.card,
   },
-  statLiveDot: { position: 'absolute', top: spacing.sm, right: spacing.sm },
-  statValue: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.orange },
-  statLabel: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: spacing.xs, textAlign: 'center' },
+  statCell: { flex: 1, alignItems: 'center' },
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+    marginVertical: spacing.xs,
+    backgroundColor: colors.hairline,
+  },
+  statValueRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  statValue: {
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  statLabel: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.medium,
+    color: colors.textMuted,
+    marginTop: 2,
+    textAlign: 'center',
+  },
 
-  segmented: {
+  // iOS-17 segmented control.
+  segWrap: { minHeight: touchTarget.standard, justifyContent: 'center' },
+  segTrack: {
     flexDirection: 'row',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.pill,
-    padding: 4,
+    height: 44,
+    borderRadius: radii.md,
+    backgroundColor: colors.fillQuiet,
+    padding: SEG_PAD,
   },
-  seg: {
-    flex: 1,
-    minHeight: touchTarget.small,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
+  segThumb: {
+    position: 'absolute',
+    top: SEG_PAD,
+    bottom: SEG_PAD,
+    left: SEG_PAD,
+    borderRadius: radii.control,
+    backgroundColor: colors.surface,
+    ...shadows.thumb,
   },
-  segActive: { backgroundColor: colors.surface, ...shadows.card },
-  segText: { fontSize: fontSize.bodyMd, color: colors.slate, fontWeight: fontWeight.medium },
-  segTextActive: { color: colors.navy, fontWeight: fontWeight.semibold },
+  segBtn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  segLabel: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    color: colors.textMuted,
+  },
+  segLabelActive: { color: colors.text },
 
+  // iOS grouped-list section headers.
+  sectionLabel: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+  },
+
+  // Grouped white cards — rows carry their own padding + hairlines.
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    overflow: 'hidden',
     ...shadows.card,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.md,
-    minHeight: touchTarget.standard,
+    minHeight: touchTarget.preferred,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
-  rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  rowTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
-  rowMeta: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2 },
-
-  sectionLabel: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  rowBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+  },
+  rowTitle: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  rowMeta: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
 
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.md,
     minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
-  actionText: { flex: 1, fontSize: fontSize.bodyLg, color: colors.navy, fontWeight: fontWeight.medium },
+  actionText: {
+    flex: 1,
+    fontSize: fontSize.bodyMd,
+    color: colors.text,
+    fontWeight: fontWeight.medium,
+  },
 
+  // Compact top-anchored empty — thin icon, 15pt message, no card, no void.
   empty: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.xxl,
     alignItems: 'center',
-    gap: spacing.sm,
-    ...shadows.card,
+    gap: spacing.xs,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
   },
   emptyTitle: {
-    fontSize: fontSize.titleSm,
+    fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
-    color: colors.navy,
+    color: colors.text,
+    marginTop: spacing.xs,
   },
   emptyBody: {
-    fontSize: fontSize.bodyMd,
-    color: colors.slate,
+    fontSize: fontSize.bodySm,
+    color: colors.textMuted,
     textAlign: 'center',
   },
 });

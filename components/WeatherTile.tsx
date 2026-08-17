@@ -37,7 +37,7 @@ const SAFETY_CHIP: Record<SafetyRating, { bg: string; fg: string; icon: 'shield-
 export function WeatherTile() {
   const [weather, setWeather] = useState<CurrentWeather | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [fetching, setFetching] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +50,7 @@ export function WeatherTile() {
         }
         const pos = await Location.getCurrentPositionAsync({});
         if (cancelled) return;
+        setFetching(true);
         const w = await fetchCurrentWeather({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
@@ -60,7 +61,7 @@ export function WeatherTile() {
         if (e instanceof WeatherNotConfiguredError) setError('Weather offline');
         else setError(null);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setFetching(false);
       }
     })();
     return () => {
@@ -70,9 +71,12 @@ export function WeatherTile() {
 
   if (error) return null; // Just hide rather than show a noisy error
 
-  // Shimmer while the fetch is in flight so the tile doesn't pop the
-  // layout when weather lands.
-  if (loading) {
+  // Shimmer ONLY while the weather request itself is in flight. The
+  // permission prompt and GPS acquisition render nothing — they can pend
+  // indefinitely (web preview, prompt never answered), and a skeleton that
+  // never resolves reads as a broken card, not a loading state. Skeletons
+  // are for LOADING states only; the module renders real or not at all.
+  if (fetching && !weather) {
     return (
       <View style={styles.tile}>
         <SkeletonBlock style={styles.skelIcon} />
@@ -95,9 +99,9 @@ export function WeatherTile() {
   return (
     <View style={styles.tile}>
       <Ionicons
-        name={weather.isDaytime ? 'sunny' : 'moon'}
-        size={28}
-        color={colors.orange}
+        name={weather.isDaytime ? 'sunny-outline' : 'moon-outline'}
+        size={26}
+        color={colors.text}
       />
       <View style={{ flex: 1 }}>
         <Text style={styles.temp}>
@@ -138,22 +142,30 @@ function conditionsLine(weather: CurrentWeather): string {
 }
 
 const styles = StyleSheet.create({
+  // Quiet white cell — hairline + grouped ground carry the shape.
   tile: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
     ...shadows.card,
   },
-  skelIcon: { width: 28, height: 28, borderRadius: radii.pill },
+  skelIcon: { width: 26, height: 26, borderRadius: radii.pill },
   skelLine: { height: fontSize.titleMd, width: '55%' },
   skelLineShort: { height: fontSize.bodySm, width: '35%' },
-  temp: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.navy },
-  feels: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.regular },
-  desc: { fontSize: fontSize.bodyMd, color: colors.slate, marginTop: 2 },
-  meta: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  temp: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  feels: { fontSize: fontSize.bodySm, color: colors.textMuted, fontWeight: fontWeight.regular },
+  desc: { fontSize: fontSize.bodyMd, color: colors.textMuted, marginTop: 2 },
+  meta: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
 
   safetyChip: {
     flexDirection: 'row',

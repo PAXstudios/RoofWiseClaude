@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { PressableScale } from '@/components/PressableScale';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
 import { overallAccuracy } from '@/lib/services/learning/localLearningEngine';
@@ -24,43 +25,45 @@ export function AICalibrationCard() {
   if (accuracy === null) return null;
 
   return (
-    <Pressable style={styles.card} onPress={() => router.push('/(tabs)/train')}>
+    <PressableScale style={styles.card} onPress={() => router.push('/(tabs)/train')}>
       <View style={styles.row}>
-        <View style={styles.iconWrap}>
-          <Ionicons name="sparkles" size={20} color={colors.textInverse} />
-        </View>
+        <Ionicons name="sparkles-outline" size={22} color={colors.text} />
         <View style={{ flex: 1 }}>
           <Text style={styles.label}>AI accuracy on your jobs</Text>
           <Text style={styles.value}>{accuracy}%</Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={colors.slate} />
+        <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
       </View>
       <Text style={styles.sub}>
         Calibrated from {profile.totalCorrections} correction{profile.totalCorrections === 1 ? '' : 's'}.
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
+  // White iOS cell on the grouped ground — hairline + near-zero shadow.
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
-    gap: spacing.sm,
+    gap: spacing.xs,
     minHeight: touchTarget.preferred,
     ...shadows.card,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.orange,
-    alignItems: 'center',
-    justifyContent: 'center',
+  label: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  value: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
   },
-  label: { fontSize: fontSize.bodySm, color: colors.slate },
-  value: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.navy },
-  sub: { fontSize: fontSize.bodySm, color: colors.slate, marginLeft: 48 },
+  sub: {
+    fontSize: fontSize.bodySm,
+    color: colors.textSubtle,
+    marginLeft: spacing.xxxl + 2,
+  },
 });

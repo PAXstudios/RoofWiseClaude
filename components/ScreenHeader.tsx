@@ -6,7 +6,6 @@ import {
   colors,
   fontSize,
   fontWeight,
-  radii,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -18,80 +17,110 @@ type Props = {
   back?: boolean | (() => void);
   /** Right-aligned actions (icon buttons, pills). */
   right?: ReactNode;
-  /** Show the orange tick accent before the title. Default true. */
+  /** Legacy orange tick accent. Accepted for compatibility; the iOS
+   *  treatment renders plain ink titles, so this no longer draws. */
   accent?: boolean;
 };
 
 /**
- * Unified screen header — tab screens use it without `back`, detail
- * screens with it. Keeps title typography, the orange tick accent, and
- * touch targets consistent across the app.
+ * Unified screen header, iOS treatment. Tab roots use it without `back`
+ * and get a large 34/bold ink title sitting directly on the grouped
+ * ground — no card, no accent bar. Detail screens pass `back` and get
+ * the inline 17/semibold bar with a plain chevron. Touch targets stay
+ * glove-sized throughout.
  */
-export function ScreenHeader({ title, subtitle, back, right, accent = true }: Props) {
+export function ScreenHeader({ title, subtitle, back, right }: Props) {
   const router = useRouter();
   const onBack = typeof back === 'function' ? back : back ? () => router.back() : undefined;
 
-  return (
-    <View style={styles.row}>
-      {onBack && (
+  // Sub-screen: inline title after a plain chevron.
+  if (onBack) {
+    return (
+      <View style={styles.inlineRow}>
         <Pressable
           onPress={onBack}
-          hitSlop={10}
+          hitSlop={8}
           style={styles.backBtn}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Ionicons name="chevron-back" size={24} color={colors.navy} />
+          <Ionicons name="chevron-back" size={26} color={colors.text} />
         </Pressable>
-      )}
-      <View style={styles.titleBlock}>
-        <View style={styles.titleRow}>
-          {accent && <View style={styles.tick} />}
-          <Text style={styles.title} numberOfLines={1}>
+        <View style={styles.titleBlock}>
+          <Text style={styles.inlineTitle} numberOfLines={1}>
             {title}
           </Text>
+          {subtitle ? (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
-        {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
+        {right}
       </View>
-      {right}
+    );
+  }
+
+  // Tab root: large title on the grouped ground.
+  return (
+    <View style={styles.largeWrap}>
+      <View style={styles.largeRow}>
+        <Text style={styles.largeTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        {right}
+      </View>
+      {subtitle ? (
+        <Text style={styles.subtitle} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
+  largeWrap: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  largeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
     gap: spacing.md,
   },
+  largeTitle: {
+    flex: 1,
+    fontSize: fontSize.display,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    letterSpacing: -0.5,
+  },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: touchTarget.standard,
+    paddingLeft: spacing.xs,
+    paddingRight: spacing.xl,
+    gap: spacing.xs,
+  },
   backBtn: {
-    width: touchTarget.small,
-    height: touchTarget.small,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    width: touchTarget.standard,
+    height: touchTarget.standard,
     alignItems: 'center',
     justifyContent: 'center',
   },
   titleBlock: { flex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  tick: { width: 4, height: 22, borderRadius: 2, backgroundColor: colors.orange },
-  title: {
-    flex: 1,
-    fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
-    color: colors.navy,
-    letterSpacing: -0.4,
+  inlineTitle: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+    letterSpacing: -0.2,
   },
   subtitle: {
     fontSize: fontSize.bodySm,
-    color: colors.slate,
+    color: colors.textMuted,
     marginTop: 2,
-    marginLeft: spacing.sm + 4,
   },
 });

@@ -93,7 +93,7 @@ export default function JobDetail() {
       <SafeAreaView style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.empty}>
-          <Ionicons name="alert-circle-outline" size={36} color={colors.slate} />
+          <Ionicons name="alert-circle-outline" size={28} color={colors.textSubtle} />
           <Text style={styles.emptyTitle}>Job not found</Text>
           <PressableScale style={styles.secondaryBtn} onPress={() => router.back()}>
             <Text style={styles.secondaryBtnText}>Back</Text>
@@ -233,7 +233,7 @@ export default function JobDetail() {
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <PressableScale onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </PressableScale>
         <View style={{ flex: 1 }}>
           <Text style={styles.reportId}>{inspection.reportId}</Text>
@@ -271,7 +271,7 @@ export default function JobDetail() {
             }
             size={18}
             color={
-              inspection.status === 'complete' ? colors.textInverse : colors.navy
+              inspection.status === 'complete' ? colors.textInverse : colors.text
             }
           />
           <Text
@@ -341,9 +341,9 @@ export default function JobDetail() {
         )}
 
         {inspection.event && (
-          <View style={[styles.card, styles.stormCard]}>
+          <View style={styles.card}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-              <Ionicons name="thunderstorm" size={20} color={colors.orange} />
+              <Ionicons name="thunderstorm" size={20} color={colors.accent} />
               <Text style={styles.cardLabel}>Storm match</Text>
             </View>
             <Text style={styles.cardValue}>
@@ -390,13 +390,13 @@ export default function JobDetail() {
             router.push({ pathname: '/quick-inspection', params: { jobId: inspection.id } })
           }
         >
-          <Ionicons name="scan-outline" size={20} color={colors.textInverse} />
+          <Ionicons name="scan-outline" size={20} color={colors.text} />
           <Text style={styles.primaryBtnText}>Start Quick Inspection</Text>
         </PressableScale>
 
         {inspection.slopes.length === 0 ? (
           <View style={styles.placeholderBox}>
-            <Ionicons name="camera-outline" size={28} color={colors.slate} />
+            <Ionicons name="camera-outline" size={28} color={colors.textSubtle} />
             <Text style={styles.placeholderText}>
               No slopes captured yet. Tap Start Quick Inspection to take photos.
             </Text>
@@ -421,7 +421,7 @@ export default function JobDetail() {
           style={styles.proposalCard}
           onPress={() => router.push(`/proposal/${inspection.id}` as any)}
         >
-          <Ionicons name="document-attach-outline" size={22} color={colors.orange} />
+          <Ionicons name="document-attach-outline" size={22} color={colors.text} />
           <View style={{ flex: 1 }}>
             <Text style={styles.proposalTitle}>
               {proposal ? `Proposal · $${proposal.total.toLocaleString()}` : 'Generate proposal'}
@@ -430,7 +430,7 @@ export default function JobDetail() {
               {proposal ? `${proposal.status} · ${proposal.lineItems.length} line items` : 'From Decision Engine + Solar squares + regional pricing'}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.slate} />
+          <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
         </PressableScale>
 
         <View style={styles.card}>
@@ -446,7 +446,7 @@ export default function JobDetail() {
                 <Ionicons
                   name={checked ? 'checkbox' : 'square-outline'}
                   size={22}
-                  color={checked ? colors.success : colors.slate}
+                  color={checked ? colors.success : colors.textSubtle}
                 />
                 <Text style={[styles.collateralLabel, checked && styles.collateralChecked]}>
                   {item.label}
@@ -477,7 +477,7 @@ export default function JobDetail() {
                     <Ionicons
                       name={item.checked ? 'checkbox' : 'square-outline'}
                       size={22}
-                      color={item.checked ? colors.success : colors.slate}
+                      color={item.checked ? colors.success : colors.textSubtle}
                     />
                     <Text style={styles.collateralLabel}>{COLLATERAL_ZONE_LABELS[zone]}</Text>
                   </PressableScale>
@@ -500,7 +500,7 @@ export default function JobDetail() {
                       })
                     }
                   >
-                    <Ionicons name="camera-outline" size={20} color={colors.navy} />
+                    <Ionicons name="camera-outline" size={20} color={colors.text} />
                     {item.photoIds.length > 0 && (
                       <Text style={styles.zonePhotoCount}>{item.photoIds.length}</Text>
                     )}
@@ -558,7 +558,7 @@ export default function JobDetail() {
                 });
               }}
             >
-              <Ionicons name="camera-outline" size={18} color={colors.navy} />
+              <Ionicons name="camera-outline" size={18} color={colors.text} />
               <Text style={styles.analyzeBtnText}>
                 Add test photo
                 {(inspection.brittlenessProtocol?.photoIds.length ?? 0) > 0
@@ -637,12 +637,12 @@ export default function JobDetail() {
         </View>
 
         <PressableScale
-          style={[styles.secondaryCta, generating && { opacity: 0.5 }]}
+          style={[styles.reportCta, generating && { opacity: 0.5 }]}
           disabled={generating}
           onPress={onGenerateHaagReport}
         >
-          <Ionicons name="document-text-outline" size={20} color={colors.navy} />
-          <Text style={styles.secondaryCtaText}>
+          <Ionicons name="document-text-outline" size={20} color={colors.textInverse} />
+          <Text style={styles.reportCtaText}>
             {generating
               ? 'Generating…'
               : isClaim
@@ -668,7 +668,7 @@ export default function JobDetail() {
         )}
 
         <PressableScale
-          style={[styles.secondaryCta, generatingLong && { opacity: 0.5 }]}
+          style={[styles.quietCta, generatingLong && { opacity: 0.5 }]}
           disabled={generatingLong}
           onPress={async () => {
             try {
@@ -693,8 +693,8 @@ export default function JobDetail() {
             }
           }}
         >
-          <Ionicons name="reader-outline" size={20} color={colors.navy} />
-          <Text style={styles.secondaryCtaText}>
+          <Ionicons name="reader-outline" size={20} color={colors.text} />
+          <Text style={styles.quietCtaText}>
             {generatingLong ? 'Generating…' : 'Generate Long Report (PDF)'}
           </Text>
         </PressableScale>
@@ -778,7 +778,7 @@ function SlopeBlock({
           })
         }
       >
-        <Ionicons name="analytics-outline" size={18} color={colors.navy} />
+        <Ionicons name="analytics-outline" size={18} color={colors.text} />
         <Text style={styles.analyzeBtnText}>Analyze photos</Text>
       </PressableScale>
 
@@ -795,10 +795,7 @@ function SlopeBlock({
                   })
                 }
               >
-                <Image
-                  source={{ uri }}
-                  style={{ width: 140, height: 100, borderRadius: radii.md }}
-                />
+                <Image source={{ uri }} style={styles.photoTile} />
                 <View style={styles.editBadge}>
                   <Ionicons name="create-outline" size={12} color={colors.textInverse} />
                 </View>
@@ -841,10 +838,11 @@ function SlopeBlock({
 function VerdictPill({ verdict }: { verdict: SlopeVerdict }) {
   const tone = (() => {
     switch (verdict) {
-      case 'full_replace': return { bg: colors.orange, fg: colors.textInverse, label: 'Full replace' };
-      case 'partial_replace': return { bg: colors.warn, fg: colors.navy, label: 'Partial' };
-      case 'verify_with_inspector': return { bg: colors.cream, fg: colors.navy, label: 'Verify' };
-      default: return { bg: colors.surfaceMuted, fg: colors.slate, label: 'Repair' };
+      // iOS badge language: semantic soft ground + semantic text, never a blob.
+      case 'full_replace': return { bg: colors.accentSoft, fg: colors.accent, label: 'Full replace' };
+      case 'partial_replace': return { bg: colors.warnSoft, fg: colors.warn, label: 'Partial' };
+      case 'verify_with_inspector': return { bg: colors.infoSoft, fg: colors.info, label: 'Verify' };
+      default: return { bg: colors.fillQuiet, fg: colors.textMuted, label: 'Repair' };
     }
   })();
   return (
@@ -865,86 +863,133 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  // Sub-screen inline bar: plain chevron, 17/semibold, hairline underline.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     gap: spacing.md,
+    backgroundColor: colors.barFill,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
   },
-  headerBtn: { padding: spacing.xs },
-  reportId: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.semibold },
-  customer: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.navy },
+  headerBtn: {
+    width: touchTarget.small,
+    height: touchTarget.small,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportId: { fontSize: fontSize.caption, color: colors.textSubtle, fontWeight: fontWeight.semibold },
+  customer: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
   statusToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
+    minHeight: touchTarget.small,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
   },
   statusToggleComplete: { backgroundColor: colors.success },
-  statusToggleText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.navy },
+  statusToggleText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
 
-  scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.md },
+  scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
+  // White inset cards on the grouped ground: hairline + near-zero shadow.
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
     gap: spacing.xs,
     ...shadows.card,
   },
-  cardLabel: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
-  cardValue: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, textTransform: 'capitalize' },
-  cardSub: { fontSize: fontSize.bodyMd, color: colors.slate },
+  cardLabel: {
+    fontSize: fontSize.bodySm,
+    color: colors.textSubtle,
+    fontWeight: fontWeight.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  cardValue: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text, textTransform: 'capitalize' },
+  cardSub: { fontSize: fontSize.bodyMd, color: colors.textMuted },
 
   statsRow: { flexDirection: 'row', gap: spacing.sm },
+  // Quiet iOS stat cells: ink tabular numbers, 13 muted labels — never orange.
   stat: {
     flex: 1,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
-    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    padding: spacing.md,
     alignItems: 'center',
     ...shadows.card,
   },
-  statValue: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.orange },
-  statLabel: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: spacing.xs },
+  statValue: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  statLabel: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.medium,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
 
+  // Quiet capture action — orange is reserved for the report-generation CTA.
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    height: touchTarget.sticky,
-    borderRadius: radii.pill,
-    backgroundColor: colors.orange,
-    marginTop: spacing.md,
+    height: touchTarget.preferred,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+    marginTop: spacing.xs,
   },
-  primaryBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  primaryBtnText: { color: colors.text, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
 
+  // Honest, compact empty module — real state, thin icon, no tinted circle.
   placeholderBox: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
     alignItems: 'center',
     gap: spacing.sm,
+    ...shadows.card,
   },
-  placeholderText: { color: colors.slate, fontSize: fontSize.bodySm, textAlign: 'center' },
+  placeholderText: { color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },
 
-  secondaryCta: {
+  // THE one orange moment on this screen: generate the report/claim packet.
+  reportCta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
     height: touchTarget.preferred,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.navy,
+    borderRadius: radii.button,
+    backgroundColor: colors.accent,
     marginTop: spacing.sm,
   },
-  secondaryCtaText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  reportCtaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+
+  quietCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.preferred,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+    marginTop: spacing.sm,
+  },
+  quietCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
   proposalCard: {
     flexDirection: 'row',
@@ -952,12 +997,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     padding: spacing.lg,
     minHeight: touchTarget.preferred,
     ...shadows.card,
   },
-  proposalTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
-  proposalSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2, textTransform: 'capitalize' },
+  proposalTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
+  proposalSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2, textTransform: 'capitalize' },
 
   signedBadge: {
     flexDirection: 'row',
@@ -972,16 +1019,17 @@ const styles = StyleSheet.create({
   },
   signedBadgeText: { color: colors.success, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
+  // Soft-ground badge, not an orange blob — same claim-mode language as bands.
   claimBadge: {
-    backgroundColor: colors.orange,
+    backgroundColor: colors.accentSoft,
     paddingHorizontal: spacing.md,
     paddingVertical: 2,
     borderRadius: radii.pill,
   },
   claimBadgeText: {
-    color: colors.textInverse,
+    color: colors.accentPressed,
     fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
+    fontWeight: fontWeight.semibold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -991,13 +1039,11 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.standard,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radii.control,
+    backgroundColor: colors.fillQuiet,
   },
-  britChipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
-  britChipText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  britChipActive: { backgroundColor: colors.navy },
+  britChipText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   britChipTextActive: { color: colors.textInverse },
   evidenceWarn: {
     fontSize: fontSize.bodySm,
@@ -1022,15 +1068,14 @@ const styles = StyleSheet.create({
     minWidth: touchTarget.standard,
     height: touchTarget.standard,
     paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radii.control,
+    backgroundColor: colors.fillQuiet,
   },
   zonePhotoCount: {
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.bold,
-    color: colors.navy,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
   },
   gateHint: {
     fontSize: fontSize.bodySm,
@@ -1041,30 +1086,35 @@ const styles = StyleSheet.create({
   },
   finalizedHint: {
     fontSize: fontSize.bodySm,
-    color: colors.slate,
+    color: colors.textSubtle,
     textAlign: 'center',
     marginTop: spacing.xs,
   },
-  collateralLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy },
-  collateralChecked: { textDecorationLine: 'line-through', color: colors.slate },
-
-  stormCard: { borderLeftWidth: 4, borderLeftColor: colors.orange },
+  collateralLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
+  collateralChecked: { textDecorationLine: 'line-through', color: colors.textMuted },
 
   notesInput: {
     minHeight: 96,
     fontSize: fontSize.bodyMd,
-    color: colors.navy,
+    color: colors.text,
     padding: spacing.md,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.md,
+    backgroundColor: colors.fillQuiet,
+    borderRadius: radii.control,
     marginTop: spacing.sm,
   },
 
+  photoTile: {
+    width: 140,
+    height: 100,
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
   editBadge: {
     position: 'absolute',
     top: 6,
     right: 6,
-    backgroundColor: 'rgba(12,24,60,0.78)',
+    backgroundColor: colors.scrim,
     width: 22,
     height: 22,
     borderRadius: 11,
@@ -1073,28 +1123,28 @@ const styles = StyleSheet.create({
   },
 
   testSquare: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.md,
+    backgroundColor: colors.fillQuiet,
+    borderRadius: radii.control,
     padding: spacing.md,
     gap: 2,
     marginTop: spacing.md,
   },
   testSquareLabel: {
     fontSize: fontSize.caption,
-    color: colors.slate,
+    color: colors.textSubtle,
     fontWeight: fontWeight.semibold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  testSquareLine: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
-  testSquareRule: { fontSize: fontSize.bodySm, color: colors.slate },
+  testSquareLine: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
+  testSquareRule: { fontSize: fontSize.bodySm, color: colors.textMuted },
 
   verdictPill: {
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
     borderRadius: radii.pill,
   },
-  verdictText: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, textTransform: 'uppercase', letterSpacing: 0.5 },
+  verdictText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   analyzeBtn: {
     flexDirection: 'row',
@@ -1102,32 +1152,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     height: touchTarget.standard,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
     marginTop: spacing.md,
   },
-  analyzeBtnText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  analyzeBtnText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
   reasoning: {
     fontSize: fontSize.bodySm,
-    color: colors.slate,
+    color: colors.textMuted,
     fontStyle: 'italic',
     marginTop: spacing.sm,
   },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
-  emptyTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  emptyTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.text },
   secondaryBtn: {
-    height: touchTarget.preferred,
+    minHeight: touchTarget.standard,
     paddingHorizontal: spacing.xxl,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.navy,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  secondaryBtnText: { color: colors.text, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
 });

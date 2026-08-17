@@ -2211,3 +2211,30 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Nothing was run on a device or a simulator** — no agent could, and neither could I. Typecheck, lint, the web export, and the hash test are the full extent of verification.
 
 **Files touched:** 26 modified, 4 new (`captureSession.ts`, `reportIntegrity.ts`, `storedEngine.ts`, `telemetry.ts`), `BACKLOG.md`, `PROMPT_LOG.md`.
+
+---
+
+### [2026-08-17] #52 — iOS × Instagram UI redesign: 11-agent visual refresh with screenshot-verified density pass
+
+**Prompt:**
+> Improve the app UI design. It looks like AI. Think Apple IOS style and Instagram. I want animations too.
+> There is a lot of white space that makes the app look empty
+> Approved
+
+**Design direction (written as the contract before any agent ran — scratchpad `design-spec.md`, preserved in this entry's key rulings):** What read "AI" was shape and weight, not palette: pill-everything, giant orange FAB circles, the floating navy pill tab bar, saturated CTA blobs, zero motion. The direction: iOS grouped ground (#F6F6FA) with white inset cards + hairlines; orange demoted to ONE moment per screen; edge-to-edge translucent tab bar with thin outline icons; iOS-17 segmented controls (grey track, spring-sliding white thumb); spring physics everywhere (motion.snappy {1,20,280}); pills demoted to elements ≤36pt. "Instagram" interpreted as chrome restraint + motion quality, NOT gradients on a roofing CRM. Glove rules survive the restyle: ≥56pt targets, near-ink text.
+
+**Mid-flight owner feedback became a first-class requirement:** "too much white space" → the Density section. Two causes, two fixes, zero fake data (Drift #5 absolute): (a) zero-state voids became structured honest content — Home now renders a "Get set up" checklist (4 rows with done-state read from real stores, each routing to the real screen) + "What RoofWise does" cells; empty lists are compact top-anchored panels, never a centered line in a void; (b) vertical rhythm tightened, content fills the first viewport at 390×844 on every tab root.
+
+**How it ran:** foundation agent ALONE (tokens add-only + BottomTabs + ScreenHeader + PressableScale + ToastHost), then 6 parallel screen builders with disjoint files (home / leads / map-plan-train / settings-auth / flows / detail), integrator, then two verifiers — one of them a **visual auditor that served the export, screenshotted every screen at 390×844, and READ the images**, judging against the spec + the before-gallery — then a fix agent. 11 agents, ~1.42M tokens, 0 errors. First launch aborted on a harness fault (permission handler stripped every tool call's parameters — zero work, clean tree); relaunch ran clean.
+
+**What shipped (36 files, +4,627/−2,685):** retuned ground and shadows; new tab bar with spring icon pop; iOS large-title headers ("Up early." — the dangling "there" greeting bug is dead); quiet white stat cells with tabular-nums; one-orange-moment discipline (Quick Inspection on Home, Generate Report on Job, sticky CTA on New Job); iOS-17 segmented controls on Leads/auth/capture; Instagram-clean 64pt lead cells with initial discs; restyled pipeline board with grabber-bar Move sheet; true iOS grouped Settings with footers; swipe-review card stack with depth (next card peeks at 0.95) and spring-pop stars; thin ink progress bar on the wizard; glass-token camera chrome; storm hero restyled (still hides with no alert — Drift #4); the old "No X yet" void cards deleted.
+
+**Verification:** build-boot verifier passed with ZERO findings (typecheck, lint, export, headless boot of 10 routes — no crashes, no console errors). Visual auditor filed 5 findings from actual screenshots; fix agent applied 4 and REFUTED 1 by pixel-measuring the screenshot (the "Knock mode pill" was already radius-14 — corner geometry matched exactly). Fixed: the never-resolving weather skeleton (now gated on an actual in-flight fetch; permission/GPS phases render nothing — the spec's "real module or nothing" rule); pipeline empty state got the List view's panel language + action; the disabled wizard CTA's compositing seam (root-caused to element-level opacity creating a second layer; replaced with a flat colors.accentDisabled token fill, pixel-verified one uniform run); map web fallback top-anchored under the chip rows.
+
+**Caught by hand after the workflow:** Settings hardcoded "Supabase — Connected (auth + storage)" — a fabricated status indicator (pre-existing, not introduced by the restyle; it was also BACKLOG's #35 item). Now honest: reads `isSupabaseConfigured`, renders "Cloud sync — Not configured — data stays on this device" when unset, matching the Gemini row's pattern.
+
+**Integrator notes worth keeping:** lineHeight numeric literals (18/22) match pre-existing repo practice — no lineHeight token exists (BACKLOG candidate); segmented control / Rise entrance / MiniSwitch are duplicated file-locally because builders couldn't share new files — hoisting to components/ is backlogged; deliberate design divergences flagged for owner review: leads rows dropped the per-row Convert button (flow lives in lead detail now) and the Source meta line; tab labels use fontSize.caption (11) not the spec's 10 (no 10pt token — Drift #11 wins).
+
+**Verification by hand:** typecheck clean, lint clean, web export green, single-file bundle boots and navigates under artifact conditions, before/after galleries captured. Artifact republished at the same URL. **Nothing was run on a device** — animations (springs, segmented thumbs, card stack) are the least web-verifiable part of this wave; the device pass gains a "does motion feel iOS" item.
+
+**Files touched:** 37 modified (see git show), `PROMPT_LOG.md`, `BACKLOG.md`.
