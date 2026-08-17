@@ -20,6 +20,9 @@ entry does not count as tracked.
 
 ## Soon (from the 2026-08-16 Drive synthesis — after Now clears)
 
+- [ ] **See the weather hero with a real key** — `EXPO_PUBLIC_GOOGLE_WEATHER_API_KEY` (or the shared Maps key) is absent in the build container, so the Home hero correctly collapses to "Weather not available" and the preview undersells the wave's headline feature. Verify the full radar hero + storm escalation on a device with a key — #53
+- [ ] Add `components/ui/index.ts` barrel — the six primitives must currently be imported by exact path — #53
+- [ ] react-native-web logs a one-time `"shadow*" style props are deprecated, use "boxShadow"` warning now that shadows carry a `web:` branch; harmless, but worth migrating — #53
 - [ ] Hoist the duplicated UI primitives from #52 into shared components — SegmentedControl, Rise (entrance), MiniSwitch are file-local copies in leads/plan/hail-tracer/welcome/settings/inspector-profile because parallel builders couldn't create shared files; converge on `components/` versions — #52
 - [ ] Owner review of #52's deliberate design divergences: leads rows dropped the per-row Convert-to-inspection button (now only in lead detail) and the Source meta line; settings icons went textMuted; VerdictPill "Full replace" softened to accentSoft — confirm or restore — #52
 - [ ] Add a `lineHeight` scale to `theme/tokens.ts` — numeric literals (18/22) are current repo practice and predate #52 — #52
@@ -80,6 +83,8 @@ entry does not count as tracked.
 
 ## Done (most recent first)
 
+- [x] Cinematic redesign — the onboarding's own visual language (Aurora, GlassCard, radar motif) promoted into the app; gradient/depth tokens + six shared primitives; the big weather hero with SVG radar in three honest states; crafted content across Home/Leads/Job/Map/Plan/Train/Settings; royal=interactive, burnt=urgency — closed by #53
+- [x] App/onboarding congruence — the app and its onboarding now read as the same product — closed by #53 (owner's explicit complaint)
 - [x] iOS × Instagram UI redesign — grouped ground, one-orange-moment discipline, edge-to-edge tab bar, iOS-17 segmented controls, spring motion layer, density pass (Get-set-up checklist, no zero-state voids), greeting bug dead; screenshot-verified by a visual auditor — closed by #52
 - [x] Settings "backend: not configured / connected" indicator — Cloud sync row now reads `isSupabaseConfigured` honestly (was hardcoded "Connected") — closed by #52 (was #35)
 - [x] 19-area slope/subject tagging + Single-Shingle vs 10×10-Square capture modes with separately aggregated counts (`AREA_TAGS`, `captureSession.ts`, `Slope.squareHitCount`/`singleShingleHitCount`) — closed by #51

@@ -43,6 +43,7 @@ import {
   fontSize,
   fontWeight,
   glass,
+  gradients,
   motion,
   radii,
   shadows,

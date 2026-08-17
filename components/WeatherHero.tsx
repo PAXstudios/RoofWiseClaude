@@ -78,6 +78,7 @@ import { leadsInStormCluster, type StormLeadCluster } from '@/lib/services/storm
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
+import { isWeatherConfigured } from '@/lib/env';
 import type { Lead, StormAlert } from '@/lib/models/types';
 import { PulseRing } from '@/components/motion';
 import { RadarArt, type RadarCell, type RadarTone } from '@/components/weather/RadarArt';
@@ -167,6 +168,14 @@ export function WeatherHero({ style }: { style?: StyleProp<ViewStyle> }) {
 
   useEffect(() => {
     let cancelled = false;
+    // No weather key means no forecast is possible, and we know that before any
+    // I/O. Say so immediately rather than burning the pending window — and,
+    // more importantly, never prompt a roofer for location access the app
+    // cannot act on.
+    if (!isWeatherConfigured) {
+      setPhase({ kind: 'unavailable', reason: 'service' });
+      return;
+    }
     // Fall through to the compact "not available" cell if the round-trip
     // hasn't settled in time. `setPhase` is idempotent here: whichever of the
     // two paths lands first wins, and a late-granted permission still

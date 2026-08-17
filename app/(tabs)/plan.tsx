@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
   dayHero: {
     borderRadius: radii.xl,
     overflow: 'hidden',
-    padding: spacing.xl,
+    padding: spacing.lg,
     gap: spacing.xs,
     // Painted under the gradient so the card is never briefly transparent.
     backgroundColor: brand.royalInk,
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: glass.smokeBorder,
-    padding: spacing.md,
+    padding: spacing.sm,
     gap: spacing.sm,
   },
   statReadout: { gap: 2 },
@@ -621,7 +621,8 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     color: colors.brandSoft,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    // 0.3 rather than 0.5: at three-across, "INSPECTIONS" broke mid-word.
+    letterSpacing: 0.3,
   },
 
   // iOS-17 segmented control.

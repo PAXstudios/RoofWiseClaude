@@ -2238,3 +2238,31 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Verification by hand:** typecheck clean, lint clean, web export green, single-file bundle boots and navigates under artifact conditions, before/after galleries captured. Artifact republished at the same URL. **Nothing was run on a device** — animations (springs, segmented thumbs, card stack) are the least web-verifiable part of this wave; the device pass gains a "does motion feel iOS" item.
 
 **Files touched:** 37 modified (see git show), `PROMPT_LOG.md`, `BACKLOG.md`.
+
+---
+
+### [2026-08-17] #53 — Cinematic redesign: the onboarding's visual language promoted into the app, weather hero, crafted content
+
+**Prompt:**
+> "So this is correct but I really don't like it. It's too plain. A previous design is attached. Keep the same layout we have but use this attached as inspiration. Also I do want the front page to have a big weather thing like the attached. But you gotta definitely make this look like an award winning apple app. It needs to feel and look like a modern app. Right now it looks like an Apple menu in settings. Not good. I like the onboarding hi. That branding and style needs to be incorporated bc right now the app isn't congruent with the onboarding."
+> Follow-up: "This is using way too many tokens. Can I use sonnet for this redesign?"
+
+**The diagnosis.** #52 fixed "looks like AI" by running at iOS **Settings** — the most utilitarian, least expressive pattern Apple ships. Correct and boring. The owner's second point was the sharper one: `app/onboarding.tsx` is the best surface in the product, and **its design system already existed as unused components** — `components/glass/{Aurora,GlassCard}.tsx` and the radar art in `components/onboarding/scenes.tsx`. The app imported none of them. The fix was promoting a system already owned, not inventing one. Also corrected a factual error in #52's spec: `expo-blur`, `expo-linear-gradient`, `react-native-svg`, and `expo-image` are ALL installed — #52 told its agents blur was unavailable, which is part of why everything came out flat.
+
+**Direction — "cinematic hero, crafted content"** (`scratchpad/design-spec-v2.md`): each screen opens with one deep branded moment in the onboarding's language, then flows into content that is *crafted* (colored icon chips, big tabular numbers, progress bars, real imagery, data-viz) rather than plain. Accent hierarchy restored with intent: **royal = primary interactive** (FAB, buttons, links — matching the owner's reference), **burnt = urgency and capture** (storm, Quick Inspection).
+
+**Two principled calls, surfaced to the owner rather than made silently:**
+1. **No stock photography.** The reference leans on stock for the storm hero and job cards. We have none licensed, and faking field photos in a product whose entire pitch is evidentiary integrity is a bad trade. Hero imagery is *drawn* (layered gradients + SVG radar, reusing the onboarding motif); job cards use the user's own inspection photos.
+2. **The weather hero always renders; the storm ALERT still does not.** Drift #4 forbids a stale storm hero. Resolution: live weather always (real data), escalating to alert treatment only with a real active alert, collapsing to a compact "Weather not available" cell when unreachable. The owner gets the big weather thing; the app never invents a storm.
+
+**Model split (owner's token concern).** Caught at 0.2MB spent, stopped and relaunched: the five screen builders + build verifier on **Sonnet** (~65% of a wave's tokens, and the spec was detailed enough that their work was mechanical); foundation, the weather hero (design invention), integration, visual audit, and fixes stayed on the stronger model.
+
+**What shipped:** gradient token sets + `shadows.hero/raised` + contrast-checked tile grounds (every pair WCAG-verified 5.5–8.4:1); `GlassCard` extended with `onArt`/`glow` so glass stays legible over gradients; six new primitives (`IconChip`, `StatCard`, `RichCard`, `SectionHeader`, `ProgressBar`, `Pill`); `WeatherHero` + `RadarArt`; and crafted passes over Home, Leads, Job detail, Map/Plan/Train, and Settings.
+
+**Verification — the visual auditor earned its keep.** Build-boot passed with ZERO findings. The visual auditor filed **9**, and was appropriately brutal: *"Home has no weather hero and no cinematic moment of any kind"*, *"Congruence failure — the owner's explicit complaint is unresolved"*, *"Plan is the purest 'Apple Settings menu' screen in the app"*. All 9 fixed, plus one the fix agent found itself. Highlights: WeatherHero's `pending` phase never terminated so Home rendered an empty hero slot; the disabled sticky CTA measured **1.9:1 contrast** while looking like a live button; Leads' hero was gated on `leads.length > 0` so it was missing in exactly the state a new user opens it in; and Settings' AI Calibration group asserted a healthy synced state for a backend that does not exist — contradicting its own Integrations row.
+
+**Caught by hand after the workflow:** the weather hero burned a 4s pending window and prompted for GPS even with no weather key configured. Added `isWeatherConfigured` to `lib/env.ts` and short-circuited — it now says "Weather not available" immediately and never asks a roofer for location access the app cannot act on. Also removed a dead `RichCard` import a Sonnet builder left in `leads.tsx` (the only lint casualty of the model switch).
+
+**Verification by hand:** typecheck clean, lint clean, web export green, single-file bundle boots and navigates under artifact conditions, gallery captured, artifact republished at the same URL. **Preview caveat:** with no weather key in the build container the hero collapses to its honest fallback, so the preview *undersells* the headline feature — on a device with a key it renders the full radar hero. **Nothing was run on a device.**
+
+**Files touched:** 40 modified/new (see git show), `PROMPT_LOG.md`, `BACKLOG.md`.

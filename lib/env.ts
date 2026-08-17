@@ -57,3 +57,4 @@ export const isGeminiConfigured = env.GEMINI_API_KEY.length > 0;
 export const isGoogleMapsConfigured = env.GOOGLE_MAPS_API_KEY.length > 0;
 export const isGooglePlacesConfigured = env.GOOGLE_PLACES_API_KEY.length > 0;
 export const isGoogleSolarConfigured = env.GOOGLE_SOLAR_API_KEY.length > 0;
+export const isWeatherConfigured = env.GOOGLE_WEATHER_API_KEY.length > 0;
