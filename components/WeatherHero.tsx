@@ -2,9 +2,17 @@
  * WeatherHero — the Home screen's one cinematic moment.
  *
  * A ~224pt hero card in the onboarding's visual language (brand gradient
- * ground + the radar motif + frosted chips), sitting first under the greeting.
- * It reads its own stores and services and picks its own state, so Home mounts
- * `<WeatherHero />` and never branches.
+ * ground + a drifting aurora + the radar motif + frosted chips), sitting first
+ * under the greeting. It reads its own stores and services and picks its own
+ * state, so Home mounts `<WeatherHero />` and never branches.
+ *
+ * ── THE GOVERNING RULE ────────────────────────────────────────────────────
+ * Missing data changes the TEXT, never the DESIGN. The gradient, the aurora,
+ * the radar and the card's full height are DECORATION — they render in every
+ * state, including the one where the app has no weather at all. What changes
+ * between states is the copy layer and, honestly, only the copy layer. The
+ * card never collapses to a one-line cell, and it never fabricates a
+ * temperature, a storm or a count (Drift #5).
  *
  * ── THE THREE HONEST STATES ───────────────────────────────────────────────
  *
@@ -20,33 +28,39 @@
  *
  *  B. NO ALERT, WEATHER AVAILABLE
  *     Calm hero: `gradients.clearDay` by day / `gradients.stormNight` after
- *     dark, big light-weight temperature, the condition, feels-like, and only
- *     the wind / gust / rain figures the API actually reported. A HAAG §7
- *     roof-work safety chip appears when the forecast carried enough real
- *     readings to rate. A quiet "Storm Watch is scanning <area>" footer
- *     appears only when a service area exists. The radar runs as an ambient
- *     ring-and-sweep pattern with NO cells — there is no storm to draw.
+ *     dark, big light-weight temperature that counts up on first resolve, the
+ *     condition, feels-like, and only the wind / gust / rain figures the API
+ *     actually reported. A HAAG §7 roof-work safety chip appears when the
+ *     forecast carried enough real readings to rate. A quiet "Storm Watch is
+ *     scanning <area>" footer appears only when a service area exists. The
+ *     radar runs as an ambient ring-and-sweep pattern with NO cells — there is
+ *     no storm to draw, and the art is never presented as radar returns.
  *
- *  C. WEATHER UNAVAILABLE / NOT CONFIGURED
- *     A compact one-line cell ("Weather not available" / "Weather needs
- *     location access"). Never a hero-sized placeholder.
+ *  C. WEATHER UNAVAILABLE (no key / permission denied / service unreachable)
+ *     The SAME full-height cinematic frame — same gradient, same aurora, same
+ *     animated radar at `tone="idle"` — carrying a "Weather not available"
+ *     headline, ONE honest sub-line naming the actual cause, and a 56pt route
+ *     to the fix (Settings, the OS permission prompt, or a retry). No number
+ *     is shown anywhere: not a dash standing in for a temperature, not a
+ *     count. This is the state a keyless build sits in permanently, so it is
+ *     designed as a destination, not as a failure — and it is SETTLED: no
+ *     spinner, no shimmer, nothing that reads as "still loading".
  *
  *  (+ a fourth, BOUNDED state: while the location + weather round-trip is
- *   still in flight the module renders the branded hero frame — gradient
- *   ground + radar — with a plain "Checking conditions" line where the
- *   reading will land. It never renders nothing: Home's cinematic moment is
- *   this card, and an absent card leaves the greeting sitting straight on the
- *   stat row. It also never pends forever: a permission prompt the user
- *   walks away from used to hang here indefinitely, so the round-trip is
- *   capped at `PENDING_TIMEOUT_MS` and falls through to state C. Nothing is
- *   synthesized in the meantime — the frame carries no numbers at all.)
+ *   still in flight the module renders the same frame with a plain "Checking
+ *   conditions" line where the reading will land. It never pends forever —
+ *   a permission prompt the user walks away from used to hang here
+ *   indefinitely, so the round-trip is capped at `PENDING_TIMEOUT_MS` and
+ *   falls through to state C with the cause we were actually waiting on.)
  *
  * Drift #4 holds: the storm-alert TREATMENT appears only with a genuine
- * active alert. State B is live weather, not a stale alert placeholder.
+ * active alert. States B and C are weather modules, not alert placeholders.
  */
 
-import { useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import {
+  Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -59,9 +73,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import Animated, {
+  Extrapolation,
+  interpolate,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { FOCUS_STORM_LEADS } from '@/app/(tabs)/map';
 import {
@@ -80,8 +98,15 @@ import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { isWeatherConfigured } from '@/lib/env';
 import type { Lead, StormAlert } from '@/lib/models/types';
-import { PulseRing } from '@/components/motion';
-import { RadarArt, type RadarCell, type RadarTone } from '@/components/weather/RadarArt';
+import { AnimatedCounter, PulseRing } from '@/components/motion';
+import {
+  AuroraWash,
+  PrecipVeil,
+  RadarArt,
+  type PrecipKind,
+  type RadarCell,
+  type RadarTone,
+} from '@/components/weather/RadarArt';
 import type { IoniconName } from '@/components/ui/IconChip';
 import {
   brand,
@@ -106,8 +131,8 @@ const PRESSED_SCALE = 0.985;
 /**
  * Cap on the location + weather round-trip. An unanswered OS permission
  * prompt never settles its promise, so without this the module sits in
- * `pending` for the life of the session and Home opens on an empty hero slot.
- * Four seconds is past a normal cold fetch and short of "is this broken?".
+ * `pending` for the life of the session. Four seconds is past a normal cold
+ * fetch and short of "is this broken?".
  */
 const PENDING_TIMEOUT_MS = 4000;
 
@@ -117,12 +142,23 @@ const GROUND_END = { x: 1, y: 1 } as const;
 const SCRIM_START = { x: 0, y: 0.25 } as const;
 const SCRIM_END = { x: 0, y: 1 } as const;
 
+/** Scroll range and travel for the in-card art parallax (see `scrollY`). */
+const PARALLAX_IN: number[] = [-120, 0, 260];
+const PARALLAX_OUT: number[] = [22, 0, -30];
+
 /**
  * The hero's display number. Derived from the type ramp rather than typed as
  * a literal (Drift #11): the temperature is the largest thing on the screen
  * by design, two steps past `display`.
  */
 const TEMP_SIZE = fontSize.display * 2;
+/**
+ * State C's glyph sits in the temperature's slot. The badge takes the display
+ * number's footprint so the composition is identical across states; the glyph
+ * inside is sized off the same ramp value rather than a literal (Drift #11).
+ */
+const GLYPH_BADGE = TEMP_SIZE;
+const GLYPH_SIZE = Math.round(TEMP_SIZE * 0.5);
 
 /**
  * HAAG §7 go/no-go chip, over a dark hero.
@@ -138,18 +174,86 @@ const SAFETY_CHIP: Record<SafetyRating, { bg: string; ink: string; icon: Ionicon
   UNSAFE: { bg: colors.danger, ink: colors.textInverse, icon: 'warning' },
 };
 
+/**
+ * Why there is no reading. Each maps to exactly ONE honest sub-line and ONE
+ * route to the fix — the difference between "this app is broken" and "this
+ * app is telling me what it needs".
+ */
+type UnavailableReason = 'no-key' | 'permission' | 'no-fix' | 'unreachable';
+
+const UNAVAILABLE_COPY: Record<
+  UnavailableReason,
+  {
+    cause: string;
+    cta: string;
+    glyph: IoniconName;
+    ctaIcon: IoniconName;
+    /** The fix is another attempt here, not a trip somewhere else. */
+    retry: boolean;
+  }
+> = {
+  'no-key': {
+    cause: 'No weather API key in this build',
+    cta: 'Add a weather key in Settings',
+    glyph: 'key-outline',
+    ctaIcon: 'settings-outline',
+    retry: false,
+  },
+  permission: {
+    cause: 'Location access is off',
+    cta: 'Turn on location access',
+    glyph: 'location-outline',
+    ctaIcon: 'navigate-outline',
+    retry: false,
+  },
+  'no-fix': {
+    cause: 'No location fix on this device yet',
+    cta: 'Try again',
+    glyph: 'navigate-circle-outline',
+    ctaIcon: 'refresh',
+    retry: true,
+  },
+  unreachable: {
+    cause: 'The weather service did not respond',
+    cta: 'Try again',
+    glyph: 'cloud-offline-outline',
+    ctaIcon: 'refresh',
+    retry: true,
+  },
+};
+
 type WeatherPhase =
   | { kind: 'pending' }
   | { kind: 'ready'; weather: CurrentWeather }
-  | { kind: 'unavailable'; reason: 'permission' | 'service' };
+  | { kind: 'unavailable'; reason: UnavailableReason };
 
-export function WeatherHero({ style }: { style?: StyleProp<ViewStyle> }) {
+type Props = {
+  style?: StyleProp<ViewStyle>;
+  /**
+   * Optional scroll offset from the host screen. When supplied, the ART layer
+   * inside the card lags the card itself — a few points of differential
+   * parallax, the Apple-Weather header feel. Absent (or under Reduce Motion)
+   * the art simply sits still; the hero never depends on it.
+   */
+  scrollY?: SharedValue<number>;
+};
+
+export function WeatherHero({ style, scrollY }: Props) {
   const router = useRouter();
   const alerts = useStormAlertStore((s) => s.alerts);
   const dismissAlert = useStormAlertStore((s) => s.dismiss);
   const leads = useLeadStore((s) => s.leads);
   const areas = useServiceAreaStore((s) => s.areas);
-  const [phase, setPhase] = useState<WeatherPhase>({ kind: 'pending' });
+  // A keyless build knows its answer before the first paint, so state C is the
+  // FIRST thing that renders rather than a frame of "Checking conditions".
+  const [phase, setPhase] = useState<WeatherPhase>(() =>
+    isWeatherConfigured ? { kind: 'pending' } : { kind: 'unavailable', reason: 'no-key' },
+  );
+  // Which leg of the round-trip we are on, so a timeout or a thrown error can
+  // name the cause it was actually blocked by instead of guessing. Each leg
+  // maps to exactly one true sentence in `UNAVAILABLE_COPY`.
+  const legRef = useRef<'permission' | 'fix' | 'fetch'>('permission');
+  const cancelRef = useRef(false);
 
   const activeAlert = useMemo(() => alerts.find((a) => a.status === 'new'), [alerts]);
 
@@ -166,59 +270,103 @@ export function WeatherHero({ style }: { style?: StyleProp<ViewStyle> }) {
     [activeAlert, cluster, leads],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    // No weather key means no forecast is possible, and we know that before any
-    // I/O. Say so immediately rather than burning the pending window — and,
-    // more importantly, never prompt a roofer for location access the app
-    // cannot act on.
+  const resolve = useCallback(async () => {
+    // No weather key means no forecast is possible, and we know that before
+    // any I/O. Say so immediately rather than burning the pending window —
+    // and, more importantly, never prompt a roofer for location access the
+    // app cannot act on.
     if (!isWeatherConfigured) {
-      setPhase({ kind: 'unavailable', reason: 'service' });
+      setPhase((p) =>
+        p.kind === 'unavailable' && p.reason === 'no-key'
+          ? p
+          : { kind: 'unavailable', reason: 'no-key' },
+      );
       return;
     }
-    // Fall through to the compact "not available" cell if the round-trip
-    // hasn't settled in time. `setPhase` is idempotent here: whichever of the
-    // two paths lands first wins, and a late-granted permission still
-    // upgrades the card when its fetch resolves.
+    setPhase({ kind: 'pending' });
+    legRef.current = 'permission';
+    // Fall through to state C if the round-trip hasn't settled in time.
+    // `setPhase` is idempotent here: whichever path lands first wins, and a
+    // late-granted permission still upgrades the card when its fetch resolves.
     const timeout = setTimeout(() => {
-      if (!cancelled) {
-        setPhase((p) => (p.kind === 'pending' ? { kind: 'unavailable', reason: 'service' } : p));
-      }
+      if (cancelRef.current) return;
+      setPhase((p) => (p.kind === 'pending' ? { kind: 'unavailable', reason: legReason() } : p));
     }, PENDING_TIMEOUT_MS);
-    (async () => {
-      try {
-        const perm = await Location.getForegroundPermissionsAsync();
-        if (cancelled) return;
-        if (perm.status !== 'granted') {
-          const req = await Location.requestForegroundPermissionsAsync();
-          if (cancelled) return;
-          // A prompt the user never answers never resolves — we stay in
-          // `pending` and render nothing rather than a forever-skeleton.
-          if (req.status !== 'granted') {
-            setPhase({ kind: 'unavailable', reason: 'permission' });
-            return;
-          }
+
+    try {
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (cancelRef.current) return;
+      if (perm.status !== 'granted') {
+        const req = await Location.requestForegroundPermissionsAsync();
+        if (cancelRef.current) return;
+        if (req.status !== 'granted') {
+          setPhase({ kind: 'unavailable', reason: 'permission' });
+          return;
         }
-        const pos = await Location.getCurrentPositionAsync({});
-        if (cancelled) return;
-        const weather = await fetchCurrentWeather({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
-        if (!cancelled) setPhase({ kind: 'ready', weather });
-      } catch {
-        // Missing key, unreachable service, no fix — all the same to the UI:
-        // say so plainly, never synthesize a forecast (Drift #5).
-        if (!cancelled) setPhase({ kind: 'unavailable', reason: 'service' });
       }
-    })();
-    return () => {
-      cancelled = true;
+      legRef.current = 'fix';
+      const pos = await Location.getCurrentPositionAsync({});
+      if (cancelRef.current) return;
+      legRef.current = 'fetch';
+      const weather = await fetchCurrentWeather({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+      });
+      if (!cancelRef.current) setPhase({ kind: 'ready', weather });
+    } catch {
+      // A missing key is already handled above, so anything landing here is a
+      // location the device could not give us or a service that did not answer
+      // — and the leg says which. Never synthesize a forecast (Drift #5).
+      if (!cancelRef.current) setPhase({ kind: 'unavailable', reason: legReason() });
+    } finally {
       clearTimeout(timeout);
-    };
+    }
+
+    function legReason(): UnavailableReason {
+      if (legRef.current === 'permission') return 'permission';
+      return legRef.current === 'fix' ? 'no-fix' : 'unreachable';
+    }
   }, []);
 
+  useEffect(() => {
+    cancelRef.current = false;
+    resolve();
+    return () => {
+      cancelRef.current = true;
+    };
+  }, [resolve]);
+
+  /** State C's fix button. Each reason gets the action that actually helps. */
+  const repair = useCallback(
+    async (reason: UnavailableReason) => {
+      if (reason === 'no-key') {
+        router.push('/settings');
+        return;
+      }
+      if (UNAVAILABLE_COPY[reason].retry) {
+        cancelRef.current = false;
+        resolve();
+        return;
+      }
+      // Permission: ask again where the OS still allows it, otherwise hand the
+      // roofer to the one place that can grant it.
+      const perm = await Location.getForegroundPermissionsAsync().catch(() => null);
+      if (perm && perm.canAskAgain !== false) {
+        cancelRef.current = false;
+        resolve();
+        return;
+      }
+      if (Platform.OS !== 'web' && typeof Linking.openSettings === 'function') {
+        Linking.openSettings().catch(() => {});
+      } else {
+        router.push('/settings');
+      }
+    },
+    [resolve, router],
+  );
+
   const weather = phase.kind === 'ready' ? phase.weather : null;
+  const scanning = areas.length > 0 ? scanLabel(areas) : null;
 
   // ── A · Active storm alert ─────────────────────────────────────────────
   if (activeAlert) {
@@ -253,9 +401,11 @@ export function WeatherHero({ style }: { style?: StyleProp<ViewStyle> }) {
     return (
       <HeroFrame
         style={style}
+        scrollY={scrollY}
         ground={gradients.stormSevere}
         tone="severe"
         cells={cells}
+        precip={precipVeil(weather, activeAlert)}
         footer={footer}
         onPress={openAlert}
         onDismiss={() => dismissAlert(alertId)}
@@ -307,13 +457,14 @@ export function WeatherHero({ style }: { style?: StyleProp<ViewStyle> }) {
   if (weather) {
     const safety = hasSafetySignal(weather.safety) ? evaluateSafety(weather.safety) : null;
     const conditions = conditionsLine(weather);
-    const scanning = areas.length > 0 ? scanLabel(areas) : null;
 
     return (
       <HeroFrame
         style={style}
+        scrollY={scrollY}
         ground={weather.isDaytime ? gradients.clearDay : gradients.stormNight}
         tone="calm"
+        precip={precipVeil(weather)}
         footer={
           scanning
             ? { icon: 'radio-outline', label: `Storm Watch is scanning ${scanning}` }
@@ -381,25 +532,86 @@ export function WeatherHero({ style }: { style?: StyleProp<ViewStyle> }) {
     );
   }
 
-  // ── C · Unavailable — one compact line, never a hero-sized void ─────────
+  // ── C · Unavailable — the SAME hero, an honest cause, a route to the fix ─
   if (phase.kind === 'unavailable') {
-    const label =
-      phase.reason === 'permission' ? 'Weather needs location access' : 'Weather not available';
+    const copy = UNAVAILABLE_COPY[phase.reason];
+    const reason = phase.reason;
+
     return (
-      <View style={[styles.compact, style]} accessibilityRole="text" accessibilityLabel={label}>
-        <Ionicons name="cloud-offline-outline" size={20} color={colors.textInverse} />
-        <Text style={styles.compactText}>{label}</Text>
-      </View>
+      <HeroFrame
+        style={style}
+        scrollY={scrollY}
+        // Night sky rather than the day blue: this state is settled and quiet,
+        // and it must never be mistaken for a live reading (Drift #4).
+        ground={gradients.stormNight}
+        tone="idle"
+        footer={{
+          icon: copy.ctaIcon,
+          label: copy.cta,
+          // A chevron promises navigation; a retry stays right here.
+          chevron: !copy.retry,
+          onPress: () => {
+            repair(reason);
+          },
+        }}
+        onPress={() => {
+          repair(reason);
+        }}
+        accessibilityLabel={[
+          'Weather not available',
+          copy.cause,
+          scanning ? `Storm Watch is scanning ${scanning}` : '',
+          copy.cta,
+        ]
+          .filter(Boolean)
+          .join('. ')}
+      >
+        <View style={styles.flagRow}>
+          <View style={styles.nowChip}>
+            <Ionicons name="cloud-offline-outline" size={13} color={colors.textInverse} />
+            <Text style={styles.nowChipText}>WEATHER</Text>
+          </View>
+        </View>
+
+        <View style={styles.readingBlock}>
+          <View style={styles.readingRow}>
+            {/* The temperature's slot, holding a glyph instead. No number is
+                shown in this state — not even a dash standing in for one. */}
+            <View style={styles.glyphSlot}>
+              <Ionicons name={copy.glyph} size={GLYPH_SIZE} color={colors.brandSoft} />
+            </View>
+            <View style={styles.readingMeta}>
+              <Text style={[styles.title, styles.titleTight]} numberOfLines={2}>
+                Weather not available
+              </Text>
+              {/* Exactly one line naming the real cause — never a generic
+                  "something went wrong", never a guess. */}
+              <Text style={styles.metaPrimary} numberOfLines={2}>
+                {copy.cause}
+              </Text>
+              {/* Storm Watch runs on NOAA, which needs no key — so when a
+                  service area exists this stays true even with no forecast.
+                  Omitted entirely when there is no area to name. */}
+              {scanning && (
+                <Text style={styles.metaSecondary} numberOfLines={1}>
+                  Storm Watch is scanning {scanning}
+                </Text>
+              )}
+            </View>
+          </View>
+        </View>
+      </HeroFrame>
     );
   }
 
   // ── D · Still resolving — the branded frame, no numbers ────────────────
-  // Bounded by PENDING_TIMEOUT_MS above, so this can't become the permanent
-  // skeleton that #52 fixed. It carries no readings at all: the art and the
-  // gradient are the card, and the copy simply says what it's doing.
+  // Bounded by PENDING_TIMEOUT_MS above, so this can't become a permanent
+  // skeleton. It carries no readings at all: the art and the gradient are the
+  // card, and the copy simply says what it's doing.
   return (
     <HeroFrame
       style={style}
+      scrollY={scrollY}
       ground={gradients.stormNight}
       tone="calm"
       footer={null}
@@ -427,37 +639,75 @@ type FooterSpec = {
   label: string;
   onPress?: () => void;
   accessibilityLabel?: string;
+  /** Chevron reads "this navigates". Off for in-place actions like a retry. */
+  chevron?: boolean;
 };
 
 type FrameProps = PropsWithChildren<{
   ground: GradientStops;
   tone: RadarTone;
   cells?: readonly RadarCell[];
+  precip?: { kind: PrecipKind; intensity: number } | null;
   footer: FooterSpec | null;
   onPress?: () => void;
   onDismiss?: () => void;
   accessibilityLabel: string;
   style?: StyleProp<ViewStyle>;
+  scrollY?: SharedValue<number>;
 }>;
 
 /**
- * Gradient ground → radar art → scrim → copy. The press targets (body,
- * footer, dismiss) are SIBLINGS rather than nested pressables, and they share
- * one spring so the whole card compresses no matter which one you hit.
+ * Gradient ground → aurora wash → radar art → precipitation → scrim → copy.
+ *
+ * Every layer above the copy is decoration and renders in every state; only
+ * `cells` and `precip` are data-gated, and their callers gate them on real
+ * readings. The press targets (body, footer, dismiss) are SIBLINGS rather than
+ * nested pressables, and they share one spring so the whole card compresses no
+ * matter which one you hit.
  */
 function HeroFrame({
   ground,
   tone,
   cells,
+  precip,
   footer,
   onPress,
   onDismiss,
   accessibilityLabel,
   style,
+  scrollY,
   children,
 }: FrameProps) {
+  const reduced = useReducedMotion();
   const scale = useSharedValue(1);
-  const shellStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const enter = useSharedValue(reduced ? 1 : 0);
+
+  useEffect(() => {
+    enter.value = reduced ? 1 : withSpring(1, motion.gentle);
+  }, [enter, reduced]);
+
+  // Entrance spring and press spring compose into one transform so a press
+  // during the entrance doesn't fight it.
+  const shellStyle = useAnimatedStyle(() => ({
+    opacity: enter.value,
+    transform: [
+      { translateY: (1 - enter.value) * spacing.md },
+      { scale: scale.value * (0.96 + enter.value * 0.04) },
+    ],
+  }));
+
+  // Differential parallax on the art layer only — the host screen may already
+  // be moving the whole card, and two identical translations read as lag.
+  const artStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateY:
+          scrollY && !reduced
+            ? interpolate(scrollY.value, PARALLAX_IN, PARALLAX_OUT, Extrapolation.CLAMP)
+            : 0,
+      },
+    ],
+  }));
 
   const press = {
     onPressIn: () => {
@@ -479,7 +729,15 @@ function HeroFrame({
           end={GROUND_END}
           style={StyleSheet.absoluteFill}
         />
-        <RadarArt size={ART_SIZE} cells={cells} tone={tone} style={styles.art} />
+        {/* Drifting brand light behind the art — the onboarding sky, sized to
+            this card. Decoration, so it renders in every state. */}
+        <AuroraWash tone={tone} />
+        <Animated.View style={[StyleSheet.absoluteFill, artStyle]} pointerEvents="none">
+          <RadarArt size={ART_SIZE} cells={cells} tone={tone} style={styles.art} />
+        </Animated.View>
+        {precip && (
+          <PrecipVeil kind={precip.kind} intensity={precip.intensity} height={HERO_HEIGHT} />
+        )}
         {/* Legibility scrim over the copy only — the footer band carries its
             own weighted fill, so stacking both would read as a black bar. */}
         <LinearGradient
@@ -519,7 +777,9 @@ function HeroFrame({
               <Text style={styles.footerText} numberOfLines={1}>
                 {footer.label}
               </Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.textInverse} />
+              {footer.chevron !== false && (
+                <Ionicons name="chevron-forward" size={18} color={colors.textInverse} />
+              )}
             </Pressable>
           ) : (
             <View style={styles.footer}>
@@ -545,11 +805,16 @@ function HeroFrame({
   );
 }
 
-/** The one display number. Capped scaling so 68pt cannot break the card. */
+/**
+ * The one display number, rolling up on first resolve. Capped scaling so 68pt
+ * cannot break the card; held static under Reduce Motion, where a number that
+ * animates is exactly the thing the setting is asking us not to do.
+ */
 function BigTemp({ value }: { value: number }) {
+  const reduced = useReducedMotion();
   return (
     <Text style={styles.temp} maxFontSizeMultiplier={1.2}>
-      {value}
+      {reduced ? value : <AnimatedCounter value={value} style={styles.temp} />}
       <Text style={styles.tempUnit}>°</Text>
     </Text>
   );
@@ -559,6 +824,37 @@ function BigTemp({ value }: { value: number }) {
 
 /** Even decorative spread — see the RadarArt honesty note on `angle`. */
 const GOLDEN_ANGLE = 137.5;
+
+/**
+ * Should the hero show falling precipitation, and of what kind?
+ *
+ * Streaks are decoration, but "it is raining" is a CLAIM, so this returns null
+ * unless the weather response carried a reading that says so: measurable
+ * precipitation on the ground (`qpf > 0` → `precipitation_expected`) or an
+ * active thunderstorm. A percentage chance alone is not precipitation, and a
+ * storm ALERT alone is not either — an alert can fire hours after the storm
+ * passed, and drawing hail over a clear sky would be a synthesized forecast
+ * (Drift #5). The alert only chooses the KIND once real precipitation is
+ * already reported: a live hail event makes those streaks hail.
+ *
+ * `intensity` is visual density only — never a stated number.
+ */
+function precipVeil(
+  weather: CurrentWeather | null,
+  alert?: StormAlert,
+): { kind: PrecipKind; intensity: number } | null {
+  if (!weather) return null;
+  const measured = weather.safety.precipitation_expected === true;
+  const thunder = weather.safety.thunderstorm_watch === true;
+  if (!measured && !thunder) return null;
+
+  const hailing = measured && alert !== undefined && alert.eventKind !== 'wind';
+  const chance = weather.precipChancePercent;
+  return {
+    kind: hailing ? 'hail' : 'rain',
+    intensity: chance !== undefined ? clamp(chance / 100, 0.2, 1) : 0.5,
+  };
+}
 
 /**
  * Radar cells for a live alert.
@@ -673,6 +969,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     // Painted under the gradient so the card is never briefly transparent.
     backgroundColor: brand.royalInk,
+    // A glass rim. Home mounts this hero INSIDE its own `stormNight` block, so
+    // on the night grounds (state C, state B after dark) the card would
+    // otherwise dissolve into the block behind it and stop reading as an
+    // object. The rim costs nothing on the bright grounds and saves the dark.
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: glass.borderStrong,
   },
   art: { position: 'absolute', top: -ART_SIZE * 0.2, right: -ART_SIZE * 0.24 },
   scrimAboveFooter: { bottom: touchTarget.standard },
@@ -761,6 +1063,21 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.regular,
     color: colors.textInverse,
   },
+  /**
+   * The temperature's footprint, holding state C's glyph instead — a frosted
+   * disc so the slot reads as a composed element rather than as the hole
+   * where a number failed to load.
+   */
+  glyphSlot: {
+    width: GLYPH_BADGE,
+    height: GLYPH_BADGE,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: glass.smokeFill,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: glass.smokeBorder,
+  },
   readingMeta: { flex: 1, paddingBottom: spacing.sm, gap: 2 },
   metaPrimary: {
     fontSize: fontSize.bodyMd,
@@ -768,6 +1085,8 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
   },
   titleAlone: { fontSize: fontSize.titleXl },
+  /** Headline sitting inside the meta column — tighter than the display slot. */
+  titleTight: { fontSize: fontSize.titleMd, marginBottom: spacing.xs },
   metaSecondary: { fontSize: fontSize.bodySm, color: colors.brandSoft },
   /** Warm secondary for the burnt hero — 5.3:1 on `stormSevere`. */
   metaSecondaryWarm: { color: colors.accentSoft },
@@ -800,26 +1119,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
-  },
-
-  // Compact cell, weighted for the DARK hero ground it sits on in Home's
-  // header block — a white card there would read as a broken hero rather
-  // than a quiet line.
-  compact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: touchTarget.standard,
-    backgroundColor: glass.smokeFill,
-    borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.smokeBorder,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  compactText: {
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.textInverse,
   },
 });

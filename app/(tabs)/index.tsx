@@ -27,8 +27,7 @@ import { useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { syncLeads } from '@/lib/services/leadSync';
 import { syncCorrections } from '@/lib/services/correctionsSync';
-import { checkStormWatch, leadsInStormCluster } from '@/lib/services/stormWatch';
-import { FOCUS_STORM_LEADS } from '@/app/(tabs)/map';
+import { checkStormWatch } from '@/lib/services/stormWatch';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
@@ -42,10 +41,7 @@ import { WeatherHero } from '@/components/WeatherHero';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { PressableScale } from '@/components/PressableScale';
 import { AnimatedCounter } from '@/components/motion';
-// Aliased: a bare `Map` import shadows the global Map constructor used for the
-// pipeline stage tally below.
-import { Map as AreaMap, MapPin } from '@/components/map/Map';
-import { GlassCard } from '@/components/glass/GlassCard';
+import { AreaActivityCard } from '@/components/home/AreaActivityCard';
 import { Aurora } from '@/components/glass/Aurora';
 import { IconChip, CHIP_TONES, type ChipTone } from '@/components/ui/IconChip';
 import { StatCard } from '@/components/ui/StatCard';
@@ -127,24 +123,6 @@ const STATUS_PILL_TONE: Record<InspectionStatus, PillTone> = {
   complete: 'success',
 };
 
-/** Bounding-box region around a set of coordinates, padded so every pin sits
- *  comfortably inside frame. Floors the delta so a single-lead map (or a
- *  tight cluster) doesn't zoom in past street level. */
-function regionForCoords(points: { lat: number; lng: number }[]) {
-  const lats = points.map((p) => p.lat);
-  const lngs = points.map((p) => p.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  return {
-    latitude: (minLat + maxLat) / 2,
-    longitude: (minLng + maxLng) / 2,
-    latitudeDelta: Math.max(0.06, (maxLat - minLat) * 1.6),
-    longitudeDelta: Math.max(0.06, (maxLng - minLng) * 1.6),
-  };
-}
-
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -183,38 +161,6 @@ export default function HomeScreen() {
       { scale: interpolate(scrollY.value, [-140, 0], [1.05, 1], Extrapolation.CLAMP) },
     ],
   }));
-
-  // Leads this alert's storm actually passed over. Re-derived from each lead's
-  // persisted `lastStormMatch` (Storm Watch stamps `matchedAt` with the
-  // alert's `firedAt`), so it survives a restart with no schema change.
-  // Null when nothing matched — the line is omitted rather than reading
-  // "0 leads" (Drift #5).
-  const stormCluster = useMemo(
-    () => (activeAlert ? leadsInStormCluster(leads, activeAlert) : null),
-    [leads, activeAlert],
-  );
-
-  // Real lead coordinates only — never plot an invented point (Drift #5).
-  // Backs the Area Activity map card, which is absent entirely below when
-  // this is empty.
-  const leadsWithCoords = useMemo(
-    () =>
-      leads.filter(
-        (l) =>
-          typeof l.lat === 'number' &&
-          typeof l.lng === 'number' &&
-          Number.isFinite(l.lat) &&
-          Number.isFinite(l.lng),
-      ),
-    [leads],
-  );
-  const areaMapRegion = useMemo(
-    () =>
-      leadsWithCoords.length > 0
-        ? regionForCoords(leadsWithCoords.map((l) => ({ lat: l.lat as number, lng: l.lng as number })))
-        : null,
-    [leadsWithCoords],
-  );
 
   const pipelineValue = useMemo(
     () =>
@@ -410,7 +356,7 @@ export default function HomeScreen() {
             is never an empty gap between the greeting and the stats. */}
         <Rise index={1} style={styles.heroSlot}>
           <Animated.View style={heroParallaxStyle}>
-            <WeatherHero />
+            <WeatherHero scrollY={scrollY} />
           </Animated.View>
         </Rise>
       </View>
@@ -514,90 +460,29 @@ export default function HomeScreen() {
         </RichCard>
       </Rise>
 
+      {/* Area Activity — the owner's second headline module, directly under
+          the hero CTAs so weather and map are the two things the first screen
+          is about. Always rendered: the card owns its own honest states (no
+          Maps key / no service area / no qualifying storms) and never
+          fabricates a pin or a count (Drift #5). */}
+      <Rise index={4}>
+        <AreaActivityCard />
+      </Rise>
+
       {/* Field tools — crafted cells, colour-chipped per tool. */}
-      <Rise index={4} style={styles.utilityRow}>
+      <Rise index={5} style={styles.utilityRow}>
         <UtilityCta icon="thunderstorm-outline" tone="blue" title="Hail Tracer" sub="NOAA map" onPress={() => router.push('/hail-tracer')} />
         <UtilityCta icon="calculator-outline" tone="green" title="Estimator" sub="Solar + cost" onPress={() => router.push('/estimator')} />
         <UtilityCta icon="car-outline" tone="purple" title="Mileage" sub="Tax log" onPress={() => router.push('/mileage')} />
       </Rise>
 
-      <Rise index={5} style={styles.stack}>
+      <Rise index={6} style={styles.stack}>
         <AnalysisQueueChip />
       </Rise>
 
-      <Rise index={5}>
+      <Rise index={6}>
         <AICalibrationCard />
       </Rise>
-
-      {/* Area Activity — a real map of geocoded leads, only when there are
-          any (Drift #5: absent, not empty). The storm-lead insight floats as
-          a glass overlay when this alert genuinely matched leads. */}
-      {leadsWithCoords.length > 0 && areaMapRegion && (
-        <Rise index={6}>
-          <SectionHeader
-            title="Area Activity"
-            action={{ label: 'Open map', onPress: () => router.push('/(tabs)/map' as any) }}
-            style={styles.sectionHeaderSpacing}
-          />
-          <View style={styles.mapCardShadow}>
-            <PressableScale
-              style={styles.mapCard}
-              accessibilityRole="button"
-              accessibilityLabel={`Area activity map. ${leadsWithCoords.length} lead${
-                leadsWithCoords.length === 1 ? '' : 's'
-              } mapped.${stormCluster ? ` ${stormCluster.headline}.` : ''}`}
-              onPress={() => {
-                tap();
-                router.push(
-                  stormCluster
-                    ? ({ pathname: '/(tabs)/map', params: { focus: FOCUS_STORM_LEADS } } as any)
-                    : ('/(tabs)/map' as any),
-                );
-              }}
-            >
-              {/* Decorative preview — the card's own onPress owns the tap
-                  target, so the map itself never fights the parent scroll. */}
-              <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <AreaMap
-                  initialRegion={areaMapRegion}
-                  showsUserLocation={false}
-                  showsCompass={false}
-                  style={StyleSheet.absoluteFillObject}
-                >
-                  {leadsWithCoords.map((l) => (
-                    <MapPin
-                      key={l.id}
-                      coordinate={{ latitude: l.lat as number, longitude: l.lng as number }}
-                      tone={
-                        l.lastStormMatch && activeAlert && l.lastStormMatch.matchedAt === activeAlert.firedAt
-                          ? 'orange'
-                          : 'info'
-                      }
-                    />
-                  ))}
-                </AreaMap>
-              </View>
-
-              {stormCluster ? (
-                <GlassCard onLight onArt style={styles.mapOverlay}>
-                  <View style={styles.mapOverlayRow}>
-                    <Ionicons name="thunderstorm" size={16} color={colors.accent} />
-                    <Text style={styles.mapOverlayText} numberOfLines={2}>
-                      {stormCluster.headline}
-                    </Text>
-                  </View>
-                </GlassCard>
-              ) : (
-                <View style={styles.mapFooter}>
-                  <Text style={styles.mapFooterText}>
-                    {leadsWithCoords.length} lead{leadsWithCoords.length === 1 ? '' : 's'} mapped
-                  </Text>
-                </View>
-              )}
-            </PressableScale>
-          </View>
-        </Rise>
-      )}
 
       {/* Density: with no jobs yet, the first session renders structured,
           honest setup content instead of a column of "No X yet" voids.
@@ -1096,50 +981,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodySm,
     color: colors.textMuted,
     marginTop: 2,
-  },
-
-  // Area Activity — a compact, non-interactive map preview (the card owns
-  // the tap target) with a glass insight floated over it.
-  mapCardShadow: { borderRadius: radii.card, ...shadows.raised },
-  mapCard: {
-    height: 200,
-    borderRadius: radii.card,
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceMuted,
-  },
-  mapOverlay: {
-    position: 'absolute',
-    left: spacing.md,
-    right: spacing.md,
-    bottom: spacing.md,
-  },
-  mapOverlayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  mapOverlayText: {
-    flex: 1,
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-  },
-  mapFooter: {
-    position: 'absolute',
-    left: spacing.md,
-    bottom: spacing.md,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    ...shadows.card,
-  },
-  mapFooterText: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-    fontVariant: ['tabular-nums'],
   },
 
   pipelineRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
