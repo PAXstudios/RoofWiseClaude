@@ -256,7 +256,10 @@ export function WeatherHero({ style, scrollY }: Props) {
   // name the cause it was actually blocked by instead of guessing. Each leg
   // maps to exactly one true sentence in `UNAVAILABLE_COPY`.
   const legRef = useRef<'permission' | 'fix' | 'fetch'>('permission');
-  const cancelRef = useRef(false);
+  // Per-invocation token: each resolve() takes a fresh id and every await checks
+  // it is still the latest, so an effect re-run (React 19 StrictMode / Fast
+  // Refresh) supersedes the in-flight round trip instead of un-cancelling it.
+  const runIdRef = useRef(0);
 
   const activeAlert = useMemo(() => alerts.find((a) => a.status === 'new'), [alerts]);
 
@@ -274,6 +277,8 @@ export function WeatherHero({ style, scrollY }: Props) {
   );
 
   const resolve = useCallback(async () => {
+    const run = ++runIdRef.current;
+    const stale = () => runIdRef.current !== run;
     // No weather key means no forecast is possible, and we know that before
     // any I/O. Say so immediately rather than burning the pending window —
     // and, more importantly, never prompt a roofer for location access the
@@ -292,16 +297,16 @@ export function WeatherHero({ style, scrollY }: Props) {
     // `setPhase` is idempotent here: whichever path lands first wins, and a
     // late-granted permission still upgrades the card when its fetch resolves.
     const timeout = setTimeout(() => {
-      if (cancelRef.current) return;
+      if (stale()) return;
       setPhase((p) => (p.kind === 'pending' ? { kind: 'unavailable', reason: legReason() } : p));
     }, PENDING_TIMEOUT_MS);
 
     try {
       const perm = await Location.getForegroundPermissionsAsync();
-      if (cancelRef.current) return;
+      if (stale()) return;
       if (perm.status !== 'granted') {
         const req = await Location.requestForegroundPermissionsAsync();
-        if (cancelRef.current) return;
+        if (stale()) return;
         if (req.status !== 'granted') {
           setPhase({ kind: 'unavailable', reason: 'permission' });
           return;
@@ -309,18 +314,18 @@ export function WeatherHero({ style, scrollY }: Props) {
       }
       legRef.current = 'fix';
       const pos = await Location.getCurrentPositionAsync({});
-      if (cancelRef.current) return;
+      if (stale()) return;
       legRef.current = 'fetch';
       const weather = await fetchCurrentWeather({
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
       });
-      if (!cancelRef.current) setPhase({ kind: 'ready', weather });
+      if (!stale()) setPhase({ kind: 'ready', weather });
     } catch {
       // A missing key is already handled above, so anything landing here is a
       // location the device could not give us or a service that did not answer
       // — and the leg says which. Never synthesize a forecast (Drift #5).
-      if (!cancelRef.current) setPhase({ kind: 'unavailable', reason: legReason() });
+      if (!stale()) setPhase({ kind: 'unavailable', reason: legReason() });
     } finally {
       clearTimeout(timeout);
     }
@@ -332,10 +337,9 @@ export function WeatherHero({ style, scrollY }: Props) {
   }, []);
 
   useEffect(() => {
-    cancelRef.current = false;
     resolve();
     return () => {
-      cancelRef.current = true;
+      runIdRef.current += 1;
     };
   }, [resolve]);
 
@@ -347,7 +351,6 @@ export function WeatherHero({ style, scrollY }: Props) {
         return;
       }
       if (UNAVAILABLE_COPY[reason].retry) {
-        cancelRef.current = false;
         resolve();
         return;
       }
@@ -355,7 +358,6 @@ export function WeatherHero({ style, scrollY }: Props) {
       // roofer to the one place that can grant it.
       const perm = await Location.getForegroundPermissionsAsync().catch(() => null);
       if (perm && perm.canAskAgain !== false) {
-        cancelRef.current = false;
         resolve();
         return;
       }

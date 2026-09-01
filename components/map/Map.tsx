@@ -6,7 +6,7 @@
 import { forwardRef, useCallback, useState, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useNavigation } from 'expo-router';
 import MapView, {
   Marker,
   Polyline,
@@ -70,7 +70,12 @@ export const Map = forwardRef(function Map(
   //
   // expo-router's useFocusEffect instead of @react-navigation/native's
   // useIsFocused: expo-router drops its react-navigation dependency in SDK 56.
-  const [isFocused, setIsFocused] = useState(false);
+  // Seeded from the navigator's current focus so a screen that mounts already
+  // focused (a pushed route, not a pre-mounted tab) renders the MapView on its
+  // first commit — exactly what useIsFocused did — so a parent's mount-effect
+  // `ref.current?.animateToRegion(...)` still finds a live ref.
+  const navigation = useNavigation();
+  const [isFocused, setIsFocused] = useState(() => navigation.isFocused());
   useFocusEffect(
     useCallback(() => {
       setIsFocused(true);

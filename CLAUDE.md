@@ -35,12 +35,12 @@ entry number. When the user asks "what's next," answer from BACKLOG.md.
 
 ## Stack
 
-- **Framework:** Expo SDK 51, React Native 0.74, TypeScript, expo-router (file-based).
+- **Framework:** Expo SDK 54, React Native 0.81, React 19, TypeScript, expo-router 6 (file-based). **New Architecture is ON** (`newArchEnabled: true`) — Expo Go 52+ runs nothing else; never turn it off to make something compile. Reanimated 4 + `react-native-worklets` (babel plugin is `react-native-worklets/plugin`, last in the list). Upgraded from SDK 51 in #55 because the App Store's Expo Go runs SDK 54.
 - **State:** Zustand stores with `persist` + AsyncStorage. Per-feature store under `lib/stores/`.
 - **Backend:** Supabase (auth + Postgres + Storage). Client at `lib/supabase.ts`. Auth store at `lib/auth/authStore.ts`.
 - **AI vision:** Gemini **2.5 Pro** via Google AI Studio direct REST (`lib/services/gemini.ts`). Higher accuracy for ambiguous damage than the previous 2.5 Flash default; trade-off is ~5× cost + slower latency per call. **There is no `gemini-3-flash` / `gemini-3.5-flash`** — Drift Warning #9.
 - **Maps:** `react-native-maps` with `PROVIDER_GOOGLE` (iOS + Android). Unified abstraction in `components/map/Map.tsx`.
-- **Native modules in use:** expo-camera, expo-location, expo-sensors, expo-haptics, expo-image, expo-image-manipulator, expo-image-picker, expo-print, expo-file-system, expo-notifications, expo-av, expo-apple-authentication, expo-clipboard, expo-document-picker, expo-sharing, react-native-reanimated, react-native-gesture-handler, react-native-svg.
+- **Native modules in use:** expo-camera, expo-location, expo-sensors, expo-haptics, expo-image, expo-image-manipulator, expo-image-picker, expo-print, expo-file-system (imported from `expo-file-system/legacy` — the File/Directory API migration is backlogged), expo-notifications, expo-audio (replaced expo-av in #55), expo-apple-authentication, expo-clipboard, expo-document-picker, expo-sharing, expo-blur, expo-linear-gradient, react-native-reanimated, react-native-gesture-handler, react-native-svg, react-native-maps. `metro.config.js` carries a zustand-only package-exports override (zustand 4's ESM build uses `import.meta`, which breaks the web bundle) — remove it if zustand is upgraded to 5.
 - **Theme:** `theme/tokens.ts` — `colors`, `fontSize`, `fontWeight`, `radii`, `spacing`, `shadows`, `touchTarget`, `motion`. **Never inline hex / font sizes.** (Drift Warning #11.)
 
 ---
@@ -123,13 +123,14 @@ Pulled from `PROMPT_LOG.md`. The full list is canonical there; this is the short
 ```sh
 # Dev
 npm install                       # or: npm ci  (preferred when lockfile is current)
-npx expo install --check          # verify native module versions match SDK 51
+npx expo install --check          # verify native module versions match SDK 54
+npx expo-doctor                   # 18 checks; must stay green after any dependency change
 npx expo start --clear            # clear Metro cache; press i for iOS Expo Go, a for Android
 npm run typecheck                 # tsc --noEmit
 npm run lint                      # expo lint
 ```
 
-**Native modules:** install via `npx expo install <pkg>` (not plain `npm install`) so versions stay pinned to the SDK. The AsyncStorage version-mismatch crash (`Native module is null, cannot access legacy storage`) came from a plain `npm install` — fix is `npx expo install @react-native-async-storage/async-storage` (locked to `1.23.1` for SDK 51).
+**Native modules:** install via `npx expo install <pkg>` (not plain `npm install`) so versions stay pinned to the SDK. The AsyncStorage version-mismatch crash (`Native module is null, cannot access legacy storage`) came from a plain `npm install` — fix is `npx expo install @react-native-async-storage/async-storage` (SDK 54 pins `2.2.0`; SDK 51 pinned `1.23.1`).
 
 ---
 

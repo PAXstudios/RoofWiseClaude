@@ -16,9 +16,19 @@ export default function RootLayout() {
   useBackgroundJobs();
 
   useEffect(() => {
+    let cancelled = false;
     let unsubscribe: (() => void) | undefined;
-    initialize().then((u) => { unsubscribe = u; });
-    return () => { unsubscribe?.(); };
+    // If cleanup ran before initialize() settled (React 19 StrictMode / Fast
+    // Refresh), release the auth listener as soon as it arrives instead of
+    // leaking it.
+    initialize().then((u) => {
+      if (cancelled) u();
+      else unsubscribe = u;
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, [initialize]);
 
   // Deep-link from notification taps. Routes Storm Watch alerts to the

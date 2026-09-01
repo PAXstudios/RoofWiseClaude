@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import Animated, {
   FadeInDown,
   FadeOutUp,
-  Layout,
+  LinearTransition,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,7 +49,7 @@ export function ToastHost() {
               .damping(motion.snappy.damping)
               .stiffness(motion.snappy.stiffness)}
             exiting={FadeOutUp.duration(180)}
-            layout={Layout.springify()
+            layout={LinearTransition.springify()
               .damping(motion.snappy.damping)
               .stiffness(motion.snappy.stiffness)}
             style={styles.toast}

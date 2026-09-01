@@ -627,6 +627,7 @@ export function AreaActivityCard() {
     fetchedKeyRef.current = fetchKey;
 
     let cancelled = false;
+    let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // A stale-but-real answer keeps showing while the refresh runs; only a
     // cold start gets the "Checking…" row.
@@ -668,12 +669,18 @@ export function AreaActivityCard() {
         if (!cancelled) setStorms(next);
       })
       .finally(() => {
+        settled = true;
         if (timer) clearTimeout(timer);
       });
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      // Re-run-safe (React 19 StrictMode / Fast Refresh): if this run was
+      // cancelled before its request settled, release the once-per-market
+      // guard so the next run refetches instead of stranding the row on
+      // "Checking…" while the cancelled promise's result is dropped.
+      if (!settled) fetchedKeyRef.current = null;
     };
   }, [anchored, fetchKey, anchor.lat, anchor.lon, serviceCenter.state, lookbackYears]);
 
