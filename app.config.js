@@ -18,6 +18,16 @@ module.exports = {
   expo: {
     name: 'RoofWise',
     slug: 'roofwise',
+    // EAS project on the owner's `roofwise` Expo account (created 2026-09-01).
+    // `eas project:init` cannot write into a dynamic config, so these three
+    // fields are maintained by hand. `runtimeVersion` MUST stay on the
+    // `sdkVersion` policy: Expo Go identifies its runtime by SDK version, so
+    // an update published under any other policy is invisible to it.
+    owner: 'roofwise',
+    updates: {
+      url: 'https://u.expo.dev/b1fdcacc-a354-499a-842c-0f5ce6fa2e68',
+    },
+    runtimeVersion: { policy: 'sdkVersion' },
     scheme: 'roofwise',
     version: '0.1.0',
     orientation: 'portrait',
@@ -116,6 +126,11 @@ module.exports = {
     experiments: {
       typedRoutes: false,
       tsconfigPaths: true,
+    },
+    extra: {
+      eas: {
+        projectId: 'b1fdcacc-a354-499a-842c-0f5ce6fa2e68',
+      },
     },
   },
 };
