@@ -63,7 +63,8 @@ export async function scheduleFollowUpReminder(args: {
       body: `Reach back out to ${args.customerName}.`,
       data: { kind: 'lead_follow_up', leadId: args.leadId },
     },
-    trigger: { date: fireAt },
+    // expo-notifications ≥0.29 requires an explicit trigger `type`.
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireAt },
   });
 }
 
@@ -83,10 +84,11 @@ export async function scheduleWeeklyCalibrationPush(): Promise<void> {
       data: { kind: 'calibration_weekly' },
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
       weekday: 2,         // Monday (1 = Sunday in iOS calendar)
       hour: 9,
       minute: 0,
-      repeats: true,
+      // WEEKLY triggers always repeat; the old `repeats: true` flag is gone.
     },
   });
 }

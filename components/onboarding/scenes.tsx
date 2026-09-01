@@ -18,6 +18,7 @@ import Animated, {
   withRepeat,
   withSpring,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { brand, colors, fontSize, fontWeight, glass, motion, radii, spacing } from '@/theme/tokens';
 
@@ -109,7 +110,7 @@ export function StormScene({ active }: SceneProps) {
   );
 }
 
-function Blip({ progress, x, y }: { progress: Animated.SharedValue<number>; x: number; y: number }) {
+function Blip({ progress, x, y }: { progress: SharedValue<number>; x: number; y: number }) {
   const dot = useAnimatedStyle(() => ({
     opacity: progress.value < 0.12 ? progress.value / 0.12 : Math.max(0, 1 - (progress.value - 0.12) / 0.88),
   }));

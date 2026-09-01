@@ -4,7 +4,8 @@
 // Gemini 2.5 Flash supports audio input via inlineData parts. We
 // declare the MIME type explicitly so the model knows what to expect.
 
-import * as FileSystem from 'expo-file-system';
+// SDK 54: string-based readAsStringAsync lives under `/legacy`.
+import * as FileSystem from 'expo-file-system/legacy';
 import { env, isGeminiConfigured } from '../env';
 import { GeminiNotConfiguredError, GeminiAnalysisError } from './gemini';
 

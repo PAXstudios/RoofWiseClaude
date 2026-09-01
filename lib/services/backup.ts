@@ -2,7 +2,10 @@
 // share it via the system share sheet. Restore reads a blob and rehydrates
 // each store.
 
-import * as FileSystem from 'expo-file-system';
+// SDK 54: the string-based API (readAsStringAsync/writeAsStringAsync/
+// documentDirectory) lives under `/legacy`; the default export is the new
+// File/Directory API. Migrating to it is backlogged.
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useInspectionStore } from '../stores/inspectionStore';
 import { useLeadStore } from '../stores/leadStore';

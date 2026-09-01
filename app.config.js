@@ -22,16 +22,15 @@ module.exports = {
     version: '0.1.0',
     orientation: 'portrait',
     userInterfaceStyle: 'light',
-    splash: {
-      resizeMode: 'contain',
-      // Brand v2: the app proper runs on white (see theme/tokens.ts).
-      backgroundColor: '#FFFFFF',
-    },
+    // Expo Go 52+ only runs the New Architecture; SDK 54 defaults it on.
+    newArchEnabled: true,
     assetBundlePatterns: ['**/*'],
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.roofwise.app',
       usesAppleSignIn: true,
+      // SDK 54 / RN 0.81 floor.
+      deploymentTarget: '15.1',
       config: {
         googleMapsApiKey,
       },
@@ -81,6 +80,16 @@ module.exports = {
     },
     plugins: [
       'expo-router',
+      [
+        // Since SDK 52 the splash screen is configured via this plugin
+        // instead of the top-level `splash` field.
+        'expo-splash-screen',
+        {
+          resizeMode: 'contain',
+          // Brand v2: the app proper runs on white (see theme/tokens.ts).
+          backgroundColor: '#FFFFFF',
+        },
+      ],
       'expo-apple-authentication',
       [
         'expo-camera',

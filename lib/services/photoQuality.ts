@@ -4,7 +4,8 @@
 // so this is a coarse heuristic: image dimensions + on-disk file size.
 // Returns a `flags` array the UI surfaces as warnings before analysis.
 
-import * as FileSystem from 'expo-file-system';
+// SDK 54: getInfoAsync({ size }) lives under `/legacy`.
+import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'react-native';
 
 const MIN_PIXELS_LONG_EDGE = 720;       // smaller = likely too low res
@@ -53,7 +54,8 @@ export async function scorePhoto(uri: string): Promise<PhotoQuality> {
 
   // File size
   try {
-    const info = await FileSystem.getInfoAsync(uri, { size: true });
+    // SDK 54 legacy API always returns `size`; the `{ size: true }` option is gone.
+    const info = await FileSystem.getInfoAsync(uri);
     if (info.exists && typeof info.size === 'number' && info.size < MIN_BYTES) {
       flags.push(`Very small file (${Math.round(info.size / 1024)} KB)`);
     }

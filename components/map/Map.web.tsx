@@ -385,7 +385,6 @@ export function MapPin({
       info?.close();
       marker.setMap(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, coordinate.latitude, coordinate.longitude, title, description, tone, pinColor]);
 
   return null;

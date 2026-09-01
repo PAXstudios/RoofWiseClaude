@@ -2,7 +2,8 @@
 // Gemini on it, and writes the resulting markers/findings back into the
 // inspection store with photoIndex tagging.
 
-import * as FileSystem from 'expo-file-system';
+// SDK 54: string-based readAsStringAsync lives under `/legacy`.
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   NO_ROOF_MESSAGE,
   analyzePhoto,

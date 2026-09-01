@@ -6,7 +6,17 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { Audio } from 'expo-av';
+// SDK 54: expo-av is in its final release (removed in 55) — recording and
+// playback moved to expo-audio. Same props/behavior for callers.
+import {
+  RecordingPresets,
+  createAudioPlayer,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+  type AudioPlayer,
+} from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -30,34 +40,34 @@ type Props = {
 
 export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }: Props) {
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recording, setRecording] = useState(false);
   const [permission, setPermission] = useState<boolean | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const playbackRef = useRef<Audio.Sound | null>(null);
+  const playbackRef = useRef<AudioPlayer | null>(null);
   const toast = useToastStore((s) => s.show);
+
+  // One reusable recorder per mount; prepared fresh before each recording.
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // Polls every 250ms — the same cadence the expo-av interval used.
+  const recorderState = useAudioRecorderState(recorder, 250);
+  const recordingDuration = recording
+    ? Math.floor(recorderState.durationMillis / 1000)
+    : 0;
 
   useEffect(() => {
     (async () => {
-      const perm = await Audio.requestPermissionsAsync();
+      const perm = await requestRecordingPermissionsAsync();
       setPermission(perm.granted);
     })();
 
     return () => {
-      playbackRef.current?.unloadAsync().catch(() => {});
+      try {
+        playbackRef.current?.remove();
+      } catch {
+        // Already released.
+      }
     };
   }, []);
-
-  useEffect(() => {
-    if (!recording) return;
-    const t = setInterval(async () => {
-      const status = await recording.getStatusAsync();
-      if (status.isRecording) {
-        setRecordingDuration(Math.floor(status.durationMillis / 1000));
-      }
-    }, 250);
-    return () => clearInterval(t);
-  }, [recording]);
 
   const startRecording = async () => {
     if (!permission) {
@@ -65,14 +75,13 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }:
       return;
     }
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await rec.startAsync();
-      setRecording(rec);
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setRecording(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch {
       toast({ tone: 'danger', title: 'Could not start recording' });
@@ -81,42 +90,49 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }:
 
   const stopRecording = async () => {
     if (!recording) return;
+    const durationSec = recordingDuration;
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      await recorder.stop();
+      const uri = recorder.uri;
       if (uri) {
-        onRecorded({ uri, durationSec: recordingDuration });
+        onRecorded({ uri, durationSec });
         toast({ tone: 'success', title: 'Voice note saved' });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } finally {
-      setRecording(null);
-      setRecordingDuration(0);
+      setRecording(false);
+    }
+  };
+
+  const releasePlayer = () => {
+    const player = playbackRef.current;
+    playbackRef.current = null;
+    if (!player) return;
+    try {
+      player.pause();
+      player.remove();
+    } catch {
+      // Already released.
     }
   };
 
   const playNote = async (note: AudioNote) => {
     try {
       if (playingId === note.id) {
-        await playbackRef.current?.stopAsync();
-        await playbackRef.current?.unloadAsync();
-        playbackRef.current = null;
+        releasePlayer();
         setPlayingId(null);
         return;
       }
-      if (playbackRef.current) {
-        await playbackRef.current.unloadAsync();
-        playbackRef.current = null;
-      }
-      const { sound } = await Audio.Sound.createAsync({ uri: note.uri });
-      playbackRef.current = sound;
+      releasePlayer();
+      const player = createAudioPlayer({ uri: note.uri });
+      playbackRef.current = player;
       setPlayingId(note.id);
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
+      player.addListener('playbackStatusUpdate', (status) => {
+        if (status.didJustFinish) {
           setPlayingId(null);
         }
       });
-      await sound.playAsync();
+      player.play();
     } catch {
       toast({ tone: 'danger', title: 'Playback failed' });
     }

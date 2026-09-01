@@ -3,10 +3,10 @@
 // Switching providers, swapping in @vis.gl on web, or adding Mapbox later
 // is a one-file change.
 
-import { forwardRef, type ReactNode, type Ref } from 'react';
+import { forwardRef, useCallback, useState, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { useIsFocused } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import MapView, {
   Marker,
   Polyline,
@@ -67,7 +67,16 @@ export const Map = forwardRef(function Map(
   // during init, hits a stale pointer, and SIGSEGVs — killing whichever
   // screen the user is actually on. Gate the native MapView on screen
   // focus so it only mounts when its host screen is visible.
-  const isFocused = useIsFocused();
+  //
+  // expo-router's useFocusEffect instead of @react-navigation/native's
+  // useIsFocused: expo-router drops its react-navigation dependency in SDK 56.
+  const [isFocused, setIsFocused] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, []),
+  );
 
   return (
     <View style={[styles.wrap, style]}>
