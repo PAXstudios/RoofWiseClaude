@@ -20,7 +20,12 @@ entry does not count as tracked.
 
 ## Soon (from the 2026-08-16 Drive synthesis — after Now clears)
 
-- [ ] **See the weather hero with a real key** — `EXPO_PUBLIC_GOOGLE_WEATHER_API_KEY` (or the shared Maps key) is absent in the build container, so the Home hero correctly collapses to "Weather not available" and the preview undersells the wave's headline feature. Verify the full radar hero + storm escalation on a device with a key — #53
+- [ ] **Get the app into the owner's hand — Expo Go via EAS Update** (the only path with zero installs on the owner's computer: the container cannot tunnel a dev server, but it CAN reach Expo's cloud). Blocked on (a) the SDK 54 upgrade below, (b) an Expo access token from the owner, (c) a phone-usable Google key (the current key is website-restricted to claude.ai and rejects app requests). Then `npx expo install expo-updates` → `eas init` → `eas update --branch preview`. TestFlight (Apple Developer $99) is the "real icon + Google Maps" path and needs no SDK upgrade — #54
+- [ ] **Upgrade Expo SDK 51 → 54** — the App Store's Expo Go runs SDK 54 and refuses 51. Owner approved ("ok"). Spec + workflow ready: `scratchpad/spec-sdk54-upgrade.md` / `wave6-sdk54.js` (New Architecture on, Reanimated 4 + worklets, expo-router 6 generics, expo-av → expo-audio, expo-file-system `/legacy`, splash plugin, `useIsFocused` → `useFocusEffect`). After it lands: update CLAUDE.md's Stack line + AsyncStorage note — #54
+- [ ] **Rotate the preview Google key before any real ship** — pasted in chat 2026-09-01; it is website-restricted to `https://claude.ai/*` and API-restricted (Maps JS, Weather, Geocoding), so exposure is bounded, but it is embedded in the published artifact page — #54
+- [ ] Verify the artifact frame's origin satisfies the key's `claude.ai/*` website restriction — unknown from the container; if tiles fail with RefererNotAllowed the owner adds the frame origin to the restriction — #54
+- [ ] Weather hero: the permission / no-fix / unreachable branches of state C could not be exercised in the keyless container (always `no-key`); verify on a device — #54
+- [ ] AreaActivityCard on low-end Android: first paint now stacks aurora + radar + sweep + pulse SVGs (+ up to 15 precipitation streaks); if it stutters, `AuroraWash animate={false}` and fewer `WASH_ORBS` are the designed escape hatches — #54
 - [ ] Add `components/ui/index.ts` barrel — the six primitives must currently be imported by exact path — #53
 - [ ] react-native-web logs a one-time `"shadow*" style props are deprecated, use "boxShadow"` warning now that shadows carry a `web:` branch; harmless, but worth migrating — #53
 - [ ] Hoist the duplicated UI primitives from #52 into shared components — SegmentedControl, Rise (entrance), MiniSwitch are file-local copies in leads/plan/hail-tracer/welcome/settings/inspector-profile because parallel builders couldn't create shared files; converge on `components/` versions — #52
@@ -83,6 +88,8 @@ entry does not count as tracked.
 
 ## Done (most recent first)
 
+- [x] Home front page shows a map AND the weather — `WeatherHero` renders its full animated cinematic frame in every state (missing data changes the text, never the design); `AreaActivityCard` is an always-present Google storm map with Leads|Storms layers, keyless NOAA hail/wind pins, and the real storm-lead insight; both above the fold on a 390×844 phone — closed by #54
+- [x] Web preview keyed — owner's claude.ai-restricted Google key in the container's gitignored `.env.local`; live weather + basemap in the artifact — closed by #54 (referrer check pending)
 - [x] Cinematic redesign — the onboarding's own visual language (Aurora, GlassCard, radar motif) promoted into the app; gradient/depth tokens + six shared primitives; the big weather hero with SVG radar in three honest states; crafted content across Home/Leads/Job/Map/Plan/Train/Settings; royal=interactive, burnt=urgency — closed by #53
 - [x] App/onboarding congruence — the app and its onboarding now read as the same product — closed by #53 (owner's explicit complaint)
 - [x] iOS × Instagram UI redesign — grouped ground, one-orange-moment discipline, edge-to-edge tab bar, iOS-17 segmented controls, spring motion layer, density pass (Get-set-up checklist, no zero-state voids), greeting bug dead; screenshot-verified by a visual auditor — closed by #52

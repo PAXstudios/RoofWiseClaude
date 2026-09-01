@@ -385,36 +385,9 @@ export default function HomeScreen() {
         </Pressable>
       )}
 
-      {/* Stats — colour-chipped StatCards. Deltas are omitted: nothing in the
-          stores yet tracks a true prior-period comparison, and inventing one
-          would be a mock (Drift #5). */}
-      <Rise index={2} style={styles.statsRow}>
-        <StatCard
-          icon="cash-outline"
-          tone="green"
-          value={`$${formatShort(revenueYTD)}`}
-          label="Revenue YTD"
-          style={{ flex: 1 }}
-        />
-        <StatCard
-          icon="people-outline"
-          tone="blue"
-          value={String(openLeads)}
-          label="Leads"
-          style={{ flex: 1 }}
-        />
-        <StatCard
-          icon="trending-up-outline"
-          tone="purple"
-          value={`$${formatShort(pipelineValue)}`}
-          label="Pipeline"
-          style={{ flex: 1 }}
-        />
-      </Rise>
-
       {/* Hero CTAs — side by side (Drift #3). Quick Inspection is the one
           burnt moment; New Job is a crafted, royal-chipped card. */}
-      <Rise index={3} style={styles.heroRow}>
+      <Rise index={2} style={styles.heroRow}>
         <PressableScale
           style={[styles.heroCta, styles.heroPrimaryShadow]}
           accessibilityRole="button"
@@ -464,9 +437,43 @@ export default function HomeScreen() {
           the hero CTAs so weather and map are the two things the first screen
           is about. Always rendered: the card owns its own honest states (no
           Maps key / no service area / no qualifying storms) and never
-          fabricates a pin or a count (Drift #5). */}
-      <Rise index={4}>
+          fabricates a pin or a count (Drift #5).
+
+          It sits ABOVE the stats deliberately. The stats row costs ~100pt and
+          on a fresh install reads "$0 / 0 / $0" — the least useful thing on a
+          390×844 first screen — and with it in front, the 200pt map body
+          started below the fold, so the owner's "map AND the weather" ask was
+          only half met on first paint. Weather and map now both land in the
+          first screenful; the numbers are one thumb-flick away. */}
+      <Rise index={3}>
         <AreaActivityCard />
+      </Rise>
+
+      {/* Stats — colour-chipped StatCards. Deltas are omitted: nothing in the
+          stores yet tracks a true prior-period comparison, and inventing one
+          would be a mock (Drift #5). */}
+      <Rise index={4} style={styles.statsRow}>
+        <StatCard
+          icon="cash-outline"
+          tone="green"
+          value={`$${formatShort(revenueYTD)}`}
+          label="Revenue YTD"
+          style={{ flex: 1 }}
+        />
+        <StatCard
+          icon="people-outline"
+          tone="blue"
+          value={String(openLeads)}
+          label="Leads"
+          style={{ flex: 1 }}
+        />
+        <StatCard
+          icon="trending-up-outline"
+          tone="purple"
+          value={`$${formatShort(pipelineValue)}`}
+          label="Pipeline"
+          style={{ flex: 1 }}
+        />
       </Rise>
 
       {/* Field tools — crafted cells, colour-chipped per tool. */}

@@ -401,8 +401,9 @@ function PlottedGround({
 
 // -----------------------------------------------------------------------------
 // Segmented control — the app's existing iOS-17 language (leads.tsx, plan.tsx,
-// hail-tracer.tsx): fillQuiet track, white thumb on the snappy spring, 56pt
-// wrapper so a gloved thumb always lands (Drift #1).
+// hail-tracer.tsx): fillQuiet track, white thumb on the snappy spring, and a
+// 56pt PRESSABLE (not merely a 56pt wrapper) so a gloved thumb always lands on
+// every platform (Drift #1) — see the `segTrack` / `segBtn` note below.
 // -----------------------------------------------------------------------------
 
 function Segmented({
@@ -447,7 +448,6 @@ function Segmented({
           <PressableScale
             key={o.id}
             style={styles.segBtn}
-            hitSlop={{ top: 8, bottom: 8 }}
             accessibilityRole="button"
             accessibilityState={{ selected: value === o.id }}
             accessibilityLabel={`Show ${o.label}`}
@@ -522,6 +522,33 @@ export function AreaActivityCard() {
   const [layer, setLayer] = useState<Layer>('storms');
   const [retryTick, setRetryTick] = useState(0);
   const [plotW, setPlotW] = useState(0);
+
+  /**
+   * Have basemap tiles actually painted?
+   *
+   * Having a key is not the same as having a map. When the tiles can't be
+   * fetched — no signal on a roof, a referrer-restricted key, a blocked
+   * host — the Map abstraction falls back to its own SCREEN-scale panel
+   * ("Map isn't available right now" + two lines of body). That panel is
+   * right for the Map tab and wrong here: at 200pt its headline overflows
+   * the frame and lands under this card's own status row and CTA, so the
+   * module reads as broken — the exact complaint this card exists to fix.
+   *
+   * So the card keeps its own ground. `PlottedGround` (the designed
+   * no-tiles state, with the REAL pins on it) is the base layer, and the
+   * tiled map fades in over it only once it reports ready. Tiles that never
+   * arrive simply leave the branded ground in place — a settled state, not
+   * an error card, and never a fabricated pin either way.
+   */
+  const [tilesReady, setTilesReady] = useState(false);
+  const onTilesReady = useCallback(() => setTilesReady(true), []);
+  const tileFade = useSharedValue(0);
+  useEffect(() => {
+    tileFade.value = tilesReady
+      ? withTiming(1, { duration: reduced ? 0 : motion.enterMs })
+      : 0;
+  }, [tilesReady, reduced, tileFade]);
+  const tileStyle = useAnimatedStyle(() => ({ opacity: tileFade.value }));
 
   // ---------------------------------------------------------------------------
   // Where are we?
@@ -673,7 +700,10 @@ export function AreaActivityCard() {
     [leads],
   );
 
-  const pinCap = HAS_BASEMAP_TILES ? MAX_STORM_PINS : PLOT_PIN_CAP;
+  // Which surface is actually drawing decides the cap — and the count row
+  // reports whichever number really got drawn, in both phases.
+  const groundShowing = !HAS_BASEMAP_TILES || !tilesReady;
+  const pinCap = groundShowing ? PLOT_PIN_CAP : MAX_STORM_PINS;
   const stormPins = useMemo(() => stormEvents.slice(0, pinCap), [stormEvents, pinCap]);
 
   /**
@@ -844,6 +874,47 @@ export function AreaActivityCard() {
     router,
   ]);
 
+  /**
+   * The frame's own invitation.
+   *
+   * Both empty grounds are honest but PASSIVE: the storms layer draws nothing
+   * until a market can be resolved, and the leads layer draws nothing until a
+   * lead is geocoded. The status row underneath already names the fix, but
+   * nothing on the 200pt body itself does — so the owner's headline module
+   * opens on an empty ground and the user has no reason to know a Settings
+   * trip would fill it. This puts the same real route on the map.
+   *
+   * Fabricates nothing: it is a label and a link, never a pin or a count, and
+   * it only ever appears when there is genuinely nothing plotted. It yields to
+   * the insight overlay so the two never stack.
+   */
+  const emptyCta = useMemo<{
+    label: string;
+    icon: IoniconName;
+    a11y: string;
+    onPress: () => void;
+  } | null>(() => {
+    if (plotPoints.length > 0) return null;
+    if (layer === 'storms') {
+      if (anchored) return null; // "checking", "unreachable" and a true zero own their rows.
+      return {
+        label: areas.length > 0 ? 'Add a state to your area' : 'Set your service area',
+        icon: 'location-outline',
+        a11y: 'Set your service area so Storm Watch can scan it. Opens Settings.',
+        onPress: () => router.push('/settings/service-area' as any),
+      };
+    }
+    return {
+      label: leads.length > 0 ? 'Add lead addresses' : 'Add your first lead',
+      icon: leads.length > 0 ? 'location-outline' : 'person-add-outline',
+      a11y:
+        leads.length > 0
+          ? 'Add addresses to your leads so they land on this map. Opens Leads.'
+          : 'Add your first lead and it lands on this map.',
+      onPress: () => router.push((leads.length > 0 ? '/(tabs)/leads' : '/new-lead') as any),
+    };
+  }, [plotPoints.length, layer, anchored, areas.length, leads.length, router]);
+
   // ---------------------------------------------------------------------------
   // Navigation
   // ---------------------------------------------------------------------------
@@ -900,14 +971,24 @@ export function AreaActivityCard() {
               onPress={openMap}
               onLayout={(e) => setPlotW(e.nativeEvent.layout.width)}
             >
-              {HAS_BASEMAP_TILES ? (
+              {/* The designed ground is the BASE: it holds the frame while
+                  tiles load, and holds it for good if they never come. */}
+              {(!HAS_BASEMAP_TILES || !tilesReady) && (
+                <PlottedGround points={plotPoints} width={plotW} reduced={reduced} />
+              )}
+
+              {HAS_BASEMAP_TILES && (
                 // Decorative preview — the card's own onPress owns the tap, so
                 // the map never fights the parent scroll.
-                <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[StyleSheet.absoluteFill, tileStyle]}
+                >
                   <AreaMap
                     region={region}
                     showsUserLocation={false}
                     showsCompass={false}
+                    onMapReady={onTilesReady}
                     style={StyleSheet.absoluteFillObject}
                   >
                     {layer === 'storms'
@@ -931,11 +1012,29 @@ export function AreaActivityCard() {
                           />
                         ))}
                   </AreaMap>
-                </View>
-              ) : (
-                <PlottedGround points={plotPoints} width={plotW} reduced={reduced} />
+                </Animated.View>
               )}
             </PressableScale>
+
+            {/* Nothing to plot yet — put the fix on the map, not only in the
+                row beneath it. `box-none` so the rest of the frame still
+                belongs to the map's own tap target. */}
+            {!insight && emptyCta && (
+              <View pointerEvents="box-none" style={styles.emptyOverlay}>
+                <PressableScale
+                  style={styles.emptyCtaWrap}
+                  accessibilityRole="button"
+                  accessibilityLabel={emptyCta.a11y}
+                  onPress={emptyCta.onPress}
+                >
+                  <GlassCard onArt onLight radius={radii.pill} style={styles.emptyCta}>
+                    <Ionicons name={emptyCta.icon} size={18} color={colors.brand} />
+                    <Text style={styles.emptyCtaText}>{emptyCta.label}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
+                  </GlassCard>
+                </PressableScale>
+              </View>
+            )}
 
             {/* A real cluster or nothing at all — never a placeholder line. */}
             {insight && (
@@ -1006,10 +1105,21 @@ const styles = StyleSheet.create({
   },
 
   // --- iOS-17 segmented control -------------------------------------------
-  segWrap: { minHeight: touchTarget.standard, justifyContent: 'center' },
+  segWrap: { justifyContent: 'center' },
+  // The BUTTON carries the 56pt, not a wrapper around it.
+  //
+  // `segWrap` used to set `minHeight: touchTarget.standard`, which sized the
+  // wrapper and bought the tap target nothing: `segBtn` is `flex: 1` inside a
+  // track that was a fixed 44 high with SEG_PAD each side, so the real
+  // pressable measured 36pt — under the Drift #1 floor. `hitSlop` couldn't
+  // cover it either: react-native-web doesn't implement hitSlop on Pressable,
+  // so the web export got the bare 36.
+  //
+  // So the track no longer fixes its own height — `segBtn`'s minHeight does,
+  // and the track lands at 56 + SEG_PAD*2. Same iOS-17 look, thumb still
+  // inset by SEG_PAD, and every platform gets a real 56pt target.
   segTrack: {
     flexDirection: 'row',
-    height: 44,
     borderRadius: radii.md,
     backgroundColor: colors.fillQuiet,
     padding: SEG_PAD,
@@ -1023,7 +1133,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     ...shadows.thumb,
   },
-  segBtn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  segBtn: {
+    flex: 1,
+    minHeight: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   segLabel: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
@@ -1073,6 +1188,30 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.surface,
     ...shadows.thumb,
+  },
+
+  // --- Empty-frame call to action ------------------------------------------
+  emptyOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: spacing.xl,
+    right: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCtaWrap: { borderRadius: radii.pill, ...shadows.float },
+  emptyCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+  },
+  emptyCtaText: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
   },
 
   // --- Floating insight ----------------------------------------------------

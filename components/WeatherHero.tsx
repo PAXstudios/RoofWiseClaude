@@ -193,7 +193,10 @@ const UNAVAILABLE_COPY: Record<
   }
 > = {
   'no-key': {
-    cause: 'No weather API key in this build',
+    // "No weather API key in this build" was honest but spoke developer to a
+    // gloved roofer in sun (Drift #1). Same fact, the persona's register — the
+    // CTA below already names the actual fix.
+    cause: 'Weather isn’t set up yet',
     cta: 'Add a weather key in Settings',
     glyph: 'key-outline',
     ctaIcon: 'settings-outline',
