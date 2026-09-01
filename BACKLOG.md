@@ -20,7 +20,10 @@ entry does not count as tracked.
 
 ## Soon (from the 2026-08-16 Drive synthesis — after Now clears)
 
-- [ ] **Get the app into the owner's hand — Expo Go via EAS Update** (the only path with zero installs on the owner's computer: the container cannot tunnel a dev server, but it CAN reach Expo's cloud). Blocked on (a) the SDK 54 upgrade below, (b) an Expo access token from the owner, (c) a phone-usable Google key (the current key is website-restricted to claude.ai and rejects app requests). Then `npx expo install expo-updates` → `eas init` → `eas update --branch preview`. TestFlight (Apple Developer $99) is the "real icon + Google Maps" path and needs no SDK upgrade — #54
+- [ ] **First device run in Expo Go** — owner opens the `preview` branch in Expo Go signed in as `roofwise`; report what breaks (see the SDK 54 device-test list below) — #56
+- [ ] **Rotate after the first device run:** the Expo access token (Admin), the phone Google key, the Gemini key, and the claude.ai-restricted web key — all pasted in chat 2026-09-01 — #56
+- [ ] TestFlight via EAS Build — the "real icon + Google Maps on iOS" path; needs the Apple Developer Program ($99) and App Store Connect credentials configured on expo.dev; works from this container once those exist — #56
+- [ ] Add an `eas.json` with `preview` / `production` build profiles + channels so `eas build`/`eas update` share one config — #56
 - [ ] **Device test on SDK 54 / New Architecture** — only the web export was booted. First Expo Go run must exercise: react-native-maps 1.20 (Apple Maps in Go), expo-camera 17 capture + analyze, expo-sensors 15 pitch gauge, **expo-audio voice notes (record + play — a full API rewrite)**, Reanimated 4 animations (hero, aurora, radar, swipe cards, toasts), the `Map.tsx` focus seed on the iOS Simulator SIGSEGV path — #55
 - [ ] zustand 4.5 → 5 — would remove the zustand-only package-exports override in `metro.config.js`; behavior-bearing (persist/selector changes), deliberately excluded from the migration — #55
 - [ ] expo-file-system: real migration off `/legacy` (deprecated) to the File/Directory API in the 4 call sites — #55
@@ -93,6 +96,7 @@ entry does not count as tracked.
 
 ## Done (most recent first)
 
+- [x] App in the owner's hand with zero installs — EAS project `roofwise/roofwise`, `expo-updates` + `sdkVersion` runtime policy, phone keys as sensitive EAS env vars, update published to branch `preview` (runtime `exposdk:54.0.0`, iOS + Android); first keyless publish caught and republished with keys — closed by #56
 - [x] Expo SDK 51 → 54 platform migration — RN 0.81.5, React 19.1, New Architecture on, Reanimated 4 + worklets, expo-router 6, expo-av → expo-audio, file-system `/legacy`, splash plugin, flat ESLint; zustand `import.meta` web crash fixed with a scoped Metro override; StrictMode re-run bugs in WeatherHero/AreaActivityCard fixed; all gates green — closed by #55
 - [x] Home front page shows a map AND the weather — `WeatherHero` renders its full animated cinematic frame in every state (missing data changes the text, never the design); `AreaActivityCard` is an always-present Google storm map with Leads|Storms layers, keyless NOAA hail/wind pins, and the real storm-lead insight; both above the fold on a 390×844 phone — closed by #54
 - [x] Web preview keyed — owner's claude.ai-restricted Google key in the container's gitignored `.env.local`; live weather + basemap in the artifact — closed by #54 (referrer check pending)

@@ -2310,3 +2310,24 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Not verified:** the native runtime. Only the web export was booted. The New Architecture is on and every native module passed expo-doctor's directory check, but Expo Go on a real iPhone is the true test for maps 1.20, camera 17, sensors 15, expo-audio, and Reanimated 4 — which is exactly what the next step (EAS Update → Expo Go) delivers.
 
 **Files touched:** `package.json`, `package-lock.json`, `app.config.js`, `babel.config.js`, `metro.config.js`, `eslint.config.js` (+ `.eslintrc.js` removed), `app/_layout.tsx`, `components/{VoiceNoteRecorder,ToastHost,WeatherHero}.tsx`, `components/home/AreaActivityCard.tsx`, `components/map/{Map,Map.web}.tsx`, `components/onboarding/scenes.tsx`, `lib/services/{analyzeSlope,backup,photoQuality,pushNotifications,transcribeAudio}.ts`, `CLAUDE.md` (Stack line, native-module list, AsyncStorage note), `BACKLOG.md`, `PROMPT_LOG.md`.
+
+---
+
+### [2026-09-01] #56 — Distribution: EAS Update into Expo Go; keys live on EAS, not in the repo
+
+**Prompt:**
+> Owner supplied an Expo access token, a phone-usable Google key, and an AI Studio key after: "the live link isnt suffiencent. how do i actually use the app"
+
+**Path chosen and why.** The container cannot tunnel a dev server (ngrok blocked) but CAN reach Expo's cloud, so the zero-install path is **EAS Update → Expo Go**: the JS bundle is published to Expo's servers and Expo Go on the owner's iPhone loads it. Requires SDK 54 (#55) because the App Store's Expo Go runs exactly that.
+
+**Wiring:** `expo-updates` installed; `eas project:init --account roofwise` created project `b1fdcacc-a354-499a-842c-0f5ce6fa2e68` but cannot write a dynamic config, so `owner`, `updates.url`, `runtimeVersion: { policy: 'sdkVersion' }` and `extra.eas.projectId` were added to `app.config.js` by hand. **`sdkVersion` is the only policy Expo Go can see** — it identifies its runtime as `exposdk:54.0.0`. Phone keys (Maps/Weather/Geocoding, Gemini, model) were registered in the EAS **`preview` environment** as `sensitive` project-scoped variables; the web preview's separate, site-restricted key stays in the gitignored `.env.local`.
+
+**Two mistakes caught by verification, not by luck.** (1) The first `env:create` loop fed the key file to `npx` on stdin, which swallowed every line after the first — the variables silently did not exist, and the first published update (group `c33101ef`) shipped **with no keys**. Caught because `eas env:pull` to a scratchpad file returned nothing. Re-created stdin-safe (`</dev/null`), verified by pulling all 5 back. (2) Local `.env.local` (web key) is loaded by `expo export` during `eas update`; to guarantee only the EAS environment reaches the phone bundle it is moved out of the repo for the duration of the publish and restored by a trap — and a local iOS export against the pulled env is grepped for the phone key *and the absence of the web key* before every publish.
+
+**eas-cli 23.2 gotchas recorded:** `env:list` has no `--non-interactive`; `env:exec` takes the environment positionally, not `--environment`; `env:pull --path` is the reliable way to inspect sensitive values from a script.
+
+**Owner's steps, in full:** install Expo Go, sign in as `roofwise`, open the project (or scan the update's QR from the EAS dashboard). Expo Go on iOS uses Apple Maps (handled in `Map.tsx`); TestFlight remains the Google-Maps/real-icon path.
+
+**Secrets hygiene:** the Expo token (Admin) and three keys were pasted in chat → all flagged for rotation after the first successful device run. Stored only under the session scratchpad with mode 600; verified absent from every commit diff.
+
+**Files touched:** `app.config.js`, `package.json`, `package-lock.json`, `BACKLOG.md`, `PROMPT_LOG.md`.
