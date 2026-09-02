@@ -174,6 +174,11 @@ export default function NewLead() {
                 setLat(p.lat);
                 setLng(p.lng);
               }}
+              onLocationSelected={(loc) => {
+                setAddress(loc.address);
+                setLat(loc.lat);
+                setLng(loc.lng);
+              }}
             />
           </FadeSlideIn>
 

@@ -22,13 +22,29 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useInspectionSyncStore } from '@/lib/stores/inspectionSyncStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { syncCorrections } from '@/lib/services/correctionsSync';
-import { isGeminiConfigured, isSupabaseConfigured } from '@/lib/env';
+import { env, isGeminiConfigured, isSupabaseConfigured, isWeatherConfigured } from '@/lib/env';
+import {
+  GOOGLE_API_LABELS,
+  GoogleApiError,
+  classifyGoogleFailure,
+  fetchGoogle,
+  getCachedGoogleApiProbes,
+  runGoogleApiProbes,
+  type GoogleApi,
+  type GoogleApiErrorKind,
+  type GoogleApiProbeResult,
+  type GoogleApiProbeState,
+} from '@/lib/services/googleApi';
+import { probePlaces } from '@/lib/services/places';
+import { probeGeocoding } from '@/lib/services/geocoding';
+import { probeSolar } from '@/lib/services/solar';
+import { MapTilesError, createSession, isGoogleTilesConfigured } from '@/lib/services/mapTiles';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { Pill } from '@/components/ui/Pill';
+import { Pill, type PillTone } from '@/components/ui/Pill';
 import {
   colors,
   fontSize,
@@ -159,6 +175,8 @@ export default function SettingsScreen() {
               : 'Not configured — data stays on this device'
           }
         />
+        <Sep />
+        <GoogleApisRow />
       </Group>
 
       <Group
@@ -457,6 +475,186 @@ function ProfileHeader({ index }: { index: number }) {
   );
 }
 
+// ---------- Google APIs (Integrations) ----------
+
+/**
+ * The smallest real request each Google API accepts. Only the two clients the
+ * app does not already own a probe for are built here: Weather (one
+ * currentConditions lookup) and Map Tiles (a free createSession, its
+ * MapTilesError translated onto the shared kinds). The native Maps SDK has
+ * no request the app can make from Expo Go — it stays "Not tested" and says
+ * why, rather than being assumed green.
+ */
+const WEATHER_PROBE_URL = 'https://weather.googleapis.com/v1/currentConditions:lookup';
+
+function tilesKind(e: MapTilesError): GoogleApiErrorKind {
+  switch (e.googleReason) {
+    case 'API_KEY_SERVICE_BLOCKED':
+    case 'SERVICE_DISABLED':
+      return 'not_authorized';
+    case 'API_KEY_INVALID':
+      return 'invalid_key';
+    case 'API_KEY_IOS_APP_BLOCKED':
+    case 'API_KEY_ANDROID_APP_BLOCKED':
+    case 'API_KEY_HTTP_REFERRER_BLOCKED':
+      return 'app_restricted';
+    case 'RATE_LIMIT_EXCEEDED':
+    case 'QUOTA_EXCEEDED':
+      return 'quota';
+    case 'BILLING_DISABLED':
+      return 'billing';
+    default:
+      break;
+  }
+  if (e.httpStatus == null) return e.message.includes('in time') ? 'timeout' : 'network';
+  if (e.httpStatus === 403) return 'not_authorized';
+  if (e.httpStatus === 429) return 'quota';
+  return 'http';
+}
+
+const GOOGLE_PROBES: Partial<Record<GoogleApi, () => Promise<string | void>>> = {
+  places: probePlaces,
+  geocoding: probeGeocoding,
+  solar: probeSolar,
+  weather: async () => {
+    if (!isWeatherConfigured) {
+      throw new GoogleApiError('weather', 'not_configured', 'Google Weather API key not configured.');
+    }
+    const url =
+      `${WEATHER_PROBE_URL}?key=${env.GOOGLE_WEATHER_API_KEY}` +
+      '&location.latitude=32.7767&location.longitude=-96.797';
+    const { res, text } = await fetchGoogle('weather', url);
+    if (!res.ok) throw classifyGoogleFailure('weather', res.status, text);
+  },
+  mapTiles: async () => {
+    if (!isGoogleTilesConfigured()) {
+      throw new GoogleApiError('mapTiles', 'not_configured', 'Google Maps key not configured.');
+    }
+    try {
+      await createSession('roadmap');
+    } catch (e) {
+      if (e instanceof MapTilesError) {
+        throw new GoogleApiError('mapTiles', tilesKind(e), e.message, e.httpStatus, e.googleReason);
+      }
+      throw e;
+    }
+  },
+};
+
+const PROBE_PILL: Record<GoogleApiProbeState, { label: string; tone: PillTone }> = {
+  enabled: { label: 'Enabled', tone: 'success' },
+  not_enabled: { label: 'Not enabled for this key', tone: 'danger' },
+  not_configured: { label: 'No key', tone: 'neutral' },
+  unreachable: { label: 'Couldn\'t check', tone: 'warn' },
+  not_tested: { label: 'Not tested', tone: 'neutral' },
+};
+
+function probeSummary(results: GoogleApiProbeResult[], checking: boolean): string {
+  if (checking) return 'Checking which Google services this key can use…';
+  const tested = results.filter((r) => r.checkedAt != null);
+  if (tested.length === 0) return 'Tap to check which Google services this key can use';
+  const enabled = tested.filter((r) => r.state === 'enabled').length;
+  const denied = tested.filter((r) => r.state === 'not_enabled').length;
+  const unreachable = tested.filter((r) => r.state === 'unreachable').length;
+  const parts = [`${enabled} of ${tested.length} enabled`];
+  if (denied > 0) parts.push(`${denied} not enabled for this key`);
+  if (unreachable > 0) parts.push(`${unreachable} couldn't be checked`);
+  const latest = Math.max(...tested.map((r) => r.checkedAt ?? 0));
+  const ago = Math.max(0, Math.round((Date.now() - latest) / 60_000));
+  parts.push(ago === 0 ? 'checked just now' : `checked ${ago} min ago`);
+  return parts.join(' · ');
+}
+
+/**
+ * "Google APIs" row. Collapsed it is one honest line; tapping expands the
+ * per-API list and runs the probes (cached 10 minutes — "Check again" forces
+ * a fresh set). Nothing is ever assumed: every pill is the result of a real
+ * request, or says it has not been tested.
+ */
+function GoogleApisRow() {
+  const [open, setOpen] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [results, setResults] = useState<GoogleApiProbeResult[]>(() => getCachedGoogleApiProbes());
+
+  const check = async (force: boolean) => {
+    if (checking) return;
+    setChecking(true);
+    try {
+      const out = await runGoogleApiProbes(GOOGLE_PROBES, { force });
+      setResults(out);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next) check(false);
+  };
+
+  const denied = results.some((r) => r.state === 'not_enabled');
+  const anyTested = results.some((r) => r.checkedAt != null);
+  const tone: ChipTone = !anyTested ? 'quiet' : denied ? 'orange' : 'green';
+
+  return (
+    <>
+      <Row
+        icon="key-outline"
+        tone={tone}
+        title="Google APIs"
+        sub={probeSummary(results, checking)}
+        trailing={
+          checking ? (
+            <ActivityIndicator color={colors.textMuted} />
+          ) : (
+            <Ionicons
+              name={open ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.textSubtle}
+            />
+          )
+        }
+        onPress={toggle}
+      />
+      {open ? (
+        <View style={styles.apiList}>
+          {results.map((r) => {
+            const pill = PROBE_PILL[r.state];
+            const labels = GOOGLE_API_LABELS[r.api];
+            return (
+              <View key={r.api} style={styles.apiRow}>
+                <View style={styles.apiText}>
+                  <Text style={styles.apiTitle}>{labels.feature}</Text>
+                  <Text style={styles.apiSub} numberOfLines={3}>
+                    {labels.apiName}
+                    {r.state !== 'enabled' && r.detail ? ` — ${r.detail}` : ''}
+                  </Text>
+                </View>
+                <Pill label={pill.label} tone={pill.tone} size="sm" dot />
+              </View>
+            );
+          })}
+          <PressableScale
+            style={[styles.apiCheckBtn, checking && styles.rowDisabled]}
+            onPress={() => check(true)}
+            disabled={checking}
+            accessibilityRole="button"
+            accessibilityLabel="Check Google APIs again"
+          >
+            <Ionicons name="refresh" size={18} color={colors.navy} />
+            <Text style={styles.apiCheckText}>{checking ? 'Checking…' : 'Check again'}</Text>
+          </PressableScale>
+          <Text style={styles.apiFooter}>
+            Each check is one tiny request per service. The native map can't be checked
+            from here — it draws with Apple Maps in this build.
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
 // ---------- grouped-list primitives ----------
 
 function Group({
@@ -643,6 +841,38 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
+
+  // Google APIs — expanded per-service list under the Integrations row.
+  apiList: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    gap: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+    paddingTop: spacing.sm,
+  },
+  apiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.small,
+    paddingVertical: spacing.xs,
+  },
+  apiText: { flex: 1 },
+  apiTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium, color: colors.text },
+  apiSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2, lineHeight: 17 },
+  apiCheckBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: touchTarget.standard,
+    borderRadius: radii.control,
+    backgroundColor: colors.fillQuiet,
+    marginTop: spacing.xs,
+  },
+  apiCheckText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  apiFooter: { fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 15 },
 
   switchTrack: {
     width: 51,

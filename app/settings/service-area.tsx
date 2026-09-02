@@ -18,6 +18,7 @@ import { useActivityStore } from '@/lib/stores/activityStore';
 import { requestPushPermission, scheduleWeeklyCalibrationPush } from '@/lib/services/pushNotifications';
 import { checkStormWatch } from '@/lib/services/stormWatch';
 import { geocodeText } from '@/lib/services/geocoding';
+import { UseMyLocationButton, type ResolvedLocation } from '@/components/AddressAutocomplete';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
@@ -47,8 +48,13 @@ export default function ServiceAreaScreen() {
   const [draft, setDraft] = useState('');
   const [scanning, setScanning] = useState(false);
 
-  const onAdd = async () => {
-    const text = draft.trim();
+  /**
+   * Add an area. `known` carries a centroid we already have (from "Use my
+   * location") so the Map circle needs no geocode round-trip — and works even
+   * when the Geocoding API is not enabled for the key.
+   */
+  const addArea = async (label: string, known?: { lat: number; lng: number }) => {
+    const text = label.trim();
     if (text.length === 0) return;
     if (!STATE_HINT_PATTERN.test(text)) {
       Alert.alert(
@@ -62,12 +68,18 @@ export default function ServiceAreaScreen() {
     setDraft('');
     toast({ tone: 'success', title: 'Added to service area', body: area.label });
 
-    // Background geocode so the Map can render the area as a circle.
-    geocodeText(text)
-      .then((g) => {
-        if (g) setCentroid(area.id, g.lat, g.lng);
-      })
-      .catch(() => {});
+    if (known) {
+      setCentroid(area.id, known.lat, known.lng);
+    } else {
+      // Background geocode so the Map can render the area as a circle. A
+      // refused key is a typed error here; the area is still saved, the
+      // circle just waits until the owner enables the Geocoding API.
+      geocodeText(text)
+        .then((g) => {
+          if (g) setCentroid(area.id, g.lat, g.lng);
+        })
+        .catch(() => {});
+    }
 
     // First-add: ask for push permission + schedule the weekly calibration push.
     if (areas.length === 0) {
@@ -76,6 +88,31 @@ export default function ServiceAreaScreen() {
         scheduleWeeklyCalibrationPush().catch(() => {});
       }
     }
+  };
+
+  const onAdd = () => addArea(draft);
+
+  /**
+   * "Use my location" → "City, ST" (or "ZIP, ST"). A full match adds the
+   * area in one tap; anything less lands in the box for the roofer to finish
+   * — never a guessed city (Drift #5).
+   */
+  const onMyLocation = (loc: ResolvedLocation) => {
+    const coord = { lat: loc.lat, lng: loc.lng };
+    if (loc.city && loc.stateCode) {
+      addArea(`${loc.city}, ${loc.stateCode}`, coord);
+      return;
+    }
+    if (loc.postalCode && loc.stateCode) {
+      addArea(`${loc.postalCode}, ${loc.stateCode}`, coord);
+      return;
+    }
+    setDraft(loc.source === 'coords' ? '' : loc.address);
+    toast({
+      tone: 'warn',
+      title: 'Couldn\'t name your area',
+      body: 'Type the city and state (e.g. "Plano, TX"), then tap +.',
+    });
   };
 
   const onRemove = (id: string, label: string) => {
@@ -162,6 +199,7 @@ export default function ServiceAreaScreen() {
                 <Ionicons name="add" size={24} color={colors.textInverse} />
               </PressableScale>
             </View>
+            <UseMyLocationButton onResolved={onMyLocation} label="Use my current city" />
           </RichCard>
         </FadeSlideIn>
 

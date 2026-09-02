@@ -194,6 +194,7 @@ export default function CostEstimatorScreen() {
                 onPlaceSelected={(p) =>
                   setDraft({ ...draft, address: p.description, lat: p.lat, lng: p.lng })
                 }
+                useMyLocation
                 onLocationSelected={onLocation}
               />
             </View>
@@ -251,8 +252,12 @@ export default function CostEstimatorScreen() {
               )}
 
               <View style={styles.card}>
+                <IconChip name="create-outline" tone="blue" />
+                <Text style={styles.cardTitle}>Enter squares manually</Text>
                 <Text style={styles.cardSub}>
-                  Prefer to enter measurements by hand?
+                  {draft.measurement
+                    ? 'Override the aerial figure with your own count.'
+                    : 'Always available — count squares on-site or from a prior report.'}
                 </Text>
                 <View style={styles.stepperRow}>
                   <Pressable

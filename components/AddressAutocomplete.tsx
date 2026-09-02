@@ -48,9 +48,11 @@ import {
 // screens with a plain TextInput (Service Area) get the same button without
 // adopting Places autocomplete.
 //
-// NOTE: the weather-page builder owns `components/LocationField.tsx`. It did
-// not exist when this was written, so this file stays self-contained; when it
-// lands, `UseMyLocationButton` can delegate to it.
+// NOTE: `components/LocationField.tsx` (weather-page builder) wraps this
+// component and carries its own "Use my location" button + device-geocode
+// path. Two implementations exist until they are unified; this one is the
+// one that SAYS when the Google key refuses the Geocoding API. LocationField
+// imports this file, so delegation can only run that way round.
 // -----------------------------------------------------------------------------
 
 export type ResolvedLocation = {
@@ -336,7 +338,12 @@ type Props = {
    * through `onChangeText`; use this for lat/lng.
    */
   onLocationSelected?: (location: ResolvedLocation) => void;
-  /** Show the "Use my location" button. Default true. */
+  /**
+   * Render the "Use my location" button under the field. Default FALSE:
+   * `components/LocationField.tsx` wraps this component and draws its own
+   * button, so a default of true would double it up there. Screens that use
+   * AddressAutocomplete directly opt in.
+   */
   useMyLocation?: boolean;
   label?: string;
   placeholder?: string;
@@ -351,7 +358,7 @@ export function AddressAutocomplete({
   onChangeText,
   onPlaceSelected,
   onLocationSelected,
-  useMyLocation = true,
+  useMyLocation = false,
   label,
   placeholder = '123 Main St, Plano TX',
   biasLat,
