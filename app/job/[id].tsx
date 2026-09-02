@@ -207,7 +207,8 @@ export default function JobDetail() {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => {
           remove(inspection.id);
-          router.replace('/(tabs)');
+          // dismissTo, not replace: replace stacked a second tab shell (NAV-3).
+          router.dismissTo('/(tabs)');
         } },
       ],
     );

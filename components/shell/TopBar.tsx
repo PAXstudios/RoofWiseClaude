@@ -22,7 +22,7 @@ export function TopBar() {
 
   const current =
     navItems.find((it) =>
-      it.href === '/'
+      it.href === '/(tabs)' || it.href === '/'
         ? pathname === '/' || pathname === '/index'
         : pathname.startsWith(it.href),
     ) ?? navItems[0];

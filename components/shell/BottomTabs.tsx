@@ -31,7 +31,13 @@ export function BottomTabs() {
             active={isActive(pathname, it.href)}
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
-              router.push(it.href as any);
+              // (tabs)/_layout renders a <Slot/>, which expo-router 6 backs
+              // with a StackRouter: every tab tap is a stack action. A repeat
+              // tap on the active tab used to PUSH a duplicate of that screen
+              // (remounting it and re-running its fetches); `navigate` pops
+              // back to an existing instance instead of stacking a new one.
+              if (isActive(pathname, it.href)) return;
+              router.navigate(it.href as any);
             }}
           />
         ))}
@@ -92,7 +98,8 @@ function TabButton({
 }
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/' || pathname === '/index';
+  // usePathname() reports the Home tab ((tabs)/index) as '/'.
+  if (href === '/(tabs)' || href === '/') return pathname === '/' || pathname === '/index';
   return pathname.startsWith(href);
 }
 

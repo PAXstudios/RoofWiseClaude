@@ -26,6 +26,7 @@ import { resolveServiceCenter } from '@/lib/services/serviceState';
 import {
   fetchAddressStormHistory,
   clampLookbackYears,
+  HISTORY_LOOKBACK_YEARS_DEFAULT,
   HISTORY_LOOKBACK_YEARS_MAX,
 } from '@/lib/services/stormMatch';
 import {
@@ -62,13 +63,14 @@ const FILTERS: { id: Filter; label: string; icon: keyof typeof import('@expo/vec
 
 /**
  * Time Travel lookbacks (years). The service clamps to
- * HISTORY_LOOKBACK_YEARS_MAX = 4; 1 year stays the default so opening the tab
- * doesn't pull four years of state-wide reports over cellular. This is the
+ * HISTORY_LOOKBACK_YEARS_MAX = 4; 3 years (36 months, hail + wind) is the
+ * default per the owner — affordable now that the fetch is the per-point IEM
+ * service (~0.3 MB/yr at 50 mi) rather than a state-wide pull. This is the
  * history-*browsing* window — deliberately separate from the 2-year claim
  * corroboration cap (docs/HAAG_DECISION_ENGINE.md §6).
  */
-const LOOKBACK_OPTIONS = [1, 2, HISTORY_LOOKBACK_YEARS_MAX] as const;
-const DEFAULT_LOOKBACK_YEARS = 1;
+const LOOKBACK_OPTIONS = [1, 2, 3, HISTORY_LOOKBACK_YEARS_MAX] as const;
+const DEFAULT_LOOKBACK_YEARS = HISTORY_LOOKBACK_YEARS_DEFAULT;
 
 /** Storm pins drawn at once. The count line always reports the real total. */
 const MAX_STORM_PINS = 300;
@@ -503,7 +505,11 @@ export default function MapScreen() {
             <View style={styles.statBarShadow}>
               <GlassCard onLight onArt radius={radii.button} style={styles.statBar}>
                 <Text style={styles.statText}>
-                  {filter === 'storms' && stormCountLine(events.length, stormPins.length, lookbackYears)}
+                  {filter === 'storms' &&
+                    stormCountLine(events.length, stormPins.length, lookbackYears, {
+                      loading,
+                      unavailable: error != null,
+                    })}
                   {filter === 'jobs' && `${jobPins.length} of ${inspections.length} jobs mapped`}
                   {filter === 'leads' && `${leadPins.length} of ${leads.length} leads mapped`}
                   {filter === 'knocks' && `${knockPins.length} knock pins`}
@@ -517,9 +523,21 @@ export default function MapScreen() {
   );
 }
 
-/** Honest count line: never claims to draw more pins than it drew. */
-function stormCountLine(total: number, shown: number, years: number): string {
+/**
+ * Honest count line: never claims to draw more pins than it drew, and never
+ * reads "No validated storm events" over a failed request — "unavailable"
+ * (NOAA/IEM unreachable) and "none found" (service answered) are different
+ * facts (Drift #5).
+ */
+function stormCountLine(
+  total: number,
+  shown: number,
+  years: number,
+  state: { loading: boolean; unavailable: boolean },
+): string {
   const window = `past ${years} yr within ${STORM_HISTORY_BROWSE_RADIUS_MILES} mi`;
+  if (state.unavailable) return `Storm pins withheld — NOAA history unavailable · ${window}`;
+  if (state.loading && total === 0) return `Checking NOAA storm reports · ${window}`;
   if (total === 0) return `No validated storm events · ${window}`;
   const head =
     shown < total

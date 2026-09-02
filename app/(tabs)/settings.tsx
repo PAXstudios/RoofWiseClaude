@@ -220,6 +220,15 @@ export default function SettingsScreen() {
           chevron
           onPress={() => router.push('/settings/about')}
         />
+        <Sep />
+        <Row
+          icon="bug-outline"
+          tone="quiet"
+          title="Diagnostics"
+          sub="Crash log for this device"
+          chevron
+          onPress={() => router.push('/settings/diagnostics')}
+        />
       </Group>
 
       <Group index={4} label="Safety">

@@ -106,7 +106,9 @@ export default function Welcome() {
       } else {
         await signIn(email.trim(), password);
       }
-      router.replace('/(tabs)');
+      // dismissTo: pops to the existing tab shell when there is one; when
+      // Welcome is the only route it pops-and-adds, i.e. behaves as replace.
+      router.dismissTo('/(tabs)');
     } catch (e) {
       toast({
         tone: 'danger',
@@ -325,7 +327,7 @@ export default function Welcome() {
               <Animated.View entering={FadeInDown.duration(motion.enterMs).delay(260)}>
                 <Pressable
                   style={styles.explore}
-                  onPress={() => router.replace('/(tabs)')}
+                  onPress={() => router.dismissTo('/(tabs)')}
                   accessibilityRole="button"
                   accessibilityLabel="Explore the app without an account"
                 >

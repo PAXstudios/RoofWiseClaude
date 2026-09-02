@@ -523,7 +523,8 @@ export default function NewJobWizard() {
     }
 
     Alert.alert('Job created', `Report ${ins.reportId} saved locally.`, [
-      { text: 'Done', onPress: () => router.replace('/(tabs)') },
+      // dismissTo, not replace: replace stacked a second tab shell (NAV-3).
+      { text: 'Done', onPress: () => router.dismissTo('/(tabs)') },
     ]);
   };
 

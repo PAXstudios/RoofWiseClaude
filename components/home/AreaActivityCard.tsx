@@ -22,7 +22,9 @@
 //                                 correct and is worse than an error
 //                                 (see lib/services/serviceState.ts).
 //   c) Key + area + no storms  -> the map + "No qualifying storms in the last
-//                                 4 years" — a true statement, not a void.
+//                                 3 years" — a true statement, not a void.
+//   d) Key + area + NOAA down  -> the map + "NOAA storm history isn't
+//                                 reachable" with a retry — distinct from (c).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
@@ -52,7 +54,7 @@ import { resolveServiceCenter, stateFromText } from '@/lib/services/serviceState
 import {
   clampLookbackYears,
   fetchAddressStormHistory,
-  HISTORY_LOOKBACK_YEARS_MAX,
+  HISTORY_LOOKBACK_YEARS_DEFAULT,
   type StormHistoryResult,
 } from '@/lib/services/stormMatch';
 import {
@@ -598,7 +600,10 @@ export function AreaActivityCard() {
   // Storm history — cancel-safe, bounded, fetched once per market
   // ---------------------------------------------------------------------------
 
-  const lookbackYears = clampLookbackYears(HISTORY_LOOKBACK_YEARS_MAX);
+  // 3-year default (36 months, hail + wind) rather than the 4-year ceiling:
+  // with the per-point IEM service this is ~1 MB, inside STORM_FETCH_TIMEOUT_MS
+  // on cellular. The old 4-year statewide pull tripped the 12 s bound.
+  const lookbackYears = clampLookbackYears(HISTORY_LOOKBACK_YEARS_DEFAULT);
   const fetchKey = `${serviceCenter.state}|${anchor.lat.toFixed(3)}|${anchor.lon.toFixed(
     3,
   )}|${retryTick}`;

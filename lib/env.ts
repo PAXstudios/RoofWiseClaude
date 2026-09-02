@@ -9,8 +9,20 @@
 // See `.env.local.example` for the canonical variable list.
 
 function pick(value: string | undefined, fallback = ''): string {
-  return value && value.length > 0 ? value : fallback;
+  // Trimmed: a whitespace-only `EXPO_PUBLIC_*` line in .env.local must fall
+  // through to the fallback, not ship an empty header value.
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : fallback;
 }
+
+/**
+ * User-Agent sent to the Iowa Environmental Mesonet (NOAA LSR mirror).
+ * IEM asks automated clients to identify themselves with a contact address
+ * and may throttle or reject anonymous/empty agents. This fallback guarantees
+ * a missing `EXPO_PUBLIC_NOAA_USER_AGENT` never sends an agent Mesonet
+ * rejects — do not reduce it to the bare app name.
+ */
+const NOAA_USER_AGENT_FALLBACK = 'RoofWise/1.0 (iOS; contact@roofwise.app)';
 
 const googleMapsKey = pick(process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY);
 
@@ -39,10 +51,7 @@ export const env = {
     process.env.EXPO_PUBLIC_CORRECTIONS_ENDPOINT,
     'https://roofwise-backend.vercel.app/api/v1/corrections/batch',
   ),
-  NOAA_USER_AGENT: pick(
-    process.env.EXPO_PUBLIC_NOAA_USER_AGENT,
-    'RoofWise iOS / contact@roofwise.app',
-  ),
+  NOAA_USER_AGENT: pick(process.env.EXPO_PUBLIC_NOAA_USER_AGENT, NOAA_USER_AGENT_FALLBACK),
 
   // Feature flags
   USE_LIVE_AR: pick(process.env.EXPO_PUBLIC_USE_LIVE_AR, 'false') === 'true',

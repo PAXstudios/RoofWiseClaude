@@ -4,7 +4,7 @@
 //
 // Thresholds come from stormMatch.ts so the whole storm-validation layer
 // shares one source of truth: hail >= 0.25" (public commitment — see
-// HAIL_VALIDATION_FLOOR_INCHES) and wind >= 50.4 kt (NWS severe criterion).
+// HAIL_VALIDATION_FLOOR_INCHES) and wind >= 58 mph (NWS severe criterion).
 //
 // This file also owns storm-matched lead clustering — the pitch deck's
 // "3 leads within 2mi of Apr 18 hail core" (docs/SPEC.md §"Geographic
@@ -74,7 +74,7 @@ export type StormCore = {
   /** ISO 8601 timestamp of the event. */
   occurredAt: string;
   type?: StormType;
-  /** Hail size in inches, wind speed in knots. */
+  /** Hail size in inches, wind speed in MPH (the unit IEM reports). */
   magnitude?: number | null;
 };
 
@@ -286,7 +286,7 @@ export async function checkStormWatch(): Promise<StormWatchResult> {
       continue;
     }
     scanned += events.length;
-    // Published validation floor: hail >= 0.25", wind >= 50.4 kt (stormMatch.ts).
+    // Published validation floor: hail >= 0.25", wind >= 58 mph (stormMatch.ts).
     // Then scoped to the area's market when we know where the area actually is.
     const qualifying = scopeToArea(events.filter(qualifiesForValidation), area);
     if (qualifying.length === 0) continue;
@@ -294,9 +294,11 @@ export async function checkStormWatch(): Promise<StormWatchResult> {
     const hailMax = qualifying
       .filter((e) => e.type === 'hail' && typeof e.magnitude === 'number')
       .reduce((m, e) => Math.max(m, e.magnitude ?? 0), 0);
+    // Magnitude is already MPH from IEM — the old `* 1.15078` (kt->mph)
+    // over-reported every alert's gust speed by 15%.
     const windMax = qualifying
       .filter((e) => e.type === 'wind' && typeof e.magnitude === 'number')
-      .reduce((m, e) => Math.max(m, (e.magnitude ?? 0) * 1.15078), 0);
+      .reduce((m, e) => Math.max(m, e.magnitude ?? 0), 0);
 
     const kind: StormAlert['eventKind'] =
       hailMax > 0 && windMax > 0 ? 'mixed' : hailMax > 0 ? 'hail' : 'wind';

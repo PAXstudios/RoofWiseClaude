@@ -4,7 +4,7 @@
 // is a one-file change.
 
 import { forwardRef, useCallback, useState, type ReactNode, type Ref } from 'react';
-import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, UIManager, View, type ViewStyle } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useFocusEffect, useNavigation } from 'expo-router';
 import MapView, {
@@ -31,6 +31,22 @@ import { colors, radii } from '@/theme/tokens';
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const MAP_PROVIDER =
   Platform.OS === 'ios' && inExpoGo ? PROVIDER_DEFAULT : PROVIDER_GOOGLE;
+
+/**
+ * Heatmap is Google-Maps-only. react-native-maps ships AIRGoogleMapHeatmap
+ * under ios/AirGoogleMaps and NO Apple Maps equivalent, yet MapHeatmap.js
+ * still calls requireNativeComponent('AIRMapHeatmap') under the default
+ * provider — a render-time "View config not found for component
+ * `AIRMapHeatmap`" invariant that takes the whole screen down (Hail Tracer in
+ * Expo Go on iOS, the moment any hail event exists). Gate on the native
+ * registration itself — the same check react-native-maps uses for
+ * `googleMapIsInstalled` — not on the provider constant: a dev build that
+ * requests PROVIDER_GOOGLE without AirGoogleMaps linked would otherwise
+ * render `<undefined>` and throw 'Element type is invalid' instead.
+ */
+export const MAP_SUPPORTS_HEATMAP =
+  Platform.OS === 'android' ||
+  (MAP_PROVIDER === PROVIDER_GOOGLE && UIManager.hasViewManagerConfig('AIRGoogleMapHeatmap'));
 
 export type MapCoordinate = { latitude: number; longitude: number };
 
@@ -141,6 +157,9 @@ export function MapCircle(props: MapCircleProps) {
 }
 
 export function MapHeatmap(props: MapHeatmapProps) {
+  // Never mount the native Heatmap where it has no view manager (Apple Maps /
+  // Expo Go iOS) — see MAP_SUPPORTS_HEATMAP. Callers draw MapCircle instead.
+  if (!MAP_SUPPORTS_HEATMAP) return null;
   return <Heatmap {...props} />;
 }
 

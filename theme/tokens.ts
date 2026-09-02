@@ -120,6 +120,10 @@ export const colors = {
   stormHail: brand.royal,
   stormWind: brand.burnt,
   stormSevere: '#D93A3F',
+  // Translucent fills for hail swath circles (the Apple Maps fallback for the
+  // Google-only heatmap in Hail Tracer). Same hues as above at low alpha.
+  stormHailFill: 'rgba(43, 78, 245, 0.22)',
+  stormSevereFill: 'rgba(217, 58, 63, 0.28)',
 
   // ── Tile grounds ────────────────────────────────────────────────────────
   // Soft grounds for icon chips and stat tiles. Colour is how a crafted app

@@ -24,7 +24,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import type MapView from 'react-native-maps';
-import { Map, MapHeatmap, MapPin } from '@/components/map/Map';
+import { Map, MapCircle, MapHeatmap, MapPin, MAP_SUPPORTS_HEATMAP } from '@/components/map/Map';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { GlassCard } from '@/components/glass/GlassCard';
@@ -52,14 +52,18 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-type Range = '7d' | '30d' | '6m' | '24m' | '48m';
+type Range = '7d' | '30d' | '6m' | '24m' | '36m' | '48m';
 const RANGE_LABELS: Record<Range, string> = {
   '7d': 'Past 7 days',
   '30d': 'Past 30 days',
   '6m': 'Past 6 months',
   '24m': 'Past 24 months',
+  '36m': 'Past 36 months',
   '48m': 'Past 4 years',
 };
+
+/** Default range: 36 months for hail and wind (owner's ask); 4 yr is the cap. */
+const DEFAULT_RANGE: Range = '36m';
 
 /**
  * Whole-year lookback that contains each range. `fetchAddressStormHistory`
@@ -73,8 +77,16 @@ const RANGE_LOOKBACK_YEARS: Record<Range, number> = {
   '30d': 1,
   '6m': 1,
   '24m': 2,
+  '36m': 3,
   '48m': 4,
 };
+
+/** Apple Maps fallback for the Google-only heatmap: one circle per hail
+ *  report, radius grown with size. 400 m floor, +600 m per inch, 2 km cap. */
+const HAIL_CIRCLE_BASE_M = 400;
+const HAIL_CIRCLE_PER_INCH_M = 600;
+const HAIL_CIRCLE_MAX_M = 2000;
+const MAX_HAIL_CIRCLES = 200;
 
 /**
  * Initial viewport, sized to the browse radius so the swath fills the map
@@ -268,7 +280,7 @@ export default function HailTracerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const [range, setRange] = useState<Range>('24m');
+  const [range, setRange] = useState<Range>(DEFAULT_RANGE);
   const [layer, setLayer] = useState<Layer>('both');
   const [magnitude, setMagnitude] = useState<Magnitude>('all');
   const [events, setEvents] = useState<StormEvent[]>([]);
@@ -349,29 +361,33 @@ export default function HailTracerScreen() {
     return filterByMagnitude(byLayer, magnitude);
   }, [events, range, layer, magnitude]);
 
+  const hailEvents = useMemo(() => filtered.filter((e) => e.type === 'hail'), [filtered]);
+
   const heatmapPoints = useMemo(
     () =>
-      filtered
-        .filter((e) => e.type === 'hail')
-        .map((e) => ({
-          latitude: e.lat,
-          longitude: e.lon,
-          // weight ∝ size²
-          weight: e.magnitude ? Math.max(0.2, (e.magnitude ?? 0) ** 2) : 0.5,
-        })),
-    [filtered],
+      hailEvents.map((e) => ({
+        latitude: e.lat,
+        longitude: e.lon,
+        // weight ∝ size²
+        weight: e.magnitude ? Math.max(0.2, (e.magnitude ?? 0) ** 2) : 0.5,
+      })),
+    [hailEvents],
   );
+
+  // "Unavailable" (service failed) and "0 events" (service answered) are
+  // different facts; the subtitle must never read "0 events" over an error.
+  const subtitle = error
+    ? `Storm history unavailable · ${RANGE_LABELS[range]}`
+    : loading && events.length === 0
+      ? `Checking NOAA storm reports · ${RANGE_LABELS[range]}`
+      : `${filtered.length} event${filtered.length === 1 ? '' : 's'} · ${RANGE_LABELS[range]} · within ${STORM_HISTORY_BROWSE_RADIUS_MILES} mi`;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       {/* Inline sub-screen header — plain chevron, honest count subtitle. */}
       <Rise index={0}>
-        <ScreenHeader
-          title="Hail Tracer"
-          subtitle={`${filtered.length} event${filtered.length === 1 ? '' : 's'} · ${RANGE_LABELS[range]} · within ${STORM_HISTORY_BROWSE_RADIUS_MILES} mi`}
-          back={() => router.back()}
-        />
+        <ScreenHeader title="Hail Tracer" subtitle={subtitle} back={() => router.back()} />
       </Rise>
 
       <Rise index={1} style={styles.segmentedWrap}>
@@ -398,7 +414,12 @@ export default function HailTracerScreen() {
             longitudeDelta: BROWSE_REGION_DELTA,
           }}
         >
-          {heatmapPoints.length > 0 && (
+          {/* Heatmap ONLY where the native view exists (Google Maps / Android).
+              On Apple Maps (Expo Go iOS) react-native-maps has no AIRMapHeatmap
+              and mounting it throws "View config not found" in render — the
+              whole screen "crashes" the moment a hail event exists. Circles
+              are supported on every provider. Do not re-enable unconditionally. */}
+          {MAP_SUPPORTS_HEATMAP && heatmapPoints.length > 0 && (
             <MapHeatmap
               points={heatmapPoints}
               radius={40}
@@ -411,6 +432,23 @@ export default function HailTracerScreen() {
               }}
             />
           )}
+          {!MAP_SUPPORTS_HEATMAP &&
+            hailEvents.slice(0, MAX_HAIL_CIRCLES).map((e) => {
+              const severe = (e.magnitude ?? 0) >= 1.5;
+              return (
+                <MapCircle
+                  key={`swath-${e.id}`}
+                  center={{ latitude: e.lat, longitude: e.lon }}
+                  radius={Math.min(
+                    HAIL_CIRCLE_MAX_M,
+                    HAIL_CIRCLE_BASE_M + HAIL_CIRCLE_PER_INCH_M * (e.magnitude ?? 0.5),
+                  )}
+                  fillColor={severe ? colors.stormSevereFill : colors.stormHailFill}
+                  strokeColor={severe ? colors.stormSevere : colors.stormHail}
+                  strokeWidth={1}
+                />
+              );
+            })}
           {filtered
             .filter((e) => e.type === 'wind')
             .slice(0, 200)
@@ -507,7 +545,9 @@ export default function HailTracerScreen() {
             <ClusterInsight
               cluster={cluster}
               onPress={() =>
-                router.push({ pathname: '/(tabs)/map', params: { focus: 'storm-leads' } } as any)
+                // navigate, not push: from this root-level screen a push to a
+                // '(tabs)/…' href stacks a second tab shell (NAV-3).
+                router.navigate({ pathname: '/(tabs)/map', params: { focus: 'storm-leads' } } as any)
               }
             />
           )}
@@ -521,7 +561,7 @@ export default function HailTracerScreen() {
                     {selected.magnitude ? (
                       selected.type === 'hail'
                         ? ` · ${selected.magnitude.toFixed(2)}"`
-                        : ` · ${Math.round(selected.magnitude)} kt`
+                        : ` · ${Math.round(selected.magnitude)} mph` // IEM reports MPH
                     ) : null}
                   </Text>
                 </View>
@@ -561,6 +601,7 @@ function rangeStart(r: Range, end: Date = new Date()): Date {
   else if (r === '30d') start.setDate(end.getDate() - 30);
   else if (r === '6m') start.setMonth(end.getMonth() - 6);
   else if (r === '24m') start.setMonth(end.getMonth() - 24);
+  else if (r === '36m') start.setMonth(end.getMonth() - 36);
   else start.setFullYear(end.getFullYear() - 4);
   return start;
 }
@@ -569,7 +610,8 @@ function filterByMagnitude(events: StormEvent[], m: Magnitude): StormEvent[] {
   if (m === 'all') return events;
   if (m === 'hail_1') return events.filter((e) => e.type === 'hail' && (e.magnitude ?? 0) >= 1);
   if (m === 'hail_15') return events.filter((e) => e.type === 'hail' && (e.magnitude ?? 0) >= 1.5);
-  if (m === 'wind_58') return events.filter((e) => e.type === 'wind' && (e.magnitude ?? 0) * 1.15078 >= 58);
+  // Magnitude is MPH straight from IEM; the old `* 1.15078` let 51 mph pass as 58.
+  if (m === 'wind_58') return events.filter((e) => e.type === 'wind' && (e.magnitude ?? 0) >= 58);
   return events;
 }
 

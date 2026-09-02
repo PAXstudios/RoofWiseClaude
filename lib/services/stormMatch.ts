@@ -37,11 +37,15 @@ import type { StormEvent as InspectionStormEvent } from '../models/types';
 export const HAIL_VALIDATION_FLOOR_INCHES = 0.25;
 
 /**
- * Wind validation floor in knots (58 mph — the NWS severe-thunderstorm wind
- * criterion). The published 0.25" floor covers hail only; wind keeps the NWS
+ * Wind validation floor in MPH — 58 mph, the NWS severe-thunderstorm wind
+ * criterion. The published 0.25" floor covers hail only; wind keeps the NWS
  * severe criterion.
+ *
+ * MPH, not knots: IEM reports gusts in MPH (`unit: 'MPH'`). The old
+ * `WIND_VALIDATION_FLOOR_KNOTS = 50.4` was compared straight against MPH
+ * values, admitting 50–57 mph gusts that are below the severe criterion.
  */
-export const WIND_VALIDATION_FLOOR_KNOTS = 50.4;
+export const WIND_VALIDATION_FLOOR_MPH = 58;
 
 /** Search radius (miles) for tying a storm report to a specific property. */
 export const MATCH_RADIUS_MILES = 5;
@@ -79,8 +83,12 @@ export const TRIPLE_CHECK_WINDOW_HOURS = 72;
  */
 export const HISTORY_LOOKBACK_YEARS_MAX = 4;
 
-/** Default storm-history lookback for address/map queries. */
-export const HISTORY_LOOKBACK_YEARS_DEFAULT = 4;
+/**
+ * Default storm-history lookback for address/map queries: 3 years (36 months)
+ * for hail AND wind, per the owner. The 4-year clamp above stays the ceiling
+ * for the Map tab's deepest chip and Hail Tracer's "Past 4 years".
+ */
+export const HISTORY_LOOKBACK_YEARS_DEFAULT = 3;
 
 /**
  * HAAG two-year rule (docs/HAAG_DECISION_ENGINE.md §6): the maximum age of a
@@ -103,7 +111,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function qualifiesForValidation(e: NoaaStormEvent): boolean {
   if (e.magnitude == null) return false;
   if (e.type === 'hail') return e.magnitude >= HAIL_VALIDATION_FLOOR_INCHES;
-  if (e.type === 'wind') return e.magnitude >= WIND_VALIDATION_FLOOR_KNOTS;
+  if (e.type === 'wind') return e.magnitude >= WIND_VALIDATION_FLOOR_MPH;
   return false;
 }
 
@@ -134,6 +142,9 @@ export async function matchStorm(args: {
       start,
       end,
       types: ['hail', 'wind'],
+      // Per-point service: the server crops to the match radius, so this is a
+      // few KB instead of a statewide pull (lib/noaa.ts header).
+      near: { lat: args.lat, lon: args.lng, radiusMiles: MATCH_RADIUS_MILES },
     });
   } catch (err) {
     return {
@@ -162,7 +173,8 @@ export async function matchStorm(args: {
       date: e.occurredAt,
       kind: e.type,
       hailSizeInches: e.type === 'hail' ? e.magnitude ?? undefined : undefined,
-      windSpeedMph: e.type === 'wind' ? Math.round((e.magnitude ?? 0) * 1.15078) : undefined,
+      // Already MPH from IEM — no knot conversion (it inflated gusts by 15%).
+      windSpeedMph: e.type === 'wind' ? Math.round(e.magnitude ?? 0) : undefined,
       noaaEventId: e.id,
       distanceMiles: best.distanceMi,
       source: 'NOAA',
@@ -204,8 +216,8 @@ export type StormHistoryResult =
 /**
  * Hail/wind history around an address for map browsing and canvassing.
  *
- * `lookbackYears` defaults to `HISTORY_LOOKBACK_YEARS_DEFAULT` (4) and is
- * clamped to `HISTORY_LOOKBACK_YEARS_MAX`. This is the *history-browsing*
+ * `lookbackYears` defaults to `HISTORY_LOOKBACK_YEARS_DEFAULT` (3) and is
+ * clamped to `HISTORY_LOOKBACK_YEARS_MAX` (4). This is the *history-browsing*
  * window — deliberately deeper than the 2-year claim-corroboration maximum
  * (`CLAIM_CORROBORATION_MAX_YEARS`, HAAG_DECISION_ENGINE.md §6), which applies
  * only when tying damage to a storm inside the Claim Viability engine.
@@ -232,6 +244,10 @@ export async function fetchAddressStormHistory(args: {
       start,
       end,
       types: ['hail', 'wind'],
+      // Per-point service (~0.3 MB/yr at 50 mi) instead of a statewide pull
+      // (~4 MB/yr, 10,000-feature cap) — what makes a 3-year window viable
+      // over cellular. The haversine below is a belt-and-braces re-crop.
+      near: { lat: args.lat, lon: args.lng, radiusMiles },
     });
   } catch (err) {
     return {

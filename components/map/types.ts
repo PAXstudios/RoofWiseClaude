@@ -14,5 +14,5 @@ export type StormFilters = {
   years: 1 | 2 | 4;
   types: StormType[];
   minHail: number; // inches
-  minWind: number; // knots
+  minWind: number; // mph (IEM reports gusts in MPH — see lib/noaa.ts)
 };

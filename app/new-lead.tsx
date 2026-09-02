@@ -87,7 +87,10 @@ export default function NewLead() {
         ? `Follow-up reminder set for ${new Date(followUpAt).toLocaleDateString()}`
         : undefined,
     });
-    router.replace('/(tabs)/leads');
+    // dismissTo (POP_TO), not replace: replace('/(tabs)/…') from a pushed
+    // screen swapped it for a NEW tab shell on top of the old one. This pops
+    // back to the existing shell (or behaves like replace if none exists).
+    router.dismissTo('/(tabs)/leads');
   };
 
   const onCancel = () => {

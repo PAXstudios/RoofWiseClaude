@@ -11,6 +11,7 @@ import {
 import {
   RecordingPresets,
   createAudioPlayer,
+  getRecordingPermissionsAsync,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
@@ -55,9 +56,17 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }:
     : 0;
 
   useEffect(() => {
+    // Seed permission state WITHOUT prompting: Job Detail mounts this card,
+    // and requestRecordingPermissionsAsync here popped the iOS microphone
+    // dialog before the roofer had tapped anything. The prompt now lives in
+    // startRecording.
     (async () => {
-      const perm = await requestRecordingPermissionsAsync();
-      setPermission(perm.granted);
+      try {
+        const perm = await getRecordingPermissionsAsync();
+        setPermission(perm.granted);
+      } catch {
+        setPermission(false);
+      }
     })();
 
     return () => {
@@ -70,7 +79,18 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }:
   }, []);
 
   const startRecording = async () => {
-    if (!permission) {
+    let granted = permission === true;
+    if (!granted) {
+      // First tap asks; iOS shows the system dialog here, on the user's action.
+      try {
+        const perm = await requestRecordingPermissionsAsync();
+        granted = perm.granted;
+        setPermission(granted);
+      } catch {
+        granted = false;
+      }
+    }
+    if (!granted) {
       toast({ tone: 'warn', title: 'Microphone access needed' });
       return;
     }
@@ -101,6 +121,12 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }:
       }
     } finally {
       setRecording(false);
+      // Leave the Record category. expo-audio keeps the iOS session in
+      // PlayAndRecord after stop(), which routes later playback to the
+      // earpiece at near-silent volume.
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(
+        () => {},
+      );
     }
   };
 
@@ -124,6 +150,10 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }:
         return;
       }
       releasePlayer();
+      // Playback category (speaker), never the leftover Record category.
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(
+        () => {},
+      );
       const player = createAudioPlayer({ uri: note.uri });
       playbackRef.current = player;
       setPlayingId(note.id);

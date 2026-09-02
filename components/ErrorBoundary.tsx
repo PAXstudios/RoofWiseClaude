@@ -1,6 +1,10 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
+import { recordError, toText } from '@/lib/services/diagnostics';
+import { useToastStore } from '@/lib/stores/toastStore';
 import {
   colors,
   fontSize,
@@ -32,9 +36,26 @@ export class ErrorBoundary extends Component<Props, State> {
     // also the hook point for a crash reporter (Sentry et al).
     this.setState({ info });
     console.error('[RoofWise] Unhandled render error:', error, info.componentStack);
+    // Belt-and-suspenders: console.error above is already wrapped by
+    // `diagnostics.install()`, but recording explicitly here means this
+    // entry survives even if diagnostics wasn't installed yet (or its wrap
+    // failed for some reason), and it lets the component stack ride along
+    // as extra context on the same entry.
+    recordError(error, { kind: 'js_error', extraStack: `Component stack:\n${info.componentStack ?? ''}` });
   }
 
   private reset = () => this.setState({ error: null, info: null });
+
+  private openDiagnostics = () => router.push('/settings/diagnostics');
+
+  private copyDetails = async () => {
+    try {
+      await Clipboard.setStringAsync(toText());
+      useToastStore.getState().show({ tone: 'success', title: 'Details copied' });
+    } catch {
+      useToastStore.getState().show({ tone: 'danger', title: 'Could not copy details' });
+    }
+  };
 
   render() {
     const { error, info } = this.state;
@@ -58,18 +79,30 @@ export class ErrorBoundary extends Component<Props, State> {
             <Text style={styles.primaryBtnText}>Try again</Text>
           </Pressable>
 
+          <View style={styles.secondaryRow}>
+            <Pressable style={styles.secondaryBtn} onPress={this.copyDetails}>
+              <Ionicons name="copy-outline" size={18} color={colors.navy} />
+              <Text style={styles.secondaryBtnText}>Copy details</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryBtn} onPress={this.openDiagnostics}>
+              <Ionicons name="bug-outline" size={18} color={colors.navy} />
+              <Text style={styles.secondaryBtnText}>Open Diagnostics</Text>
+            </Pressable>
+          </View>
+
           <View style={styles.detailCard}>
             <Text style={styles.detailLabel}>What happened</Text>
             <Text style={styles.detailText} selectable>
-              {error.message || String(error)}
+              {error.name}: {error.message || String(error)}
             </Text>
-            {info?.componentStack ? (
-              <Text style={styles.stack} selectable numberOfLines={12}>
-                {info.componentStack.trim()}
+            <ScrollView style={styles.stackScroll} nestedScrollEnabled>
+              <Text style={styles.stack} selectable>
+                {(error.stack ?? '').trim()}
+                {info?.componentStack ? `\n\nComponent stack:${info.componentStack.trimEnd()}` : ''}
               </Text>
-            ) : null}
+            </ScrollView>
             <Text style={styles.detailHint}>
-              Screenshot this and send it to support — it&apos;s what we need to fix it.
+              Copy details and send it to support — it&apos;s what we need to fix it.
             </Text>
           </View>
         </ScrollView>
@@ -123,6 +156,25 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
   },
+  secondaryRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  secondaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: touchTarget.standard,
+    borderRadius: radii.pill,
+    backgroundColor: colors.fillQuiet,
+  },
+  secondaryBtnText: {
+    color: colors.navy,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+  },
   detailCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
@@ -139,10 +191,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   detailText: { fontSize: fontSize.bodyMd, color: colors.navy },
+  // Scrollable so a long native+component stack never gets clipped —
+  // the whole point of this screen is that the roofer can read (and copy)
+  // the actual failure, not a truncated hint of it.
+  stackScroll: { maxHeight: 220 },
   stack: {
-    fontSize: fontSize.caption,
+    fontFamily: Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' }),
+    fontSize: fontSize.bodySm,
     color: colors.textSubtle,
-    lineHeight: 15,
+    lineHeight: 18,
   },
   detailHint: {
     fontSize: fontSize.bodySm,

@@ -64,7 +64,8 @@ export default function StormAlertDetail() {
 
   const onAct = () => {
     markActedOn(alert.id);
-    router.replace('/(tabs)/map');
+    // dismissTo, not replace: replace stacked a second tab shell (NAV-3).
+    router.dismissTo('/(tabs)/map');
   };
 
   return (

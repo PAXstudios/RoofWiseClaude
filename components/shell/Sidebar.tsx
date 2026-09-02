@@ -61,7 +61,8 @@ export function Sidebar() {
 }
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/' || pathname === '/index';
+  // Home's href is '/(tabs)' (see navItems.ts); usePathname() reports it as '/'.
+  if (href === '/(tabs)' || href === '/') return pathname === '/' || pathname === '/index';
   return pathname.startsWith(href);
 }
 

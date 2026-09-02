@@ -506,6 +506,9 @@ export function MapCircle({
 // surface to the core script only).
 // ---------------------------------------------------------------------------
 
+/** Mirrors Map.tsx: the web approximation below always works, so `true`. */
+export const MAP_SUPPORTS_HEATMAP = true;
+
 export type MapHeatmapProps = {
   points: { latitude: number; longitude: number; weight?: number }[];
   radius?: number;

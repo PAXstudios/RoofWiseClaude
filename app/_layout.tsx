@@ -9,6 +9,13 @@ import { useAuthStore } from '@/lib/auth/authStore';
 import { useBackgroundJobs } from '@/lib/services/lifecycleHooks';
 import { ToastHost } from '@/components/ToastHost';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { install as installDiagnostics, DiagnosticsGate } from '@/lib/services/diagnostics';
+
+// Module-level, not inside RootLayout: the global JS-error / promise-rejection
+// / console.error hooks must exist BEFORE the root layout's first render, or a
+// throw during that render (the "keeps crashing" boot case) is the one crash
+// diagnostics can never record. Idempotent, and it never throws.
+installDiagnostics();
 
 export default function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
@@ -46,7 +53,10 @@ export default function RootLayout() {
       if (data?.kind === 'storm_alert' && data.alertId) {
         router.push({ pathname: '/storm-alert/[id]', params: { id: data.alertId } } as any);
       } else if (data?.kind === 'calibration_weekly') {
-        router.push('/(tabs)/train');
+        // navigate, not push: a push while a detail screen is open stacks a
+        // second tab shell on the root stack instead of switching the one
+        // that exists.
+        router.navigate('/(tabs)/train');
       }
     });
     return () => sub.remove();
@@ -59,6 +69,10 @@ export default function RootLayout() {
         {/* Wraps the navigator, not the app root, so the crash screen still
             renders inside the safe area and a recovery re-mounts routing. */}
         <ErrorBoundary>
+          {/* First child, inside the boundary and the router tree: keeps the
+              diagnostics "last known route" current from the very first
+              pathname so a crash on any screen is tagged with where it hit. */}
+          <DiagnosticsGate />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
         </ErrorBoundary>
         <ToastHost />
