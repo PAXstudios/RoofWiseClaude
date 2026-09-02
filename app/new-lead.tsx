@@ -34,6 +34,10 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
+// Stable identity — see estimator.tsx: an inline options object re-presents the
+// modal on every render via navigation.setOptions.
+const MODAL_SCREEN_OPTIONS = { headerShown: false, presentation: 'modal' } as const;
+
 export default function NewLead() {
   const router = useRouter();
   const createLead = useLeadStore((s) => s.create);
@@ -106,7 +110,7 @@ export default function NewLead() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false, presentation: 'modal' }} />
+      <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
       <View style={styles.header}>
         <PressableScale
           onPress={onCancel}

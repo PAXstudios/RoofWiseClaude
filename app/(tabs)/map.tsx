@@ -1,28 +1,46 @@
-import { useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  AppState,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import type MapView from 'react-native-maps';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { Map, MapPin, MapCircle, regionForLatLon } from '@/components/map/Map';
+import { Map, MapPin, MapCircle, regionForLatLon, type Region } from '@/components/map/Map';
+import { StormOverlay, useStormOverlaySelection } from '@/components/map/StormOverlay';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { IconChip } from '@/components/ui/IconChip';
-import { severityColor, magnitudeLabel, type StormEvent } from '@/lib/noaa';
+import { magnitudeLabel, type StormEvent } from '@/lib/noaa';
+import { list as listDiagnostics } from '@/lib/services/diagnostics';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
+import {
+  isValidLatLon,
+  isValidRegion,
+  stormOverlayCountLine,
+  type StormClusterCell,
+} from '@/lib/services/stormCluster';
 import {
   fetchAddressStormHistory,
   clampLookbackYears,
@@ -34,6 +52,7 @@ import {
   STORM_HISTORY_BROWSE_RADIUS_MILES,
   type StormLeadCluster,
 } from '@/lib/services/stormWatch';
+import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
@@ -54,7 +73,7 @@ import {
 
 type Filter = 'leads' | 'jobs' | 'storms' | 'knocks';
 
-const FILTERS: { id: Filter; label: string; icon: keyof typeof import('@expo/vector-icons/build/Ionicons').default.glyphMap }[] = [
+const FILTERS: { id: Filter; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: 'leads', label: 'Leads', icon: 'people-outline' },
   { id: 'jobs', label: 'Jobs', icon: 'hammer-outline' },
   { id: 'storms', label: 'Storms', icon: 'thunderstorm-outline' },
@@ -72,8 +91,11 @@ const FILTERS: { id: Filter; label: string; icon: keyof typeof import('@expo/vec
 const LOOKBACK_OPTIONS = [1, 2, 3, HISTORY_LOOKBACK_YEARS_MAX] as const;
 const DEFAULT_LOOKBACK_YEARS = HISTORY_LOOKBACK_YEARS_DEFAULT;
 
-/** Storm pins drawn at once. The count line always reports the real total. */
-const MAX_STORM_PINS = 300;
+/** Viewport changes settle this long before the overlay re-selects. */
+const REGION_DEBOUNCE_MS = 250;
+
+/** Statewide-ish first view: the 50-mi browse ring fits on screen. */
+const INITIAL_REGION_DELTA = 2;
 
 /**
  * Deep-link target for the dashboard storm-alert hero: land on the Leads
@@ -82,24 +104,95 @@ const MAX_STORM_PINS = 300;
  */
 export const FOCUS_STORM_LEADS = 'storm-leads';
 
+// -----------------------------------------------------------------------------
+// Map safety mode — did the last run die with storm overlays on screen?
+// -----------------------------------------------------------------------------
+//
+// A native abort records nothing (the process is gone), so two signals stand
+// in for a crash marker, both honest and both reversible from the UI:
+//
+//   1. A "storm overlays armed" flag in AsyncStorage. Set while the Map tab is
+//      focused with storm overlays live, cleared on blur / unmount / app
+//      background. Still set at the next launch ⇒ the previous run ended with
+//      overlays on screen. (A force-quit from the Map tab also trips it — the
+//      one-tap "turn them on" row makes that a two-second inconvenience.)
+//   2. Diagnostics: an error entry tagged with the Map route inside the
+//      previous session (between the current boot marker and the one before
+//      it), or on the Map route within 5 s of that previous boot.
+//
+// Either ⇒ the Map tab opens with overlays OFF and says so in one line.
+
+const OVERLAYS_ARMED_KEY = 'roofwise.map.stormOverlaysArmed.v1';
+const MAP_ROUTE_RE = /\/map$/;
+const BOOT_PROXIMITY_MS = 5_000;
+
+type SafetySignal = 'armed-flag' | 'diagnostics' | null;
+
+async function readSafetySignal(): Promise<SafetySignal> {
+  try {
+    const armed = await AsyncStorage.getItem(OVERLAYS_ARMED_KEY);
+    if (armed) return 'armed-flag';
+  } catch {
+    // Storage unavailable — fall through to the diagnostics read.
+  }
+  try {
+    const entries = listDiagnostics(); // newest first
+    const bootIdx = entries
+      .map((e, i) => (e.kind === 'boot' ? i : -1))
+      .filter((i) => i >= 0);
+    if (bootIdx.length === 0) return null;
+    const start = bootIdx[0] + 1; // after this launch's boot marker
+    const end = bootIdx.length >= 2 ? bootIdx[1] + 1 : entries.length; // through the previous boot
+    const prevBootMs = bootIdx.length >= 2 ? Date.parse(entries[bootIdx[1]].iso) : NaN;
+    for (let i = start; i < end; i += 1) {
+      const e = entries[i];
+      if (!e.route || !MAP_ROUTE_RE.test(e.route)) continue;
+      const isError = e.kind === 'js_error' || e.kind === 'promise_rejection';
+      const nearBoot =
+        Number.isFinite(prevBootMs) && Math.abs(Date.parse(e.iso) - prevBootMs) <= BOOT_PROXIMITY_MS;
+      if (isError || nearBoot) return 'diagnostics';
+    }
+  } catch {
+    // Diagnostics unreadable — no signal, normal boot.
+  }
+  return null;
+}
+
+function setOverlaysArmed(on: boolean): void {
+  const op = on
+    ? AsyncStorage.setItem(OVERLAYS_ARMED_KEY, new Date().toISOString())
+    : AsyncStorage.removeItem(OVERLAYS_ARMED_KEY);
+  op.catch(() => {
+    // Best-effort. A missed write only means one less crash signal.
+  });
+}
+
 // First-paint-only entrance gate — same pattern as Home. Returning to the
-// Map tab (remounted under expo-router's Slot) renders statically instead of
+// Map tab (kept alive by the tab navigator) renders statically instead of
 // replaying the stagger. Dev fast-refresh resets it, which is fine.
 let mapEntrancePlayed = false;
 
+/** Rise distance in points — captured as a NUMBER, not the `spacing` object. */
+const RISE_PX = spacing.sm;
+
 /**
  * Subtle iOS entrance: 8pt rise + fade on the snappy spring, staggered by
- * index. Same reanimated primitives the repo already ships on web.
+ * index. The worklet body is guarded: a throw inside a worklet on the UI
+ * runtime aborts the process in a release native binary (see
+ * lib/services/uiRuntimeGuard.ts), so it reads only a number and falls back
+ * to the resting style. `static` renders a plain View — no worklet at all —
+ * which is what safety mode uses.
  */
 function Rise({
   index = 0,
   style,
+  static: isStatic = false,
   children,
-}: PropsWithChildren<{ index?: number; style?: StyleProp<ViewStyle> }>) {
+}: PropsWithChildren<{ index?: number; style?: StyleProp<ViewStyle>; static?: boolean }>) {
   const progress = useSharedValue(mapEntrancePlayed ? 1 : 0);
 
   useEffect(() => {
-    if (progress.value === 1) return;
+    if (isStatic || progress.value === 1) return;
     const id = setTimeout(() => {
       progress.value = withSpring(1, motion.snappy);
     }, index * motion.staggerDelayMs);
@@ -108,11 +201,18 @@ function Rise({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const anim = useAnimatedStyle(() => ({
-    opacity: Math.min(1, progress.value),
-    transform: [{ translateY: (1 - progress.value) * spacing.sm }],
-  }));
+  const anim = useAnimatedStyle(() => {
+    try {
+      const raw = progress.value;
+      const p = typeof raw === 'number' && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 1;
+      return { opacity: p, transform: [{ translateY: (1 - p) * RISE_PX }] };
+    } catch (error) {
+      reportWorkletError(error, 'map.Rise');
+      return { opacity: 1, transform: [{ translateY: 0 }] };
+    }
+  });
 
+  if (isStatic) return <View style={style}>{children}</View>;
   return <Animated.View style={[style, anim]}>{children}</Animated.View>;
 }
 
@@ -217,8 +317,50 @@ function ClusterInsight({ cluster, onPress }: { cluster: StormLeadCluster; onPre
   );
 }
 
+/**
+ * Tap-a-pin detail: the real report, nothing inferred. Date, magnitude,
+ * place, and the NWS remark when there is one.
+ */
+function StormDetailCard({ event, onClose }: { event: StormEvent; onClose: () => void }) {
+  const kind = event.type === 'hail' ? 'Hail' : 'Wind';
+  const when = new Date(event.occurredAt);
+  const where = [event.city, event.state].filter(Boolean).join(', ');
+  return (
+    <GlassCard onLight onArt radius={radii.card} style={styles.detailCard}>
+      <IconChip
+        name={event.type === 'hail' ? 'snow-outline' : 'flag-outline'}
+        tone={event.type === 'hail' ? 'blue' : 'orange'}
+        size="md"
+      />
+      <View style={styles.insightText}>
+        <Text style={styles.insightLabel}>
+          {kind.toUpperCase()} · {magnitudeLabel(event)}
+        </Text>
+        <Text style={styles.insightHeadline} numberOfLines={1}>
+          {when.toLocaleDateString()} {when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+          {where ? ` · ${where}` : ''}
+        </Text>
+        {event.remarks ? (
+          <Text style={styles.detailRemark} numberOfLines={2}>
+            {event.remarks}
+          </Text>
+        ) : null}
+      </View>
+      <PressableScale
+        style={styles.detailClose}
+        accessibilityRole="button"
+        accessibilityLabel="Close storm details"
+        onPress={onClose}
+      >
+        <Ionicons name="close" size={22} color={colors.text} />
+      </PressableScale>
+    </GlassCard>
+  );
+}
+
 export default function MapScreen() {
   const router = useRouter();
+  const mapRef = useRef<MapView>(null);
   const { focus } = useLocalSearchParams<{ focus?: string }>();
   const inspections = useInspectionStore((s) => s.inspections);
   const leads = useLeadStore((s) => s.leads);
@@ -234,6 +376,25 @@ export default function MapScreen() {
   const [events, setEvents] = useState<StormEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<StormEvent | null>(null);
+
+  // Safety mode. `null` = still reading the signal (overlays stay off until
+  // the answer is in — the safe default costs one frame, not a crash).
+  const [overlaysEnabled, setOverlaysEnabled] = useState<boolean | null>(null);
+  const [safetyNotice, setSafetyNotice] = useState<SafetySignal>(null);
+  useEffect(() => {
+    let cancelled = false;
+    readSafetySignal().then((signal) => {
+      if (cancelled) return;
+      setSafetyNotice(signal);
+      setOverlaysEnabled(signal == null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const overlaysOn = overlaysEnabled === true;
+  const safetyMode = safetyNotice != null;
 
   // Flip the entrance gate after the first mount's children have scheduled
   // their animations (child effects run before this parent effect).
@@ -241,13 +402,55 @@ export default function MapScreen() {
     mapEntrancePlayed = true;
   }, []);
 
-  // Follows the saved Service Area rather than assuming Texas.
-  const { state: serviceState, ...center } = useMemo(
+  // Screen focus, for the armed flag — the tab navigator keeps this screen
+  // alive off-screen, so "mounted" is not "on screen".
+  const [isFocused, setIsFocused] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, []),
+  );
+
+  // Centre: the first saved Service Area with a centroid, else the service
+  // state's centre. Follows the saved area rather than assuming Texas.
+  const { state: serviceState, ...stateCenter } = useMemo(
     () => resolveServiceCenter(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [serviceAreas, inspections],
   );
-  const initialRegion = regionForLatLon(center.lat, center.lon, 4);
+  const center = useMemo(() => {
+    const area = serviceAreas.find((a) => isValidLatLon(a.centroidLat, a.centroidLng));
+    return area
+      ? { lat: area.centroidLat as number, lon: area.centroidLng as number }
+      : { lat: stateCenter.lat, lon: stateCenter.lon };
+  }, [serviceAreas, stateCenter.lat, stateCenter.lon]);
+
+  // The native map's initial region is fixed for the life of the MapView —
+  // never derived per render, never passed back as `region` (a controlled
+  // region prop re-animates the camera on every state change).
+  const [initialRegion] = useState<Region>(() =>
+    regionForLatLon(center.lat, center.lon, INITIAL_REGION_DELTA),
+  );
+
+  // Viewport, debounced. The overlay re-selects on this; the MapView never
+  // remounts on it.
+  const [region, setRegion] = useState<Region>(initialRegion);
+  const regionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onRegionChangeComplete = useCallback((next: Region) => {
+    if (!isValidRegion(next)) return;
+    if (regionTimer.current) clearTimeout(regionTimer.current);
+    regionTimer.current = setTimeout(() => {
+      regionTimer.current = null;
+      setRegion(next);
+    }, REGION_DEBOUNCE_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (regionTimer.current) clearTimeout(regionTimer.current);
+    },
+    [],
+  );
 
   // The Map tab is pre-mounted by the tab navigator, so a deep link can arrive
   // while this screen is already alive — react to the param, don't rely on the
@@ -265,7 +468,7 @@ export default function MapScreen() {
   // chip (Expo Go iOS) sits above it — Google requires the credit visible.
   const [statBarHeight, setStatBarHeight] = useState(0);
 
-  // Storm history now runs through the shared, 4-year-clamped address lookback
+  // Storm history runs through the shared, 4-year-clamped address lookback
   // (stormMatch.fetchAddressStormHistory) instead of a raw NOAA call: same
   // published validation floors as every other storm surface, and an explicit
   // "unavailable" result rather than a silent empty map (Drift #5).
@@ -299,6 +502,53 @@ export default function MapScreen() {
     return () => { cancelled = true; };
   }, [filter, serviceState, lookbackYears, center.lat, center.lon]);
 
+  // Everything native receives for storms comes out of here — sanitised,
+  // banded by zoom, capped. Empty (but honest about totals) while overlays
+  // are off.
+  const selection = useStormOverlaySelection(events, region, filter === 'storms' && overlaysOn);
+  const selectedStillShown = useMemo(
+    () => !!selectedEvent && selection.markers.some((e) => e.id === selectedEvent.id),
+    [selectedEvent, selection.markers],
+  );
+
+  // Armed flag: on only while storm overlays are actually drawn on a focused
+  // screen; cleared the moment they aren't, and on every app background.
+  const overlaysLive =
+    isFocused && filter === 'storms' && overlaysOn &&
+    (selection.markers.length > 0 || selection.clusters.length > 0);
+  const overlaysLiveRef = useRef(overlaysLive);
+  overlaysLiveRef.current = overlaysLive;
+  useEffect(() => {
+    setOverlaysArmed(overlaysLive);
+  }, [overlaysLive]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        if (overlaysLiveRef.current) setOverlaysArmed(true);
+      } else {
+        setOverlaysArmed(false);
+      }
+    });
+    return () => {
+      sub.remove();
+      setOverlaysArmed(false);
+    };
+  }, []);
+
+  const onSelectCluster = useCallback(
+    (cell: StormClusterCell) => {
+      const next: Region = {
+        latitude: cell.lat,
+        longitude: cell.lon,
+        latitudeDelta: region.latitudeDelta / 3,
+        longitudeDelta: region.longitudeDelta / 3,
+      };
+      if (!isValidRegion(next)) return;
+      mapRef.current?.animateToRegion(next, 350);
+    },
+    [region.latitudeDelta, region.longitudeDelta],
+  );
+
   const jobPins = useMemo(
     () => inspections.filter((i) => typeof i.lat === 'number' && typeof i.lng === 'number'),
     [inspections],
@@ -325,13 +575,19 @@ export default function MapScreen() {
   );
   const clusterLeadIds = useMemo(() => new Set(cluster?.leadIds ?? []), [cluster]);
 
-  const stormPins = useMemo(() => events.slice(0, MAX_STORM_PINS), [events]);
+  // Hold the first paint until the safety signal is in: in safety mode the
+  // entrance is static (no worklets at all on this screen's own chrome).
+  if (overlaysEnabled === null) {
+    return <View style={styles.root} />;
+  }
+
+  const countWindow = `past ${lookbackYears} yr within ${STORM_HISTORY_BROWSE_RADIUS_MILES} mi`;
 
   return (
     <View style={styles.root}>
       {/* Large title on the grouped ground. Knock mode is this screen's single
           accent action — everything else over the map goes quiet. */}
-      <Rise index={0}>
+      <Rise index={0} static={safetyMode}>
         <ScreenHeader
           title="Map"
           right={
@@ -354,7 +610,9 @@ export default function MapScreen() {
           cinematic moment. Controls float over the imagery as real glass. */}
       <View style={styles.mapWrap}>
         <Map
+          ref={mapRef}
           initialRegion={initialRegion}
+          onRegionChangeComplete={onRegionChangeComplete}
           // Web preview only: the fallback panel top-anchors under the two
           // floating chip rows (list-screen empty-state pattern) instead of
           // centering in the void. Offset = overlay top inset + two chip rows
@@ -368,27 +626,24 @@ export default function MapScreen() {
           attributionInset={{ bottom: statBarHeight + spacing.md + spacing.sm }}
         >
           {serviceAreas
-            .filter((a) => typeof a.centroidLat === 'number' && typeof a.centroidLng === 'number')
+            .filter((a) => isValidLatLon(a.centroidLat, a.centroidLng))
             .map((a) => (
               <MapCircle
                 key={a.id}
-                center={{ latitude: a.centroidLat!, longitude: a.centroidLng! }}
+                center={{ latitude: a.centroidLat as number, longitude: a.centroidLng as number }}
                 radius={8047}  // 5 mi in meters
                 strokeColor={colors.navy}
                 strokeWidth={2}
                 fillColor={glass.lightFill}
               />
             ))}
-          {filter === 'storms' &&
-            stormPins.map((e) => (
-              <MapPin
-                key={e.id}
-                coordinate={{ latitude: e.lat, longitude: e.lon }}
-                title={`${e.type === 'hail' ? 'Hail' : 'Wind'} · ${magnitudeLabel(e)}`}
-                description={`${new Date(e.occurredAt).toLocaleDateString()} ${e.city ?? ''}`}
-                pinColor={severityColor(e)}
-              />
-            ))}
+          {filter === 'storms' && overlaysOn && (
+            <StormOverlay
+              selection={selection}
+              onSelectEvent={setSelectedEvent}
+              onSelectCluster={onSelectCluster}
+            />
+          )}
           {filter === 'jobs' &&
             jobPins.map((ins) => (
               <MapPin
@@ -439,12 +694,9 @@ export default function MapScreen() {
         </Map>
 
         {/* ONE floating glass control bar — real BlurView on iOS, tinted-fill
-            fallback elsewhere; glove-sized (≥56pt) either way. Layers, time
-            range and legend used to stack as three separate floating rows
-            down the top third of the map, and the legend pill collided with
-            the pins beneath it. */}
+            fallback elsewhere; glove-sized (≥56pt) either way. */}
         <View style={styles.overlayTop} pointerEvents="box-none">
-          <Rise index={1} style={styles.controlBarShadow}>
+          <Rise index={1} static={safetyMode} style={styles.controlBarShadow}>
             <GlassCard onLight onArt radius={radii.lg} style={styles.controlBar}>
               <ScrollView
                 horizontal
@@ -459,7 +711,10 @@ export default function MapScreen() {
                     icon={f.icon}
                     label={f.label}
                     accessibilityLabel={`Show ${f.label}`}
-                    onPress={() => setFilter(f.id)}
+                    onPress={() => {
+                      setSelectedEvent(null);
+                      setFilter(f.id);
+                    }}
                   />
                 ))}
               </ScrollView>
@@ -482,6 +737,19 @@ export default function MapScreen() {
                         onPress={() => setLookbackYears(clampLookbackYears(years))}
                       />
                     ))}
+                    {/* Overlays toggle — the reversible half of safety mode,
+                        and a plain "quiet the map" control the rest of the time. */}
+                    <GlassChip
+                      active={overlaysOn}
+                      icon="layers-outline"
+                      label="Overlays"
+                      accessibilityLabel={overlaysOn ? 'Hide storm overlays' : 'Show storm overlays'}
+                      onPress={() => {
+                        setSelectedEvent(null);
+                        setOverlaysEnabled(!overlaysOn);
+                        if (!overlaysOn) setSafetyNotice(null);
+                      }}
+                    />
                   </ScrollView>
                   <StormLegend />
                 </View>
@@ -498,8 +766,9 @@ export default function MapScreen() {
           )}
         </View>
 
-        {/* Cluster insight + count float at the bottom edge of the map. Real
-            numbers only — both are absent when there's nothing to report. */}
+        {/* Cluster insight, storm detail, safety row and count float at the
+            bottom edge of the map. Real numbers only — each is absent when
+            there's nothing to report. */}
         <View
           style={styles.statBarWrap}
           pointerEvents="box-none"
@@ -510,19 +779,44 @@ export default function MapScreen() {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
+          {safetyMode && !overlaysOn && (
+            <PressableScale
+              style={styles.safetyShadow}
+              accessibilityRole="button"
+              accessibilityLabel="Loaded without storm overlays after a crash. Turn them on."
+              onPress={() => {
+                setOverlaysEnabled(true);
+                setSafetyNotice(null);
+              }}
+            >
+              <GlassCard onLight onArt radius={radii.button} style={styles.safetyRow}>
+                <Ionicons name="shield-checkmark-outline" size={22} color={colors.warn} />
+                <Text style={styles.safetyText} numberOfLines={2}>
+                  Loaded without storm overlays after a crash — tap to turn them on
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+              </GlassCard>
+            </PressableScale>
+          )}
+          {filter === 'storms' && selectedEvent && selectedStillShown && (
+            <View style={styles.insightShadow}>
+              <StormDetailCard event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+            </View>
+          )}
           {cluster && (
-            <Rise index={4}>
+            <Rise index={4} static={safetyMode}>
               <ClusterInsight cluster={cluster} onPress={() => setFilter('leads')} />
             </Rise>
           )}
-          <Rise index={5}>
+          <Rise index={5} static={safetyMode}>
             <View style={styles.statBarShadow}>
               <GlassCard onLight onArt radius={radii.button} style={styles.statBar}>
                 <Text style={styles.statText}>
                   {filter === 'storms' &&
-                    stormCountLine(events.length, stormPins.length, lookbackYears, {
+                    stormOverlayCountLine(selection, countWindow, {
                       loading,
                       unavailable: error != null,
+                      overlaysOff: !overlaysOn,
                     })}
                   {filter === 'jobs' && `${jobPins.length} of ${inspections.length} jobs mapped`}
                   {filter === 'leads' && `${leadPins.length} of ${leads.length} leads mapped`}
@@ -535,29 +829,6 @@ export default function MapScreen() {
       </View>
     </View>
   );
-}
-
-/**
- * Honest count line: never claims to draw more pins than it drew, and never
- * reads "No validated storm events" over a failed request — "unavailable"
- * (NOAA/IEM unreachable) and "none found" (service answered) are different
- * facts (Drift #5).
- */
-function stormCountLine(
-  total: number,
-  shown: number,
-  years: number,
-  state: { loading: boolean; unavailable: boolean },
-): string {
-  const window = `past ${years} yr within ${STORM_HISTORY_BROWSE_RADIUS_MILES} mi`;
-  if (state.unavailable) return `Storm pins withheld — NOAA history unavailable · ${window}`;
-  if (state.loading && total === 0) return `Checking NOAA storm reports · ${window}`;
-  if (total === 0) return `No validated storm events · ${window}`;
-  const head =
-    shown < total
-      ? `${shown} most recent of ${total} storm events`
-      : `${total} storm event${total === 1 ? '' : 's'}`;
-  return `${head} · ${window}`;
 }
 
 const styles = StyleSheet.create({
@@ -639,8 +910,8 @@ const styles = StyleSheet.create({
   chipTextActive: { color: colors.textInverse },
 
   // Storm legend — semantic storm tokens (Drift #11), not the raw per-event
-  // hex. Now a row inside the control bar rather than a pill floating over
-  // (and colliding with) the pins.
+  // hex. A row inside the control bar rather than a pill floating over (and
+  // colliding with) the pins.
   legendCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -689,6 +960,45 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   insightHeadline: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+
+  // Storm detail — same card grammar as the insight, plus a 56pt close.
+  detailCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    minHeight: touchTarget.standard,
+  },
+  detailRemark: {
+    fontSize: fontSize.caption,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  detailClose: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Safety-mode row: one line, one tap, ≥56pt.
+  safetyShadow: { borderRadius: radii.button, ...shadows.float },
+  safetyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    minHeight: touchTarget.standard,
+  },
+  safetyText: {
+    flex: 1,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     color: colors.text,

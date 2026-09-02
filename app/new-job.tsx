@@ -269,6 +269,14 @@ function formatMoney(n: number | undefined): string {
   return n === undefined ? '—' : `$${n.toLocaleString()}`;
 }
 
+// Stable identity — an inline options object re-presents the modal on every
+// render via navigation.setOptions (see estimator.tsx for the full rationale).
+const MODAL_SCREEN_OPTIONS = {
+  headerShown: false,
+  presentation: 'modal',
+  animation: 'slide_from_bottom',
+} as const;
+
 export default function NewJobWizard() {
   const router = useRouter();
   const createInspection = useInspectionStore((s) => s.create);
@@ -530,7 +538,7 @@ export default function NewJobWizard() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
+      <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
       <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <Pressable onPress={onBack} hitSlop={10} style={styles.headerBtn}>

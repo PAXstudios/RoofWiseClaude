@@ -10,12 +10,18 @@ import { useBackgroundJobs } from '@/lib/services/lifecycleHooks';
 import { ToastHost } from '@/components/ToastHost';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { install as installDiagnostics, DiagnosticsGate } from '@/lib/services/diagnostics';
+import { installUiRuntimeGuard } from '@/lib/services/uiRuntimeGuard';
 
 // Module-level, not inside RootLayout: the global JS-error / promise-rejection
 // / console.error hooks must exist BEFORE the root layout's first render, or a
 // throw during that render (the "keeps crashing" boot case) is the one crash
 // diagnostics can never record. Idempotent, and it never throws.
 installDiagnostics();
+// A JS exception thrown inside a Reanimated worklet on the UI thread escapes as
+// a C++ exception and aborts the process (the owner's Expo Go SIGABRT via
+// worklets::UIScheduler::triggerUI). This installs the UI-runtime error handler
+// so such a throw is recorded to Diagnostics instead of killing the app.
+installUiRuntimeGuard();
 
 export default function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);

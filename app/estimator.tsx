@@ -74,6 +74,14 @@ const SCOPE_CHOICES: { id: DamageScope; label: string; sub: string }[] = [
   { id: 'full_replacement', label: 'Full replacement', sub: 'Whole-roof tear-off' },
 ];
 
+// Hoisted to a stable identity. expo-router's <Stack.Screen> re-applies its
+// `options` via navigation.setOptions whenever the object identity changes
+// (see expo-router Screen.js); an inline object is new every render, so on
+// every keystroke `presentation: 'modal'` was re-applied and the native stack
+// re-presented the modal — the field lost focus and the page "regenerated".
+// A module constant is applied once at mount.
+const MODAL_SCREEN_OPTIONS = { headerShown: false, presentation: 'modal' } as const;
+
 export default function CostEstimatorScreen() {
   const router = useRouter();
   const setPrefill = useWizardPrefillStore((s) => s.set);
@@ -158,7 +166,7 @@ export default function CostEstimatorScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false, presentation: 'modal' }} />
+      <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
       <View style={styles.header}>
         <Pressable
           onPress={() => (step === 0 ? router.back() : setStep((step - 1) as Step))}
