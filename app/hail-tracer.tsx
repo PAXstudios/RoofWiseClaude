@@ -25,6 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type MapView from 'react-native-maps';
 import { Map, MapCircle, MapHeatmap, MapPin, MAP_SUPPORTS_HEATMAP } from '@/components/map/Map';
+import { StormSwathLayer, useStormSwaths } from '@/components/map/StormOverlay';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { GlassCard } from '@/components/glass/GlassCard';
@@ -228,14 +229,42 @@ function GlassChip({
   );
 }
 
-/** Wind / hail swatches for the semantic storm palette (Drift #11). */
+/** Impacted-area band scale + report swatches (Drift #11: theme tokens). The
+ *  title names it "from storm reports" — the buffered contour of real NOAA
+ *  LSRs, never radar (Drift #5). */
 function StormLegend() {
   return (
     <View style={styles.legendShadow}>
-      <GlassCard onLight onArt radius={radii.pill} style={styles.legendCard}>
-        <LegendSwatch color={colors.stormWind} label="Wind report" />
-        <LegendSwatch color={colors.stormSevere} label={'Hail ≥1.5" report'} />
+      <GlassCard onLight onArt radius={radii.card} style={styles.legendCard}>
+        <Text style={styles.legendTitle} numberOfLines={2}>
+          Impacted area — hail / wind (from storm reports)
+        </Text>
+        <View style={styles.legendBandRow}>
+          <SwathSwatch color={colors.stormHail} label={'Hail  < 1"  ·  1–1.5"  ·  1.5–2"  ·  2"+'} />
+        </View>
+        <View style={styles.legendBandRow}>
+          <SwathSwatch color={colors.stormWind} label="Wind  58–70  ·  70–86  ·  86+ mph" />
+        </View>
+        <View style={styles.legendBandRow}>
+          <LegendSwatch color={colors.stormWind} label="Wind report" />
+          <LegendSwatch color={colors.stormSevere} label={'Hail ≥1.5" report'} />
+        </View>
       </GlassCard>
+    </View>
+  );
+}
+
+/** A darkening ramp of the peril hue — mirrors the deepening nested contours. */
+function SwathSwatch({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={styles.swathRamp}>
+        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.22 }]} />
+        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.42 }]} />
+        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.62 }]} />
+        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.85 }]} />
+      </View>
+      <Text style={styles.legendText} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
@@ -363,6 +392,12 @@ export default function HailTracerScreen() {
 
   const hailEvents = useMemo(() => filtered.filter((e) => e.type === 'hail'), [filtered]);
 
+  // Impacted-area swaths from the SAME filtered set, so the Hail/Wind/Both and
+  // magnitude controls show and hide the swaths together with the points below.
+  // Region is null here (this screen doesn't track the viewport) — the pure
+  // service picks a sensible cell size for the browse-radius view.
+  const swaths = useStormSwaths(filtered, null, filtered.length > 0);
+
   const heatmapPoints = useMemo(
     () =>
       hailEvents.map((e) => ({
@@ -419,6 +454,10 @@ export default function HailTracerScreen() {
           // the Apple base here; native builds render Google + swaths anyway.
           googleImagery={false}
         >
+          {/* Impacted-area contours FIRST, so they sit under the heatmap /
+              circles / pins. The buffered union of the real reports — labelled
+              "from storm reports", never radar (Drift #5). */}
+          <StormSwathLayer swaths={swaths} />
           {/* Heatmap ONLY where the native view exists (Google Maps / Android).
               On Apple Maps (Expo Go iOS) react-native-maps has no AIRMapHeatmap
               and mounting it throws "View config not found" in render — the
@@ -693,17 +732,19 @@ const styles = StyleSheet.create({
 
   // Storm legend — semantic storm tokens (Drift #11).
   legendRow: { marginTop: spacing.sm, paddingHorizontal: spacing.lg },
-  legendShadow: { alignSelf: 'flex-start', borderRadius: radii.pill, ...shadows.float },
+  legendShadow: { alignSelf: 'flex-start', borderRadius: radii.card, ...shadows.float },
   legendCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: touchTarget.small,
+    gap: spacing.xs,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
+  legendTitle: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, color: colors.text },
+  legendBandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
+  swathRamp: { flexDirection: 'row', borderRadius: 3, overflow: 'hidden' },
+  swathCell: { width: 9, height: 10 },
 
   loadingShadow: {
     alignSelf: 'flex-start',

@@ -26,7 +26,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { Map, MapPin, MapCircle, regionForLatLon, type Region } from '@/components/map/Map';
-import { StormOverlay, useStormOverlaySelection } from '@/components/map/StormOverlay';
+import { StormOverlay, useStormOverlaySelection, useStormSwaths } from '@/components/map/StormOverlay';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -270,13 +270,42 @@ function GlassChip({
 }
 
 /** Hail/wind/severe swatches for the semantic storm palette (Drift #11: theme
- *  tokens, not the raw per-magnitude hex `severityColor()` plots with). */
+ *  tokens, not the raw per-magnitude hex `severityColor()` plots with), plus
+ *  the impacted-area band scale. The label says "from storm reports" — this is
+ *  the buffered contour of real NOAA LSRs, NEVER radar (Drift #5). */
 function StormLegend() {
   return (
     <View style={styles.legendCard}>
-      <LegendSwatch color={colors.stormHail} label="Hail" />
-      <LegendSwatch color={colors.stormWind} label="Wind" />
-      <LegendSwatch color={colors.stormSevere} label="Severe" />
+      <Text style={styles.legendTitle} numberOfLines={2}>
+        Impacted area — hail / wind (from storm reports)
+      </Text>
+      <View style={styles.legendRow}>
+        <SwathSwatch color={colors.stormHail} label={'Hail  < 1"  ·  1–1.5"  ·  1.5–2"  ·  2"+'} />
+      </View>
+      <View style={styles.legendRow}>
+        <SwathSwatch color={colors.stormWind} label="Wind  58–70  ·  70–86  ·  86+ mph" />
+      </View>
+      <View style={styles.legendRow}>
+        <LegendSwatch color={colors.stormHail} label="Hail report" />
+        <LegendSwatch color={colors.stormWind} label="Wind report" />
+        <LegendSwatch color={colors.stormSevere} label="Severe" />
+      </View>
+    </View>
+  );
+}
+
+/** A darkening ramp of the peril hue — mirrors how the nested band contours
+ *  deepen from the weakest band to the strongest. */
+function SwathSwatch({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={styles.swathRamp}>
+        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.22 }]} />
+        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.42 }]} />
+        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.62 }]} />
+        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.85 }]} />
+      </View>
+      <Text style={styles.legendText} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
@@ -506,6 +535,10 @@ export default function MapScreen() {
   // banded by zoom, capped. Empty (but honest about totals) while overlays
   // are off.
   const selection = useStormOverlaySelection(events, region, filter === 'storms' && overlaysOn);
+  // Impacted-area swaths (HailTrace-style) — the whole area the reports imply,
+  // recomputed on data / zoom-bucket change, not on pan. Same gate as the pins,
+  // so the hail/wind (storms) filter shows and hides both together.
+  const swaths = useStormSwaths(events, region, filter === 'storms' && overlaysOn);
   const selectedStillShown = useMemo(
     () => !!selectedEvent && selection.markers.some((e) => e.id === selectedEvent.id),
     [selectedEvent, selection.markers],
@@ -624,6 +657,13 @@ export default function MapScreen() {
             spacing.xl
           }
           attributionInset={{ bottom: statBarHeight + spacing.md + spacing.sm }}
+          // Expo Go iOS only: the storm swaths + hit circles are vector
+          // overlays, and MapKit stacks the opaque Google tile overlay ABOVE
+          // them — the impacted-area fill (the substance of this filter) would
+          // vanish under it. Keep the Apple base while browsing storms; every
+          // other filter (pins are annotations, always on top) keeps Google
+          // imagery, and native builds render Google + overlays regardless.
+          googleImagery={filter !== 'storms'}
         >
           {serviceAreas
             .filter((a) => isValidLatLon(a.centroidLat, a.centroidLng))
@@ -640,6 +680,7 @@ export default function MapScreen() {
           {filter === 'storms' && overlaysOn && (
             <StormOverlay
               selection={selection}
+              swaths={swaths}
               onSelectEvent={setSelectedEvent}
               onSelectCluster={onSelectCluster}
             />
@@ -913,15 +954,22 @@ const styles = StyleSheet.create({
   // hex. A row inside the control bar rather than a pill floating over (and
   // colliding with) the pins.
   legendCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: touchTarget.small,
+    gap: spacing.xs,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
+  legendTitle: {
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+  },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
+  // A 4-cell ramp echoing the deepening nested band contours.
+  swathRamp: { flexDirection: 'row', borderRadius: 3, overflow: 'hidden' },
+  swathCell: { width: 9, height: 10 },
 
   loadingShadow: {
     alignSelf: 'flex-start',

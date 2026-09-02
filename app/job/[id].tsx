@@ -1,7 +1,16 @@
 import { PressableScale } from '@/components/PressableScale';
 import { formatDate, formatDateShort, formatRelative } from '@/lib/format/date';
 import { useRef, useState } from 'react';
-import { ScrollView, View, Text, StyleSheet, Alert, Share, TextInput } from 'react-native';
+import {
+  ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  Share,
+  TextInput,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,9 +23,22 @@ import * as ImagePicker from 'expo-image-picker';
 import { generateHaagReport } from '@/lib/services/haagPdf';
 import { generateLongReport } from '@/lib/services/longReport';
 import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
+import {
+  importFromLibrary,
+  isUnreadableAssetError,
+  type LibraryImportProgress,
+} from '@/lib/services/libraryImport';
+import {
+  deriveAnalysisProgress,
+  pendingPhotoCount,
+  queueSlopeAnalysis,
+} from '@/lib/services/analysisQueue';
+import { useCaptureSettingsStore } from '@/lib/stores/captureSettingsStore';
+import { DEFAULT_CAPTURE_MODE, defaultAreaTagForSlope } from '@/lib/services/captureSession';
 import { SignaturePad } from '@/components/SignaturePad';
 import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
+import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { transcribeAudio } from '@/lib/services/transcribeAudio';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { isGeminiConfigured } from '@/lib/env';
@@ -45,6 +67,7 @@ import {
   type BrittlenessResult,
   type Inspection,
   type Slope,
+  type SlopeOrientation,
   type SlopeVerdict,
 } from '@/lib/models/types';
 import { RichCard } from '@/components/ui/RichCard';
@@ -128,8 +151,12 @@ export default function JobDetail() {
   const toast = useToastStore((s) => s.show);
   const logActivity = useActivityStore((s) => s.log);
   const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
+  const attachRawPhotos = useInspectionStore((s) => s.attachRawPhotos);
+  const multiSelectImport = useCaptureSettingsStore((s) => s.multiSelectImport);
   const [generating, setGenerating] = useState(false);
   const [generatingLong, setGeneratingLong] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<LibraryImportProgress | null>(null);
   // "Record now" on the finalize gate has to land the roofer on the card that
   // fixes the problem, not just dismiss a dialog.
   const scrollRef = useRef<ScrollView>(null);
@@ -173,6 +200,105 @@ export default function JobDetail() {
     (a, sl) => a + (sl.aiFindings ?? []).filter((f) => f.detected).length,
     0,
   );
+  // Live analysis backlog for THIS job — drives the header status button and
+  // is the same real per-photo count the Processing view reads.
+  const pendingHere = pendingPhotoCount(deriveAnalysisProgress([inspection]));
+
+  const openCapture = () =>
+    router.push({ pathname: '/quick-inspection', params: { jobId: inspection.id } });
+
+  /**
+   * Import existing photos from the library straight into this job. Each asset
+   * rides the shared `importFromLibrary` service (same pipeline + multi-select
+   * story as the capture screen), attaches to this job's most recent slope
+   * (South if the job has none yet), then the whole slope is queued for
+   * background analysis — so imported photos flow through the exact same
+   * analysis queue as captured ones and land back here with per-photo state.
+   */
+  const runJobLibraryImport = async () => {
+    if (importing) return;
+    setImporting(true);
+    setImportProgress(null);
+    const targetSlope: SlopeOrientation =
+      inspection.slopes[inspection.slopes.length - 1]?.orientation ?? 'S';
+    const areaTag = defaultAreaTagForSlope(targetSlope);
+    try {
+      const result = await importFromLibrary({
+        multiSelect: multiSelectImport,
+        onProgress: setImportProgress,
+        onPhoto: (uri) => {
+          // Throwing marks THIS asset failed in the service and the batch
+          // continues — a single bad write never loses the rest.
+          attachRawPhotos(inspection.id, [
+            { uri, slope: targetSlope, areaTag, captureMode: DEFAULT_CAPTURE_MODE },
+          ]);
+        },
+      });
+
+      if (result.permission === 'denied') {
+        Alert.alert(
+          'Photos access needed',
+          result.permissionCanAskAgain
+            ? 'RoofWise needs Photos access to import existing roof images.'
+            : 'Enable Photos access for RoofWise in Settings to import existing images.',
+        );
+        return;
+      }
+
+      if (result.imported > 0) {
+        const slope = useInspectionStore
+          .getState()
+          .getById(inspection.id)
+          ?.slopes.find((s) => s.orientation === targetSlope);
+        logActivity({
+          kind: 'photo_captured',
+          inspectionId: inspection.id,
+          message: `Imported ${result.imported} photo${result.imported === 1 ? '' : 's'} from library`,
+        });
+        if (slope && isGeminiConfigured) {
+          queueSlopeAnalysis({
+            inspectionId: inspection.id,
+            slopeId: slope.id,
+            slopeLabel: slope.orientation,
+          });
+          toast({
+            tone: 'success',
+            title: `Imported ${result.imported} photo${result.imported === 1 ? '' : 's'}`,
+            body: 'Analyzing in the background — tap the status card to watch.',
+          });
+        } else {
+          toast({
+            tone: isGeminiConfigured ? 'success' : 'warn',
+            title: `Imported ${result.imported} photo${result.imported === 1 ? '' : 's'}`,
+            body: isGeminiConfigured
+              ? undefined
+              : 'AI not connected — photos saved without analysis.',
+          });
+        }
+      }
+
+      if (result.failures.length > 0) {
+        const n = result.failures.length;
+        const first = result.failures[0].reason;
+        Alert.alert(
+          result.imported > 0 ? `Imported ${result.imported}, skipped ${n}` : "Couldn't read that photo",
+          isUnreadableAssetError(first)
+            ? `${first} Try different photos, or run on a real iPhone.`
+            : first,
+        );
+      } else if (result.reachedLimit && result.imported > 0) {
+        Alert.alert(
+          'Import paused',
+          `Added ${result.imported} photos. Tap Import again to keep going.`,
+        );
+      }
+    } catch (e) {
+      Alert.alert('Import failed', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setImporting(false);
+      setImportProgress(null);
+    }
+  };
 
   // Pre-formatted insurance body lines — computed once so the RichCard below
   // can pass `null` (no body at all) rather than an array of `false`s when
@@ -366,6 +492,17 @@ export default function JobDetail() {
             {inspection.status === 'complete' ? 'Complete' : 'Mark complete'}
           </Text>
         </PressableScale>
+        {pendingHere > 0 && (
+          <PressableScale
+            onPress={() => router.push('/processing')}
+            hitSlop={10}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`${pendingHere} photo${pendingHere === 1 ? '' : 's'} analyzing. Open processing.`}
+          >
+            <ActivityIndicator size="small" color={colors.brand} />
+          </PressableScale>
+        )}
         <PressableScale onPress={onDelete} hitSlop={10} style={styles.headerBtn}>
           <Ionicons name="trash-outline" size={22} color={colors.danger} />
         </PressableScale>
@@ -382,6 +519,48 @@ export default function JobDetail() {
           band={haag.claim_viability}
           recommendation={haag.roofwise_recommendation}
         />
+
+        {/* The owner's ask: from inside a job, take photos to analyse — a big,
+            unmissable primary. Opens capture linked to THIS job so every photo
+            attaches here and flows through the analysis queue. */}
+        <PressableScale
+          style={styles.captureCta}
+          onPress={openCapture}
+          accessibilityRole="button"
+          accessibilityLabel="Take photos to analyse for this job"
+        >
+          <Ionicons name="camera" size={24} color={colors.textInverse} />
+          <Text style={styles.captureCtaText}>Take photos to analyse</Text>
+        </PressableScale>
+
+        <PressableScale
+          style={[styles.importCta, importing && { opacity: 0.6 }]}
+          disabled={importing}
+          onPress={runJobLibraryImport}
+          accessibilityRole="button"
+          accessibilityLabel="Import photos from library for this job"
+        >
+          {importing ? (
+            <ActivityIndicator size="small" color={colors.text} />
+          ) : (
+            <Ionicons name="images-outline" size={22} color={colors.text} />
+          )}
+          <Text style={styles.importCtaText}>
+            {importing
+              ? importProgress
+                ? importProgress.phase === 'multi'
+                  ? `Importing ${importProgress.done} of ${importProgress.total}…`
+                  : `Imported ${importProgress.done}…`
+                : 'Opening library…'
+              : 'Import from library'}
+          </Text>
+        </PressableScale>
+
+        {pendingHere > 0 && (
+          <View style={styles.pendingStrip}>
+            <AnalysisQueueChip inspectionId={inspection.id} />
+          </View>
+        )}
 
         <SectionHeader title="Property" style={styles.sectionSpacing} />
 
@@ -1047,6 +1226,36 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
 
   sectionSpacing: { marginBottom: spacing.sm },
+
+  // Prominent capture entry from a job — the owner must never lose "take
+  // photos to analyse". Brand-blue so it's distinct from the one orange
+  // report CTA further down. 64pt primary (Drift #1).
+  captureCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.preferred,
+    borderRadius: radii.button,
+    backgroundColor: colors.brand,
+    ...shadows.raised,
+  },
+  captureCtaText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+  },
+  importCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.preferred,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+  },
+  importCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  pendingStrip: { marginTop: spacing.xs },
 
   // ── Hero ──────────────────────────────────────────────────────────────
   heroShell: { borderRadius: radii.xl },

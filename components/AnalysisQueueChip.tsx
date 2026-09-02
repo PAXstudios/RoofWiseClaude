@@ -1,7 +1,13 @@
+import { useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAnalysisQueueStore } from '@/lib/stores/analysisQueueStore';
-import { drainAnalysisQueue } from '@/lib/services/analysisQueue';
+import { useRouter } from 'expo-router';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import {
+  deriveAnalysisProgress,
+  pendingPhotoCount,
+  analyzingPhotoCount,
+} from '@/lib/services/analysisQueue';
 import { PressableScale } from '@/components/PressableScale';
 import { IconChip } from '@/components/ui/IconChip';
 import {
@@ -14,46 +20,61 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-/** Shows on Home while queued AI analysis jobs are pending. */
-export function AnalysisQueueChip() {
-  const jobs = useAnalysisQueueStore((s) => s.jobs);
-  const pending = jobs.filter((j) => j.status === 'queued' || j.status === 'running');
-  const running = jobs.find((j) => j.status === 'running');
+/**
+ * Live "AI is working" status. Shows only while photos are actually queued or
+ * analyzing (real per-photo counts from the inspection store — never a
+ * fabricated number, Drift #5). Tapping opens the Processing view, where every
+ * in-flight analysis is listed with its per-photo state and a Retry for
+ * failures.
+ *
+ * Pass `inspectionId` to scope the count to one job (used in the job header);
+ * omit it on Home for the app-wide count.
+ */
+export function AnalysisQueueChip({ inspectionId }: { inspectionId?: string } = {}) {
+  const router = useRouter();
+  const inspections = useInspectionStore((s) => s.inspections);
+  const groups = useMemo(() => {
+    const scoped = inspectionId
+      ? inspections.filter((i) => i.id === inspectionId)
+      : inspections;
+    return deriveAnalysisProgress(scoped);
+  }, [inspections, inspectionId]);
 
-  if (pending.length === 0) return null;
+  const pending = pendingPhotoCount(groups);
+  const analyzing = analyzingPhotoCount(groups);
+
+  // Real counts only: nothing queued or analyzing → nothing to say.
+  if (pending === 0) return null;
+
+  const label =
+    analyzing > 0
+      ? `Analyzing ${pending} photo${pending === 1 ? '' : 's'}…`
+      : `${pending} photo${pending === 1 ? '' : 's'} queued`;
 
   return (
     <PressableScale
       style={styles.chip}
       accessibilityRole="button"
-      accessibilityLabel={`AI queue, ${pending.length} slope${pending.length === 1 ? '' : 's'} remaining. Tap to run now.`}
-      onPress={() => drainAnalysisQueue().catch(() => {})}
+      accessibilityLabel={`AI analysis, ${pending} photo${pending === 1 ? '' : 's'} pending. Tap to see what's processing.`}
+      onPress={() => router.push('/processing')}
     >
       <IconChip name="sparkles-outline" tone="purple" size="md" />
       <View style={{ flex: 1 }}>
-        <Text style={styles.title}>
-          AI queue · {pending.length} slope{pending.length === 1 ? '' : 's'} remaining
-        </Text>
-        <Text style={styles.sub}>
-          {running
-            ? `Analyzing ${running.slopeLabel} slope now…`
-            : 'Tap to run now — completes while the app is open.'}
-        </Text>
+        <Text style={styles.title}>{label}</Text>
+        <Text style={styles.sub}>Runs in the background — tap to see what's processing.</Text>
       </View>
-      {running ? (
+      {analyzing > 0 ? (
         <ActivityIndicator size="small" color={colors.textMuted} />
       ) : (
-        <View style={styles.playBadge}>
-          <Ionicons name="play" size={16} color={colors.textInverse} />
-        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
       )}
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  // Crafted cell — purple "AI" chip identity + a royal play badge instead of
-  // a bare glyph, matching the rest of Home's colour-chipped language.
+  // Crafted cell — purple "AI" chip identity, matching the rest of Home's
+  // colour-chipped language.
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -73,12 +94,4 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   sub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
-  playBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.pill,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 });

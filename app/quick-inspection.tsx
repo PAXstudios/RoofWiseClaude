@@ -21,8 +21,12 @@ import {
 } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as ImagePicker from 'expo-image-picker';
 import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
+import {
+  importFromLibrary,
+  isUnreadableAssetError,
+  type LibraryImportProgress,
+} from '@/lib/services/libraryImport';
 import { analyzeSlope, markPhotosQueued } from '@/lib/services/analyzeSlope';
 import { describeAnalysisError } from '@/lib/services/gemini';
 import { isGeminiConfigured } from '@/lib/env';
@@ -73,13 +77,6 @@ import { Pill, type PillTone } from '@/components/ui/Pill';
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
 const INITIAL_SLOPE: SlopeOrientation = 'S';
-
-/**
- * Ceiling on one import run. expo-image-picker in Expo Go can only be driven
- * one asset at a time (see `importFromLibrary`), so "multi-select" is a loop —
- * and a loop needs a stop even if the user never taps Cancel.
- */
-const IMPORT_RUN_LIMIT = 24;
 
 /** Inner inset of the capture-mode segmented track (the thumb slides inside it). */
 const MODE_TRACK_PAD = spacing.xs;
@@ -215,6 +212,8 @@ function QuickInspectionNative() {
   // overwriting it — you shoot gutters on more than one elevation.
   const [areaTagPinned, setAreaTagPinned] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<LibraryImportProgress | null>(null);
+  const multiSelectImport = useCaptureSettingsStore((s) => s.multiSelectImport);
   const [capturing, setCapturing] = useState(false);
   const [torch, setTorch] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -551,72 +550,77 @@ function QuickInspectionNative() {
 
   /**
    * Import existing photos from the library. Imports are first-class captures:
-   * same `prepareCapturedPhoto` normalization, same area tag / capture mode,
-   * same store path, so they reach analysis by exactly the camera's path.
+   * the shared `importFromLibrary` service normalizes each asset through the
+   * same `prepareCapturedPhoto` pipeline as the camera, then hands it back one
+   * at a time to `addPhoto`, which attaches it to this slope with the current
+   * area tag / capture mode and enqueues it for analysis by exactly the
+   * camera's path.
    *
-   * Multi-photo import is a LOOP over the single-asset picker, not
-   * `allowsMultipleSelection`. expo-image-picker's multi-select handler fires
-   * its JS completion once per failed asset and never debounces, so two
-   * unreadable assets (iCloud originals, simulator HEIC placeholders) reject
-   * the same promise twice and abort the process — SIGABRT, no JS error
-   * (PROMPT_LOG #24/#25). Re-presenting the single-select picker gives the
-   * same "pick several" outcome on the path that settles exactly once. The
-   * user taps Cancel to stop.
+   * The service tries REAL multi-select (SDK 54 / expo-image-picker 17 modern
+   * PHPicker) behind a settle-once guard, and falls back to the single-asset
+   * loop — the path that never tripped the #24/#25 SIGABRT — when multi-select
+   * throws, returns nothing, or `multiSelectImport` is off. A per-asset read
+   * failure (unreadable HEIC, iCloud not-downloaded) is reported without
+   * aborting the batch.
    */
-  const importFromLibrary = async () => {
+  const runLibraryImport = async () => {
     if (importing) return;
     setImporting(true);
-    let added = 0;
+    setImportProgress(null);
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
+      const result = await importFromLibrary({
+        multiSelect: multiSelectImport,
+        onProgress: (p) => {
+          if (mountedRef.current) setImportProgress(p);
+        },
+        onPhoto: (uri) => {
+          // addPhoto throws if the store write fails — the service catches that
+          // and records it as this asset's failure, then keeps going.
+          addPhoto(uri, true);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        },
+      });
+
+      if (result.permission === 'denied') {
         Alert.alert(
           'Photos access needed',
-          perm.canAskAgain
+          result.permissionCanAskAgain
             ? 'RoofWise needs Photos access to import existing roof images. You can still capture with the camera.'
             : 'Enable Photos access for RoofWise in Settings to import existing images. You can still capture with the camera.',
         );
         return;
       }
 
-      for (let i = 0; i < IMPORT_RUN_LIMIT; i++) {
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsMultipleSelection: false,
-          // Compatible (not Current) makes iOS transcode HEIC / iCloud originals
-          // to a readable JPEG before handing them over. Current returns raw HEIC
-          // bytes, which fail with "Cannot load representation of type public.heic"
-          // — especially on the simulator and for not-yet-downloaded iCloud photos.
-          preferredAssetRepresentationMode:
-            ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-        });
-        // Cancel is how the user says "done adding".
-        if (result.canceled || result.assets.length === 0) break;
-
-        const small = await prepareCapturedPhoto(result.assets[0].uri);
-        addPhoto(small, true);
-        added += 1;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      }
-
-      if (added >= IMPORT_RUN_LIMIT) {
+      // Honest, non-aborting failure summary: what came in, what couldn't be read.
+      if (result.failures.length > 0) {
+        const n = result.failures.length;
+        const first = result.failures[0].reason;
+        const unreadable = isUnreadableAssetError(first);
+        Alert.alert(
+          result.imported > 0
+            ? `Imported ${result.imported}, skipped ${n}`
+            : n === 1
+            ? "Couldn't read that photo"
+            : `Couldn't read ${n} photos`,
+          unreadable
+            ? `${first} Try a screenshot as a test image, pick different photos, or run on a real iPhone.`
+            : first,
+        );
+      } else if (result.reachedLimit && result.imported > 0) {
         Alert.alert(
           'Import paused',
-          `Added ${added} photos. Tap the library button again to keep importing.`,
+          `Added ${result.imported} photos. Tap the library button again to keep importing.`,
         );
       }
     } catch (e) {
-      // One bad asset ends the run rather than looping the same failure.
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      const readFail = /load representation|failed to read/i.test(msg);
-      Alert.alert(
-        readFail ? "Couldn't read that photo" : 'Import failed',
-        readFail
-          ? "iOS couldn't load this image's data. This is common with the iOS Simulator's built-in photos (they're HEIC placeholders) and with iCloud photos that haven't fully downloaded to the device. Try a screenshot as a test image, pick a different photo, or run on a real iPhone."
-          : msg,
-      );
+      // The service is defensive; this only fires on an unexpected programming
+      // error, never a per-asset read failure.
+      Alert.alert('Import failed', e instanceof Error ? e.message : 'Unknown error');
     } finally {
-      setImporting(false);
+      if (mountedRef.current) {
+        setImporting(false);
+        setImportProgress(null);
+      }
     }
   };
 
@@ -748,7 +752,11 @@ function QuickInspectionNative() {
     .find((s) => s.status === 'failed');
 
   const hint = importing
-    ? 'Keep picking photos — tap Cancel in the picker when you are done.'
+    ? importProgress
+      ? importProgress.phase === 'multi'
+        ? `Importing ${importProgress.done} of ${importProgress.total}…`
+        : `Imported ${importProgress.done} — tap Cancel in the picker when done.`
+      : 'Opening your photo library…'
     : photos.length === 0
     ? captureModeOption(captureMode).hint
     : lastFailure
@@ -967,7 +975,7 @@ function QuickInspectionNative() {
 
           <View style={styles.shutterRow}>
             <Pressable
-              onPress={importFromLibrary}
+              onPress={runLibraryImport}
               disabled={importing}
               style={[styles.dockBtn, importing && styles.dockBtnBusy]}
               accessibilityRole="button"

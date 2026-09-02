@@ -12,6 +12,8 @@
 
 import { useAnalysisQueueStore, type AnalysisJob } from '../stores/analysisQueueStore';
 import { useActivityStore } from '../stores/activityStore';
+import { useInspectionStore } from '../stores/inspectionStore';
+import type { Inspection } from '../models/types';
 import {
   analyzeSlope,
   markPhotosFailed,
@@ -42,6 +44,51 @@ class QueueJobError extends Error {
 }
 
 let draining = false;
+
+// ── Module-level background pump ───────────────────────────────────────────
+// The drain must run whenever queued jobs exist, NOT only while a particular
+// screen (/analyze) is mounted. Three things kick it:
+//   1. app boot + every foreground transition — lib/services/lifecycleHooks.ts
+//      calls drainAnalysisQueue() on AppState 'active'.
+//   2. enqueue — the store subscription below wakes the drain the instant a
+//      job is added, from anywhere, with no screen involved.
+//   3. a manual "run now" tap (Analyze screen / retry).
+// `drainAnalysisQueue` is re-entrancy-guarded (`draining`) and re-reads the
+// store each loop iteration, so kicking it redundantly is always a safe no-op.
+let pumpStarted = false;
+
+/** Wire the store→drain pump exactly once. Idempotent; safe to call from
+ *  several import sites. */
+export function startAnalysisQueuePump(): void {
+  if (pumpStarted) return;
+  pumpStarted = true;
+  useAnalysisQueueStore.subscribe((state) => {
+    if (state.jobs.some((j) => j.status === 'queued')) {
+      void drainAnalysisQueue().catch(() => {});
+    }
+  });
+}
+
+// Self-install on first import. analysisQueue is imported at app boot
+// (lifecycleHooks) and by the queue chip, so the pump is live before any job
+// can be enqueued.
+startAnalysisQueuePump();
+
+/**
+ * Enqueue a slope for background analysis and wake the pump. Returns false when
+ * the slope already has a queued/running job (dedup). Photos land in the same
+ * per-photo Queued/Analyzing/Done/Failed states the capture strip and Analyze
+ * screen read, so the Processing view reflects the work immediately.
+ */
+export function queueSlopeAnalysis(input: {
+  inspectionId: string;
+  slopeId: string;
+  slopeLabel: string;
+}): boolean {
+  const job = useAnalysisQueueStore.getState().enqueue(input);
+  void drainAnalysisQueue().catch(() => {});
+  return !!job;
+}
 
 export async function drainAnalysisQueue(): Promise<void> {
   if (draining) return;
@@ -157,4 +204,100 @@ function isJobRetryable(e: unknown): boolean {
   if (e instanceof QueueJobError) return e.retryable;
   if (e instanceof GeminiAnalysisError) return isRetryableGeminiError(e);
   return false;
+}
+
+// -----------------------------------------------------------------------------
+// In-flight progress — the Processing view + the queue chip
+// -----------------------------------------------------------------------------
+//
+// The honest source of "what's still processing" is the per-photo
+// `slope.photoAnalysis` state that `analyzeSlope` writes live — regardless of
+// whether the pass was started by this background queue, the Analyze screen, or
+// the capture strip's own pump. Deriving from it (rather than from the queue's
+// job list alone) means every in-flight analysis shows up, and the counts are
+// real photo counts, never a fabricated number.
+
+/** One slope with unfinished analysis work, flattened for the Processing view. */
+export type SlopeAnalysisProgress = {
+  inspectionId: string;
+  slopeId: string;
+  /** Slope orientation, e.g. "S". */
+  slopeLabel: string;
+  reportId: string;
+  customerName: string;
+  queued: number;
+  analyzing: number;
+  done: number;
+  failed: number;
+  /** Photos on this slope carrying any analysis state. */
+  total: number;
+  /** photoPaths indexes of the failed photos — the Retry target. */
+  failedIndexes: number[];
+};
+
+/**
+ * Every slope that still has queued, analyzing, or failed photos, across all
+ * inspections. A slope whose photos are all done (or has no analysis state at
+ * all) is omitted — it is not "in flight". Pure over its input so a component
+ * can subscribe to `inspections` and call this in render.
+ */
+export function deriveAnalysisProgress(inspections: Inspection[]): SlopeAnalysisProgress[] {
+  const groups: SlopeAnalysisProgress[] = [];
+  for (const ins of inspections) {
+    for (const sl of ins.slopes) {
+      const pa = sl.photoAnalysis;
+      if (!pa) continue;
+      let queued = 0;
+      let analyzing = 0;
+      let done = 0;
+      let failed = 0;
+      const failedIndexes: number[] = [];
+      for (const [uri, st] of Object.entries(pa)) {
+        // Skip records for photos that were removed/rotated out of photoPaths.
+        const idx = sl.photoPaths.indexOf(uri);
+        if (idx < 0) continue;
+        switch (st.status) {
+          case 'queued':
+            queued++;
+            break;
+          case 'analyzing':
+            analyzing++;
+            break;
+          case 'done':
+            done++;
+            break;
+          case 'failed':
+            failed++;
+            failedIndexes.push(idx);
+            break;
+        }
+      }
+      if (queued + analyzing + failed === 0) continue;
+      groups.push({
+        inspectionId: ins.id,
+        slopeId: sl.id,
+        slopeLabel: sl.orientation,
+        reportId: ins.reportId,
+        customerName: ins.customerName,
+        queued,
+        analyzing,
+        done,
+        failed,
+        total: queued + analyzing + done + failed,
+        failedIndexes,
+      });
+    }
+  }
+  return groups;
+}
+
+/** Pending (queued + analyzing) photo count across all groups — drives the
+ *  chip's live count and whether it shows at all. */
+export function pendingPhotoCount(groups: SlopeAnalysisProgress[]): number {
+  return groups.reduce((a, g) => a + g.queued + g.analyzing, 0);
+}
+
+/** Photos actively analyzing right now — drives the spinner. */
+export function analyzingPhotoCount(groups: SlopeAnalysisProgress[]): number {
+  return groups.reduce((a, g) => a + g.analyzing, 0);
 }

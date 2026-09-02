@@ -16,6 +16,11 @@ type State = {
   /** "Notify me" for anchored AR markers, which need the native build. Local
    *  only — nothing is sent anywhere; it is read back when the build ships. */
   arNotify: boolean;
+  /** Try real multi-select when importing from the library (SDK 54 / expo-image
+   *  -picker 17 modern PHPicker). ON by default; a one-tap kill switch that
+   *  drops the importer back to the proven single-asset loop if a device ever
+   *  shows the old Expo Go crash (PROMPT_LOG #24/#25). */
+  multiSelectImport: boolean;
   /** Model id that last answered a live frame (honest provenance for the
    *  "LIVE · <model>" label before the first frame of a new session). */
   lastLiveModel: string | null;
@@ -24,6 +29,7 @@ type State = {
   setGuides: (v: boolean) => void;
   setArNotify: (v: boolean) => void;
   setLastLiveModel: (model: string | null) => void;
+  setMultiSelectImport: (v: boolean) => void;
 };
 
 export const useCaptureSettingsStore = create<State>()(
@@ -33,10 +39,12 @@ export const useCaptureSettingsStore = create<State>()(
       guides: true,
       arNotify: false,
       lastLiveModel: null,
+      multiSelectImport: true,
       setLiveOverlay: (v) => set({ liveOverlay: v }),
       setGuides: (v) => set({ guides: v }),
       setArNotify: (v) => set({ arNotify: v }),
       setLastLiveModel: (model) => set({ lastLiveModel: model }),
+      setMultiSelectImport: (v) => set({ multiSelectImport: v }),
     }),
     {
       name: 'roofwise.captureSettings.v1',
@@ -46,6 +54,7 @@ export const useCaptureSettingsStore = create<State>()(
         guides: s.guides,
         arNotify: s.arNotify,
         lastLiveModel: s.lastLiveModel,
+        multiSelectImport: s.multiSelectImport,
       }),
     },
   ),

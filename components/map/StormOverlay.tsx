@@ -22,7 +22,7 @@
 
 import { memo, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { MapCircle, MapPin, type Region } from '@/components/map/Map';
+import { MapCircle, MapPin, MapPolygon, type Region } from '@/components/map/Map';
 import type { StormOverlayProps } from '@/components/map/types';
 import { magnitudeLabel, type StormEvent } from '@/lib/noaa';
 import { recordError } from '@/lib/services/diagnostics';
@@ -37,6 +37,12 @@ import {
   type StormOverlaySelection,
   type StormTone,
 } from '@/lib/services/stormCluster';
+import {
+  computeStormSwaths,
+  swathPointsFromEvents,
+  type StormSwath,
+  type SwathPeril,
+} from '@/lib/services/stormSwath';
 import { colors, fontSize, fontWeight, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 const TONE_STROKE: Record<StormTone, string> = {
@@ -44,6 +50,96 @@ const TONE_STROKE: Record<StormTone, string> = {
   wind: colors.stormWind,
   severe: colors.stormSevere,
 };
+
+// -----------------------------------------------------------------------------
+// Impacted-area swaths (HailTrace-style) — filled contours UNDER the pins.
+// -----------------------------------------------------------------------------
+
+/** Peril hue for the swath fill/stroke, straight from the storm tokens
+ *  (Drift #11) — blue for hail, orange for wind. */
+const SWATH_HUE: Record<SwathPeril, string> = {
+  hail: colors.stormHail,
+  wind: colors.stormWind,
+};
+
+/**
+ * Derive a translucent fill from a theme hex token — the hue is the token's,
+ * only the alpha is set here, so no raw colour is introduced (Drift #11). The
+ * band contours are NESTED (band-≥-t), so stacking these low-alpha fills builds
+ * the intensity read a HailTrace map has, without needing a distinct colour per
+ * band. Higher bands carry a touch more alpha so the core is unmistakable.
+ */
+function hexWithAlpha(hex: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const int = parseInt(m[1], 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  const a = Math.max(0, Math.min(1, alpha));
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+/** Fill alpha per band index — modest so nested bands stack into a gradient. */
+const SWATH_FILL_ALPHA = [0.13, 0.17, 0.22, 0.28];
+const SWATH_STROKE_ALPHA = 0.55;
+
+/**
+ * Compute impacted-area swaths for the current data. Recomputed on the storm
+ * data changing and on crossing a coarse zoom bucket (so the cell size can
+ * adapt) — NOT on every pan. `enabled=false` (overlays off / wrong filter)
+ * yields nothing. The heavy pure work lives in lib/services/stormSwath.ts.
+ */
+export function useStormSwaths(
+  events: readonly StormEvent[],
+  region: Region | null,
+  enabled: boolean,
+): StormSwath[] {
+  const points = useMemo(() => swathPointsFromEvents(events), [events]);
+  // Coarse zoom bucket: pan within a bucket reuses the memo; only a zoom that
+  // crosses a threshold recomputes. Larger spans get larger cells so the
+  // vertex cap is reached less often.
+  const bucket = useMemo(() => {
+    const span = region ? Math.max(region.longitudeDelta, region.latitudeDelta) : 2;
+    if (!Number.isFinite(span)) return 1;
+    if (span < 0.4) return 0;
+    if (span < 1.2) return 1;
+    return 2;
+  }, [region]);
+  return useMemo(() => {
+    if (!enabled || points.length === 0) return [];
+    const cellSizeKm = bucket === 0 ? 1.2 : bucket === 1 ? 1.8 : 2.6;
+    return computeStormSwaths(points, { cellSizeKm });
+  }, [points, bucket, enabled]);
+}
+
+/**
+ * The filled contours. Rendered FIRST (under circles/pins) and as MapPolygons,
+ * which are overlays MapKit/Google stack beneath marker annotations — so the
+ * area shows through while every pin stays on top and tappable. Every ring goes
+ * through Map.tsx's MapPolygon guard (invalid coords dropped before native).
+ * Non-interactive: taps fall through to the pins above.
+ */
+export const StormSwathLayer = memo(function StormSwathLayer({ swaths }: { swaths: StormSwath[] }) {
+  return (
+    <>
+      {swaths.map((s) => {
+        const hue = SWATH_HUE[s.peril];
+        const fill = hexWithAlpha(hue, SWATH_FILL_ALPHA[Math.min(s.bandIndex, SWATH_FILL_ALPHA.length - 1)]);
+        const stroke = hexWithAlpha(hue, SWATH_STROKE_ALPHA);
+        return s.rings.map((ring, ri) => (
+          <MapPolygon
+            key={`swath:${s.peril}:${s.bandIndex}:${ri}`}
+            coordinates={ring.map((p) => ({ latitude: p.lat, longitude: p.lng }))}
+            fillColor={fill}
+            strokeColor={stroke}
+            strokeWidth={1}
+          />
+        ));
+      })}
+    </>
+  );
+});
 
 /** Circles are hail-only (stormCluster), so only the two hail fills exist. */
 const TONE_FILL: Record<'hail' | 'severe', string> = {
@@ -135,11 +231,14 @@ const ClusterGlyph = memo(function ClusterGlyph({
 
 export const StormOverlay = memo(function StormOverlay({
   selection,
+  swaths,
   onSelectEvent,
   onSelectCluster,
-}: StormOverlayProps) {
+}: StormOverlayProps & { swaths?: StormSwath[] }) {
   return (
     <>
+      {/* Impacted-area contours FIRST so they sit under the circles and pins. */}
+      {swaths && swaths.length > 0 ? <StormSwathLayer swaths={swaths} /> : null}
       {selection.circles.map((e) => {
         const tone = stormTone(e);
         const fill = tone === 'severe' ? TONE_FILL.severe : TONE_FILL.hail;
