@@ -2331,3 +2331,16 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Secrets hygiene:** the Expo token (Admin) and three keys were pasted in chat → all flagged for rotation after the first successful device run. Stored only under the session scratchpad with mode 600; verified absent from every commit diff.
 
 **Files touched:** `app.config.js`, `package.json`, `package-lock.json`, `BACKLOG.md`, `PROMPT_LOG.md`.
+
+---
+
+### [2026-09-01] #57 — Standing trigger: Apple Developer account → TestFlight + native capabilities, automatically
+
+**Prompt:**
+> "Don't forget to do this automatically when I add the apple developer account: Full background tracking like SalesRabbit needs the real build — the TestFlight path, which I can do the moment there's an Apple Developer account."
+
+**Recorded as a durable instruction, not a note.** The container is ephemeral and context gets summarized, so the directive lives in three places any future session reads first: the top of `BACKLOG.md` "Now" as a **⚡ STANDING TRIGGER** with the exact automated sequence, a pointer in `CLAUDE.md`'s "Known parked items" (so nobody treats background location / Google Maps on iOS / Apple Sign In / geofenced mileage / AR-LiDAR as still parked once the account exists), and this entry. `eas.json` added now with `preview` / `production` build profiles, channels, and environments so the trigger is executable with one command the day the credentials arrive.
+
+**What the owner supplies, once:** Apple Team ID and an App Store Connect API key (Issuer ID, Key ID, .p8, App Manager role), uploaded on expo.dev → roofwise → Credentials or handed over. **What then happens without being asked:** remote credentials, background location + task manager wired into door-knocking trip tracking (the "pauses when you switch apps" copy removed), `PROVIDER_GOOGLE` on iOS, geofenced mileage, Apple Sign In, real push, `eas build --platform ios --profile production --auto-submit` → TestFlight, owner invited as internal tester, then the ARKit/LiDAR native module behind the capture-settings buttons.
+
+**Files touched:** `BACKLOG.md`, `CLAUDE.md`, `eas.json` (new), `PROMPT_LOG.md`.

@@ -1,0 +1,37 @@
+{
+  "cli": {
+    "version": ">= 23.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "environment": "preview"
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "environment": "preview",
+      "ios": { "simulator": false }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "environment": "production",
+      "credentialsSource": "remote"
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "SET_WHEN_APP_STORE_CONNECT_RECORD_EXISTS"
+      }
+    }
+  },
+  "update": {
+    "preview": { "environment": "preview" },
+    "production": { "environment": "production" }
+  }
+}

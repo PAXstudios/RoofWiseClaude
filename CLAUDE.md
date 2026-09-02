@@ -156,6 +156,8 @@ npm run lint                      # expo lint
 
 ## Known parked items (don't quietly resurrect)
 
+**Except by the standing trigger:** when the owner has an Apple Developer account, BACKLOG.md's "⚡ STANDING TRIGGER" item (#57) says to build for TestFlight and enable every native-only capability below automatically — background trip tracking first. Read it before touching any of these.
+
 - **Apple Sign In** — doesn't work in Expo Go; needs `expo run:ios` dev build + Supabase Apple provider configured (Services ID + .p8 key). Email/password is the working path today.
 - **True background execution** (expo-task-manager) — needs a dev build.
 - **Mileage auto-tracking via geofencing** — same constraint.
