@@ -1,5 +1,14 @@
-// Gemini 2.5 Pro vision service (model id from env, default gemini-2.5-pro —
-// Drift Warning #9: gemini-3-flash / gemini-3.5-flash do not exist).
+// Gemini vision service — newest Flash model via Google AI Studio direct REST.
+// Model id comes from env (`EXPO_PUBLIC_GEMINI_MODEL`, default
+// `gemini-3.8-flash`, owner directive 2026-09-01) and is only the FIRST model
+// tried: Google retires model ids for new keys (`gemini-2.5-pro` now answers
+// HTTP 404 "no longer available"), so every call falls through
+// GEMINI_FALLBACK_MODELS on a model-gone response and records which model
+// actually answered (`modelUsed`) on the result. Any other failure — quota,
+// safety, auth, network, timeout — surfaces AS ITSELF; it is never retried
+// across models, because a quota error on 3.8 is a quota error on 3.7 too and
+// the roofer needs the real reason.
+//
 // Spec section "Gemini System Prompt for Damage Detection" +
 // docs/PRODUCT_SYNTHESIS.md §1 "AI analysis" (scale-aware detection,
 // anti-fabrication guard, ridge-cap false-positive mitigation).
@@ -24,6 +33,25 @@ function endpoint(model: string): string {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 }
 
+/**
+ * Deprecation-proof fallback chain, newest first. Verified live 2026-09-01
+ * against the owner's key (see PROMPT_LOG for the ground-truth table): every
+ * entry answers the vision + structured-JSON damage request with valid JSON.
+ * The configured model is always tried first; these follow, deduplicated.
+ * `gemini-2.5-flash` is the last resort only — older, kept so a total retire
+ * of the 3.x line still leaves the roofer with an answer.
+ */
+export const GEMINI_FALLBACK_MODELS: readonly string[] = [
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.5-flash',
+  'gemini-2.5-flash',
+];
+
+/** Hard per-attempt ceiling. A 2560px JPEG + JSON reply lands in ~2–8 s on
+ *  Flash; anything past a minute is a hung socket, not a slow model. */
+export const GEMINI_TIMEOUT_MS = 60_000;
+
 export class GeminiNotConfiguredError extends Error {
   constructor() {
     super('Gemini API key not configured. Set EXPO_PUBLIC_GEMINI_API_KEY in .env.local.');
@@ -31,11 +59,290 @@ export class GeminiNotConfiguredError extends Error {
   }
 }
 
+/**
+ * Coarse failure class so callers can decide retry vs. stop and show honest
+ * copy. `model_unavailable` means the WHOLE chain was exhausted, not a single
+ * 404 (single 404s are absorbed by the fallback).
+ */
+export type GeminiErrorCode =
+  | 'model_unavailable'
+  | 'auth'
+  | 'bad_request'
+  | 'quota'
+  | 'safety'
+  | 'timeout'
+  | 'network'
+  | 'server'
+  | 'bad_response';
+
 export class GeminiAnalysisError extends Error {
-  constructor(message: string, public status?: number) {
+  constructor(
+    message: string,
+    public status?: number,
+    public code: GeminiErrorCode = 'bad_response',
+  ) {
     super(message);
     this.name = 'GeminiAnalysisError';
   }
+}
+
+/** True for failures a later attempt can plausibly fix (rate limit, hung
+ *  socket, offline, 5xx). Auth, safety, bad request, exhausted model chain and
+ *  unparseable output are NOT retryable — retrying them only burns quota and
+ *  hides the real reason from the roofer. */
+export function isRetryableGeminiError(e: unknown): boolean {
+  if (!(e instanceof GeminiAnalysisError)) {
+    // Unknown throwables (file read errors etc.) are the caller's call; a
+    // GeminiNotConfiguredError is never retryable.
+    return !(e instanceof GeminiNotConfiguredError);
+  }
+  return e.code === 'quota' || e.code === 'timeout' || e.code === 'network' || e.code === 'server';
+}
+
+/** Plain-words reason for UI copy — never the raw JSON dump. */
+export function describeAnalysisError(e: unknown): string {
+  if (e instanceof GeminiNotConfiguredError) {
+    return 'AI not connected — add EXPO_PUBLIC_GEMINI_API_KEY to .env.local.';
+  }
+  if (e instanceof Error && e.message.trim().length > 0) return e.message;
+  return 'Analysis failed for an unknown reason.';
+}
+
+// Once a fallback model has answered, later calls start from it instead of
+// paying a 404 round-trip per photo on the retired one. Process-lifetime
+// only — a fresh launch re-tries the configured model, so a restored model
+// or a corrected env value wins again without a code change.
+let preferredModel: string | null = null;
+
+/** The model the next call will try first. For Diagnostics / report footer. */
+export function getActiveGeminiModel(): string {
+  return preferredModel ?? env.GEMINI_MODEL;
+}
+
+/** Ordered, deduplicated list of models a call will try. */
+export function geminiModelChain(): string[] {
+  const chain = [preferredModel, env.GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter(
+    (m): m is string => typeof m === 'string' && m.trim().length > 0,
+  );
+  return Array.from(new Set(chain));
+}
+
+/** HTTP 404 / NOT_FOUND / "no longer available" — the only failure class
+ *  that moves on to the next model in the chain. */
+function isModelGone(status: number, bodyText: string): boolean {
+  if (status === 404) return true;
+  return (
+    /"status"\s*:\s*"NOT_FOUND"/.test(bodyText) ||
+    /no longer available/i.test(bodyText) ||
+    /is not found for API version/i.test(bodyText)
+  );
+}
+
+function errorSnippet(bodyText: string): string {
+  try {
+    const parsed = JSON.parse(bodyText);
+    const msg = parsed?.error?.message;
+    if (typeof msg === 'string' && msg.length > 0) return msg.slice(0, 240);
+  } catch {
+    // Not JSON — fall through to the raw slice.
+  }
+  return bodyText.replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function classifyHttpError(model: string, status: number, bodyText: string): GeminiAnalysisError {
+  const snippet = errorSnippet(bodyText);
+  if (status === 400 && /API key not valid/i.test(bodyText)) {
+    return new GeminiAnalysisError(
+      'Gemini rejected the API key as invalid (400). Check EXPO_PUBLIC_GEMINI_API_KEY.',
+      status,
+      'auth',
+    );
+  }
+  if (status === 400) {
+    return new GeminiAnalysisError(`Gemini rejected the request (400): ${snippet}`, status, 'bad_request');
+  }
+  if (status === 401 || status === 403) {
+    return new GeminiAnalysisError(
+      `Gemini API key not authorized (${status}) for ${model}. Check the key and its restrictions in AI Studio.`,
+      status,
+      'auth',
+    );
+  }
+  if (status === 429) {
+    return new GeminiAnalysisError(
+      'Gemini quota or rate limit hit (429). Wait a minute and retry, or check billing in AI Studio.',
+      status,
+      'quota',
+    );
+  }
+  if (status >= 500) {
+    return new GeminiAnalysisError(
+      `Gemini is unavailable right now (${status}). Retry in a moment.`,
+      status,
+      'server',
+    );
+  }
+  return new GeminiAnalysisError(`Gemini ${status} on ${model}: ${snippet}`, status, 'bad_response');
+}
+
+export type GenerateContentOutcome = {
+  /** Raw generateContent JSON body. */
+  json: any;
+  /** Model id that answered. */
+  modelUsed: string;
+  /** Wall-clock ms of the answering attempt only. */
+  latencyMs: number;
+  /** Models that returned model-gone before `modelUsed` answered. */
+  modelsSkipped: string[];
+};
+
+export type GenerateContentOptions = {
+  /** Per-attempt timeout. Defaults to GEMINI_TIMEOUT_MS. */
+  timeoutMs?: number;
+  /** Caller-side cancel (screen unmounted, live scan stopped). */
+  signal?: AbortSignal;
+};
+
+/**
+ * POST a generateContent body through the fallback chain. Exported so other
+ * Gemini callers (transcription, live scan) share one transport instead of
+ * re-implementing the 404 handling. Throws GeminiAnalysisError with a code;
+ * never returns synthesized content.
+ */
+export async function geminiGenerateContent(
+  body: unknown,
+  opts: GenerateContentOptions = {},
+): Promise<GenerateContentOutcome> {
+  if (!isGeminiConfigured) throw new GeminiNotConfiguredError();
+
+  const timeoutMs = opts.timeoutMs ?? GEMINI_TIMEOUT_MS;
+  const chain = geminiModelChain();
+  const payload = JSON.stringify(body);
+  const modelsSkipped: string[] = [];
+
+  for (const model of chain) {
+    if (opts.signal?.aborted) {
+      throw new GeminiAnalysisError('Analysis cancelled.', undefined, 'timeout');
+    }
+    const controller = new AbortController();
+    const onOuterAbort = () => controller.abort();
+    opts.signal?.addEventListener('abort', onOuterAbort);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
+    const startedAt = Date.now();
+    let res: Response;
+    try {
+      res = await fetch(`${endpoint(model)}?key=${env.GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        signal: controller.signal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      opts.signal?.removeEventListener('abort', onOuterAbort);
+      if (timedOut) {
+        throw new GeminiAnalysisError(
+          `Gemini did not answer within ${Math.max(1, Math.round(timeoutMs / 1000))} s (${model}). Check signal and retry.`,
+          undefined,
+          'timeout',
+        );
+      }
+      if (opts.signal?.aborted) {
+        throw new GeminiAnalysisError('Analysis cancelled.', undefined, 'timeout');
+      }
+      const detail = e instanceof Error ? e.message : String(e);
+      throw new GeminiAnalysisError(
+        `Could not reach Gemini (${detail}). Check the connection and retry.`,
+        undefined,
+        'network',
+      );
+    }
+    clearTimeout(timer);
+    opts.signal?.removeEventListener('abort', onOuterAbort);
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      if (isModelGone(res.status, text)) {
+        modelsSkipped.push(model);
+        if (__DEV__) {
+          console.warn(`[gemini] ${model} unavailable (${res.status}) — trying next in chain`);
+        }
+        continue;
+      }
+      throw classifyHttpError(model, res.status, text);
+    }
+
+    let json: any;
+    try {
+      json = await res.json();
+    } catch {
+      throw new GeminiAnalysisError(
+        `Gemini (${model}) returned an unreadable response body.`,
+        res.status,
+        'bad_response',
+      );
+    }
+
+    const latencyMs = Date.now() - startedAt;
+    if (model !== preferredModel) {
+      if (model !== env.GEMINI_MODEL && __DEV__) {
+        console.info(`[gemini] answered by fallback model ${model} in ${latencyMs} ms`);
+      }
+      preferredModel = model;
+    }
+    return { json, modelUsed: model, latencyMs, modelsSkipped };
+  }
+
+  throw new GeminiAnalysisError(
+    `No Gemini model answered — tried ${modelsSkipped.join(', ')} (all retired or unavailable). ` +
+      'Set EXPO_PUBLIC_GEMINI_MODEL to a current model from aistudio.google.com.',
+    404,
+    'model_unavailable',
+  );
+}
+
+/**
+ * Concatenate the answer text from a generateContent body. Thinking models
+ * may prepend `thought: true` parts — those are never the answer. An empty
+ * answer is reported with the model's own reason (safety block, token cap),
+ * never treated as "no findings".
+ */
+export function extractGeminiText(json: any, modelUsed: string): string {
+  const blockReason = json?.promptFeedback?.blockReason;
+  if (typeof blockReason === 'string' && blockReason.length > 0) {
+    throw new GeminiAnalysisError(
+      `Gemini safety filter blocked this photo (${blockReason}). Re-shoot the roof surface only.`,
+      undefined,
+      'safety',
+    );
+  }
+  const candidate = json?.candidates?.[0];
+  const parts: any[] = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+  const text = parts
+    .filter((p) => p && p.thought !== true)
+    .map((p) => (typeof p.text === 'string' ? p.text : typeof p.inline_text === 'string' ? p.inline_text : ''))
+    .join('')
+    .trim();
+  if (text.length > 0) return text;
+
+  const finish = typeof candidate?.finishReason === 'string' ? candidate.finishReason : '';
+  if (finish === 'SAFETY' || finish === 'RECITATION' || finish === 'PROHIBITED_CONTENT') {
+    throw new GeminiAnalysisError(
+      `Gemini declined to describe this photo (${finish}). Re-shoot the roof surface only.`,
+      undefined,
+      'safety',
+    );
+  }
+  throw new GeminiAnalysisError(
+    `Gemini (${modelUsed}) returned an empty answer${finish ? ` (${finish})` : ''}. Retry.`,
+    undefined,
+    'bad_response',
+  );
 }
 
 export type DetectionAudit = {
@@ -83,6 +390,14 @@ export type AnalysisResult = {
    *  "AI withheld detections" inspector toast. */
   detectionAudit: DetectionAudit;
   raw: unknown;
+  /** Model id that actually answered — may be a fallback, never assumed.
+   *  Shown in the report footer + Diagnostics. Absent on cached results that
+   *  predate the fallback chain. */
+  modelUsed?: string;
+  /** Wall-clock ms of the answering request. */
+  latencyMs?: number;
+  /** Models that returned "no longer available" before `modelUsed` answered. */
+  modelsSkipped?: string[];
 };
 
 const SYSTEM_PROMPT = `You are a forensic roof inspector trained on HAAG (Haag Engineering) standards. You are reviewing a single roof photograph.
@@ -180,15 +495,23 @@ export type AnalyzeOptions = {
   slope?: SlopeOrientation;
   /** Optional per-user prompt prefix from LocalLearningEngine. */
   userStylePrefix?: string;
+  /** Caller-side cancel (screen unmounted, live scan stopped). */
+  signal?: AbortSignal;
+  /** Per-attempt timeout override. Defaults to GEMINI_TIMEOUT_MS. */
+  timeoutMs?: number;
 };
 
-export async function analyzePhoto(opts: AnalyzeOptions): Promise<AnalysisResult> {
-  if (!isGeminiConfigured) throw new GeminiNotConfiguredError();
-
+/**
+ * The exact generateContent body `analyzePhoto` sends. Exported so the
+ * request contract (13 canonical categories, severity, 0–100 confidence,
+ * 0–1000 bboxes, no_roof_detected, shingle_scale_estimate) can be exercised
+ * against the live API without the file-system half of the pipeline.
+ */
+export function buildAnalyzeRequest(opts: AnalyzeOptions): unknown {
   const slopeHint = opts.slope ? `\n\nThe photo is of slope orientation: ${opts.slope}.` : '';
   const prefix = opts.userStylePrefix ? `${opts.userStylePrefix}\n\n` : '';
 
-  const body = {
+  return {
     systemInstruction: {
       role: 'system',
       parts: [{ text: prefix + SYSTEM_PROMPT + slopeHint }],
@@ -216,33 +539,35 @@ export async function analyzePhoto(opts: AnalyzeOptions): Promise<AnalysisResult
       temperature: 0.1,
     },
   };
+}
 
-  const url = `${endpoint(env.GEMINI_MODEL)}?key=${env.GEMINI_API_KEY}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+export async function analyzePhoto(opts: AnalyzeOptions): Promise<AnalysisResult> {
+  if (!isGeminiConfigured) throw new GeminiNotConfiguredError();
+
+  const body = buildAnalyzeRequest(opts);
+  const { json, modelUsed, latencyMs, modelsSkipped } = await geminiGenerateContent(body, {
+    signal: opts.signal,
+    timeoutMs: opts.timeoutMs,
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new GeminiAnalysisError(`Gemini ${res.status}: ${text.slice(0, 500)}`, res.status);
-  }
-
-  const json = await res.json();
-  const text =
-    json?.candidates?.[0]?.content?.parts?.[0]?.text ??
-    json?.candidates?.[0]?.content?.parts?.[0]?.inline_text ??
-    '';
+  const text = extractGeminiText(json, modelUsed);
 
   let parsed: any;
   try {
-    parsed = typeof text === 'string' ? JSON.parse(text) : text;
+    parsed = JSON.parse(text);
   } catch {
-    throw new GeminiAnalysisError('Gemini returned non-JSON output.');
+    throw new GeminiAnalysisError(
+      `Gemini (${modelUsed}) returned non-JSON output. Retry.`,
+      undefined,
+      'bad_response',
+    );
   }
 
-  return normalize(parsed, json);
+  const result = normalize(parsed, json);
+  result.modelUsed = modelUsed;
+  result.latencyMs = latencyMs;
+  if (modelsSkipped.length > 0) result.modelsSkipped = modelsSkipped;
+  return result;
 }
 
 function normalize(parsed: any, raw: unknown): AnalysisResult {

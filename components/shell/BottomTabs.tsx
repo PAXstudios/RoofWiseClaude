@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,37 +9,58 @@ import Animated, {
   withSequence,
   withSpring,
 } from 'react-native-reanimated';
-import { mobileBottomItems } from './navItems';
+import { mobileBottomItems, type TabBarProps } from './navItems';
 import { colors, fontSize, fontWeight, motion, spacing, touchTarget } from '@/theme/tokens';
 
 // Edge-to-edge iOS tab bar — barFill ground, hairline top border, no chrome
 // beyond that. The bar handles its own bottom inset (SafeAreaView is
 // position-aware, so it adds nothing when a parent already applied it).
-export function BottomTabs() {
-  const router = useRouter();
-  const pathname = usePathname();
-
+//
+// Rendered by expo-router's <Tabs tabBar={...}> in app/(tabs)/_layout.tsx, so
+// it receives the navigator's live `state` (which tab is focused) and
+// `navigation` (how to switch). A tap dispatches NAVIGATE to the tab's own
+// router, which the TabRouter resolves as a JUMP_TO: the current tab stays
+// mounted, the destination is mounted once (lazy) and then reused — no more
+// stack push/pop, no NOAA re-fetch on the Map tab, no replayed entrance
+// animation on Home. Re-tapping the focused tab only emits `tabPress` (a
+// screen may listen and scroll to top); it never navigates.
+export function BottomTabs({ state, descriptors, navigation }: TabBarProps) {
   return (
     <SafeAreaView edges={['bottom']} style={styles.wrap} pointerEvents="box-none">
       <View style={styles.bar}>
-        {mobileBottomItems.map((it) => (
-          <TabButton
-            key={it.name}
-            icon={it.icon}
-            label={it.label}
-            active={isActive(pathname, it.href)}
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              // (tabs)/_layout renders a <Slot/>, which expo-router 6 backs
-              // with a StackRouter: every tab tap is a stack action. A repeat
-              // tap on the active tab used to PUSH a duplicate of that screen
-              // (remounting it and re-running its fetches); `navigate` pops
-              // back to an existing instance instead of stacking a new one.
-              if (isActive(pathname, it.href)) return;
-              router.navigate(it.href as any);
-            }}
-          />
-        ))}
+        {mobileBottomItems.map((it) => {
+          const routeIndex = state.routes.findIndex((r) => r.name === it.name);
+          // Defensive: a nav item whose route file is missing renders nothing
+          // rather than a dead button.
+          if (routeIndex === -1) return null;
+          const route = state.routes[routeIndex];
+          const active = state.index === routeIndex;
+          const label = descriptors[route.key]?.options.title ?? it.label;
+
+          return (
+            <TabButton
+              key={route.key}
+              icon={it.icon}
+              label={label}
+              active={active}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                // Same contract as react-navigation's stock BottomTabBar: emit a
+                // preventable `tabPress`, then navigate only when not focused.
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true,
+                });
+                if (active || event.defaultPrevented) return;
+                navigation.navigate(route.name, route.params);
+              }}
+              onLongPress={() => {
+                navigation.emit({ type: 'tabLongPress', target: route.key });
+              }}
+            />
+          );
+        })}
       </View>
     </SafeAreaView>
   );
@@ -51,11 +71,13 @@ function TabButton({
   label,
   active,
   onPress,
+  onLongPress,
 }: {
   icon: any;
   label: string;
   active: boolean;
   onPress: () => void;
+  onLongPress: () => void;
 }) {
   // Filled icon variant when active (e.g. "home-outline" → "home").
   const activeIcon = String(icon).replace('-outline', '');
@@ -80,6 +102,7 @@ function TabButton({
     <Pressable
       style={styles.tab}
       onPress={onPress}
+      onLongPress={onLongPress}
       hitSlop={6}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
@@ -95,12 +118,6 @@ function TabButton({
       <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
     </Pressable>
   );
-}
-
-function isActive(pathname: string, href: string): boolean {
-  // usePathname() reports the Home tab ((tabs)/index) as '/'.
-  if (href === '/(tabs)' || href === '/') return pathname === '/' || pathname === '/index';
-  return pathname.startsWith(href);
 }
 
 const styles = StyleSheet.create({

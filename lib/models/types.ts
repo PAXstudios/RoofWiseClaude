@@ -421,6 +421,35 @@ export type PhotoMeta = {
   captureMode?: CaptureMode;
 };
 
+/**
+ * Lifecycle of one photo's AI analysis. Written by
+ * `lib/services/analyzeSlope.ts`; rendered by the capture review strip and
+ * the Analyze screen as a state pill (Queued / Analyzing / Done (n) /
+ * Failed · Retry). A photo must never sit in an implicit "pending" state —
+ * a failure carries its reason in plain words.
+ */
+export type PhotoAnalysisStatus = 'queued' | 'analyzing' | 'done' | 'failed';
+
+export type PhotoAnalysisState = {
+  status: PhotoAnalysisStatus;
+  /** ISO timestamp of the last transition. */
+  at: string;
+  /** Plain-language reason — present when `status === 'failed'`. */
+  error?: string;
+  /** HTTP status of the failing call, when the failure was an API response. */
+  errorStatus?: number;
+  /** Model id that actually answered (honest provenance; may be a fallback). */
+  modelUsed?: string;
+  /** Wall-clock milliseconds of the answering call (file read excluded). */
+  latencyMs?: number;
+  /** Markers kept after client-side sanitizing — the "Done (n)" number. */
+  findingCount?: number;
+  /** True when the model reported no roof/shingle surface in frame. */
+  noRoofDetected?: boolean;
+  /** Attempts so far for this photo — drives the Retry affordance copy. */
+  attempts?: number;
+};
+
 // -----------------------------------------------------------------------------
 // Slope + Inspection
 // -----------------------------------------------------------------------------
@@ -479,6 +508,15 @@ export type Slope = {
    */
   squareHitCount?: number;
   singleShingleHitCount?: number;
+  /**
+   * Per-photo AI analysis state keyed by the LOCAL PHOTO URI (the entry in
+   * `photoPaths`), not by index: `removePhoto` renumbers indices and a
+   * rotated photo gets a fresh URI, so a URI key stays correct through both
+   * without store changes. Read it with `getPhotoAnalysisState(slope, index)`
+   * from `lib/services/analyzeSlope.ts`, which also covers photos analyzed
+   * before this field existed. Optional — older inspections predate it.
+   */
+  photoAnalysis?: Record<string, PhotoAnalysisState>;
 };
 
 export type InspectionStatus = 'lead' | 'scheduled' | 'in_progress' | 'complete';

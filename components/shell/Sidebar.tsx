@@ -1,12 +1,15 @@
 // Desktop-web left rail. Renders the SAME 5 destinations as BottomTabs
 // (Drift #2 — Home / Leads / Map / Plan / Train, nothing more) from the
 // shared navItems list, so phone and desktop can never drift apart.
-// Presentational: navigation goes through expo-router.
+//
+// Like BottomTabs, this is the tab navigator's `tabBar` (mounted on the left
+// via `tabBarPosition: 'left'` in app/(tabs)/_layout.tsx), so it switches
+// tabs through the navigator itself — a JUMP_TO that keeps every tab's state
+// alive — rather than pushing routes.
 
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { navItems } from './navItems';
+import { navItems, type TabBarProps } from './navItems';
 import {
   colors,
   fontSize,
@@ -16,10 +19,7 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-export function Sidebar() {
-  const router = useRouter();
-  const pathname = usePathname();
-
+export function Sidebar({ state, descriptors, navigation }: TabBarProps) {
   return (
     <View style={styles.rail}>
       <View style={styles.brandRow}>
@@ -31,18 +31,30 @@ export function Sidebar() {
 
       <View style={styles.nav}>
         {navItems.map((it) => {
-          const active = isActive(pathname, it.href);
+          const routeIndex = state.routes.findIndex((r) => r.name === it.name);
+          if (routeIndex === -1) return null;
+          const route = state.routes[routeIndex];
+          const active = state.index === routeIndex;
+          const label = descriptors[route.key]?.options.title ?? it.label;
           // Filled icon variant when active (e.g. "home-outline" → "home"),
           // mirroring BottomTabs.
           const icon = active ? String(it.icon).replace('-outline', '') : it.icon;
           return (
             <Pressable
-              key={it.name}
+              key={route.key}
               style={[styles.item, active && styles.itemActive]}
-              onPress={() => router.push(it.href as any)}
+              onPress={() => {
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true,
+                });
+                if (active || event.defaultPrevented) return;
+                navigation.navigate(route.name, route.params);
+              }}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
-              accessibilityLabel={it.label}
+              accessibilityLabel={label}
             >
               <Ionicons
                 name={icon as any}
@@ -50,7 +62,7 @@ export function Sidebar() {
                 color={active ? colors.brand : colors.textMuted}
               />
               <Text style={[styles.itemLabel, active && styles.itemLabelActive]}>
-                {it.label}
+                {label}
               </Text>
             </Pressable>
           );
@@ -58,12 +70,6 @@ export function Sidebar() {
       </View>
     </View>
   );
-}
-
-function isActive(pathname: string, href: string): boolean {
-  // Home's href is '/(tabs)' (see navItems.ts); usePathname() reports it as '/'.
-  if (href === '/(tabs)' || href === '/') return pathname === '/' || pathname === '/index';
-  return pathname.startsWith(href);
 }
 
 const SIDEBAR_WIDTH = 248;

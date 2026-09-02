@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,13 @@ import {
   ScrollView,
   Image,
   Alert,
+  AppState,
+  type AppStateStatus,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Stack,
+  useFocusEffect,
   useLocalSearchParams,
   useRootNavigationState,
   useRouter,
@@ -20,9 +23,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
+import { analyzeSlope, markPhotosQueued } from '@/lib/services/analyzeSlope';
+import { describeAnalysisError } from '@/lib/services/gemini';
+import { isGeminiConfigured } from '@/lib/env';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
@@ -41,6 +48,8 @@ import {
 import {
   AREA_TAGS,
   type CaptureMode,
+  type Inspection,
+  type PhotoAnalysisStatus,
   type SlopeOrientation,
 } from '@/lib/models/types';
 import {
@@ -53,7 +62,13 @@ import {
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
+import { useToastStore } from '@/lib/stores/toastStore';
+import { useCaptureSettingsStore } from '@/lib/stores/captureSettingsStore';
 import { CameraHUD } from '@/components/CameraHUD';
+import { LevelGuide, ThirdsGrid, useThrottledMotion } from '@/components/capture/LevelGuide';
+import { LiveOverlay } from '@/components/capture/LiveOverlay';
+import { CaptureSettingsSheet } from '@/components/capture/CaptureSettingsSheet';
+import { Pill, type PillTone } from '@/components/ui/Pill';
 
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
@@ -69,6 +84,13 @@ const IMPORT_RUN_LIMIT = 24;
 /** Inner inset of the capture-mode segmented track (the thumb slides inside it). */
 const MODE_TRACK_PAD = spacing.xs;
 
+/** The shutter ring — the one control a gloved thumb must never miss. */
+const SHUTTER = 80;
+const SHUTTER_CORE = SHUTTER - 18;
+
+/** How long the shutter waits for the live loop to hand the camera back. */
+const CAMERA_LOCK_WAIT_MS = 3000;
+
 type CapturedPhoto = {
   uri: string;
   slope: SlopeOrientation;
@@ -77,6 +99,24 @@ type CapturedPhoto = {
   captureMode: CaptureMode;
   /** Library imports are flagged so the strip can show where a photo came from. */
   imported?: boolean;
+  /** Where the photo landed in the store the moment it was taken. */
+  inspectionId: string;
+  slopeId: string;
+  photoIndex: number;
+};
+
+/**
+ * Screen-local analysis bookkeeping for photos the store has not (yet)
+ * recorded a `photoAnalysis` entry for. The store's record wins whenever it
+ * exists — this only fills the gap between "attached" and "analyzeSlope
+ * wrote something".
+ */
+type LocalAnalysis = { status: 'queued' | 'analyzing' | 'failed'; error?: string };
+
+type StripState = {
+  status: PhotoAnalysisStatus | 'no_ai';
+  findingCount?: number;
+  error?: string;
 };
 
 export default function QuickInspection() {
@@ -146,12 +186,22 @@ const webStyles = StyleSheet.create({
   },
 });
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 function QuickInspectionNative() {
   const router = useRouter();
   const { jobId } = useLocalSearchParams<{ jobId?: string }>();
   const attachRawPhotos = useInspectionStore((s) => s.attachRawPhotos);
   const createInspection = useInspectionStore((s) => s.create);
+  const removeInspection = useInspectionStore((s) => s.remove);
   const logActivity = useActivityStore((s) => s.log);
+  const toast = useToastStore((s) => s.show);
+  const liveOverlay = useCaptureSettingsStore((s) => s.liveOverlay);
+  const guides = useCaptureSettingsStore((s) => s.guides);
+  const setLiveOverlay = useCaptureSettingsStore((s) => s.setLiveOverlay);
+  const reducedMotion = useReducedMotion();
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
@@ -165,9 +215,63 @@ function QuickInspectionNative() {
   // overwriting it — you shoot gutters on more than one elevation.
   const [areaTagPinned, setAreaTagPinned] = useState(false);
   const [importing, setImporting] = useState(false);
-  // The bottom dock grew three rows; the HUD's bottom-left stack tracks its
+  const [capturing, setCapturing] = useState(false);
+  const [torch, setTorch] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [livePausedReason, setLivePausedReason] = useState<string | null>(null);
+  // The bottom dock grew several rows; the HUD's bottom-left stack tracks its
   // measured height instead of a constant that drifts every layout change.
   const [dockHeight, setDockHeight] = useState(0);
+  const [topBarHeight, setTopBarHeight] = useState(0);
+
+  // ── Where photos land ─────────────────────────────────────────────────
+  // Photos are attached to the inspection the moment they are taken (a
+  // standalone capture auto-creates a lightweight inspection on the first
+  // shutter press) so the review strip can analyse them in place and hand
+  // any of them to Edit Detection. Nothing is held only in screen state.
+  const targetIdRef = useRef<string | null>(jobId ?? null);
+  const createdHereRef = useRef(false);
+  const [targetId, setTargetId] = useState<string | null>(jobId ?? null);
+  const inspection = useInspectionStore((s) =>
+    targetId ? s.inspections.find((i) => i.id === targetId) : undefined,
+  );
+
+  // ── Per-photo analysis runner ─────────────────────────────────────────
+  const [localAnalysis, setLocalAnalysis] = useState<Record<string, LocalAnalysis>>({});
+  const [analyzing, setAnalyzing] = useState(false);
+  const pendingRef = useRef<string[]>([]);
+  const runningRef = useRef(false);
+  const photosRef = useRef<CapturedPhoto[]>([]);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // ── Camera ownership ──────────────────────────────────────────────────
+  // `takePictureAsync` must never run twice at once. The shutter and the
+  // live loop share this ref: whoever sets it true owns the camera.
+  const cameraLock = useRef(false);
+
+  // ── Focus / app state → sensors + live loop ───────────────────────────
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) =>
+      setAppActive(next === 'active'),
+    );
+    return () => sub.remove();
+  }, []);
+  const motionSample = useThrottledMotion(focused && appActive && permission?.granted === true);
 
   // iOS-17 on-glass segmented control for capture mode: a white thumb springs
   // between segments on a glass track. Purely presentational chrome — the
@@ -184,9 +288,10 @@ function QuickInspectionNative() {
       : 0;
   useEffect(() => {
     if (modeSegW > 0) {
-      modeThumbX.value = withSpring(MODE_TRACK_PAD + activeModeIndex * modeSegW, motion.snappy);
+      const x = MODE_TRACK_PAD + activeModeIndex * modeSegW;
+      modeThumbX.value = reducedMotion ? x : withSpring(x, motion.snappy);
     }
-  }, [modeSegW, activeModeIndex, modeThumbX]);
+  }, [modeSegW, activeModeIndex, modeThumbX, reducedMotion]);
   const modeThumbStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: modeThumbX.value }],
   }));
@@ -235,51 +340,219 @@ function QuickInspectionNative() {
     });
   }, [navReady, preFlightEnabled, lastConfirmedAt, router, jobId]);
 
-  if (!permission) return <View style={styles.permRoot} />;
-
-  if (!permission.granted) {
-    return (
-      <SafeAreaView style={styles.permRoot} edges={['top', 'bottom']}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.permWrap}>
-          <Ionicons name="camera-outline" size={40} color={colors.textInverse} />
-          <Text style={styles.permTitle}>Camera access needed</Text>
-          <Text style={styles.permBody}>
-            RoofWise uses the camera to capture roof photos for HAAG-protocol analysis.
-          </Text>
-          <Pressable style={styles.permBtn} onPress={requestPermission}>
-            <Text style={styles.permBtnText}>Enable camera</Text>
-          </Pressable>
-          <Pressable onPress={() => router.back()} style={{ marginTop: spacing.md }}>
-            <Text style={styles.linkText}>Not now</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+  /**
+   * Drain the screen's analysis queue one slope-batch at a time. Every
+   * pending photo on the head photo's slope rides one `analyzeSlope` call
+   * (explicit `photoIndexes`, so a Retry re-runs a photo the store already
+   * counts as analysed); photos captured while it runs stay queued for the
+   * next pass. The pass result names each failed photo with a plain-words
+   * reason — that is what the strip and the hint line show.
+   */
+  const pump = useCallback(async () => {
+    if (runningRef.current) return;
+    const nextUri = pendingRef.current[0];
+    if (!nextUri) return;
+    const head = photosRef.current.find((p) => p.uri === nextUri);
+    if (!head) {
+      pendingRef.current.shift();
+      void pump();
+      return;
+    }
+    const batch = photosRef.current.filter(
+      (p) => p.slopeId === head.slopeId && pendingRef.current.includes(p.uri),
     );
-  }
+    const batchUris = batch.map((p) => p.uri);
+    pendingRef.current = pendingRef.current.filter((u) => !batchUris.includes(u));
+    runningRef.current = true;
+    if (mountedRef.current) {
+      setAnalyzing(true);
+      setLocalAnalysis((prev) => {
+        const next = { ...prev };
+        for (const u of batchUris) next[u] = { status: 'analyzing' };
+        return next;
+      });
+    }
+
+    let batchError: string | null = null;
+    let failures: { uri: string; reason: string }[] = [];
+    try {
+      const result = await analyzeSlope(head.inspectionId, head.slopeId, {
+        photoIndexes: batch.map((p) => p.photoIndex),
+      });
+      failures = result.failures;
+    } catch (e) {
+      // analyzeSlope only throws when the slope itself is gone (discarded
+      // mid-pass) or on a programming error; per-photo failures come back
+      // in `failures`, already toasted by the service.
+      batchError = describeAnalysisError(e);
+    }
+
+    const slopeNow = useInspectionStore
+      .getState()
+      .inspections.find((i) => i.id === head.inspectionId)
+      ?.slopes.find((s) => s.id === head.slopeId);
+    const analyzed = new Set(slopeNow?.analyzedPhotoIndices ?? []);
+    let ok = 0;
+    let bad = 0;
+    const update: Record<string, LocalAnalysis | null> = {};
+    for (const p of batch) {
+      const failure = failures.find((f) => f.uri === p.uri);
+      if (!failure && !batchError && analyzed.has(p.photoIndex)) {
+        update[p.uri] = null;
+        ok++;
+      } else {
+        const reason =
+          failure?.reason ??
+          slopeNow?.photoAnalysis?.[p.uri]?.error ??
+          batchError ??
+          'Analysis did not finish.';
+        update[p.uri] = { status: 'failed', error: reason };
+        bad++;
+      }
+    }
+
+    runningRef.current = false;
+    if (mountedRef.current) {
+      setLocalAnalysis((prev) => {
+        const next = { ...prev };
+        for (const [u, v] of Object.entries(update)) {
+          if (v) next[u] = v;
+          else delete next[u];
+        }
+        return next;
+      });
+      setAnalyzing(false);
+    }
+
+    if (bad > 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      // Per-photo failures were already toasted by analyzeSlope; only a
+      // pass that never ran needs its own.
+      if (batchError) {
+        useToastStore.getState().show({
+          tone: 'danger',
+          title: 'Analysis could not run',
+          body: batchError,
+        });
+      }
+    } else if (ok > 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+
+    if (mountedRef.current) void pump();
+  }, []);
+
+  const enqueueAnalysis = useCallback(
+    (uri: string) => {
+      if (!isGeminiConfigured) return;
+      const photo = photosRef.current.find((p) => p.uri === uri);
+      // The store's own "Queued" record, so the Analyze screen and the job
+      // agree with this strip about the photo's state from the first moment.
+      if (photo) markPhotosQueued(photo.inspectionId, photo.slopeId, [uri]);
+      setLocalAnalysis((prev) => ({ ...prev, [uri]: { status: 'queued' } }));
+      if (!pendingRef.current.includes(uri)) pendingRef.current.push(uri);
+      void pump();
+    },
+    [pump],
+  );
+
+  const ensureInspection = (): string => {
+    if (targetIdRef.current) return targetIdRef.current;
+    // Customer/address/roof details default to placeholders the inspector
+    // can edit later on the Job screen.
+    const ins = createInspection({
+      customerName: 'Quick inspection',
+      address: 'Address pending',
+      material: 'architectural_asphalt',
+      ageYears: 0,
+      geometry: 'gable',
+      condition: 'good',
+    });
+    targetIdRef.current = ins.id;
+    createdHereRef.current = true;
+    setTargetId(ins.id);
+    logActivity({
+      kind: 'job_created',
+      inspectionId: ins.id,
+      message: `Created quick inspection ${ins.reportId}`,
+    });
+    return ins.id;
+  };
+
+  /**
+   * Save a normalized photo to the inspection and queue it for analysis.
+   * areaTag / captureMode ride each capture into Slope.photoMeta so the
+   * analysis and report layers can bucket hits per mode.
+   */
+  const addPhoto = (uri: string, imported?: boolean) => {
+    const inspectionId = ensureInspection();
+    attachRawPhotos(inspectionId, [{ uri, slope, areaTag, captureMode }]);
+    const stored = useInspectionStore
+      .getState()
+      .inspections.find((i) => i.id === inspectionId)
+      ?.slopes.find((s) => s.orientation === slope);
+    const photoIndex = stored ? stored.photoPaths.lastIndexOf(uri) : -1;
+    if (!stored || photoIndex < 0) {
+      throw new Error('The photo could not be saved to the inspection.');
+    }
+    const photo: CapturedPhoto = {
+      uri,
+      slope,
+      areaTag,
+      captureMode,
+      imported,
+      inspectionId,
+      slopeId: stored.id,
+      photoIndex,
+    };
+    photosRef.current = [...photosRef.current, photo];
+    setPhotos(photosRef.current);
+    enqueueAnalysis(uri);
+  };
+
+  const acquireCamera = async (): Promise<boolean> => {
+    const deadline = Date.now() + CAMERA_LOCK_WAIT_MS;
+    while (cameraLock.current) {
+      if (Date.now() > deadline) return false;
+      await sleep(50);
+    }
+    cameraLock.current = true;
+    return true;
+  };
 
   const capture = async () => {
-    if (!camRef.current) return;
+    if (!camRef.current || capturing) return;
+    setCapturing(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      // Capture near-lossless. The old 0.7 baked JPEG artifacts into the
-      // frame before our pipeline ever saw it, permanently smearing the
-      // granule texture damage calls depend on. prepareCapturedPhoto is
-      // the single intentional lossy step. (Unrelated to the ImagePicker
-      // `quality` param removed in #23 — that was a multi-HEIC OOM path.)
-      const photo = await camRef.current.takePictureAsync({ quality: 0.95 });
-      if (!photo?.uri) throw new Error('No photo data');
-      const small = await prepareCapturedPhoto(photo.uri);
-      setPhotos((prev) => [...prev, { uri: small, slope, areaTag, captureMode }]);
+      if (!(await acquireCamera())) {
+        throw new Error('The camera is busy — try again.');
+      }
+      let uri: string | undefined;
+      try {
+        // Capture near-lossless. The old 0.7 baked JPEG artifacts into the
+        // frame before our pipeline ever saw it, permanently smearing the
+        // granule texture damage calls depend on. prepareCapturedPhoto is
+        // the single intentional lossy step.
+        const photo = await camRef.current.takePictureAsync({ quality: 0.95 });
+        uri = photo?.uri;
+      } finally {
+        cameraLock.current = false;
+      }
+      if (!uri) throw new Error('No photo data');
+      const small = await prepareCapturedPhoto(uri);
+      addPhoto(small);
     } catch (e) {
       Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setCapturing(false);
     }
   };
 
   /**
    * Import existing photos from the library. Imports are first-class captures:
    * same `prepareCapturedPhoto` normalization, same area tag / capture mode,
-   * same `photos` array, so they reach analysis by exactly the camera's path.
+   * same store path, so they reach analysis by exactly the camera's path.
    *
    * Multi-photo import is a LOOP over the single-asset picker, not
    * `allowsMultipleSelection`. expo-image-picker's multi-select handler fires
@@ -321,10 +594,7 @@ function QuickInspectionNative() {
         if (result.canceled || result.assets.length === 0) break;
 
         const small = await prepareCapturedPhoto(result.assets[0].uri);
-        setPhotos((prev) => [
-          ...prev,
-          { uri: small, slope, areaTag, captureMode, imported: true },
-        ]);
+        addPhoto(small, true);
         added += 1;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       }
@@ -351,98 +621,244 @@ function QuickInspectionNative() {
   };
 
   const finish = () => {
-    if (photos.length === 0) {
+    const inspectionId = targetIdRef.current;
+    if (photos.length === 0 || !inspectionId) {
       router.back();
       return;
     }
 
-    // Standalone capture (no job set) auto-creates a lightweight inspection so
-    // photos are never lost. Customer/address/roof details default to
-    // placeholders the inspector can edit later on the Job screen.
-    let targetId = jobId;
-    if (!targetId) {
-      const ins = createInspection({
-        customerName: 'Quick inspection',
-        address: 'Address pending',
-        material: 'architectural_asphalt',
-        ageYears: 0,
-        geometry: 'gable',
-        condition: 'good',
-      });
-      targetId = ins.id;
-      logActivity({
-        kind: 'job_created',
-        inspectionId: ins.id,
-        message: `Created quick inspection ${ins.reportId}`,
-      });
-    }
-
-    // areaTag / captureMode ride each capture into Slope.photoMeta so the
-    // analysis and report layers can bucket hits per mode. Nothing here
-    // aggregates counts — that happens once markers exist.
-    attachRawPhotos(targetId, photos);
     const singles = photos.filter((p) => p.captureMode === 'single_shingle').length;
     logActivity({
       kind: 'photo_captured',
-      inspectionId: targetId,
+      inspectionId,
       message:
         `Captured ${photos.length} photo${photos.length === 1 ? '' : 's'} for inspection` +
         (singles > 0 ? ` (${singles} single-shingle)` : ''),
     });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
-    // Jump straight into AI analysis for the slope we just filled so the
-    // capture -> analyze loop is one continuous flow. Fall back to the job
-    // screen only if no slope ended up with photos.
-    const ins = useInspectionStore.getState().inspections.find((i) => i.id === targetId);
-    const slopeWithPhotos = ins?.slopes.find((s) => s.photoPaths.length > 0);
+    // Jump straight into the analysis screen for the slope we were shooting
+    // so the capture -> analyze loop is one continuous flow. Fall back to the
+    // job screen only if no slope ended up with photos.
+    const ins = useInspectionStore.getState().inspections.find((i) => i.id === inspectionId);
+    const slopeWithPhotos =
+      ins?.slopes.find((s) => s.orientation === slope && s.photoPaths.length > 0) ??
+      ins?.slopes.find((s) => s.photoPaths.length > 0);
     if (slopeWithPhotos) {
       router.replace({
         pathname: '/analyze',
-        params: { inspectionId: targetId, slopeId: slopeWithPhotos.id },
+        params: { inspectionId, slopeId: slopeWithPhotos.id },
       });
     } else {
-      router.replace({ pathname: `/job/${targetId}` as any });
+      router.replace({ pathname: `/job/${inspectionId}` as any });
     }
   };
+
+  const close = () => {
+    const inspectionId = targetIdRef.current;
+    if (photos.length === 0 || !inspectionId) {
+      router.back();
+      return;
+    }
+    const n = photos.length;
+    if (createdHereRef.current) {
+      Alert.alert(
+        'Keep these photos?',
+        `${n} photo${n === 1 ? ' is' : 's are'} saved to a new quick inspection.`,
+        [
+          {
+            text: 'Discard photos',
+            style: 'destructive',
+            onPress: () => {
+              removeInspection(inspectionId);
+              router.back();
+            },
+          },
+          { text: 'Keep and exit', onPress: () => router.back() },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+    toast({
+      tone: 'info',
+      title: `${n} photo${n === 1 ? '' : 's'} saved to the job`,
+    });
+    router.back();
+  };
+
+  const onLiveError = useCallback(
+    (reason: string) => {
+      setLiveOverlay(false);
+      setLivePausedReason(reason);
+      toast({ tone: 'warn', title: 'Live overlay paused', body: reason });
+    },
+    [setLiveOverlay, toast],
+  );
+
+  const openPhoto = (photo: CapturedPhoto, state: StripState) => {
+    Haptics.selectionAsync().catch(() => {});
+    if (state.status === 'failed') {
+      enqueueAnalysis(photo.uri);
+      return;
+    }
+    router.push({
+      pathname: '/edit-detection',
+      params: {
+        inspectionId: photo.inspectionId,
+        slopeId: photo.slopeId,
+        photoIndex: String(photo.photoIndex),
+      },
+    });
+  };
+
+  if (!permission) return <View style={styles.permRoot} />;
+
+  if (!permission.granted) {
+    return (
+      <SafeAreaView style={styles.permRoot} edges={['top', 'bottom']}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.permWrap}>
+          <Ionicons name="camera-outline" size={40} color={colors.textInverse} />
+          <Text style={styles.permTitle}>Camera access needed</Text>
+          <Text style={styles.permBody}>
+            RoofWise uses the camera to capture roof photos for HAAG-protocol analysis.
+          </Text>
+          <Pressable style={styles.permBtn} onPress={requestPermission}>
+            <Text style={styles.permBtnText}>Enable camera</Text>
+          </Pressable>
+          <Pressable onPress={() => router.back()} style={styles.permLink}>
+            <Text style={styles.linkText}>Not now</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const chromeTop = insets.top + topBarHeight + spacing.sm;
+  const chromeBottom = dockHeight ? dockHeight + insets.bottom + spacing.sm : undefined;
+  const targetPitch = inspection?.slopes.find((s) => s.orientation === slope)?.pitchDegrees;
+  const livePaused = capturing || importing || analyzing;
+
+  // The most recent failed photo's reason, in plain words, where the roofer
+  // is already looking — the pill alone only has room for "Failed · Retry".
+  const lastFailure = [...photos]
+    .reverse()
+    .map((p) => stripStateFor(p, inspection, localAnalysis[p.uri]))
+    .find((s) => s.status === 'failed');
+
+  const hint = importing
+    ? 'Keep picking photos — tap Cancel in the picker when you are done.'
+    : photos.length === 0
+    ? captureModeOption(captureMode).hint
+    : lastFailure
+    ? `Analysis failed — ${(lastFailure.error ?? 'unknown reason').replace(/[.\s]+$/, '')}. Tap the photo to retry.`
+    : !isGeminiConfigured
+    ? 'AI is not connected — photos are saved; analysis runs once a key is set.'
+    : liveOverlay
+    ? 'Live overlay reads the camera. Photos analyze as you shoot — tap Done when finished.'
+    : 'Photos analyze as you shoot. Tap a thumbnail to check it, Done when finished.';
 
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
-      <CameraView ref={camRef} style={StyleSheet.absoluteFill} facing="back" />
+      <CameraView
+        ref={camRef}
+        style={StyleSheet.absoluteFill}
+        facing="back"
+        enableTorch={torch}
+        // Live grabs a frame every ~3 s; the preview must not blink for each
+        // one. The haptic still confirms the roofer's own shutter press.
+        animateShutter={!liveOverlay}
+        onCameraReady={() => setCameraReady(true)}
+      />
+
+      {/* Viewfinder layers — grid, live boxes, level — all non-interactive. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {guides && <ThirdsGrid />}
+        <LiveOverlay
+          enabled={liveOverlay}
+          cameraRef={camRef}
+          cameraReady={cameraReady}
+          cameraLock={cameraLock}
+          paused={livePaused}
+          focused={focused}
+          slope={slope}
+          reducedMotion={reducedMotion}
+          labelTop={chromeTop}
+          onError={onLiveError}
+        />
+        {guides && (
+          <LevelGuide
+            motion={motionSample}
+            targetPitchDegrees={targetPitch}
+            reducedMotion={reducedMotion}
+          />
+        )}
+      </View>
+
       <CameraHUD
         selectedSlope={slope}
         areaTag={areaTag}
         captureMode={captureMode}
-        bottomInset={dockHeight ? dockHeight + insets.bottom + spacing.sm : undefined}
+        motion={motionSample}
+        topInset={chromeTop + (liveOverlay ? touchTarget.small : 0)}
+        bottomInset={chromeBottom}
       />
+
       <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
-        <View style={styles.topRow}>
-          <Pressable onPress={() => router.back()} hitSlop={10} style={styles.topBtn}>
-            <Ionicons name="close" size={24} color={colors.textInverse} />
+        <View
+          style={styles.topRow}
+          onLayout={(e) => setTopBarHeight(e.nativeEvent.layout.height)}
+        >
+          <Pressable
+            onPress={close}
+            style={styles.topBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Close camera"
+          >
+            <Ionicons name="close" size={26} color={colors.textInverse} />
           </Pressable>
-          <View style={styles.topPill}>
-            <Text style={styles.topPillText}>
-              {photos.length === 0 ? 'Tap shutter to capture' : `${photos.length} photo${photos.length === 1 ? '' : 's'}`}
+
+          <Pressable
+            style={styles.topPill}
+            onPress={photos.length > 0 ? finish : undefined}
+            disabled={photos.length === 0}
+            accessibilityRole={photos.length > 0 ? 'button' : 'text'}
+            accessibilityLabel={
+              photos.length > 0
+                ? `${slope} slope, ${photos.length} photos. Finish and review.`
+                : `${slope} slope. No photos yet.`
+            }
+          >
+            <Text style={styles.topPillSlope}>{slope}</Text>
+            <Text style={styles.topPillText} numberOfLines={1}>
+              {photos.length === 0
+                ? 'slope · no photos yet'
+                : `slope · ${photos.length} photo${photos.length === 1 ? '' : 's'}`}
             </Text>
-          </View>
+          </Pressable>
+
           <View style={styles.topRightGroup}>
             <Pressable
-              onPress={importFromLibrary}
-              hitSlop={10}
-              disabled={importing}
-              style={[styles.topBtn, importing && styles.topBtnBusy]}
-              accessibilityLabel="Import photos from library. Keep picking, then tap Cancel when done."
-            >
-              <Ionicons name="images-outline" size={22} color={colors.textInverse} />
-            </Pressable>
-            <Pressable
               onPress={() => router.push('/pitch-gauge')}
-              hitSlop={10}
               style={styles.topBtn}
+              accessibilityRole="button"
               accessibilityLabel="Open pitch gauge"
             >
-              <Ionicons name="compass-outline" size={22} color={colors.textInverse} />
+              <Ionicons name="compass-outline" size={24} color={colors.textInverse} />
+            </Pressable>
+            <Pressable
+              onPress={() => setSettingsOpen(true)}
+              style={[styles.topBtn, liveOverlay && styles.topBtnActive]}
+              accessibilityRole="button"
+              accessibilityLabel="Capture settings"
+            >
+              <Ionicons
+                name="settings-outline"
+                size={24}
+                color={liveOverlay ? colors.text : colors.textInverse}
+              />
             </Pressable>
           </View>
         </View>
@@ -451,6 +867,17 @@ function QuickInspectionNative() {
           style={styles.bottomDock}
           onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
         >
+          {photos.length > 0 && (
+            <ReviewStrip
+              photos={photos}
+              inspection={inspection}
+              localAnalysis={localAnalysis}
+              reducedMotion={reducedMotion}
+              onOpen={openPhoto}
+              onDone={finish}
+            />
+          )}
+
           {/* Capture mode. Above everything else because it decides whether a
               photo's hits can ever count toward the per-square threshold.
               iOS-17 on-glass segmented: glass track, white sliding thumb. */}
@@ -490,9 +917,6 @@ function QuickInspectionNative() {
               );
             })}
           </View>
-          <Text style={styles.modeHint} numberOfLines={1}>
-            {captureModeOption(captureMode).hint}
-          </Text>
 
           {/* Capture subject — the 19 area tags. Rides each photo into the report. */}
           <ScrollView
@@ -506,7 +930,7 @@ function QuickInspectionNative() {
               return (
                 <Pressable
                   key={tag}
-                  style={[styles.areaChip, active && styles.chipActive]}
+                  style={[styles.chip, active && styles.chipActive]}
                   onPress={() => selectAreaTag(tag)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
@@ -528,7 +952,7 @@ function QuickInspectionNative() {
             {SLOPES.map((s) => (
               <Pressable
                 key={s}
-                style={[styles.slopeChip, slope === s && styles.chipActive]}
+                style={[styles.chip, slope === s && styles.chipActive]}
                 onPress={() => selectSlope(s)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: slope === s }}
@@ -542,67 +966,185 @@ function QuickInspectionNative() {
           </ScrollView>
 
           <View style={styles.shutterRow}>
-            <PhotoStrip photos={photos} />
             <Pressable
-              style={styles.shutter}
+              onPress={importFromLibrary}
+              disabled={importing}
+              style={[styles.dockBtn, importing && styles.dockBtnBusy]}
+              accessibilityRole="button"
+              accessibilityLabel="Import photos from library. Keep picking, then tap Cancel when done."
+            >
+              <Ionicons name="images-outline" size={26} color={colors.textInverse} />
+            </Pressable>
+
+            <Pressable
+              style={[styles.shutter, capturing && styles.shutterBusy]}
               onPress={capture}
+              disabled={capturing}
+              accessibilityRole="button"
               accessibilityLabel="Capture photo"
             >
               <View style={styles.shutterInner} />
             </Pressable>
+
             <Pressable
-              style={[styles.doneBtn, photos.length === 0 && styles.doneBtnDisabled]}
-              disabled={photos.length === 0}
-              onPress={finish}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setTorch((t) => !t);
+              }}
+              style={[styles.dockBtn, torch && styles.dockBtnActive]}
+              accessibilityRole="button"
+              accessibilityState={{ checked: torch }}
+              accessibilityLabel={torch ? 'Turn torch off' : 'Turn torch on'}
             >
-              <Text style={styles.doneBtnText}>Done</Text>
-              <Text style={styles.doneBtnSub}>{photos.length}</Text>
+              <Ionicons
+                name={torch ? 'flashlight' : 'flashlight-outline'}
+                size={26}
+                color={torch ? colors.text : colors.textInverse}
+              />
             </Pressable>
           </View>
 
-          <Text style={styles.captureHint}>
-            {importing
-              ? 'Keep picking photos — tap Cancel in the picker when you are done.'
-              : 'Capture or import, then tap Done to run AI damage analysis.'}
+          <Text style={styles.captureHint} numberOfLines={2}>
+            {hint}
           </Text>
         </View>
       </SafeAreaView>
+
+      <CaptureSettingsSheet
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        livePausedReason={livePausedReason}
+      />
     </View>
   );
 }
 
-/**
- * Recent captures with their area tag rendered as an overlay chip. The label
- * is drawn over the thumbnail, never composited into the JPEG — the stored
- * pixels stay exactly what the camera saw, which is what an adjuster (and the
- * vision model) has to be able to trust.
- */
-function PhotoStrip({ photos }: { photos: CapturedPhoto[] }) {
-  if (photos.length === 0) return <View style={styles.stripPlaceholder} />;
-  const recent = photos.slice(-2);
-  const hidden = photos.length - recent.length;
+// ── Review strip ─────────────────────────────────────────────────────────
+
+/** State of one thumbnail: the store's record wins, screen-local fills gaps. */
+function stripStateFor(
+  photo: CapturedPhoto,
+  inspection: Inspection | undefined,
+  local: LocalAnalysis | undefined,
+): StripState {
+  if (!isGeminiConfigured) return { status: 'no_ai' };
+  const slope = inspection?.slopes.find((s) => s.id === photo.slopeId);
+  const markersOnPhoto = slope
+    ? slope.damage.filter((m) => m.photoIndex === photo.photoIndex).length
+    : 0;
+  const stored = slope?.photoAnalysis?.[photo.uri];
+  // Done is done — the store knows before this screen's batch reconciles.
+  if (stored?.status === 'done') {
+    return { status: 'done', findingCount: stored.findingCount ?? markersOnPhoto };
+  }
+  // A fresh local queue/analyzing entry (a retry) outranks a stale stored
+  // failure; otherwise the store's own record is the truth.
+  if (local && local.status !== 'failed') return { status: local.status };
+  if (stored) {
+    return {
+      status: stored.status,
+      findingCount: stored.findingCount ?? markersOnPhoto,
+      error: stored.error,
+    };
+  }
+  if (slope?.analyzedPhotoIndices?.includes(photo.photoIndex)) {
+    return { status: 'done', findingCount: markersOnPhoto };
+  }
+  if (local) return { status: local.status, error: local.error };
+  return { status: 'queued' };
+}
+
+function pillFor(state: StripState): { label: string; tone: PillTone; pulse: boolean } {
+  switch (state.status) {
+    case 'no_ai':
+      return { label: 'No AI', tone: 'warn', pulse: false };
+    case 'analyzing':
+      return { label: 'Analyzing', tone: 'info', pulse: true };
+    case 'done':
+      return { label: `Done · ${state.findingCount ?? 0}`, tone: 'success', pulse: false };
+    case 'failed':
+      return { label: 'Failed · Retry', tone: 'danger', pulse: false };
+    default:
+      return { label: 'Queued', tone: 'neutral', pulse: false };
+  }
+}
+
+function ReviewStrip({
+  photos,
+  inspection,
+  localAnalysis,
+  reducedMotion,
+  onOpen,
+  onDone,
+}: {
+  photos: CapturedPhoto[];
+  inspection: Inspection | undefined;
+  localAnalysis: Record<string, LocalAnalysis>;
+  reducedMotion: boolean;
+  onOpen: (photo: CapturedPhoto, state: StripState) => void;
+  onDone: () => void;
+}) {
+  const scrollRef = useRef<ScrollView>(null);
   return (
-    <View style={styles.photoStrip}>
-      {recent.map((p, i) => (
-        <View key={`${p.uri}-${i}`} style={styles.thumbWrap}>
-          <Image source={{ uri: p.uri }} style={styles.thumb} />
-          <View style={styles.thumbTag}>
-            <Text style={styles.thumbTagText} numberOfLines={1}>
-              {shortAreaTag(p.areaTag)}
-            </Text>
-          </View>
-          {p.captureMode === 'single_shingle' && (
-            <View style={styles.thumbModeDot}>
-              <Ionicons name="layers" size={10} color={colors.textInverse} />
-            </View>
-          )}
-        </View>
-      ))}
-      {hidden > 0 && (
-        <View style={styles.thumbMore}>
-          <Text style={styles.thumbMoreText}>+{hidden}</Text>
-        </View>
-      )}
+    <View style={styles.stripRow}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.strip}
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: !reducedMotion })}
+      >
+        {photos.map((p) => {
+          const state = stripStateFor(p, inspection, localAnalysis[p.uri]);
+          const pill = pillFor(state);
+          const a11y =
+            state.status === 'failed'
+              ? `Photo ${p.photoIndex + 1}, ${shortAreaTag(p.areaTag)}. Analysis failed${state.error ? `: ${state.error}` : ''}. Tap to retry.`
+              : `Photo ${p.photoIndex + 1}, ${shortAreaTag(p.areaTag)}, ${pill.label}. Tap to open.`;
+          return (
+            <Pressable
+              key={p.uri}
+              style={styles.thumbCol}
+              onPress={() => onOpen(p, state)}
+              accessibilityRole="button"
+              accessibilityLabel={a11y}
+            >
+              <View style={[styles.thumbWrap, state.status === 'failed' && styles.thumbWrapFailed]}>
+                <Image source={{ uri: p.uri }} style={styles.thumb} />
+                <View style={styles.thumbTag}>
+                  <Text style={styles.thumbTagText} numberOfLines={1}>
+                    {shortAreaTag(p.areaTag)}
+                  </Text>
+                </View>
+                {p.captureMode === 'single_shingle' && (
+                  <View style={styles.thumbModeDot}>
+                    <Ionicons name="layers" size={10} color={colors.textInverse} />
+                  </View>
+                )}
+                {p.imported && (
+                  <View style={[styles.thumbModeDot, styles.thumbImportDot]}>
+                    <Ionicons name="images" size={10} color={colors.textInverse} />
+                  </View>
+                )}
+              </View>
+              <Pill
+                label={pill.label}
+                tone={pill.tone}
+                size="sm"
+                solid
+                dot={pill.pulse}
+                pulse={pill.pulse && !reducedMotion}
+              />
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {/* The screen's one orange moment — Done hands off to analysis. */}
+      <Pressable style={styles.doneBtn} onPress={onDone} accessibilityRole="button">
+        <Text style={styles.doneBtnText}>Done</Text>
+        <Text style={styles.doneBtnSub}>{photos.length}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -614,40 +1156,122 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
   },
+  // Every top-bar control is a full 56pt glass disc — the smoke pair, so it
+  // reads on any roof behind it.
   topBtn: {
     width: touchTarget.standard,
     height: touchTarget.standard,
     borderRadius: radii.pill,
-    backgroundColor: colors.overlay,
+    backgroundColor: glass.smokeFill,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: glass.smokeBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  topBtnActive: { backgroundColor: colors.surface, borderColor: colors.surface },
   topPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    height: touchTarget.standard,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
     borderRadius: radii.pill,
-    backgroundColor: colors.overlay,
+    backgroundColor: glass.smokeFill,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: glass.smokeBorder,
+  },
+  topPillSlope: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+  },
+  topPillText: {
+    color: colors.textInverse,
+    opacity: 0.85,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    flexShrink: 1,
   },
   topRightGroup: { flexDirection: 'row', gap: spacing.sm },
-  topBtnBusy: { opacity: 0.5 },
-  topPillText: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   bottomDock: {
-    paddingBottom: spacing.md,
-    backgroundColor: colors.scrim,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: glass.border,
+    paddingBottom: spacing.sm,
+    backgroundColor: glass.smokeFill,
+    borderTopWidth: StyleSheet.hairlineWidth * 2,
+    borderTopColor: glass.smokeBorder,
   },
+
+  // Review strip — thumbnails with their analysis state, plus Done.
+  stripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.lg,
+    paddingTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  strip: { gap: spacing.sm, alignItems: 'flex-start', paddingRight: spacing.sm },
+  thumbCol: { alignItems: 'center', gap: spacing.xs, minWidth: touchTarget.standard },
+  thumbWrap: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    borderRadius: radii.sm,
+    borderWidth: 2,
+    borderColor: colors.textInverse,
+    overflow: 'hidden',
+  },
+  thumbWrapFailed: { borderColor: colors.danger },
+  thumb: { width: '100%', height: '100%' },
+  thumbTag: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.overlay,
+    paddingVertical: 1,
+    alignItems: 'center',
+  },
+  thumbTagText: {
+    color: colors.textInverse,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+  },
+  thumbModeDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 16,
+    height: 16,
+    borderRadius: radii.pill,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbImportDot: { right: undefined, left: 2, backgroundColor: colors.textMuted },
+
+  doneBtn: {
+    minWidth: touchTarget.preferred,
+    paddingHorizontal: spacing.lg,
+    height: touchTarget.preferred,
+    borderRadius: radii.button,
+    backgroundColor: colors.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doneBtnText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
+  doneBtnSub: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
   // On-glass segmented track + sliding white thumb (iOS-17 pattern).
   modeTrack: {
     flexDirection: 'row',
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
     height: touchTarget.standard,
     borderRadius: radii.md,
     backgroundColor: glass.fill,
@@ -679,19 +1303,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   modeSegmentTextActive: { color: colors.text, opacity: 1, fontWeight: fontWeight.bold },
-  modeHint: {
-    // Camera chrome sits on the live preview: token colour + opacity rather
-    // than a baked rgba literal (Drift #11).
-    color: colors.textInverse,
-    opacity: 0.78,
-    fontSize: fontSize.caption,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xs,
-  },
 
   chipRow: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
     gap: spacing.sm,
     alignItems: 'center',
   },
@@ -704,16 +1319,7 @@ const styles = StyleSheet.create({
   },
   // Picker chips share the on-glass language: glass rest state, white fill +
   // ink text when active (selection matches the segmented thumb, not orange).
-  areaChip: {
-    minWidth: touchTarget.standard,
-    height: touchTarget.standard,
-    borderRadius: radii.button,
-    paddingHorizontal: spacing.lg,
-    backgroundColor: glass.fillHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  slopeChip: {
+  chip: {
     minWidth: touchTarget.standard,
     height: touchTarget.standard,
     borderRadius: radii.button,
@@ -730,13 +1336,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.xxxl,
     paddingTop: spacing.sm,
   },
-  // Clean shutter: thin white ring around an ink core.
+  dockBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    borderRadius: radii.pill,
+    backgroundColor: glass.fillHigh,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: glass.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dockBtnBusy: { opacity: 0.5 },
+  dockBtnActive: { backgroundColor: colors.surface, borderColor: colors.surface },
+  // 80pt shutter: thin white ring, white core with a breathing gap between.
   shutter: {
-    width: 76,
-    height: 76,
+    width: SHUTTER,
+    height: SHUTTER,
     borderRadius: radii.pill,
     backgroundColor: 'transparent',
     alignItems: 'center',
@@ -744,71 +1362,12 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: colors.textInverse,
   },
-  shutterInner: { width: 60, height: 60, borderRadius: radii.pill, backgroundColor: colors.navy },
-
-  // The screen's one orange moment — Done hands off to analysis.
-  doneBtn: {
-    minWidth: touchTarget.preferred,
-    paddingHorizontal: spacing.lg,
-    height: touchTarget.preferred,
-    borderRadius: radii.button,
-    backgroundColor: colors.orange,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doneBtnDisabled: { opacity: 0.4 },
-  doneBtnText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
-  doneBtnSub: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
-
-  stripPlaceholder: { width: touchTarget.standard },
-  photoStrip: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  thumbWrap: {
-    width: touchTarget.standard,
-    height: touchTarget.standard,
-    borderRadius: radii.sm,
-    borderWidth: 2,
-    borderColor: colors.textInverse,
-    overflow: 'hidden',
-  },
-  thumb: { width: '100%', height: '100%' },
-  thumbTag: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.overlay,
-    paddingVertical: 1,
-    alignItems: 'center',
-  },
-  thumbTagText: {
-    color: colors.textInverse,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-  },
-  thumbModeDot: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 16,
-    height: 16,
+  shutterBusy: { opacity: 0.6 },
+  shutterInner: {
+    width: SHUTTER_CORE,
+    height: SHUTTER_CORE,
     borderRadius: radii.pill,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  thumbMore: {
-    minWidth: 28,
-    height: touchTarget.standard,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.xs,
-    backgroundColor: glass.fillHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  thumbMoreText: {
-    color: colors.textInverse,
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.bold,
+    backgroundColor: colors.surface,
   },
 
   captureHint: {
@@ -834,5 +1393,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   permBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  permLink: {
+    minHeight: touchTarget.standard,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
   linkText: { color: colors.textInverse, fontSize: fontSize.bodyMd },
 });

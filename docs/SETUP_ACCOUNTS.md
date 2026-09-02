@@ -99,6 +99,51 @@ curl "https://solar.googleapis.com/v1/buildingInsights:findClosest?location.lati
 
 ---
 
+## Gemini (AI Studio) — model + deprecation fallback
+
+`lib/services/gemini.ts` calls the Google AI Studio REST endpoint
+(`generativelanguage.googleapis.com/v1beta/models/<model>:generateContent`)
+with the key in `EXPO_PUBLIC_GEMINI_API_KEY`.
+
+**Model:** `EXPO_PUBLIC_GEMINI_MODEL`, default **`gemini-3.8-flash`** (newest
+Flash as of 2026-09-01 — owner directive: "Gemini flash 3.7 or the newest
+version"). Flash answers the 2560px vision + structured-JSON damage request in
+roughly 1.5–3 s.
+
+**`gemini-2.5-pro` is retired for new keys.** Google now answers
+`404 "This model models/gemini-2.5-pro is no longer available to new users"`
+for it, which is what broke photo analysis entirely. Never pin it again.
+
+**Fallback chain (deprecation-proof).** The configured model is only the first
+one tried. On HTTP 404 / `NOT_FOUND` / "no longer available" the client moves to
+the next entry:
+
+```
+<EXPO_PUBLIC_GEMINI_MODEL> → gemini-3.8-flash → gemini-3.7-flash → gemini-3.5-flash → gemini-2.5-flash
+```
+
+The model that actually answered is stored on every analysis result
+(`modelUsed`, plus `latencyMs`) and on each photo's `photoAnalysis` state, so
+the report footer and Diagnostics show honest provenance. Once a fallback has
+answered, later calls in the same app session start from it (no 404 round-trip
+per photo); a fresh launch re-tries the configured model.
+
+**Every other error surfaces as itself** — quota (429), invalid/unauthorized
+key (400/403), safety block, network, 5xx, or the 60 s per-attempt timeout —
+never retried across models, and shown to the roofer per photo as
+"Analysis failed — <reason> · Retry".
+
+Verify a key + model quickly:
+```sh
+curl -sS "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=YOUR_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"contents":[{"parts":[{"text":"Reply with the single word OK."}]}]}'
+```
+A 404 here means that model id is gone for your key; list what the key can use
+with `curl -sS "https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY"`.
+
+---
+
 ## Weather: already wired, and it's Google — not Apple
 
 `lib/services/weather.ts` is a **Google Weather API** client and works today with
@@ -128,7 +173,7 @@ during a contractor demo is unrecoverable in the moment.
 | Service | State | Action needed |
 |---|---|---|
 | NOAA storm events | Live, keyless | none |
-| Gemini 2.5 Pro | Live | key in `.env.local` |
+| Gemini (gemini-3.8-flash, fallback chain) | Live | key in `.env.local`; 2.5-pro retired for new keys |
 | Google Weather | Wired | enable API + billing |
 | Google Maps / Places / Geocoding | Wired | enable APIs, add key restrictions |
 | Google Solar | Wired | enable API, set budget alert |

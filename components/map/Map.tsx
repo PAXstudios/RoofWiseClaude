@@ -4,7 +4,14 @@
 // is a one-file change.
 
 import { forwardRef, useCallback, useState, type ReactNode, type Ref } from 'react';
-import { Platform, StyleSheet, UIManager, View, type ViewStyle } from 'react-native';
+import {
+  Platform,
+  StyleSheet,
+  UIManager,
+  View,
+  type LayoutChangeEvent,
+  type ViewStyle,
+} from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useFocusEffect, useNavigation } from 'expo-router';
 import MapView, {
@@ -22,6 +29,8 @@ import MapView, {
   type MapCircleProps,
   type MapHeatmapProps,
 } from 'react-native-maps';
+import { GoogleTileAttribution, GoogleTileLayer } from '@/components/map/GoogleTileLayer';
+import { isTileSessionValid, useMapTilesStore, type TileMapType } from '@/lib/stores/mapTilesStore';
 import { colors, radii } from '@/theme/tokens';
 
 // Expo Go on iOS does not bundle the Google Maps SDK — requesting
@@ -31,6 +40,17 @@ import { colors, radii } from '@/theme/tokens';
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const MAP_PROVIDER =
   Platform.OS === 'ios' && inExpoGo ? PROVIDER_DEFAULT : PROVIDER_GOOGLE;
+
+/**
+ * The owner wants Google Maps, not Apple Maps. Where the native Google SDK
+ * can't load (Expo Go on iOS — the only place MAP_PROVIDER is Apple), Google's
+ * real road/satellite imagery is drawn over the Apple base as an opaque
+ * UrlTile from the Map Tiles API (lib/services/mapTiles.ts). It lights up on
+ * its own the moment the owner's key allows that API; until then, and on any
+ * failure, the Apple base simply stays and Diagnostics carries the reason.
+ * Native builds and Android already render PROVIDER_GOOGLE and are untouched.
+ */
+const USE_GOOGLE_TILE_LAYER = Platform.OS === 'ios' && inExpoGo;
 
 /**
  * Heatmap is Google-Maps-only. react-native-maps ships AIRGoogleMapHeatmap
@@ -50,6 +70,9 @@ export const MAP_SUPPORTS_HEATMAP =
 
 export type MapCoordinate = { latitude: number; longitude: number };
 
+/** Base imagery. `standard` is roads; `satellite`/`hybrid` are aerial. */
+export type MapImageryType = 'standard' | 'satellite' | 'hybrid';
+
 export type MapProps = {
   initialRegion?: Region;
   region?: Region;
@@ -62,7 +85,25 @@ export type MapProps = {
   /** Web only (Map.web.tsx): top-anchors the no-map fallback panel. The
    *  native map fills the screen, so this is a no-op here. */
   fallbackTopOffset?: number;
+  /** Road map (default) or aerial imagery. Drives both the native map type
+   *  and, in Expo Go on iOS, which Google tile set is drawn over Apple. */
+  mapType?: MapImageryType;
+  /**
+   * Expo Go on iOS only: draw Google's imagery over the Apple base (default
+   * true). Opt OUT on a screen whose MapCircle / MapPolygon / MapPolyline
+   * layers carry the information — MapKit stacks tile overlays ABOVE those
+   * vector overlays, so an opaque Google tile hides them. Markers and
+   * callouts are annotations and always stay on top.
+   */
+  googleImagery?: boolean;
+  /** Lifts the "Google · Map data ©…" attribution chip clear of a host
+   *  screen's own bottom-left chrome. Defaults to a small corner inset. */
+  attributionInset?: { bottom?: number; left?: number };
 };
+
+function tileMapTypeFor(mapType: MapImageryType | undefined): TileMapType {
+  return mapType === 'satellite' || mapType === 'hybrid' ? 'satellite' : 'roadmap';
+}
 
 export const Map = forwardRef(function Map(
   {
@@ -74,9 +115,35 @@ export const Map = forwardRef(function Map(
     children,
     onMapReady,
     onLongPress,
+    mapType,
+    googleImagery = true,
+    attributionInset,
   }: MapProps,
   ref: Ref<MapView>,
 ) {
+  // Google imagery over Apple (Expo Go on iOS). `tilesLive` is true only
+  // while a real Map Tiles session exists — it flips the Apple base's own
+  // labels/POIs off so nothing bleeds at tile seams, and back on the moment
+  // the session lapses so the fallback map is a complete map.
+  const wantGoogleTiles = USE_GOOGLE_TILE_LAYER && googleImagery;
+  const tileMapType = tileMapTypeFor(mapType);
+  const tileSession = useMapTilesStore((s) => s.sessions[tileMapType]);
+  const tilesLive = wantGoogleTiles && isTileSessionValid(tileSession);
+
+  // Viewport + width feed ONLY the attribution chip (debounced inside it).
+  // The tile layer itself never re-keys on region — every re-fetched tile is
+  // a metered request, and the native overlay already caches.
+  const [viewport, setViewport] = useState<Region | null>(null);
+  const [mapWidth, setMapWidth] = useState(0);
+  const onRegionChangeComplete = useCallback(
+    (next: Region) => {
+      if (wantGoogleTiles) setViewport(next);
+    },
+    [wantGoogleTiles],
+  );
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    setMapWidth(e.nativeEvent.layout.width);
+  }, []);
   // The Map tab is one of the 5 tab roots and gets pre-mounted by the tab
   // navigator. On iOS Simulator the underlying MKMapView (Apple Maps) fires
   // -mapViewWillStartRenderingMap: into react-native-maps' AIRMapManager
@@ -100,17 +167,26 @@ export const Map = forwardRef(function Map(
   );
 
   return (
-    <View style={[styles.wrap, style]}>
+    <View style={[styles.wrap, style]} onLayout={wantGoogleTiles ? onLayout : undefined}>
       {isFocused ? (
         <MapView
           ref={ref}
           provider={MAP_PROVIDER}
           style={StyleSheet.absoluteFill}
+          mapType={mapType}
           showsUserLocation={showsUserLocation}
           showsCompass={showsCompass}
+          // Apple-only chrome, off while Google tiles cover the base so
+          // Apple's POI pins and building extrusions don't poke through at
+          // tile seams or while a tile is still loading. Defaults otherwise
+          // (and on PROVIDER_GOOGLE these are no-ops / their own defaults).
+          showsPointsOfInterest={!tilesLive}
+          showsBuildings={!tilesLive}
+          showsTraffic={false}
           initialRegion={initialRegion}
           region={region}
           onMapReady={onMapReady}
+          onRegionChangeComplete={wantGoogleTiles ? onRegionChangeComplete : undefined}
           onLongPress={(e) =>
             onLongPress?.({
               latitude: e.nativeEvent.coordinate.latitude,
@@ -118,8 +194,22 @@ export const Map = forwardRef(function Map(
             })
           }
         >
+          {/* First child so the native overlay is inserted beneath the
+              caller's markers. Renders nothing without a session. */}
+          {wantGoogleTiles ? <GoogleTileLayer mapType={tileMapType} /> : null}
           {children}
         </MapView>
+      ) : null}
+      {/* Required by Google's terms. A sibling of MapView (not a child —
+          MapView children must be map primitives), non-interactive, and it
+          only exists while Google imagery is actually on screen. */}
+      {wantGoogleTiles && isFocused ? (
+        <GoogleTileAttribution
+          mapType={tileMapType}
+          region={viewport ?? region ?? initialRegion ?? null}
+          viewportWidth={mapWidth}
+          inset={attributionInset}
+        />
       ) : null}
     </View>
   );

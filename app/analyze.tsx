@@ -22,7 +22,8 @@ import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useAnalysisQueueStore } from '@/lib/stores/analysisQueueStore';
 import { drainAnalysisQueue } from '@/lib/services/analysisQueue';
-import { analyzeSlope } from '@/lib/services/analyzeSlope';
+import { analyzeSlope, getPhotoAnalysisState } from '@/lib/services/analyzeSlope';
+import { describeAnalysisError } from '@/lib/services/gemini';
 import { scorePhotos } from '@/lib/services/photoQuality';
 import { isGeminiConfigured } from '@/lib/env';
 import {
@@ -152,12 +153,21 @@ export default function AnalyzeView() {
         inspectionId: inspection.id,
         message: `Analyzed ${result.attached} photo${result.attached === 1 ? '' : 's'} on ${slope.orientation} slope`,
       });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (result.failed > 0) {
-        setError(`${result.failed} photo${result.failed === 1 ? '' : 's'} could not be analyzed.`);
+        // Reason verbatim from the pipeline — never a bare count. Failed
+        // photos are not in analyzedPhotoIndices, so "Analyze N new" is the
+        // retry; the badge on each failed thumb shows which ones.
+        const first = result.failures[0]?.reason ?? 'Unknown reason.';
+        setError(
+          `${result.failed} photo${result.failed === 1 ? '' : 's'} failed — ${first} ` +
+            'Failed photos are marked "!" below; tap "Analyze new" to retry them.',
+        );
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      } else {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Analysis failed');
+      setError(describeAnalysisError(e));
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setRunning(false);
@@ -212,6 +222,16 @@ export default function AnalyzeView() {
         <View style={styles.grid}>
           {slope.photoPaths.map((uri, i) => {
             const analyzed = (slope.analyzedPhotoIndices ?? []).includes(i);
+            // Failure notice: a photo whose last attempt failed shows "!"
+            // (reason lives in the banner above + slope.photoAnalysis).
+            const failed = getPhotoAnalysisState(slope, i)?.status === 'failed';
+            const badgeBg = failed
+              ? colors.danger
+              : analyzed
+                ? colors.success
+                : colors.surfaceMuted;
+            const badgeIcon = failed ? 'alert' : analyzed ? 'checkmark' : 'ellipse-outline';
+            const badgeColor = failed || analyzed ? colors.textInverse : colors.slate;
             return (
               <Pressable
                 key={i}
@@ -229,17 +249,8 @@ export default function AnalyzeView() {
                 onLongPress={() => onPhotoLongPress(i)}
               >
                 <Image source={{ uri }} style={styles.thumbImg} />
-                <View
-                  style={[
-                    styles.thumbBadge,
-                    { backgroundColor: analyzed ? colors.success : colors.surfaceMuted },
-                  ]}
-                >
-                  <Ionicons
-                    name={analyzed ? 'checkmark' : 'ellipse-outline'}
-                    size={14}
-                    color={analyzed ? colors.textInverse : colors.slate}
-                  />
+                <View style={[styles.thumbBadge, { backgroundColor: badgeBg }]}>
+                  <Ionicons name={badgeIcon} size={14} color={badgeColor} />
                 </View>
               </Pressable>
             );

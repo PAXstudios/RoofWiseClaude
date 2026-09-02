@@ -1,12 +1,16 @@
 // Desktop-web top bar. Shows the current destination's context (derived
 // from the same shared navItems list the Sidebar uses) plus the two primary
 // quick actions — New Job and Quick Inspection — mirroring the dashboard
-// hero CTAs (Drift #3). Presentational: navigation goes through expo-router.
+// hero CTAs (Drift #3).
+//
+// Mounted as the tab navigator's per-screen `header` (see
+// app/(tabs)/_layout.tsx), so the focused route arrives as a prop — no
+// pathname parsing. The quick actions push root-stack routes via expo-router.
 
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { navItems } from './navItems';
+import { navItems, type TabHeaderProps } from './navItems';
 import {
   colors,
   fontSize,
@@ -16,20 +20,17 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-export function TopBar() {
+export function TopBar({ route, options }: TabHeaderProps) {
   const router = useRouter();
-  const pathname = usePathname();
 
-  const current =
-    navItems.find((it) =>
-      it.href === '/(tabs)' || it.href === '/'
-        ? pathname === '/' || pathname === '/index'
-        : pathname.startsWith(it.href),
-    ) ?? navItems[0];
+  // Settings is a route inside the group but not a nav item, so fall back to
+  // the screen's own title before the raw route name.
+  const title =
+    navItems.find((it) => it.name === route.name)?.label ?? options.title ?? route.name;
 
   return (
     <View style={styles.bar}>
-      <Text style={styles.title}>{current.label}</Text>
+      <Text style={styles.title}>{title}</Text>
 
       <View style={styles.actions}>
         <Pressable

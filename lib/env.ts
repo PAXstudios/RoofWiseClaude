@@ -31,9 +31,13 @@ export const env = {
   SUPABASE_URL: pick(process.env.EXPO_PUBLIC_SUPABASE_URL),
   SUPABASE_ANON_KEY: pick(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
 
-  // Gemini
+  // Gemini — newest Flash by default (owner directive 2026-09-01). The value
+  // is only the FIRST model tried: lib/services/gemini.ts falls through a
+  // deprecation chain when Google retires a model id (HTTP 404 / "no longer
+  // available"), so a stale override here degrades to the next Flash instead
+  // of breaking every analysis. `gemini-2.5-pro` is retired for new keys.
   GEMINI_API_KEY: pick(process.env.EXPO_PUBLIC_GEMINI_API_KEY),
-  GEMINI_MODEL: pick(process.env.EXPO_PUBLIC_GEMINI_MODEL, 'gemini-2.5-pro'),
+  GEMINI_MODEL: pick(process.env.EXPO_PUBLIC_GEMINI_MODEL, 'gemini-3.8-flash'),
 
   // Google Maps Platform — base key + per-platform/per-service overrides
   GOOGLE_MAPS_API_KEY: googleMapsKey,
