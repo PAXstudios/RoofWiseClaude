@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IconChip } from '@/components/ui/IconChip';
-import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import { AddressAutocomplete, type ResolvedLocation } from '@/components/AddressAutocomplete';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useEstimateStore } from '@/lib/stores/estimateStore';
 import { useToastStore } from '@/lib/stores/toastStore';
@@ -26,14 +26,16 @@ import {
   spacing,
   touchTarget,
 } from '@/theme/tokens';
+// The measurement instrument is Google's Solar API; on screen it is "roof
+// measurement" (owner directive — no "solar" in user-facing copy).
 import {
   measureRoof,
   type RoofMeasurement,
-  SolarNotConfiguredError,
   SolarNotFoundError,
-  SolarServiceError,
   imageryIsStale,
 } from '@/lib/services/solar';
+import { geocodeText } from '@/lib/services/geocoding';
+import { describeGoogleApiError } from '@/lib/services/googleApi';
 import {
   estimateCost,
   regionForState,
@@ -109,26 +111,44 @@ export default function CostEstimatorScreen() {
       : null;
 
   const runMeasurement = async () => {
-    if (draft.lat === undefined || draft.lng === undefined) return;
+    if (draft.address.trim().length === 0) return;
     setMeasuring(true);
     setError(null);
     try {
-      const m = await measureRoof({ lat: draft.lat, lng: draft.lng });
-      setDraft({ ...draft, measurement: m });
+      // A hand-typed address (Places refused, or no suggestion picked) has no
+      // coordinates yet — look them up first so measurement is never gated on
+      // autocomplete working.
+      let lat = draft.lat;
+      let lng = draft.lng;
+      if (lat === undefined || lng === undefined) {
+        const g = await geocodeText(draft.address.trim());
+        if (!g) {
+          setError('Couldn\'t find that address on the map. Check the spelling, or enter squares manually below.');
+          return;
+        }
+        lat = g.lat;
+        lng = g.lng;
+      }
+      const m = await measureRoof({ lat, lng });
+      setDraft({ ...draft, lat, lng, measurement: m });
     } catch (e) {
-      if (e instanceof SolarNotConfiguredError) {
-        setError('Google Solar API key not configured.');
-      } else if (e instanceof SolarNotFoundError) {
-        setError('No aerial measurement available for this address — enter manually below.');
-      } else if (e instanceof SolarServiceError) {
-        setError(e.message);
+      if (e instanceof SolarNotFoundError) {
+        setError('No aerial measurement available for this address — enter squares manually below.');
       } else {
-        setError(e instanceof Error ? e.message : 'Measurement failed');
+        // A refused key says which Google API to enable; everything else is
+        // the honest generic line. Manual entry stays available underneath.
+        setError(
+          describeGoogleApiError(e) ??
+            (e instanceof Error ? e.message : 'Roof measurement didn\'t work — enter squares manually below.'),
+        );
       }
     } finally {
       setMeasuring(false);
     }
   };
+
+  const onLocation = (loc: ResolvedLocation) =>
+    setDraft({ ...draft, address: loc.address, lat: loc.lat, lng: loc.lng, measurement: undefined });
 
   const canAdvance =
     (step === 0 && draft.address.trim().length > 0) ||
@@ -149,7 +169,7 @@ export default function CostEstimatorScreen() {
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.stepCount}>Step {step + 1} of 4</Text>
-          <Text style={styles.stepTitle}>{['Address', 'Roof detection', 'Damage scope', 'Result'][step]}</Text>
+          <Text style={styles.stepTitle}>{['Address', 'Roof measurement', 'Damage scope', 'Result'][step]}</Text>
         </View>
       </View>
 
@@ -165,7 +185,7 @@ export default function CostEstimatorScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {step === 0 && (
             <View style={{ gap: spacing.lg }}>
-              <Text style={styles.helper}>Enter the property address. We'll pull aerial roof measurements via Google's Solar API.</Text>
+              <Text style={styles.helper}>Enter the property address. We'll measure the roof from aerial imagery — or you can enter squares by hand on the next step.</Text>
               <AddressAutocomplete
                 value={draft.address}
                 onChangeText={(t) =>
@@ -174,6 +194,7 @@ export default function CostEstimatorScreen() {
                 onPlaceSelected={(p) =>
                   setDraft({ ...draft, address: p.description, lat: p.lat, lng: p.lng })
                 }
+                onLocationSelected={onLocation}
               />
             </View>
           )}
@@ -183,21 +204,23 @@ export default function CostEstimatorScreen() {
               {!draft.measurement && (
                 <View style={styles.card}>
                   <IconChip name="globe-outline" tone="orange" />
-                  <Text style={styles.cardTitle}>Detect roof from the air</Text>
+                  <Text style={styles.cardTitle}>Measure the roof from the air</Text>
                   <Text style={styles.cardSub}>
                     {draft.lat !== undefined
-                      ? 'Tap below to pull slope geometry from Google Solar API.'
-                      : 'Pick an address with autocomplete on step 1 to enable detection.'}
+                      ? 'Tap below to measure each slope from aerial imagery.'
+                      : 'We\'ll look up the address you typed, then measure each slope from aerial imagery.'}
                   </Text>
                   <Pressable
-                    style={[styles.secondaryBtn, !draft.lat && { opacity: 0.4 }]}
-                    disabled={!draft.lat || measuring}
+                    style={[styles.secondaryBtn, draft.address.trim().length === 0 && { opacity: 0.4 }]}
+                    disabled={draft.address.trim().length === 0 || measuring}
                     onPress={runMeasurement}
+                    accessibilityRole="button"
+                    accessibilityLabel="Measure roof"
                   >
                     {measuring ? (
                       <ActivityIndicator color={colors.textInverse} />
                     ) : (
-                      <Text style={styles.secondaryBtnText}>Run detection</Text>
+                      <Text style={styles.secondaryBtnText}>Measure roof</Text>
                     )}
                   </Pressable>
                   {error && (
@@ -214,7 +237,7 @@ export default function CostEstimatorScreen() {
                   <IconChip name="layers-outline" tone="green" />
                   <Text style={styles.cardTitle}>{draft.measurement.totalSquares.toFixed(1)} squares</Text>
                   <Text style={styles.cardSub}>
-                    {draft.measurement.slopes.length} slopes detected
+                    {draft.measurement.slopes.length} slopes measured
                     {'  ·  Imagery '}{draft.measurement.imageryDate}
                     {'  ·  Quality '}{draft.measurement.imageryQuality}
                   </Text>
