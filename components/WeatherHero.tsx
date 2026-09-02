@@ -373,6 +373,12 @@ export function WeatherHero({ style, scrollY }: Props) {
   const weather = phase.kind === 'ready' ? phase.weather : null;
   const scanning = areas.length > 0 ? scanLabel(areas) : null;
 
+  // Every state's card body goes to the same place. The footer is where a
+  // state keeps its own consequence CTA (alert cluster, repair).
+  const openWeather = useCallback(() => {
+    router.push('/weather' as any);
+  }, [router]);
+
   // ── A · Active storm alert ─────────────────────────────────────────────
   if (activeAlert) {
     const headline = stormHeadline(activeAlert);
@@ -383,6 +389,10 @@ export function WeatherHero({ style, scrollY }: Props) {
     const openAlert = () =>
       router.push({ pathname: '/storm-alert/[id]', params: { id: alertId } } as any);
 
+    // The footer keeps the alert's own consequence CTA; the card BODY opens
+    // the weather page in every state (owner's ask — "the big weather image
+    // should open the weather page"), which surfaces this alert again with
+    // a route to its detail.
     const footer: FooterSpec = cluster
       ? {
           icon: 'location',
@@ -412,14 +422,14 @@ export function WeatherHero({ style, scrollY }: Props) {
         cells={cells}
         precip={precipVeil(weather, activeAlert)}
         footer={footer}
-        onPress={openAlert}
+        onPress={openWeather}
         onDismiss={() => dismissAlert(alertId)}
         accessibilityLabel={[
           headline,
           activeAlert.areaLabel,
           magnitude,
           weather ? `${weather.temperatureF} degrees` : '',
-          'Opens the storm alert.',
+          'Opens the weather page.',
         ]
           .filter(Boolean)
           .join('. ')}
@@ -475,15 +485,16 @@ export function WeatherHero({ style, scrollY }: Props) {
             ? { icon: 'radio-outline', label: `Storm Watch is scanning ${scanning}` }
             : null
         }
-        // Only offer a target when there is somewhere genuinely useful to go:
-        // the §7 rating leads straight to the pre-flight safety check.
-        onPress={safety ? () => router.push('/safety-check') : undefined}
+        // The whole card is the door to the weather page — hourly, 10-day,
+        // NWS alerts and the §7 roof-work window all live there now.
+        onPress={openWeather}
         accessibilityLabel={[
           `${weather.temperatureF} degrees`,
           weather.description,
           `feels like ${weather.feelsLikeF}`,
           conditions,
-          safety ? `Roof work: ${SAFETY_RATING_LABELS[safety.rating]}. Opens the safety check.` : '',
+          safety ? `Roof work: ${SAFETY_RATING_LABELS[safety.rating]}.` : '',
+          'Opens the weather page.',
         ]
           .filter(Boolean)
           .join('. ')}
@@ -559,13 +570,15 @@ export function WeatherHero({ style, scrollY }: Props) {
             repair(reason);
           },
         }}
-        onPress={() => {
-          repair(reason);
-        }}
+        // The footer carries the repair; the body still opens the weather
+        // page, which shows the same honest "not set up" panel and the parts
+        // that need no key (NWS alerts, storm history).
+        onPress={openWeather}
         accessibilityLabel={[
           'Weather not available',
           copy.cause,
           scanning ? `Storm Watch is scanning ${scanning}` : '',
+          'Opens the weather page.',
           copy.cta,
         ]
           .filter(Boolean)
@@ -620,7 +633,8 @@ export function WeatherHero({ style, scrollY }: Props) {
       ground={gradients.stormNight}
       tone="calm"
       footer={null}
-      accessibilityLabel="Checking current conditions."
+      onPress={openWeather}
+      accessibilityLabel="Checking current conditions. Opens the weather page."
     >
       <View style={styles.flagRow}>
         <View style={styles.nowChip}>
@@ -762,6 +776,12 @@ function HeroFrame({
             {...press}
           >
             {children}
+            {/* Tappable affordance: a frosted chevron disc in the body's
+                bottom-right, clear of the copy column and of the footer band.
+                Decorative — the Pressable above owns the label. */}
+            <View style={styles.affordance} pointerEvents="none" accessibilityElementsHidden>
+              <Ionicons name="chevron-forward" size={18} color={colors.textInverse} />
+            </View>
           </Pressable>
         ) : (
           <View style={styles.body} accessible accessibilityLabel={accessibilityLabel}>
@@ -1083,7 +1103,21 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: glass.smokeBorder,
   },
-  readingMeta: { flex: 1, paddingBottom: spacing.sm, gap: 2 },
+  // Trailing pad keeps the meta column clear of the chevron affordance.
+  readingMeta: { flex: 1, paddingBottom: spacing.sm, paddingRight: spacing.xxxl, gap: 2 },
+  affordance: {
+    position: 'absolute',
+    right: spacing.lg,
+    bottom: spacing.lg,
+    width: 32,
+    height: 32,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: glass.smokeFill,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: glass.smokeBorder,
+  },
   metaPrimary: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,

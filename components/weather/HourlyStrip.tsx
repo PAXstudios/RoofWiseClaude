@@ -160,8 +160,10 @@ export function conditionIcon(conditionType: string, isDaytime: boolean): Ionico
   if (t.includes('FOG') || t.includes('HAZE') || t.includes('MIST') || t.includes('SMOKE')) return 'cloud-outline';
   if (t.includes('WIND')) return 'cloudy-outline';
   if (t === 'CLOUDY' || t === 'MOSTLY_CLOUDY') return 'cloud';
-  if (t.includes('CLOUD')) return isDaytime ? 'partly-sunny' : 'cloudy-night';
-  if (t.includes('CLEAR') || t === 'SUNNY') return isDaytime ? 'sunny' : 'moon';
+  // "PARTLY_CLOUDY" (type) and "PARTLY_SUNNY" (description, from `weather.ts`
+  // which carries no type) are the same sky.
+  if (t.includes('CLOUD') || t.includes('PARTLY')) return isDaytime ? 'partly-sunny' : 'cloudy-night';
+  if (t.includes('CLEAR') || t.includes('SUNNY')) return isDaytime ? 'sunny' : 'moon';
   return isDaytime ? 'partly-sunny-outline' : 'cloudy-night-outline';
 }
 

@@ -201,8 +201,17 @@ async function getJson(url: string): Promise<unknown> {
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) {
-      const body = (await res.text().catch(() => '')).slice(0, 200);
-      throw new Error(`Weather ${res.status}${body ? `: ${body}` : ''}`);
+      // Surface the service's own sentence ("API key not valid…"), not the
+      // JSON envelope around it — the reason lands in a one-line UI state.
+      const body = await res.text().catch(() => '');
+      let message = '';
+      try {
+        const parsed = JSON.parse(body) as { error?: { message?: unknown } };
+        if (typeof parsed?.error?.message === 'string') message = parsed.error.message;
+      } catch {
+        message = body.replace(/\s+/g, ' ').trim();
+      }
+      throw new Error(`Weather ${res.status}${message ? `: ${message.slice(0, 120)}` : ''}`);
     }
     return await res.json();
   } catch (err) {
