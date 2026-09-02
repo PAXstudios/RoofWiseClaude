@@ -38,7 +38,7 @@ entry number. When the user asks "what's next," answer from BACKLOG.md.
 - **Framework:** Expo SDK 54, React Native 0.81, React 19, TypeScript, expo-router 6 (file-based). **New Architecture is ON** (`newArchEnabled: true`) — Expo Go 52+ runs nothing else; never turn it off to make something compile. Reanimated 4 + `react-native-worklets` (babel plugin is `react-native-worklets/plugin`, last in the list). Upgraded from SDK 51 in #55 because the App Store's Expo Go runs SDK 54.
 - **State:** Zustand stores with `persist` + AsyncStorage. Per-feature store under `lib/stores/`.
 - **Backend:** Supabase (auth + Postgres + Storage). Client at `lib/supabase.ts`. Auth store at `lib/auth/authStore.ts`.
-- **AI vision:** Gemini **2.5 Pro** via Google AI Studio direct REST (`lib/services/gemini.ts`). Higher accuracy for ambiguous damage than the previous 2.5 Flash default; trade-off is ~5× cost + slower latency per call. **There is no `gemini-3-flash` / `gemini-3.5-flash`** — Drift Warning #9.
+- **AI vision:** Gemini **newest Flash** (`gemini-3.8-flash` as of 2026-09-02) via Google AI Studio direct REST (`lib/services/gemini.ts`). Model is env-configurable (`EXPO_PUBLIC_GEMINI_MODEL`) with a deprecation-proof fallback chain (3.8 → 3.7 → 3.5 → 2.5-flash) that walks ONLY on 404/"no longer available"; every result records `modelUsed`. **`gemini-2.5-pro` is retired for new API keys** (HTTP 404) — it killed every analysis on the first device run. Drift Warning #9.
 - **Maps:** `react-native-maps` with `PROVIDER_GOOGLE` (iOS + Android). Unified abstraction in `components/map/Map.tsx`.
 - **Native modules in use:** expo-camera, expo-location, expo-sensors, expo-haptics, expo-image, expo-image-manipulator, expo-image-picker, expo-print, expo-file-system (imported from `expo-file-system/legacy` — the File/Directory API migration is backlogged), expo-notifications, expo-audio (replaced expo-av in #55), expo-apple-authentication, expo-clipboard, expo-document-picker, expo-sharing, expo-blur, expo-linear-gradient, react-native-reanimated, react-native-gesture-handler, react-native-svg, react-native-maps. `metro.config.js` carries a zustand-only package-exports override (zustand 4's ESM build uses `import.meta`, which breaks the web bundle) — remove it if zustand is upgraded to 5.
 - **Theme:** `theme/tokens.ts` — `colors`, `fontSize`, `fontWeight`, `radii`, `spacing`, `shadows`, `touchTarget`, `motion`. **Never inline hex / font sizes.** (Drift Warning #11.)
@@ -87,8 +87,8 @@ Pulled from `PROMPT_LOG.md`. The full list is canonical there; this is the short
 6. Damage taxonomy is the **13 canonical categories** (`docs/SPEC.md`). Each finding has severity + 0–100 confidence.
 7. HAAG thresholds are **material-specific** and are defined by **`docs/HAAG_DECISION_ENGINE.md`**, not by memory or convenience. 3-tab asphalt is **>5** hits per test square; laminate/architectural is **>8**. Repairability gates (discontinued material, brittleness FAIL/BORDERLINE, 2+ layers) **override hit counts** and force replacement on their own.
 8. Decision Engine is **pure logic** — no I/O. Lives in `lib/services/decisionEngine.ts`. It must emit `roofwise_recommendation`, `claim_viability`, and `roofer_safety_rating` per `docs/HAAG_DECISION_ENGINE.md` §9.
-9. Gemini model: `gemini-2.5-pro` via Google AI Studio direct REST. No `gemini-3-flash` / `gemini-3.5-flash` (neither exists).
-10. **No LiDAR / ARKit in v1.** Camera-only.
+9. Gemini model: the **newest Flash** via Google AI Studio direct REST, env-configurable, with the fallback chain in `gemini.ts`. Never pin a retired model; never hardcode a model name outside `lib/env.ts`. (Rewritten 2026-09-02 on the owner's directive with live evidence — `gemini-2.5-pro` returns 404 for new keys and the 3.x Flash family exists; see PROMPT_LOG #60.)
+10. **LiDAR / AR are v2 features with visible, honest entry points** (owner directive 2026-09-01, superseding "no LiDAR/ARKit in v1"): the capture-settings sheet shows Live overlay (works in Expo Go), AR markers and LiDAR measure (say plainly they need the native build). Never fake depth or AR anchors. The native implementation is gated on the Apple Developer account — see the ⚡ STANDING TRIGGER in BACKLOG.md.
 11. Theme tokens everywhere — no inline hex / font sizes.
 12. `requireAuth` flag wired from day one; false during dev.
 13. Append, don't rewrite, the Prompt History.
@@ -162,7 +162,7 @@ npm run lint                      # expo lint
 - **True background execution** (expo-task-manager) — needs a dev build.
 - **Mileage auto-tracking via geofencing** — same constraint.
 - **Voice input on free-text fields** beyond `expo-av` recording — needs a native module beyond Expo Go.
-- **LiDAR / ARKit** — Drift Warning #10.
+- **LiDAR / ARKit native implementation** — buttons exist (Drift #10 as rewritten); the ARKit/scene-depth module needs the native build → STANDING TRIGGER.
 
 ---
 
