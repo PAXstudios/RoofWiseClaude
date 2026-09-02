@@ -28,14 +28,12 @@ entry does not count as tracked.
 ## Soon (from the 2026-08-16 Drive synthesis — after Now clears)
 
 - [ ] **Re-test the #58 fixes on the iPhone** (publish a new EAS Update first): Map tab shows storm pins within seconds and the stat line reads a real count (not "unavailable"); Hail Tracer opens with hail circles on Apple Maps and no ErrorBoundary card; Home tab tap is a single transition with no blank screen; a second tap on the active tab does nothing; New Lead "save" / New Job "Done" / job delete return to the existing shell (swipe-back reveals nothing underneath); voice note plays through the speaker; Job Detail no longer prompts for the mic on open. If Expo Go still exits on "Map", pull the iOS crash log (Settings → Privacy & Security → Analytics Data → "Expo Go-…") — the faulting frame decides between AIRMapManager (nil `onMapReady`) and AIRMap `insertReactSubview` (dynamic marker add/remove) — #58
-- [ ] `(tabs)/_layout.tsx` renders `<Slot/>`, which expo-router 6 backs with a StackRouter — every tab tap is a stack action and tabs remount on each visit (Map re-fetches NOAA, Home replays its entrance). Replace with `<Tabs tabBar={() => <BottomTabs/>} screenOptions={{ headerShown: false }}>` for JUMP_TO semantics and preserved tab state; #58 mitigated with `navigate` + active-tab guard only — #58
 - [ ] Surface `D` / `O` (TSTM/NON-TSTM WND DMG) reports: IEM sends them with no gust magnitude, so they never pass `qualifiesForValidation` and "wind damage reported here" is invisible on every map. Product call on showing them as unvalidated context (Drift #5-safe: labelled, never counted as validated) — #58
 - [ ] Owner call: do `N` (NON-TSTM WND GST) and `A` (HIGH SUST WINDS) count as roofing wind events? `lib/noaa.ts` includes them (parity with the old substring match); excluding them is a one-line `WIND_CODES` change — #58
 - [ ] `lib/noaa.ts` severityColor also still uses inline hex for wind bands (now 86/69/58 mph) — fold into the existing Drift #11 item below — #58
 - [ ] `MapHeatmap` gate is inert on Android and Google-provider dev builds; the MapCircle fallback has only been reasoned about, not seen — check the swath density/alpha on a device and tune `HAIL_CIRCLE_*` in `app/hail-tracer.tsx` — #58
 - [ ] **Rotate after the first device run:** the Expo access token (Admin), the phone Google key, the Gemini key, and the claude.ai-restricted web key — all pasted in chat 2026-09-01 — #56
 - [ ] TestFlight via EAS Build — the "real icon + Google Maps on iOS" path; needs the Apple Developer Program ($99) and App Store Connect credentials configured on expo.dev; works from this container once those exist — #56
-- [ ] Add an `eas.json` with `preview` / `production` build profiles + channels so `eas build`/`eas update` share one config — #56
 - [ ] **Device test on SDK 54 / New Architecture** — only the web export was booted. First Expo Go run must exercise: react-native-maps 1.20 (Apple Maps in Go), expo-camera 17 capture + analyze, expo-sensors 15 pitch gauge, **expo-audio voice notes (record + play — a full API rewrite)**, Reanimated 4 animations (hero, aurora, radar, swipe cards, toasts), the `Map.tsx` focus seed on the iOS Simulator SIGSEGV path — #55
 - [ ] zustand 4.5 → 5 — would remove the zustand-only package-exports override in `metro.config.js`; behavior-bearing (persist/selector changes), deliberately excluded from the migration — #55
 - [ ] expo-file-system: real migration off `/legacy` (deprecated) to the File/Directory API in the 4 call sites — #55
@@ -108,6 +106,8 @@ entry does not count as tracked.
 
 ## Done (most recent first)
 
+- [x] `(tabs)/_layout.tsx` Slot-as-stack → real `<Tabs>` navigator — closed by #60 (was a Soon item from #58)
+- [x] `eas.json` with preview/production profiles — closed by #57
 - [x] Supabase connected to the owner's own project `epghfumtuxrhonbpnbmr` on web + phone; full schema (sync tables, photo buckets, learning-loop dataset tables, RLS) applied via the Management API and verified — closed by #61
 - [x] Photo analysis restored — `gemini-2.5-pro` is retired for new keys (404); newest Flash + fallback chain, typed errors, per-photo failed/retry state, `modelUsed` recorded — closed by #60
 - [x] Capture UI rebuilt with Live overlay, honest AR / LiDAR / Guides buttons (Drift #10 rewritten by owner directive) — closed by #60
