@@ -754,7 +754,7 @@ function QuickInspectionNative() {
     : lastFailure
     ? `Analysis failed — ${(lastFailure.error ?? 'unknown reason').replace(/[.\s]+$/, '')}. Tap the photo to retry.`
     : !isGeminiConfigured
-    ? 'AI is not connected — photos are saved; analysis runs once a key is set.'
+    ? 'AI is not connected — photos are saved without analysis. Run "Analyze" from the job once a key is set.'
     : liveOverlay
     ? 'Live overlay reads the camera. Photos analyze as you shoot — tap Done when finished.'
     : 'Photos analyze as you shoot. Tap a thumbnail to check it, Done when finished.';

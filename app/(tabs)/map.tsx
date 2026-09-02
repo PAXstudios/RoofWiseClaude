@@ -251,10 +251,19 @@ export default function MapScreen() {
 
   // The Map tab is pre-mounted by the tab navigator, so a deep link can arrive
   // while this screen is already alive — react to the param, don't rely on the
-  // initial state alone.
+  // initial state alone. The param is consumed once applied: it persists on
+  // the tab route otherwise, so a second identical deep link (same string)
+  // would not change this effect's deps and the filter would not re-apply.
   useEffect(() => {
-    if (focus === FOCUS_STORM_LEADS) setFilter('leads');
-  }, [focus]);
+    if (focus === FOCUS_STORM_LEADS) {
+      setFilter('leads');
+      router.setParams({ focus: '' });
+    }
+  }, [focus, router]);
+
+  // Height of the floating stat bar / cluster card so the Google attribution
+  // chip (Expo Go iOS) sits above it — Google requires the credit visible.
+  const [statBarHeight, setStatBarHeight] = useState(0);
 
   // Storm history now runs through the shared, 4-year-clamped address lookback
   // (stormMatch.fetchAddressStormHistory) instead of a raw NOAA call: same
@@ -356,6 +365,7 @@ export default function MapScreen() {
             spacing.sm +
             spacing.xl
           }
+          attributionInset={{ bottom: statBarHeight + spacing.md + spacing.sm }}
         >
           {serviceAreas
             .filter((a) => typeof a.centroidLat === 'number' && typeof a.centroidLng === 'number')
@@ -490,7 +500,11 @@ export default function MapScreen() {
 
         {/* Cluster insight + count float at the bottom edge of the map. Real
             numbers only — both are absent when there's nothing to report. */}
-        <View style={styles.statBarWrap} pointerEvents="box-none">
+        <View
+          style={styles.statBarWrap}
+          pointerEvents="box-none"
+          onLayout={(e) => setStatBarHeight(e.nativeEvent.layout.height)}
+        >
           {error && (
             <View style={styles.errorCard}>
               <Text style={styles.errorText}>{error}</Text>

@@ -128,9 +128,13 @@ export function geminiModelChain(): string[] {
 }
 
 /** HTTP 404 / NOT_FOUND / "no longer available" — the only failure class
- *  that moves on to the next model in the chain. */
+ *  that moves on to the next model in the chain. The body phrases are
+ *  consulted only on a 404 or a 400 (Google's two "that model id is not
+ *  served here" shapes); a 401/403/429/5xx never walks the chain, whatever
+ *  its body says — those must surface as themselves. */
 function isModelGone(status: number, bodyText: string): boolean {
   if (status === 404) return true;
+  if (status !== 400) return false;
   return (
     /"status"\s*:\s*"NOT_FOUND"/.test(bodyText) ||
     /no longer available/i.test(bodyText) ||
@@ -499,7 +503,19 @@ export type AnalyzeOptions = {
   signal?: AbortSignal;
   /** Per-attempt timeout override. Defaults to GEMINI_TIMEOUT_MS. */
   timeoutMs?: number;
+  /**
+   * Live-viewfinder frame (components/capture/LiveOverlay.tsx): a reduced
+   * ≤1024px grab whose result is drawn for a few seconds and discarded. The
+   * system prompt and schema are unchanged; the user turn asks for the
+   * detections + the no-roof verdict only, so the 13-row findings table is
+   * not generated for a frame nobody stores. Never set for a saved photo.
+   */
+  live?: boolean;
 };
+
+/** Extra user-turn text for a live frame. Same schema, less output. */
+const LIVE_FRAME_ADDENDUM =
+  '\n\nLIVE VIEWFINDER FRAME: this is a reduced-resolution preview grab that is shown for a few seconds and then discarded — it is not the inspection photo. Apply STEP 0 and STEP 1 exactly as above, then return the same JSON schema with "detections" populated for every visible damage instance and "findings" as an empty array. Do not lower your evidence bar: a box you would not draw on a full-resolution photo must not be drawn here either.';
 
 /**
  * The exact generateContent body `analyzePhoto` sends. Exported so the
@@ -510,6 +526,7 @@ export type AnalyzeOptions = {
 export function buildAnalyzeRequest(opts: AnalyzeOptions): unknown {
   const slopeHint = opts.slope ? `\n\nThe photo is of slope orientation: ${opts.slope}.` : '';
   const prefix = opts.userStylePrefix ? `${opts.userStylePrefix}\n\n` : '';
+  const liveAddendum = opts.live ? LIVE_FRAME_ADDENDUM : '';
 
   return {
     systemInstruction: {
@@ -527,7 +544,8 @@ export function buildAnalyzeRequest(opts: AnalyzeOptions): unknown {
             },
           },
           {
-            text: 'Analyze this roof photograph. First confirm a roof/shingle surface is actually in frame (if not, return no_roof_detected: true with zero findings), then calibrate pixels-per-inch from the standard shingle geometry and report shingle_scale_estimate. Identify the shingle type, evaluate all 13 damage categories in findings, and detect every distinct damage instance you can see with a tight bounding box on the 0–1000 integer scale (box_2d), sized by pixel extent relative to your scale estimate. Cover ALL damage categories present — hail, wind, granule loss, missing shingles, cracking, blistering, lifted shingles, flashing, algae, structural sagging, splitting, bruising, wind creasing. If real storm damage is present you should output many detections; the inspector trusts you to flag everything they would.',
+            text: 'Analyze this roof photograph. First confirm a roof/shingle surface is actually in frame (if not, return no_roof_detected: true with zero findings), then calibrate pixels-per-inch from the standard shingle geometry and report shingle_scale_estimate. Identify the shingle type, evaluate all 13 damage categories in findings, and detect every distinct damage instance you can see with a tight bounding box on the 0–1000 integer scale (box_2d), sized by pixel extent relative to your scale estimate. Cover ALL damage categories present — hail, wind, granule loss, missing shingles, cracking, blistering, lifted shingles, flashing, algae, structural sagging, splitting, bruising, wind creasing. If real storm damage is present you should output many detections; the inspector trusts you to flag everything they would.' +
+              liveAddendum,
           },
         ],
       },

@@ -105,10 +105,11 @@ export default function SearchScreen() {
       const jobId = hit.kind === 'inspection' ? hit.id : hit.jobId;
       router.push(`/job/${jobId}` as any);
     } else {
-      // navigate, not push: from a root-level screen a push to a '(tabs)/…'
-      // href stacks a SECOND tab shell on the root stack (the old one stays
-      // mounted underneath). navigate pops back to the existing shell.
-      router.navigate('/(tabs)/leads');
+      // dismissTo (POP_TO), not navigate/push: from a root-level screen a
+      // NAVIGATE that does not match the current route PUSHES a second tab
+      // shell on the root stack (the old one stays mounted underneath).
+      // POP_TO pops back to the existing shell and switches its tab (NAV-3).
+      router.dismissTo('/(tabs)/leads');
     }
   };
 

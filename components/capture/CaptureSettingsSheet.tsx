@@ -34,6 +34,7 @@ import Animated, {
 import { GlassCard } from '@/components/glass/GlassCard';
 import type { IoniconName } from '@/components/ui/IconChip';
 import { useCaptureSettingsStore } from '@/lib/stores/captureSettingsStore';
+import { isGeminiConfigured } from '@/lib/env';
 import {
   colors,
   fontSize,
@@ -184,7 +185,9 @@ export function CaptureSettingsSheet({ visible, onClose, livePausedReason }: Pro
                 icon="scan-outline"
                 title="Live overlay"
                 subtitle={
-                  liveOverlay
+                  !isGeminiConfigured
+                    ? 'Needs the AI key — this build has none, so nothing can be drawn.'
+                    : liveOverlay
                     ? `On · ${lastLiveModel ?? 'connecting'} · the AI reads a frame every few seconds`
                     : livePausedReason
                     ? `Paused — ${livePausedReason}`

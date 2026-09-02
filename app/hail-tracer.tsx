@@ -413,6 +413,11 @@ export default function HailTracerScreen() {
             latitudeDelta: BROWSE_REGION_DELTA,
             longitudeDelta: BROWSE_REGION_DELTA,
           }}
+          // Expo Go iOS: the hail swaths below are MapCircles, and MapKit
+          // stacks the opaque Google tile overlay ABOVE vector overlays — the
+          // swaths (the substance of this screen) would vanish under it. Keep
+          // the Apple base here; native builds render Google + swaths anyway.
+          googleImagery={false}
         >
           {/* Heatmap ONLY where the native view exists (Google Maps / Android).
               On Apple Maps (Expo Go iOS) react-native-maps has no AIRMapHeatmap
@@ -545,9 +550,11 @@ export default function HailTracerScreen() {
             <ClusterInsight
               cluster={cluster}
               onPress={() =>
-                // navigate, not push: from this root-level screen a push to a
-                // '(tabs)/…' href stacks a second tab shell (NAV-3).
-                router.navigate({ pathname: '/(tabs)/map', params: { focus: 'storm-leads' } } as any)
+                // dismissTo (POP_TO), not navigate/push: from this root-level
+                // screen a NAVIGATE that does not match the current route
+                // PUSHES a second (tabs) shell; POP_TO pops back to the
+                // existing shell and applies the tab + params (NAV-3).
+                router.dismissTo({ pathname: '/(tabs)/map', params: { focus: 'storm-leads' } } as any)
               }
             />
           )}

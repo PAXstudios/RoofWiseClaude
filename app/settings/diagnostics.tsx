@@ -18,6 +18,10 @@ import {
   type DiagnosticKind,
 } from '@/lib/services/diagnostics';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { useMapTilesStore } from '@/lib/stores/mapTilesStore';
+import { getGoogleTilesStatus } from '@/lib/services/mapTiles';
+import { geminiModelChain, getActiveGeminiModel } from '@/lib/services/gemini';
+import { isGeminiConfigured } from '@/lib/env';
 import { formatDateTime, formatRelative } from '@/lib/format/date';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
@@ -58,6 +62,17 @@ export default function DiagnosticsScreen() {
   // from whenever this screen first mounted.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const boot = useMemo(() => getBootInfo(), [entries]);
+
+  // Service provenance — what actually answers, not what was configured.
+  // Both reads are cheap store/module lookups, so they run on every render:
+  // the focus refresh above re-renders (Gemini's chain head is process-
+  // lifetime — a fallback that answered once is tried first until relaunch),
+  // and the tile-store subscription re-renders when a session or error lands
+  // while this screen is open.
+  useMapTilesStore((s) => s.sessions);
+  useMapTilesStore((s) => s.lastError);
+  const tiles = getGoogleTilesStatus();
+  const gemini = { active: getActiveGeminiModel(), chain: geminiModelChain() };
 
   const onCopyAll = async () => {
     try {
@@ -152,6 +167,36 @@ export default function DiagnosticsScreen() {
             <BuildRow label="Update ID" value={boot.updateId ?? 'embedded (no EAS Update applied)'} />
             <BuildRow label="Runtime version" value={boot.runtimeVersion ?? 'unknown'} />
             <BuildRow label="Channel" value={boot.channel ?? 'unknown'} />
+          </RichCard>
+        </FadeSlideIn>
+
+        <FadeSlideIn index={3} style={styles.section}>
+          <SectionHeader title="Services" style={styles.sectionHeaderSpacing} />
+          <RichCard>
+            <BuildRow
+              label="AI model"
+              value={
+                isGeminiConfigured
+                  ? gemini.active
+                  : 'not connected (no EXPO_PUBLIC_GEMINI_API_KEY)'
+              }
+            />
+            <BuildRow label="AI fallback chain" value={gemini.chain.join(' → ')} />
+            <BuildRow label="Google map imagery" value={tiles.message} />
+            {tiles.lastError && (
+              <BuildRow
+                label="Imagery last error"
+                value={
+                  [
+                    tiles.lastError.httpStatus != null ? `HTTP ${tiles.lastError.httpStatus}` : null,
+                    tiles.lastError.googleReason,
+                    formatRelative(new Date(tiles.lastError.at).toISOString()),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                }
+              />
+            )}
           </RichCard>
         </FadeSlideIn>
       </ScrollView>

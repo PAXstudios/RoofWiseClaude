@@ -220,6 +220,9 @@ export function LiveOverlay({
           slope: slopeRef.current,
           signal: abort.signal,
           timeoutMs: LIVE_TIMEOUT_MS,
+          // Detections + no-roof verdict only — the findings table is never
+          // generated for a frame that is drawn for 3 s and discarded.
+          live: true,
         });
         if (cancelled) return;
 

@@ -40,7 +40,15 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
-const clamp01 = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
+// Called from inside useAnimatedStyle, i.e. on the UI thread. Without the
+// 'worklet' directive Reanimated 4 throws "Tried to synchronously call a
+// non-worklet function on the UI thread" — and on a device that throw is not
+// catchable: it escapes worklets::UIScheduler::triggerUI as a C++ exception
+// and aborts the process (the owner's Expo Go crash log, 2026-09-02).
+function clamp01(n: number): number {
+  'worklet';
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
+}
 
 /**
  * Token-coloured track with a fill that springs to its value.

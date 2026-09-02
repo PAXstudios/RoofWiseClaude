@@ -49,6 +49,11 @@ export type MapProps = {
    */
   fallbackTopOffset?: number;
   children?: ReactNode;
+  /** Accepted for parity with the native Map (Expo Go iOS Google tile
+   *  layer); the web map is Google's own JS API, so these are no-ops here. */
+  mapType?: 'standard' | 'satellite' | 'hybrid';
+  googleImagery?: boolean;
+  attributionInset?: { bottom?: number; left?: number };
 };
 
 // ---------------------------------------------------------------------------
