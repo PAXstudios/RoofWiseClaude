@@ -2452,3 +2452,14 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Unblocked:** email sign-up/sign-in, cloud sync of inspections/leads/photos, corrections capture, and the Learning Loop v2 wave (`docs/LEARNING_LOOP.md`) — which now runs right after Wave 7c.
 
 **Files touched:** `BACKLOG.md`, `PROMPT_LOG.md` (schema file committed earlier).
+
+---
+
+### [2026-09-02] #62 — Standing trigger: PRE-LAUNCH checklist (email confirmation back on, secrets rotated, keys restricted)
+
+**Prompt:**
+> "dont forget this when i tell you the app is about to launched: before public launch I'd switch email confirmation back on. Reversible in Authentication → Settings."
+
+Recorded as a second **⚡ STANDING TRIGGER** at the top of `BACKLOG.md` "Now", next to the Apple Developer one, so any future session acts on "we're about to launch" without being asked: Supabase email confirmation back on (`mailer_autoconfirm=false`, set to true in #61 for the test phase) with production `site_url`/redirects; rotate every secret pasted in chat; restrict the Google keys; `REQUIRE_AUTH=true` re-test; full device pass.
+
+**Files touched:** `BACKLOG.md`, `PROMPT_LOG.md`.

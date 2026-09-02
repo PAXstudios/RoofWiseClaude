@@ -141,9 +141,10 @@ export function isValidRadius(radius: unknown): radius is number {
 
 /** Drop anything native could choke on. Never throws; never mutates input. */
 export function sanitizeStormEvents(events: readonly StormEvent[] | null | undefined): SanitizedStormEvents {
-  if (!events || events.length === 0) return { events: [], dropped: 0 };
+  if (!events || events.length === 0) return { events: [], dropped: 0, rekeyed: 0 };
   const out: StormEvent[] = [];
   let dropped = 0;
+  let rekeyed = 0;
   const seen = new Set<string>();
   for (const e of events) {
     if (!e || typeof e.id !== 'string' || e.id.length === 0) {
@@ -154,15 +155,19 @@ export function sanitizeStormEvents(events: readonly StormEvent[] | null | undef
       dropped += 1;
       continue;
     }
-    // Duplicate ids would collide as React keys AND as native annotation ids.
-    if (seen.has(e.id)) {
-      dropped += 1;
-      continue;
+    // Duplicate ids would collide as React keys. Keep the report, make the
+    // key unique (deterministic: same input order → same suffixes).
+    let id = e.id;
+    if (seen.has(id)) {
+      let n = 2;
+      while (seen.has(`${e.id}#${n}`)) n += 1;
+      id = `${e.id}#${n}`;
+      rekeyed += 1;
     }
-    seen.add(e.id);
-    out.push(e);
+    seen.add(id);
+    out.push(id === e.id ? e : { ...e, id });
   }
-  return { events: out, dropped };
+  return { events: out, dropped, rekeyed };
 }
 
 /** Circle radius in metres for an event. Always finite and > 0. */
@@ -382,8 +387,11 @@ export function selectStormOverlay(
     };
   }
 
-  // near: circles ride the same ranked list so the strongest hits get a footprint.
-  const circleSource = ranked === visible ? [...visible].sort(bySeverityThenRecency) : ranked;
+  // near: hit circles for HAIL only (a gust has no footprint), strongest
+  // first so the biggest hits keep their circle when the cap bites.
+  const hailVisible = visible.filter((e) => e.type === 'hail');
+  const circleSource =
+    hailVisible.length > maxCircles ? [...hailVisible].sort(bySeverityThenRecency) : hailVisible;
   const circles = circleSource.slice(0, maxCircles);
   return {
     band,
@@ -392,7 +400,7 @@ export function selectStormOverlay(
     circles,
     totalEvents: total,
     inRegion: visible.length,
-    capped: markers.length < visible.length || circles.length < visible.length,
+    capped: markers.length < visible.length || circles.length < hailVisible.length,
   };
 }
 

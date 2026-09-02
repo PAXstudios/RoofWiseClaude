@@ -2,8 +2,29 @@
 // Jobs, JobDetail) imports from here, not from `react-native-maps` directly.
 // Switching providers, swapping in @vis.gl on web, or adding Mapbox later
 // is a one-file change.
+//
+// Hardening for Apple Maps under the New Architecture (react-native-maps
+// 1.20.1, Expo Go on iOS — the owner's only runtime today):
+//   - Location permission is resolved BEFORE the native MapView mounts when
+//     `showsUserLocation` is on (a not-yet-determined permission at mount is a
+//     known assertion path in AIRMap's CLLocationManager wiring). Denied →
+//     the map mounts without the blue dot; it never blocks the screen.
+//   - Children (markers / circles / tiles) mount only after `onMapReady`
+//     (Apple fires it from -mapViewWillStartRenderingMap:), with a timed
+//     fallback so a map that never reports ready still gets its overlays.
+//   - MapPin / MapCircle are the door every coordinate/radius passes through:
+//     an invalid one renders nothing and is counted in Diagnostics.
+//   - Only props react-native-maps documents for the active provider are
+//     sent; Google-only ones (Heatmap, customMapStyle, …) are gated or absent.
 
-import { forwardRef, useCallback, useState, type ReactNode, type Ref } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import {
   Platform,
   StyleSheet,
@@ -13,6 +34,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as Location from 'expo-location';
 import { useFocusEffect, useNavigation } from 'expo-router';
 import MapView, {
   Marker,
@@ -30,6 +52,8 @@ import MapView, {
   type MapHeatmapProps,
 } from 'react-native-maps';
 import { GoogleTileAttribution, GoogleTileLayer } from '@/components/map/GoogleTileLayer';
+import { recordError } from '@/lib/services/diagnostics';
+import { isValidLatLon, isValidRadius } from '@/lib/services/stormCluster';
 import { isTileSessionValid, useMapTilesStore, type TileMapType } from '@/lib/stores/mapTilesStore';
 import { colors, radii } from '@/theme/tokens';
 
@@ -68,6 +92,14 @@ export const MAP_SUPPORTS_HEATMAP =
   Platform.OS === 'android' ||
   (MAP_PROVIDER === PROVIDER_GOOGLE && UIManager.hasViewManagerConfig('AIRGoogleMapHeatmap'));
 
+/**
+ * If the native map never reports ready (an unknown provider quirk, a map
+ * hidden behind another view), overlays still mount after this — a map with
+ * pins beats a map that waits forever. Apple fires onMapReady in
+ * -mapViewWillStartRenderingMap:, well inside this window.
+ */
+const MAP_READY_FALLBACK_MS = 2500;
+
 export type MapCoordinate = { latitude: number; longitude: number };
 
 /** Base imagery. `standard` is roads; `satellite`/`hybrid` are aerial. */
@@ -80,8 +112,11 @@ export type MapProps = {
   showsCompass?: boolean;
   style?: ViewStyle;
   children?: ReactNode;
+  /** Native map reported ready (children mount on this). */
   onMapReady?: () => void;
   onLongPress?: (coord: MapCoordinate) => void;
+  /** The viewport settled after a pan/zoom. Debounce in the caller. */
+  onRegionChangeComplete?: (region: Region) => void;
   /** Web only (Map.web.tsx): top-anchors the no-map fallback panel. The
    *  native map fills the screen, so this is a no-op here. */
   fallbackTopOffset?: number;
@@ -105,6 +140,44 @@ function tileMapTypeFor(mapType: MapImageryType | undefined): TileMapType {
   return mapType === 'satellite' || mapType === 'hybrid' ? 'satellite' : 'roadmap';
 }
 
+type LocationGate = 'pending' | 'granted' | 'denied';
+
+/**
+ * Resolve foreground location BEFORE the native map mounts. Asks once when
+ * the permission is undetermined and the screen is visible; never re-prompts
+ * a denial (iOS wouldn't show the sheet again anyway).
+ */
+function useLocationGate(wanted: boolean, visible: boolean): LocationGate {
+  const [gate, setGate] = useState<LocationGate>(wanted ? 'pending' : 'denied');
+
+  useEffect(() => {
+    if (!wanted) {
+      setGate('denied');
+      return;
+    }
+    if (!visible) return;
+    let cancelled = false;
+    (async () => {
+      let next: LocationGate = 'denied';
+      try {
+        let perm = await Location.getForegroundPermissionsAsync();
+        if (perm.status !== 'granted' && perm.canAskAgain) {
+          perm = await Location.requestForegroundPermissionsAsync();
+        }
+        next = perm.status === 'granted' ? 'granted' : 'denied';
+      } catch {
+        next = 'denied';
+      }
+      if (!cancelled) setGate(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [wanted, visible]);
+
+  return gate;
+}
+
 export const Map = forwardRef(function Map(
   {
     initialRegion,
@@ -115,6 +188,7 @@ export const Map = forwardRef(function Map(
     children,
     onMapReady,
     onLongPress,
+    onRegionChangeComplete,
     mapType,
     googleImagery = true,
     attributionInset,
@@ -130,20 +204,23 @@ export const Map = forwardRef(function Map(
   const tileSession = useMapTilesStore((s) => s.sessions[tileMapType]);
   const tilesLive = wantGoogleTiles && isTileSessionValid(tileSession);
 
-  // Viewport + width feed ONLY the attribution chip (debounced inside it).
-  // The tile layer itself never re-keys on region — every re-fetched tile is
-  // a metered request, and the native overlay already caches.
+  // Viewport + width feed the attribution chip (debounced inside it) and the
+  // caller's optional onRegionChangeComplete. The tile layer itself never
+  // re-keys on region — every re-fetched tile is a metered request, and the
+  // native overlay already caches.
   const [viewport, setViewport] = useState<Region | null>(null);
   const [mapWidth, setMapWidth] = useState(0);
-  const onRegionChangeComplete = useCallback(
+  const handleRegionChangeComplete = useCallback(
     (next: Region) => {
       if (wantGoogleTiles) setViewport(next);
+      onRegionChangeComplete?.(next);
     },
-    [wantGoogleTiles],
+    [wantGoogleTiles, onRegionChangeComplete],
   );
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     setMapWidth(e.nativeEvent.layout.width);
   }, []);
+
   // The Map tab is one of the 5 tab roots and gets pre-mounted by the tab
   // navigator. On iOS Simulator the underlying MKMapView (Apple Maps) fires
   // -mapViewWillStartRenderingMap: into react-native-maps' AIRMapManager
@@ -166,15 +243,39 @@ export const Map = forwardRef(function Map(
     }, []),
   );
 
+  // Permission before mount (see useLocationGate). The map mounts either way
+  // once the answer is in; only the blue dot depends on "granted".
+  const locationGate = useLocationGate(showsUserLocation, isFocused);
+  const mountMap = isFocused && locationGate !== 'pending';
+
+  // Children mount only once the native map says it's ready (or the fallback
+  // timer fires). Reset whenever the MapView itself unmounts so a re-focus
+  // re-runs the gate against the NEW native instance.
+  const [mapReady, setMapReady] = useState(false);
+  useEffect(() => {
+    if (!mountMap) {
+      setMapReady(false);
+      return;
+    }
+    const timer = setTimeout(() => setMapReady(true), MAP_READY_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [mountMap]);
+  const handleMapReady = useCallback(() => {
+    setMapReady(true);
+    onMapReady?.();
+  }, [onMapReady]);
+
   return (
     <View style={[styles.wrap, style]} onLayout={wantGoogleTiles ? onLayout : undefined}>
-      {isFocused ? (
+      {mountMap ? (
         <MapView
           ref={ref}
           provider={MAP_PROVIDER}
           style={StyleSheet.absoluteFill}
-          mapType={mapType}
-          showsUserLocation={showsUserLocation}
+          // Only send mapType when a caller set one — an explicit `undefined`
+          // still crosses the bridge as a prop update on Fabric.
+          {...(mapType ? { mapType } : null)}
+          showsUserLocation={showsUserLocation && locationGate === 'granted'}
           showsCompass={showsCompass}
           // Apple-only chrome, off while Google tiles cover the base so
           // Apple's POI pins and building extrusions don't poke through at
@@ -184,26 +285,31 @@ export const Map = forwardRef(function Map(
           showsBuildings={!tilesLive}
           showsTraffic={false}
           initialRegion={initialRegion}
-          region={region}
-          onMapReady={onMapReady}
-          onRegionChangeComplete={wantGoogleTiles ? onRegionChangeComplete : undefined}
-          onLongPress={(e) =>
-            onLongPress?.({
-              latitude: e.nativeEvent.coordinate.latitude,
-              longitude: e.nativeEvent.coordinate.longitude,
-            })
+          {...(region ? { region } : null)}
+          onMapReady={handleMapReady}
+          onRegionChangeComplete={
+            wantGoogleTiles || onRegionChangeComplete ? handleRegionChangeComplete : undefined
+          }
+          onLongPress={
+            onLongPress
+              ? (e) =>
+                  onLongPress({
+                    latitude: e.nativeEvent.coordinate.latitude,
+                    longitude: e.nativeEvent.coordinate.longitude,
+                  })
+              : undefined
           }
         >
-          {/* First child so the native overlay is inserted beneath the
-              caller's markers. Renders nothing without a session. */}
-          {wantGoogleTiles ? <GoogleTileLayer mapType={tileMapType} /> : null}
-          {children}
+          {/* Nothing native-overlay-shaped until the map is ready. Tile layer
+              first so it sits beneath the caller's markers. */}
+          {mapReady && wantGoogleTiles ? <GoogleTileLayer mapType={tileMapType} /> : null}
+          {mapReady ? children : null}
         </MapView>
       ) : null}
       {/* Required by Google's terms. A sibling of MapView (not a child —
           MapView children must be map primitives), non-interactive, and it
           only exists while Google imagery is actually on screen. */}
-      {wantGoogleTiles && isFocused ? (
+      {wantGoogleTiles && mountMap ? (
         <GoogleTileAttribution
           mapType={tileMapType}
           region={viewport ?? region ?? initialRegion ?? null}
@@ -214,6 +320,24 @@ export const Map = forwardRef(function Map(
     </View>
   );
 });
+
+// -----------------------------------------------------------------------------
+// The one door to native for coordinates and radii
+// -----------------------------------------------------------------------------
+
+// Once per kind per session: Diagnostics gets the fact, not a flood.
+const reportedInvalid = new Set<string>();
+function reportInvalidOverlay(kind: 'marker' | 'circle' | 'polyline' | 'polygon'): void {
+  if (reportedInvalid.has(kind)) return;
+  reportedInvalid.add(kind);
+  recordError(`[map] dropped a ${kind} with an invalid coordinate/radius before native`, {
+    kind: 'console_error',
+  });
+}
+
+function validCoordinate(c: { latitude: unknown; longitude: unknown } | null | undefined): boolean {
+  return !!c && isValidLatLon(c.latitude, c.longitude);
+}
 
 export type MapPinProps = MapMarkerProps & {
   tone?: 'navy' | 'orange' | 'cream' | 'success' | 'warn' | 'danger' | 'info';
@@ -229,21 +353,48 @@ const TONE_COLORS: Record<NonNullable<MapPinProps['tone']>, string> = {
   info: colors.info,
 };
 
-export function MapPin({ tone, pinColor, ...rest }: MapPinProps) {
+/**
+ * Marker with a tone from the theme. `tracksViewChanges` defaults to false —
+ * a custom-view marker that keeps re-snapshotting every frame is the single
+ * biggest marker cost on iOS; pass `tracksViewChanges` explicitly for the
+ * rare marker whose child view animates.
+ */
+export function MapPin({ tone, pinColor, tracksViewChanges = false, coordinate, ...rest }: MapPinProps) {
+  if (!validCoordinate(coordinate)) {
+    reportInvalidOverlay('marker');
+    return null;
+  }
   const color = tone ? TONE_COLORS[tone] : pinColor;
-  return <Marker {...rest} pinColor={color as string | undefined} />;
+  return (
+    <Marker
+      {...rest}
+      coordinate={coordinate}
+      tracksViewChanges={tracksViewChanges}
+      pinColor={color as string | undefined}
+    />
+  );
 }
 
-export function MapPolyline(props: MapPolylineProps) {
-  return <Polyline {...props} />;
+export function MapPolyline({ coordinates, ...rest }: MapPolylineProps) {
+  const clean = (coordinates ?? []).filter(validCoordinate);
+  if (clean.length !== (coordinates ?? []).length) reportInvalidOverlay('polyline');
+  if (clean.length < 2) return null;
+  return <Polyline {...rest} coordinates={clean} />;
 }
 
-export function MapPolygon(props: MapPolygonProps) {
-  return <Polygon {...props} />;
+export function MapPolygon({ coordinates, ...rest }: MapPolygonProps) {
+  const clean = (coordinates ?? []).filter(validCoordinate);
+  if (clean.length !== (coordinates ?? []).length) reportInvalidOverlay('polygon');
+  if (clean.length < 3) return null;
+  return <Polygon {...rest} coordinates={clean} />;
 }
 
-export function MapCircle(props: MapCircleProps) {
-  return <Circle {...props} />;
+export function MapCircle({ center, radius, ...rest }: MapCircleProps) {
+  if (!validCoordinate(center) || !isValidRadius(radius)) {
+    reportInvalidOverlay('circle');
+    return null;
+  }
+  return <Circle {...rest} center={center} radius={radius} />;
 }
 
 export function MapHeatmap(props: MapHeatmapProps) {
