@@ -2463,3 +2463,19 @@ detail screens (Job/Lead) — they inherit the token changes.
 Recorded as a second **⚡ STANDING TRIGGER** at the top of `BACKLOG.md` "Now", next to the Apple Developer one, so any future session acts on "we're about to launch" without being asked: Supabase email confirmation back on (`mailer_autoconfirm=false`, set to true in #61 for the test phase) with production `site_url`/redirects; rotate every secret pasted in chat; restrict the Google keys; `REQUIRE_AUTH=true` re-test; full device pass.
 
 **Files touched:** `BACKLOG.md`, `PROMPT_LOG.md`.
+
+---
+
+### [2026-09-02] #63 — Finished Wave 7c by hand after a session-limit crash: crash trap mounted, estimator modal re-present bug, weather page + map hardening integrated
+
+**Context.** Wave 7c's two remaining agents (map-hardening, integrate+verify) died on a usage/session limit mid-run, leaving the tree half-integrated: the weather-page and API-denied builders had finished, the map-hardening builder had written its files (`components/map/StormOverlay.tsx`, `lib/services/stormCluster.ts`, `lib/services/uiRuntimeGuard.ts`) and left `app/(tabs)/map.tsx` uncommitted, but nothing was verified and two seams were unwired. A container restart followed. Completed in the main thread rather than re-running a fleet (session-limit risk; the fixes were concrete).
+
+**Two real bugs finished:**
+1. **The crash trap was inert.** `uiRuntimeGuard.ts` existed but `installUiRuntimeGuard()` was never called. Mounted it at module load in `app/_layout.tsx` beside `installDiagnostics()`, so a JS exception thrown inside a Reanimated worklet on the UI thread — the owner's Expo Go SIGABRT via `worklets::UIScheduler::triggerUI` — is recorded to Diagnostics instead of aborting the process. This is the tool that will finally name the Map-tab crash's exact worklet.
+2. **Estimator "the page regenerates and I can't type an address."** `<Stack.Screen options={{…, presentation:'modal'}}/>` used an inline object; expo-router re-applies options via `navigation.setOptions` on every identity change (verified in `expo-router/build/views/Screen.js`), so each keystroke re-applied `presentation:'modal'` and the native stack re-presented the modal — the field lost focus. Hoisted the options to stable module constants in `estimator`, `new-job`, `new-lead`. Masked until now because Places was disabled on the key; it surfaced the moment address search started firing.
+
+**Integrated and verified green:** the `/weather` page (Google forecast hours/days — both paged, verified live; NWS active alerts; HAAG §7 roof-work window; saved locations; storms-near-here), `LocationField`, honest Google-API-denied copy on address/measure, and the map `StormOverlay` with zoom-band clustering + `isValidLatLon`/`isValidRegion` guards so no NaN coordinate reaches the native map. Gates re-run by hand: typecheck, lint, web export clean; headless boot of `/weather`, `/estimator` and every tab with no crash (one benign React #418 web-hydration warning). Published to Expo Go (`569e6d2a`).
+
+**Still open (degraded, not broken):** the weather page's "storms near here" deep-links `/(tabs)/map?focus=point&lat&lng`, but the map only handles `focus=storm-leads` — the tap opens the map at its default centre for now. Backlogged.
+
+**Files touched:** `app/_layout.tsx`, `app/estimator.tsx`, `app/new-job.tsx`, `app/new-lead.tsx`, `app/(tabs)/map.tsx`, `app/weather.tsx` + `components/weather/*`, `components/LocationField.tsx`, `components/map/StormOverlay.tsx`, `lib/services/{weatherForecast,nwsAlerts,stormCluster,uiRuntimeGuard}.ts`, `lib/stores/weatherLocationsStore.ts`, `PROMPT_LOG.md`, `BACKLOG.md`.

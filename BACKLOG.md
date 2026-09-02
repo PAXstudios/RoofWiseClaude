@@ -15,6 +15,7 @@ entry does not count as tracked.
 
 - [ ] **⚡ STANDING TRIGGER — the moment the owner has an Apple Developer account, do ALL of this without being asked** (owner directive 2026-09-01: "Don't forget to do this automatically when I add the apple developer account"). Owner provides: Apple Team ID + an App Store Connect API key (Issuer ID, Key ID, .p8 — role App Manager) either uploaded on expo.dev → roofwise → Credentials, or handed over. Then, in order: (1) `eas credentials` / build profile `production` in `eas.json` (present) with `credentialsSource: remote`; (2) enable the native-only capabilities that Expo Go could not run — **background location for door-knocking trip tracking** (`expo-location` background + `expo-task-manager`, `UIBackgroundModes: ["location"]`, `isIosBackgroundLocationEnabled` in the plugin, the "tracking pauses when you switch apps" copy removed), Google Maps on iOS (`PROVIDER_GOOGLE`, key already in `ios.config`), geofenced mileage auto-tracking, Apple Sign In (Supabase Apple provider), remote push on the real bundle; (3) `eas build --platform ios --profile production --non-interactive --auto-submit` → TestFlight; (4) invite the owner as an internal tester; (5) then start the AR/LiDAR native module work (custom Expo Module wrapping ARKit world tracking + scene depth) behind the existing capture-settings buttons. Every step is in docs/SETUP_ACCOUNTS.md; the bundle id is `com.roofwise.app`. — #57
 - [ ] **Map tab crash — trigger still unpinned.** The owner's log proves a JS exception inside a Reanimated worklet on the UI thread (SIGABRT via `worklets::UIScheduler::triggerUI`), not MapView. Wave 7c installs a UI-runtime error trap (records the JS message to Diagnostics instead of aborting) and clusters the ~900 storm overlays; the next device crash log or Diagnostics entry names the worklet — #60
+- [ ] Weather page "storms near here" deep-links `/(tabs)/map?focus=point&lat&lng` but the map only handles `focus=storm-leads`; wire the point branch (centre + fetch + clear param) so the tap-through lands on that address — #63
 - [ ] Report footer: print `modelUsed` per analysis (persisted on `slope.photoAnalysis[uri].modelUsed`; spec §1 of the photo wave asked for it) — #60
 - [ ] `AnalysisJob.lastError` on the queue store so the queue chip can show why a job failed (per-photo state and notifications already carry it) — #60
 - [ ] Learning Loop v2 + dataset pipeline — `docs/LEARNING_LOOP.md`; Supabase project + schema are LIVE (#61); runs right after Wave 7c — #61
@@ -107,6 +108,9 @@ entry does not count as tracked.
 
 ## Done (most recent first)
 
+- [x] UI-runtime crash trap mounted at boot — a worklet throw on the UI thread now records to Diagnostics instead of aborting (was written but never installed) — closed by #63
+- [x] Estimator/New Job/New Lead "page regenerates while typing an address" — inline `<Stack.Screen options>` re-presented the modal every keystroke; hoisted to stable constants — closed by #63
+- [x] Weather page (`/weather`) the hero opens in every state; honest Google-API-denied surfacing; map StormOverlay with clustering + coordinate guards — closed by #63
 - [x] `(tabs)/_layout.tsx` Slot-as-stack → real `<Tabs>` navigator — closed by #60 (was a Soon item from #58)
 - [x] `eas.json` with preview/production profiles — closed by #57
 - [x] Supabase connected to the owner's own project `epghfumtuxrhonbpnbmr` on web + phone; full schema (sync tables, photo buckets, learning-loop dataset tables, RLS) applied via the Management API and verified — closed by #61
