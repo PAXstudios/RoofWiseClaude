@@ -2435,3 +2435,20 @@ detail screens (Job/Lead) — they inherit the token changes.
 **Verification:** expo-doctor 18/18, install --check clean, typecheck, lint, web export, headless boot of every tab + `/quick-inspection` + `/settings/diagnostics` (0 errors), live Gemini path confirmed (3.8-flash; 404 fall-through; bogus key → `auth` with no chain walk). Re-run by hand after the workflow: all green. **Not verified:** detection quality on a real roof JPEG, the Live overlay's box registration on a device, and the tab bar's iOS bottom inset — the owner's phone is the gate.
 
 **Files touched:** `lib/env.ts`, `lib/services/{gemini,analyzeSlope,analysisQueue,transcribeAudio,mapTiles}.ts`, `lib/models/types.ts`, `lib/stores/{captureSettingsStore,mapTilesStore}.ts`, `app/{quick-inspection,analyze,index,search,hail-tracer}.tsx`, `app/(tabs)/{_layout,map}.tsx`, `app/settings/diagnostics.tsx`, `components/{CameraHUD,ui/ProgressBar}.tsx`, `components/capture/*` (new), `components/map/{Map,Map.web,GoogleTileLayer,types}.tsx`, `components/shell/*`, `.env.local.example`, `docs/SETUP_ACCOUNTS.md`, `docs/LEARNING_LOOP.md` (new), `CLAUDE.md` (Stack, Drift #9, Drift #10, parked list), `BACKLOG.md`, `PROMPT_LOG.md`.
+
+---
+
+### [2026-09-02] #61 — Supabase: the owner's "roofwise claude" project wired into the app; schema applied through the Management API
+
+**Prompt:**
+> "so supabase is nt connected, i created a new project in supabase: …epghfumtuxrhonbpnbmr" (+ anon key, service-role key) · "i want loudoun to be totally seperate from this" · "here is the token: sbp_…"
+
+**What happened.** The app's Supabase URL + anon key now point at project `epghfumtuxrhonbpnbmr` on both targets (web `.env.local`, EAS `preview` environment) — verified: zero references to any other project in the repo, config, or docs. The Supabase MCP connector in this workspace belongs to an unrelated account ("Loudoun Data Center Watch"), so it was never used for RoofWise; the schema went in through the **Supabase Management API** (`/v1/projects/{ref}/database/query`) with an owner-issued personal access token. First attempt failed on every statement with Cloudflare `error 1010` — bot-blocking Python's default User-Agent, not the token; a real User-Agent fixed it and the whole file applied in one shot.
+
+**Live in the project:** tables `inspections`, `leads`, `corrections` (the exact row `correctionsSync.serialize()` sends), `photos`, `detections`, `labels`, `prompt_releases`; buckets `inspection-photos` (public read, owner-folder insert) and `dataset-crops` (private); row-level security on every table (4 policies each; `prompt_releases` read-active-only for authenticated users); `updated_at` triggers. `supabase/schema.sql` is idempotent and committed (#60 follow-up, `5a87968`).
+
+**Secrets hygiene, stated plainly:** three Supabase secrets were pasted in chat — the anon key (public by design, in the app), the **service-role key** (never needed, never used, must be rotated), and the **personal access token** (used for this migration; keep it until the Learning Loop migrations land, then revoke). All stored only under the session scratchpad, mode 600, verified absent from every commit.
+
+**Unblocked:** email sign-up/sign-in, cloud sync of inspections/leads/photos, corrections capture, and the Learning Loop v2 wave (`docs/LEARNING_LOOP.md`) — which now runs right after Wave 7c.
+
+**Files touched:** `BACKLOG.md`, `PROMPT_LOG.md` (schema file committed earlier).
