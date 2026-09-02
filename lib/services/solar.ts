@@ -5,18 +5,37 @@
 // NOT solar production. The roofSegmentStats array gives us per-slope
 // area + pitch + azimuth in metric units; we convert to squares (100 sq ft)
 // and named orientations.
+//
+// Owner directive: on screen this is "roof measurement" — the word "Solar"
+// is the instrument, never the feature. Only the file name and the Google
+// API name in the enable-it copy keep the word.
+//
+// Failure policy: every non-success is a typed `GoogleApiError` (see
+// lib/services/googleApi.ts). The live case on the owner's key today is
+// HTTP 403 PERMISSION_DENIED "…blocked" from the key's API restrictions;
+// `describeGoogleApiError` turns it into "Roof measurement isn't enabled for
+// this app's Google key yet (Solar API)".
 
 import { env, isGoogleSolarConfigured } from '../env';
 import type { SlopeOrientation } from '../models/types';
 import { yawToOrientation } from '../models/types';
+import {
+  GoogleApiError,
+  classifyGoogleFailure,
+  clearGoogleDenial,
+  fetchGoogle,
+  recentGoogleDenial,
+  rememberGoogleDenial,
+} from './googleApi';
 
-export class SolarNotConfiguredError extends Error {
+export class SolarNotConfiguredError extends GoogleApiError {
   constructor() {
-    super('Google Solar API key not configured.');
+    super('solar', 'not_configured', 'Google Solar API key not configured.');
     this.name = 'SolarNotConfiguredError';
   }
 }
 
+/** Google answered (so the key is fine) but has no building at this point. */
 export class SolarNotFoundError extends Error {
   constructor() {
     super('No aerial measurement available for this address.');
@@ -24,10 +43,17 @@ export class SolarNotFoundError extends Error {
   }
 }
 
-export class SolarServiceError extends Error {
-  constructor(message: string, public status?: number) {
-    super(message);
+/**
+ * Any measurement failure Google (or the network) reported. `kind` says
+ * which; `not_authorized` is the key-restriction case.
+ */
+export class SolarServiceError extends GoogleApiError {
+  /** Kept for existing callers that read `.status`. */
+  readonly status?: number;
+  constructor(from: GoogleApiError) {
+    super('solar', from.kind, from.message, from.httpStatus, from.googleReason);
     this.name = 'SolarServiceError';
+    this.status = from.httpStatus ?? undefined;
   }
 }
 
@@ -50,23 +76,53 @@ export type RoofMeasurement = {
 const M2_PER_SQUARE = 9.290304;
 const ENDPOINT = 'https://solar.googleapis.com/v1/buildingInsights:findClosest';
 
+function raise(err: unknown): never {
+  const e = err instanceof GoogleApiError ? new SolarServiceError(err) : err;
+  if (e instanceof SolarServiceError) rememberGoogleDenial(e);
+  throw e;
+}
+
+/**
+ * Raw request. Resolves with the parsed body; throws `SolarNotFoundError` on
+ * 404 (key OK, no building) or the typed service error otherwise.
+ */
+async function findClosest(
+  coord: { lat: number; lng: number },
+  requiredQuality: 'HIGH' | 'MEDIUM' | 'LOW',
+): Promise<any> {
+  const denied = recentGoogleDenial('solar');
+  if (denied) throw new SolarServiceError(denied);
+
+  const url =
+    `${ENDPOINT}?location.latitude=${coord.lat}&location.longitude=${coord.lng}` +
+    `&requiredQuality=${requiredQuality}&key=${env.GOOGLE_SOLAR_API_KEY}`;
+
+  const { res, text } = await fetchGoogle('solar', url);
+  if (res.status === 404) {
+    clearGoogleDenial('solar');
+    throw new SolarNotFoundError();
+  }
+  if (!res.ok) throw classifyGoogleFailure('solar', res.status, text);
+  clearGoogleDenial('solar');
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new GoogleApiError('solar', 'http', 'Google returned an unreadable response.', res.status);
+  }
+}
+
 export async function measureRoof(
   coord: { lat: number; lng: number },
 ): Promise<RoofMeasurement> {
   if (!isGoogleSolarConfigured) throw new SolarNotConfiguredError();
 
-  const url =
-    `${ENDPOINT}?location.latitude=${coord.lat}&location.longitude=${coord.lng}` +
-    `&requiredQuality=HIGH&key=${env.GOOGLE_SOLAR_API_KEY}`;
-
-  const res = await fetch(url);
-  if (res.status === 404) throw new SolarNotFoundError();
-  if (!res.ok) {
-    const body = (await res.text()).slice(0, 300);
-    throw new SolarServiceError(`Solar ${res.status}: ${body}`, res.status);
+  let data: any;
+  try {
+    data = await findClosest(coord, 'HIGH');
+  } catch (e) {
+    raise(e);
   }
 
-  const data = await res.json();
   const segments: any[] = data?.solarPotential?.roofSegmentStats ?? [];
   const wholeRoofM2 = Number(data?.solarPotential?.wholeRoofStats?.areaMeters2 ?? 0);
   const imagery = data?.imageryDate ?? {};
@@ -95,6 +151,24 @@ export async function measureRoof(
       lng: Number(data?.center?.longitude ?? coord.lng),
     },
   };
+}
+
+/**
+ * Smallest request the Solar API accepts — one findClosest at a fixed point,
+ * lowest quality bar. A 404 (no building) still proves the key is allowed,
+ * so it resolves; only key/network failures throw. Used by the Settings
+ * "Google APIs" check.
+ */
+export async function probeSolar(): Promise<void> {
+  if (!isGoogleSolarConfigured) throw new SolarNotConfiguredError();
+  try {
+    // Downtown Dallas — the launch market; any point works, the answer
+    // we care about is "did Google let this key ask".
+    await findClosest({ lat: 32.7767, lng: -96.797 }, 'LOW');
+  } catch (e) {
+    if (e instanceof SolarNotFoundError) return;
+    raise(e);
+  }
 }
 
 function pitchDegreesToRatio(d: number): string {
