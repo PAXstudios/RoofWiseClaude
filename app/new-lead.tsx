@@ -174,6 +174,7 @@ export default function NewLead() {
                 setLat(p.lat);
                 setLng(p.lng);
               }}
+              useMyLocation
               onLocationSelected={(loc) => {
                 setAddress(loc.address);
                 setLat(loc.lat);

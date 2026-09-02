@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RichCard } from '@/components/ui/RichCard';
+import type { IoniconName } from '@/components/ui/IconChip';
 import type { ForecastDay, ForecastDayPart, ForecastStatus } from '@/lib/services/weatherForecast';
 import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 import {
@@ -234,7 +235,7 @@ function DetailChip({
   label,
   tone,
 }: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
+  icon: IoniconName;
   label: string;
   tone?: 'warn' | 'danger' | 'brand';
 }) {

@@ -776,6 +776,7 @@ function CustomerStep({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) 
             addressLng: p.lng,
           })
         }
+        useMyLocation
         onLocationSelected={(loc) =>
           setDraft({
             ...draft,
