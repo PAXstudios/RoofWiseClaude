@@ -177,6 +177,31 @@ export function pitchDegreesToRatio(degrees: number): string {
 // Damage Marker + Finding (per-photo AI output)
 // -----------------------------------------------------------------------------
 
+/**
+ * What the model actually saw inside a hail/bruise box — HAAG §1's functional
+ * test, made structured. Functional hail damage on asphalt is a puncture,
+ * tear, or fracture (bruise) of the shingle MAT (Marshall & Herzog, 1999);
+ * granule loss that does not expose the mat is not, by itself, functional.
+ * The per-slope `functional` flag is DERIVED from these, never from a count.
+ */
+export type HitEvidence =
+  | 'mat_fracture'
+  | 'exposed_substrate'
+  | 'granule_loss_only'
+  | 'cosmetic'
+  | 'unclear';
+
+export const HIT_EVIDENCE_LABELS: Record<HitEvidence, string> = {
+  mat_fracture: 'Mat fracture',
+  exposed_substrate: 'Exposed substrate',
+  granule_loss_only: 'Granule loss only',
+  cosmetic: 'Cosmetic',
+  unclear: 'Unclear',
+};
+
+/** Evidence classes that make a hit FUNCTIONAL under HAAG §1. */
+export const FUNCTIONAL_EVIDENCE: readonly HitEvidence[] = ['mat_fracture', 'exposed_substrate'];
+
 export type DamageMarker = {
   id: string;
   category: DamageCategory;
@@ -202,6 +227,8 @@ export type DamageMarker = {
    * legacy markers) it falls back to the center+radius circle.
    */
   box?: { xmin: number; ymin: number; xmax: number; ymax: number };
+  /** HAAG §1 evidence class for hail_hits / bruising. Absent on older markers. */
+  evidence?: HitEvidence;
 };
 
 export type InspectionFinding = {
@@ -540,6 +567,19 @@ export type PhotoAnalysisState = {
   subjectDetail?: string;
   /** Damage on a non-roof subject — collateral corroboration (never roof hits). */
   collateralDamage?: CollateralFinding[];
+  /** Whole shingles visible in this frame (model estimate, roof photos only). */
+  shingleCount?: number;
+  /**
+   * How much of a chalked 10×10 test square this frame covers — the basis for
+   * squares documented FROM PHOTOS (as opposed to the aerial figure).
+   */
+  squareCoverage?: {
+    /** A chalk-marked square is visible in frame. */
+    visible: boolean;
+    /** 0–1: the fraction of one 100 sq ft square this frame shows. */
+    fraction: number;
+    confidence: number; // 0-100
+  };
 };
 
 // -----------------------------------------------------------------------------

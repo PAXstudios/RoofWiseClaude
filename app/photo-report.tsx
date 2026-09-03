@@ -153,6 +153,22 @@ export default function PhotoReportScreen() {
 
   const sideLine = [meta?.areaTag, `${slope.orientation} slope`].filter(Boolean).join(' · ');
 
+  // HAAG §1 tally for this photo's hail marks: how many show mat fracture /
+  // exposed substrate (functional) vs granule loss only. Absent on markers
+  // analyzed before evidence classification existed.
+  const evidenceLine = (() => {
+    const hail = markers.filter((m) => m.category === 'hail_hits' || m.category === 'bruising');
+    if (hail.length === 0 || !hail.some((m) => m.evidence)) return null;
+    const functional = hail.filter((m) => m.evidence === 'mat_fracture' || m.evidence === 'exposed_substrate').length;
+    const granule = hail.filter((m) => m.evidence === 'granule_loss_only').length;
+    const unclear = hail.length - functional - granule;
+    return (
+      `HAAG §1: ${functional} of ${hail.length} hail mark${hail.length === 1 ? '' : 's'} show mat fracture or exposed substrate` +
+      (granule > 0 ? ` · ${granule} granule loss only` : '') +
+      (unclear > 0 ? ` · ${unclear} unclear / cosmetic` : '')
+    );
+  })();
+
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -284,6 +300,19 @@ export default function PhotoReportScreen() {
                     : `${hailHere} hail hit${hailHere === 1 ? '' : 's'} in this test square. ${threshold.rule}`
                   : `${hailHere} hit${hailHere === 1 ? '' : 's'} on this shingle. Close-ups document individual bruises and mat fractures; they are not counted toward the per-square threshold.`}
               </Text>
+              {state?.squareCoverage && (
+                <Text style={styles.cardFoot}>
+                  {state.squareCoverage.visible ? 'Chalk square visible · ' : 'No chalk lines seen · '}
+                  this frame documents {(state.squareCoverage.fraction * 100).toFixed(0)}% of one square
+                  {' · '}{Math.round(state.squareCoverage.confidence)}% confidence
+                </Text>
+              )}
+              {typeof state?.shingleCount === 'number' && (
+                <Text style={styles.cardFoot}>
+                  {state.shingleCount} whole shingle{state.shingleCount === 1 ? '' : 's'} visible in frame
+                </Text>
+              )}
+              {evidenceLine && <Text style={styles.cardFoot}>{evidenceLine}</Text>}
               {scale?.pixelsPerInch != null && (
                 <Text style={styles.cardFoot}>
                   Scale: {Math.round(scale.pixelsPerInch)} px/in from the {scale.reference ?? 'shingle geometry'} ·{' '}

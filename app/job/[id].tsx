@@ -41,6 +41,8 @@ import { DamageScoreBar } from '@/components/DamageScoreBar';
 import { DamageScoreCard } from '@/components/DamageScoreCard';
 import { PropertyIntelCard } from '@/components/PropertyIntelCard';
 import { DamageDetailSection } from '@/components/DamageDetailSection';
+import { documentedCoverage, documentedSummary } from '@/lib/services/documentedSquares';
+import { deriveFunctional } from '@/lib/services/functionalDamage';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
@@ -1178,6 +1180,8 @@ function SlopeBlock({
   const router = useRouter();
   const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
   const threshold = thresholdFor(inspection.material);
+  const coverage = documentedCoverage(slope);
+  const functionalInfo = deriveFunctional(slope);
 
   return (
     <RichCard
@@ -1255,6 +1259,16 @@ function SlopeBlock({
             {slope.photoPaths.length} photo{slope.photoPaths.length === 1 ? '' : 's'} on this slope.
           </Text>
         )}
+        {/* What the photos themselves document — a different number from the
+            aerial figure and never confused with it. */}
+        {coverage.photos > 0 && (
+          <Text style={styles.testSquareLine}>{documentedSummary(coverage)}</Text>
+        )}
+        {/* §1: the functional determination and WHY, derived from evidence. */}
+        <Text style={[styles.testSquareLine, functionalInfo.functional ? styles.functionalYes : undefined]}>
+          {functionalInfo.functional ? 'Functional damage: yes — ' : 'Functional damage: not established — '}
+          {functionalInfo.reason}
+        </Text>
         <Text style={styles.testSquareRule}>{threshold.rule}</Text>
       </View>
 
@@ -1572,6 +1586,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   testSquareLine: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
+  functionalYes: { color: colors.danger, fontWeight: fontWeight.semibold },
   testSquareRule: { fontSize: fontSize.bodySm, color: colors.textMuted },
 
   analyzeBtn: {

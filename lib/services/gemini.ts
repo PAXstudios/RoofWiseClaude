@@ -31,6 +31,10 @@ import {
   type PhotoSubject,
   type CollateralFinding,
   type CollateralDamageKind,
+  ROOF_MATERIAL_LABELS,
+  type CaptureMode,
+  type RoofMaterial,
+  type HitEvidence,
 } from '../models/types';
 import { env, isGeminiConfigured } from '../env';
 
@@ -394,6 +398,10 @@ export type AnalysisResult = {
   subjectDetail?: string;
   /** Damage on a non-roof subject. Corroboration only, never roof hits. */
   collateralDamage?: CollateralFinding[];
+  /** Whole shingles visible (roof photos). */
+  shingleCount?: number;
+  /** Fraction of one 100 sq ft test square this frame documents. */
+  squareCoverage?: { visible: boolean; fraction: number; confidence: number };
   shingleType?: ShingleTypeClassification;
   /** Persisted on the result for calibration logging/sync. Absent on older
    *  cached results that predate scale-aware detection. */
@@ -443,6 +451,12 @@ Return STRICT JSON only (no markdown wrapper), with this exact schema:
       "note": "<short pixel evidence>"
     }
   ],
+  "shingle_count": <int: whole shingles visible in frame, or null when they cannot be counted>,
+  "test_square_coverage": {
+    "visible": true|false,
+    "fraction": <0-1: how much of ONE 10x10 ft (100 sq ft) test square this frame shows>,
+    "confidence": 0-100
+  },
   "findings": [
     {
       "label": "hail_hits|bruising|granule_loss|wind_damage|wind_creasing|blistering|cracking|flashing_damage|algae_moss|missing_shingles|splitting|lifted_shingles|structural_sagging",
@@ -459,6 +473,7 @@ Return STRICT JSON only (no markdown wrapper), with this exact schema:
       "label": "hail_hits|bruising|granule_loss|wind_damage|wind_creasing|blistering|cracking|flashing_damage|algae_moss|missing_shingles|splitting|lifted_shingles|structural_sagging",
       "severity": "minor|moderate|severe",
       "confidence": 0-100,
+      "evidence": "mat_fracture|exposed_substrate|granule_loss_only|cosmetic|unclear",
       "note": "<specific pixel feature inside the box — color, shape, size, what makes it damage>"
     }
   ]
@@ -505,6 +520,27 @@ ANTI-HALLUCINATION RULES (avoid these specific failure modes)
 FINDINGS (the 13-row summary table)
 Include all 13 damage categories in "findings". "detected": true when that category is genuinely present. "count" is the number of distinct instances visible (should roughly match the number of boxes you output for that category).
 
+HAAG FUNCTIONAL TEST — "evidence" on every hail_hits / bruising detection (this decides the claim)
+HAAG defines functional hail damage on asphalt as a puncture, tear, or FRACTURE OF THE SHINGLE MAT (a bruise: an indentation with a fracture in the mat that feels soft). Granule loss that does not expose the mat is NOT functional damage by itself. For every hail_hits or bruising box, set "evidence":
+- "mat_fracture": you can see the fiberglass/organic mat fractured or crushed inside the mark.
+- "exposed_substrate": the dark asphalt/mat is visibly exposed through the granules at the impact centre.
+- "granule_loss_only": granules displaced, but the mat below looks intact.
+- "cosmetic": a mark with no loss of granules or mat integrity (spatter, algae shadow).
+- "unclear": cannot tell at this resolution or angle.
+Be strict. An inspector's per-slope functional determination is derived from mat_fracture / exposed_substrate evidence on test-square photos; claiming a mat fracture that is not visible is the most expensive mistake this tool can make, and missing one that is visible is the second.
+
+HAAG LOOK-ALIKES (do not report these as hail)
+- Blisters: raised bubbles, often with a popped crater and granules still around the rim; a rough, irregular floor, not a fractured mat. Report as blistering, never hail_hits.
+- Mechanical / foot-traffic scuffs: linear or smeared granule loss, often in a walking path, with no circular impact geometry.
+- Manufacturing defects and rasp marks: uniform or repeating patterns from the factory.
+- Thermal cracking / craze: fine linear cracks with age, no impact centre.
+- Nail pops, hip/ridge cap edges and shadow lines (rule 6), tab cutouts and shadow bands (rule 3).
+If a mark could be any of these, choose the look-alike category or lower the evidence to "unclear" — never upgrade to hail on a hunch.
+
+COUNTING (fill "shingle_count" and "test_square_coverage")
+- "shingle_count": whole shingles fully visible in frame (count courses x shingles per course for the visible area; for laminate, count exposed-course units). null when framing, angle or material makes a count meaningless.
+- "test_square_coverage": inspectors chalk a 10x10 ft (100 sq ft) test square. If chalk lines are visible, set "visible": true and estimate the fraction of ONE square this frame contains (a whole chalked square = 1.0; half = 0.5). Without chalk, estimate the fraction from the calibrated scale (STEP 1): frame width in inches / 120, times frame height in inches / 120, capped at 1.0, with lower confidence. This adds up to how many squares the photos actually document.
+
 CONFIDENCE RUBRIC (apply per-detection — be willing to commit to high confidence when the evidence is clear)
 - 90–100: Unmistakable. Multiple definitive indicators visible (e.g. for hail: circular shape + exposed mat + granule displacement). Use this freely when warranted.
 - 75–89: Clear damage with one strong indicator. Most real detections land here.
@@ -519,6 +555,12 @@ export type AnalyzeOptions = {
   imageBase64: string;
   mimeType?: string;
   slope?: SlopeOrientation;
+  /** How the frame was shot — a 10x10 test square or a single-shingle close-up. */
+  captureMode?: CaptureMode;
+  /** The job's declared roof material (the model still reports what it sees). */
+  material?: RoofMaterial;
+  /** What the inspector said the frame is of ("Front Slope", "Gutters / Downspouts"). */
+  areaTag?: string;
   /** Optional per-user prompt prefix from LocalLearningEngine. */
   userStylePrefix?: string;
   /** Caller-side cancel (screen unmounted, live scan stopped). */
@@ -546,7 +588,23 @@ const LIVE_FRAME_ADDENDUM =
  * against the live API without the file-system half of the pipeline.
  */
 export function buildAnalyzeRequest(opts: AnalyzeOptions): unknown {
-  const slopeHint = opts.slope ? `\n\nThe photo is of slope orientation: ${opts.slope}.` : '';
+  // What the inspector told the camera. The model still reports what it SEES
+  // (a declared 3-tab that is really laminate is reported as laminate), but
+  // knowing this is a chalked test square vs a close-up changes what counting
+  // and coverage mean, and the declared material sets the geometry to
+  // calibrate against.
+  const context: string[] = [];
+  if (opts.slope) context.push(`slope orientation ${opts.slope}`);
+  if (opts.areaTag) context.push(`inspector's subject tag "${opts.areaTag}"`);
+  if (opts.captureMode) {
+    context.push(
+      opts.captureMode === 'square_10x10'
+        ? 'shot as a 10x10 ft TEST SQUARE (expect a chalked square; count hits per square)'
+        : 'shot as a SINGLE-SHINGLE close-up (several marks on one shingle are NOT several hits in a square; test_square_coverage should be small)',
+    );
+  }
+  if (opts.material) context.push(`declared roof material ${ROOF_MATERIAL_LABELS[opts.material]}`);
+  const slopeHint = context.length > 0 ? `\n\nCAPTURE CONTEXT: ${context.join('; ')}.` : '';
   const prefix = opts.userStylePrefix ? `${opts.userStylePrefix}\n\n` : '';
   const liveAddendum = opts.live ? LIVE_FRAME_ADDENDUM : '';
 
@@ -687,6 +745,7 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
         box,
         confidence: clamp(Number(d.confidence ?? 0), 0, 100),
         note: typeof d.note === 'string' ? d.note : undefined,
+        evidence: parseEvidence(d.evidence),
       };
     })
     .filter(Boolean) as DamageMarker[];
@@ -714,6 +773,11 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
   const candidates = detections.length > 0 ? detections : legacyMarkers;
   const { markers, gridRejected } = sanitizeMarkers(candidates);
 
+  const shingleCountRaw = Number(parsed?.shingle_count);
+  const shingleCount =
+    Number.isFinite(shingleCountRaw) && shingleCountRaw >= 0 ? Math.round(shingleCountRaw) : undefined;
+  const squareCoverage = parseCoverage(parsed?.test_square_coverage);
+
   const shingleType: ShingleTypeClassification | undefined = parsed?.shingle_type?.type
     ? {
         type: String(parsed.shingle_type.type),
@@ -731,6 +795,8 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
     noRoofDetected: false,
     subject,
     subjectDetail,
+    shingleCount,
+    squareCoverage,
     shingleType,
     shingleScaleEstimate,
     findings,
@@ -755,6 +821,30 @@ function parseSubject(raw: unknown, noRoof: boolean): PhotoSubject {
     return s;
   }
   return noRoof ? 'unidentifiable' : 'roof_field';
+}
+
+function parseCoverage(raw: any): AnalysisResult['squareCoverage'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const fraction = Number(raw.fraction);
+  if (!Number.isFinite(fraction)) return undefined;
+  return {
+    visible: raw.visible === true,
+    fraction: clamp(fraction, 0, 1),
+    confidence: clamp(Number(raw.confidence ?? 0), 0, 100),
+  };
+}
+
+const HIT_EVIDENCE_VALUES: readonly string[] = [
+  'mat_fracture',
+  'exposed_substrate',
+  'granule_loss_only',
+  'cosmetic',
+  'unclear',
+];
+
+/** Evidence class, defensively — anything unrecognised is absent, never functional. */
+function parseEvidence(raw: unknown): HitEvidence | undefined {
+  return typeof raw === 'string' && HIT_EVIDENCE_VALUES.includes(raw) ? (raw as HitEvidence) : undefined;
 }
 
 function parseCollateral(raw: unknown): CollateralFinding[] | undefined {

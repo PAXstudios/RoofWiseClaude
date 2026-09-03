@@ -21,6 +21,7 @@ import {
   isRetryableGeminiError,
   type AnalysisResult,
 } from './gemini';
+import { deriveFunctional } from './functionalDamage';
 import { useInspectionStore } from '../stores/inspectionStore';
 import { useCorrectionsStore } from '../stores/correctionsStore';
 import { useTrainingQueueStore } from '../stores/trainingQueueStore';
@@ -201,9 +202,15 @@ async function runAnalyzeSlope(
 
     try {
       const base64 = await readPhotoBase64(uri);
+      const photoMeta = slope.photoMeta?.find((m) => m.photoIndex === photoIndex);
       const r = await analyzePhoto({
         imageBase64: base64,
         slope: slope.orientation,
+        // What the inspector told the camera — test square vs close-up decides
+        // what counting means; the declared material sets the geometry.
+        captureMode: photoMeta?.captureMode ?? 'square_10x10',
+        areaTag: photoMeta?.areaTag,
+        material: inspection.material,
         userStylePrefix: prefix || undefined,
         signal: opts.signal,
       });
@@ -230,6 +237,8 @@ async function runAnalyzeSlope(
         subject: r.subject,
         subjectDetail: r.subjectDetail,
         collateralDamage: r.collateralDamage,
+        shingleCount: r.shingleCount,
+        squareCoverage: r.squareCoverage,
       });
       measure(photoMark, { metric: PHOTO_ANALYSIS_METRIC.photo, n: 1 });
 
@@ -645,11 +654,18 @@ function mergeFindingsForPhoto(
                 },
               ]
             : sl.scaleEstimates;
-          return {
+          const next = {
             ...sl,
             aiFindings: [...(sl.aiFindings ?? []), ...result.findings],
             scaleEstimates,
           };
+          // §1 functional damage, DERIVED from the evidence the model reported
+          // (mat fracture / exposed substrate on a test-square photo). This is
+          // the flag the §4 tree and the damage score read; until now nothing
+          // ever set it, so every AI-analyzed slope read "not functional".
+          // replacePhotoMarkers ran just before this merge, so `next.damage`
+          // already carries this photo's markers.
+          return { ...next, functional: deriveFunctional(next).functional };
         }),
       };
     }),
