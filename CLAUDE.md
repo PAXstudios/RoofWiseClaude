@@ -133,6 +133,8 @@ npm run lint                      # expo lint
 
 **Native modules:** install via `npx expo install <pkg>` (not plain `npm install`) so versions stay pinned to the SDK. The AsyncStorage version-mismatch crash (`Native module is null, cannot access legacy storage`) came from a plain `npm install` — fix is `npx expo install @react-native-async-storage/async-storage` (SDK 54 pins `2.2.0`; SDK 51 pinned `1.23.1`).
 
+**Publishing (`eas update`) — the EXPO_PUBLIC cache gotcha:** `EXPO_PUBLIC_*` vars are inlined into the bundle by a Babel transform that is **cached**. When you ADD a new `EXPO_PUBLIC_*` key (env or `.env.local`) after a prior export, the stale Metro transform re-uses the old value and inlines the new key as `undefined` — the bundle ships without it and every gate for it silently reads "not configured" (this bit the Census key in #88: it was in the EAS env and verified live, but absent from the phone bundle). Always publish a new key with a busted cache: `rm -rf .expo node_modules/.cache && npx expo export --clear …` then `eas update --clear-cache`, and **grep the exported `.hbc` for the key's own value before publishing** — a missing key is a 0, a present key is a 1.
+
 ---
 
 ## Where things live
