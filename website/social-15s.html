@@ -1,0 +1,262 @@
+<title>RoofWise Social — 15s (9:16)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --navy: #0C183C;
+    --navy-2: #16275f;
+    --orange: #FC6018;
+    --cream: #F0F0E4;
+    --slate: #546078;
+    --white: #FFFFFF;
+    --success: #2BB673;
+    --danger: #E5484D;
+    --display: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #060d24; color: var(--cream); font-family: var(--display);
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; padding: 18px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .stage-wrap { display: flex; flex-direction: column; }
+  .stage {
+    position: relative;
+    height: min(78vh, 780px); aspect-ratio: 9 / 16;
+    background: var(--navy); border-radius: 22px; overflow: hidden; cursor: pointer;
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
+  }
+  .scene {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 9% 8%;
+    opacity: 0; visibility: hidden; transition: opacity 0.28s ease;
+  }
+  .scene.on { opacity: 1; visibility: visible; }
+
+  .k {
+    font-family: var(--mono); font-size: clamp(10px, 1.6vh, 14px);
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--orange);
+    margin-bottom: 2.4vh;
+  }
+  .h {
+    font-size: clamp(30px, 5.4vh, 52px); font-weight: 800;
+    letter-spacing: -0.03em; line-height: 1.02; text-wrap: balance;
+  }
+  .h .hi { color: var(--orange); }
+  .h .strike { text-decoration: line-through; text-decoration-color: var(--danger); text-decoration-thickness: 4px; }
+  .sub { margin-top: 2.2vh; font-size: clamp(13px, 2vh, 18px); color: rgba(240, 240, 228, 0.72); }
+
+  .w { display: inline-block; opacity: 0; transform: translateY(0.55em); }
+  .scene.on .w { animation: rise 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  /* hook scene shake */
+  .s1 { background: radial-gradient(130% 110% at 50% 0%, var(--navy-2), #060d24 78%); }
+  .s1.on .h { animation: shake 0.4s 0.55s ease; }
+  @keyframes shake {
+    0%, 100% { transform: none; }
+    25% { transform: translateX(-7px) rotate(-0.6deg); }
+    55% { transform: translateX(6px) rotate(0.5deg); }
+    80% { transform: translateX(-3px); }
+  }
+  .denied {
+    margin-top: 3vh;
+    border: 4px solid var(--danger); color: var(--danger);
+    font-weight: 800; font-size: clamp(20px, 3.4vh, 34px); letter-spacing: 0.14em;
+    padding: 0.35em 0.9em; border-radius: 8px;
+    transform: rotate(-6deg); opacity: 0;
+  }
+  .s1.on .denied { animation: slam 0.4s 0.8s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
+  @keyframes slam { from { opacity: 0; transform: rotate(-6deg) scale(2.6); } to { opacity: 1; transform: rotate(-6deg) scale(1); } }
+
+  /* detection scene */
+  .s3 { background: #35465f; }
+  .s3::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(180deg, transparent 0 44px, rgba(6, 13, 36, 0.4) 44px 47px),
+      repeating-linear-gradient(100deg, rgba(61, 79, 107, 0.9) 0 38px, rgba(53, 70, 95, 0.9) 38px 76px);
+  }
+  .s3 .scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,13,36,0.78), rgba(6,13,36,0.2) 42%, rgba(6,13,36,0.8)); }
+  .s3 .k, .s3 .h, .s3 .sub { position: relative; z-index: 3; }
+  .det {
+    position: absolute; z-index: 2;
+    border: 3px solid var(--orange); border-radius: 6px;
+    opacity: 0; box-shadow: 0 0 0 2px rgba(6, 13, 36, 0.4);
+  }
+  .s3.on .det { animation: pop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
+  @keyframes pop { from { opacity: 0; transform: scale(1.7); } to { opacity: 1; transform: scale(1); } }
+  .det .tag {
+    position: absolute; top: -24px; left: -3px;
+    background: var(--orange); color: var(--white);
+    font-family: var(--mono); font-size: clamp(8px, 1.3vh, 12px); font-weight: 700;
+    padding: 2px 8px; border-radius: 4px; white-space: nowrap; letter-spacing: 0.04em;
+  }
+  .s3.on .det:nth-child(2) { animation-delay: 0.25s; }
+  .s3.on .det:nth-child(3) { animation-delay: 0.5s; }
+  .s3.on .det:nth-child(4) { animation-delay: 0.75s; }
+  .s3.on .det:nth-child(5) { animation-delay: 1s; }
+
+  /* verdict quick-card */
+  .mini-doc {
+    background: var(--white); color: var(--navy); font-family: var(--mono);
+    border-radius: 12px; padding: 5% 6%;
+    width: 84%; text-align: left; position: relative;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+    font-size: clamp(11px, 1.7vh, 15px);
+  }
+  .mini-doc .row { display: flex; justify-content: space-between; padding: 0.7em 0; border-bottom: 1px solid rgba(12, 24, 60, 0.12); }
+  .mini-doc .row:last-child { border: none; }
+  .mini-doc b { font-variant-numeric: tabular-nums; }
+  .stamp {
+    position: absolute; right: 5%; bottom: -12%;
+    border: 4px solid var(--success); color: var(--success); background: var(--white);
+    font-family: var(--display); font-weight: 800;
+    font-size: clamp(15px, 2.6vh, 26px); letter-spacing: 0.12em;
+    padding: 0.35em 0.7em; border-radius: 8px;
+    transform: rotate(-7deg); opacity: 0;
+  }
+  .s4.on .stamp { animation: slam2 0.45s 1s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
+  @keyframes slam2 { from { opacity: 0; transform: rotate(-7deg) scale(2.6); } to { opacity: 1; transform: rotate(-7deg) scale(1); } }
+
+  /* end card */
+  .logo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 1.6vh; }
+  .logo-row svg { width: clamp(36px, 5.6vh, 54px); }
+  .logo-row .name { font-size: clamp(30px, 5.2vh, 50px); font-weight: 800; letter-spacing: -0.03em; }
+  .cta-pill {
+    margin-top: 3vh; background: var(--orange); color: var(--white);
+    font-weight: 700; font-size: clamp(13px, 2vh, 18px);
+    padding: 0.9em 1.9em; border-radius: 999px;
+    opacity: 0; transform: translateY(12px);
+  }
+  .s5.on .cta-pill { animation: rise 0.45s 0.9s forwards; }
+
+  /* chrome */
+  .bar { height: 4px; background: rgba(240, 240, 228, 0.14); border-radius: 99px; overflow: hidden; margin-top: 12px; }
+  .bar i { display: block; height: 100%; width: 0%; background: var(--orange); border-radius: 99px; }
+  .chrome { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-family: var(--mono); font-size: 11px; color: rgba(240, 240, 228, 0.55); }
+  .chrome button {
+    background: none; border: 1.5px solid rgba(240, 240, 228, 0.3); color: var(--cream);
+    font-family: var(--mono); font-size: 11px; padding: 6px 14px; border-radius: 99px; cursor: pointer;
+  }
+  .chrome button:hover { border-color: var(--orange); color: var(--orange); }
+  .note { max-width: 460px; font-size: 12px; line-height: 1.6; color: rgba(240, 240, 228, 0.45); font-family: var(--mono); }
+  .note b { color: rgba(240, 240, 228, 0.75); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scene { transition: none; }
+    .w, .det, .stamp, .denied, .cta-pill { animation-duration: 0.001s !important; }
+  }
+</style>
+
+<div class="stage-wrap">
+  <div class="stage" id="stage" title="Tap to pause / resume">
+
+    <!-- S1 · 0–3s · hook -->
+    <div class="scene s1" data-t="3000">
+      <div class="h"><span class="w">Another</span> <span class="w" style="animation-delay:.12s">claim</span><br/><span class="w" style="animation-delay:.3s">just</span> <span class="w" style="animation-delay:.42s">got…</span></div>
+      <div class="denied">DENIED</div>
+    </div>
+
+    <!-- S2 · 3–6s · the excuse -->
+    <div class="scene" data-t="3000" style="background:#060d24;">
+      <div class="k">The adjuster's favorite word</div>
+      <div class="h"><span class="w strike" style="animation-delay:.15s">“Cosmetic.”</span></div>
+      <div class="sub"><span class="w" style="animation-delay:.8s">That word costs roofers <b style="color:var(--danger)">$5–20K</b> per claim.</span></div>
+    </div>
+
+    <!-- S3 · 6–10s · detection burst -->
+    <div class="scene s3" data-t="4000">
+      <div class="scrim"></div>
+      <div class="det" style="left:14%; top:16%; width:17%; aspect-ratio:1;"><span class="tag">HAIL HIT · 96</span></div>
+      <div class="det" style="left:64%; top:24%; width:15%; aspect-ratio:1;"><span class="tag">HAIL HIT · 93</span></div>
+      <div class="det" style="left:24%; top:68%; width:26%; aspect-ratio:1.6;"><span class="tag">GRANULE LOSS · 84</span></div>
+      <div class="det" style="left:60%; top:74%; width:16%; aspect-ratio:1;"><span class="tag">BRUISING · 78</span></div>
+      <div class="k" style="margin-top:20vh;">RoofWise AI</div>
+      <div class="h"><span class="w" style="animation-delay:1.3s">The</span> <span class="w" style="animation-delay:1.42s">pixels</span><br/><span class="w hi" style="animation-delay:1.6s">don't</span> <span class="w hi" style="animation-delay:1.75s">negotiate.</span></div>
+    </div>
+
+    <!-- S4 · 10–13s · verdict -->
+    <div class="scene s4" data-t="3000" style="background:var(--navy);">
+      <div class="k">HAAG protocol · applied</div>
+      <div class="mini-doc">
+        <div class="row"><span>Threshold</span><b>10 hits/sq</b></div>
+        <div class="row"><span>Found</span><b>12 hits</b></div>
+        <div class="row"><span>Mat exposure</span><b>YES</b></div>
+        <div class="stamp">CLAIM-WORTHY</div>
+      </div>
+    </div>
+
+    <!-- S5 · 13–16s · end card -->
+    <div class="scene s5" data-t="3000" style="background:radial-gradient(110% 110% at 50% 0%, var(--navy-2), var(--navy) 78%);">
+      <div class="logo-row">
+        <svg viewBox="0 0 26 26" aria-hidden="true">
+          <path d="M2 14 L13 4 L24 14" fill="none" stroke="#FC6018" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="18.5" cy="8.5" r="2.6" fill="#F0F0E4"/>
+        </svg>
+        <span class="name">RoofWise</span>
+      </div>
+      <div class="sub" style="margin-top:0;">Win the claim you would have lost.</div>
+      <div class="cta-pill">Early access → roofwise.app</div>
+    </div>
+  </div>
+
+  <div class="bar"><i id="bar"></i></div>
+  <div class="chrome">
+    <span id="status">1/5 · 15s · TAP TO PAUSE</span>
+    <button id="replay">⟲ REPLAY</button>
+  </div>
+</div>
+
+<p class="note">
+  <b>To export as MP4:</b> screen-record one loop (⌘⇧5 on Mac), crop to the stage.
+  Sized 9:16 for Reels / TikTok / Shorts. ~16s total; scenes auto-advance.
+</p>
+
+<script>
+  const scenes = [...document.querySelectorAll('.scene')];
+  const bar = document.getElementById('bar');
+  const status = document.getElementById('status');
+  const stage = document.getElementById('stage');
+  const total = scenes.reduce((s, el) => s + Number(el.dataset.t), 0);
+
+  let idx = -1, sceneStart = 0, elapsedBefore = 0, paused = false, timer, raf, pausedAt = 0;
+
+  function show(i) {
+    scenes.forEach((s, n) => s.classList.toggle('on', n === i));
+    status.textContent = `${i + 1}/${scenes.length} · 15s · TAP TO PAUSE`;
+  }
+  function play() { idx = -1; elapsedBefore = 0; next(); cancelAnimationFrame(raf); tick(); }
+  function next() {
+    idx += 1;
+    if (idx >= scenes.length) { setTimeout(play, 800); return; }
+    elapsedBefore = scenes.slice(0, idx).reduce((s, el) => s + Number(el.dataset.t), 0);
+    sceneStart = performance.now();
+    show(idx);
+    timer = setTimeout(() => { if (!paused) next(); }, Number(scenes[idx].dataset.t));
+  }
+  function tick() {
+    if (!paused && idx >= 0 && idx < scenes.length) {
+      const inScene = Math.min(performance.now() - sceneStart, Number(scenes[idx].dataset.t));
+      bar.style.width = ((elapsedBefore + inScene) / total) * 100 + '%';
+    }
+    raf = requestAnimationFrame(tick);
+  }
+  stage.addEventListener('click', () => {
+    paused = !paused;
+    if (paused) {
+      clearTimeout(timer);
+      pausedAt = performance.now() - sceneStart;
+      status.textContent = 'PAUSED — TAP TO RESUME';
+    } else {
+      sceneStart = performance.now() - pausedAt;
+      timer = setTimeout(() => { if (!paused) next(); }, Math.max(0, Number(scenes[idx].dataset.t) - pausedAt));
+      status.textContent = `${idx + 1}/${scenes.length} · 15s · TAP TO PAUSE`;
+    }
+  });
+  document.getElementById('replay').addEventListener('click', () => { clearTimeout(timer); paused = false; play(); });
+
+  play();
+</script>

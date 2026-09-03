@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #ff6a13; } a:hover { color: #d4520a; }
+    .ic-s { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: {{bg}}; color: {{ink}}; overflow: hidden;">
+
+  <div style="padding: 56px 20px 16px; color: #fff; background: radial-gradient(80% 70% at 92% 4%, {{accent}} 0%, transparent 48%), linear-gradient(150deg, #101317, #23272c);">
+    <div style="font-size: 28px; font-weight: 700; letter-spacing: -0.02em;">Pipeline</div>
+    <div style="font-size: 13px; opacity: 0.8; margin-top: 2px;">$318K in play &middot; 14 open &middot; 4 signed this month</div>
+    <div style="display: inline-flex; gap: 4px; background: rgba(255,255,255,0.14); border-radius: 12px; padding: 4px; margin-top: 16px;">
+      <span style="font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 9px; background: #fff; color: #14171b;">Board</span>
+      <span style="font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 9px; opacity: 0.8;">List</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; gap: 12px; padding: 16px 0 0 16px; overflow: hidden;">
+
+    <div style="width: 168px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700;">
+        <span style="width: 22px; height: 4px; border-radius: 3px; background: {{accent}};"></span>New
+        <span style="margin-left: auto; font-size: 11px; opacity: 0.55; font-weight: 600;">3 &middot; $46K</span>
+      </div>
+      <div style="background: {{surface}}; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px;">
+        <div style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em;">$18,400</div>
+        <div style="font-size: 13px; opacity: 0.75; margin-top: 2px;">Maria Salazar</div>
+        <div style="font-size: 11px; opacity: 0.5;">2210 Elm Ct</div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+          <span style="font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; background: rgba(255,106,19,0.16); color: {{accent}};">2d</span>
+          <span style="font-size: 11px; opacity: 0.5;">Knock</span>
+        </div>
+      </div>
+      <div style="background: {{surface}}; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px;">
+        <div style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em; opacity: 0.55;">No estimate</div>
+        <div style="font-size: 13px; opacity: 0.75; margin-top: 2px;">Kyle Boyd</div>
+        <div style="font-size: 11px; opacity: 0.5;">88 Vine St</div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+          <span style="font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; background: rgba(255,176,80,0.18); color: #ffb050;">5d</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 168px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700;">
+        <span style="width: 22px; height: 4px; border-radius: 3px; background: {{accent}};"></span>Inspecting
+        <span style="margin-left: auto; font-size: 11px; opacity: 0.55; font-weight: 600;">2 &middot; $61K</span>
+      </div>
+      <div style="background: {{surface}}; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px;">
+        <div style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em;">$27,900</div>
+        <div style="font-size: 13px; opacity: 0.75; margin-top: 2px;">The Nguyens</div>
+        <div style="font-size: 11px; opacity: 0.5;">1420 Oak St</div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+          <span style="font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; background: rgba(255,106,19,0.16); color: {{accent}};">1d</span>
+          <span style="font-size: 11px; opacity: 0.5;">18 photos</span>
+        </div>
+      </div>
+      <div style="background: {{surface}}; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px;">
+        <div style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em;">$14,050</div>
+        <div style="font-size: 13px; opacity: 0.75; margin-top: 2px;">R. Okafor</div>
+        <div style="font-size: 11px; opacity: 0.5;">905 Walnut</div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+          <span style="font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; background: rgba(214,90,60,0.2); color: #e8795a;">9d idle</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 168px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700;">
+        <span style="width: 22px; height: 4px; border-radius: 3px; background: {{accent}};"></span>Signed
+        <span style="margin-left: auto; font-size: 11px; opacity: 0.55; font-weight: 600;">4 &middot; $121K</span>
+      </div>
+      <div style="background: {{surface}}; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px;">
+        <div style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em;">$31,200</div>
+        <div style="font-size: 13px; opacity: 0.75; margin-top: 2px;">Henderson</div>
+        <div style="font-size: 11px; opacity: 0.5;">611 Garden Oaks</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: relative; height: 0;">
+    <div style="position: absolute; right: 20px; bottom: 96px; width: 64px; height: 64px; border-radius: 20px; background: linear-gradient(150deg, {{accent}}, #d4520a); color: #fff; display: flex; align-items: center; justify-content: center;">
+      <svg style="width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+  </div>
+
+  <div style="display: flex; justify-content: space-around; padding: 12px 0 26px; background: {{surface}}; border-top: 1px solid rgba(255,255,255,0.07);">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.45;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg>Home
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: {{accent}};">
+      <svg class="ic-s" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/></svg>Pipeline
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.45;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>Map
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.45;">
+      <svg class="ic-s" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M8 3v4M16 3v4"/></svg>Plan
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.45;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M5 4h11a2 2 0 0 1 2 2v14H7a2 2 0 0 0-2 2z"/><path d="M5 4v16"/></svg>Train
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#ff6a13","options":["#ff6a13","#c87d3f","#f58426","#1b5f52"]},"bg":{"editor":"color","default":"#14171b"},"surface":{"editor":"color","default":"#1e2227"},"ink":{"editor":"color","default":"#ededea"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#ff6a13',
+      bg: this.props.bg ?? '#14171b',
+      surface: this.props.surface ?? '#1e2227',
+      ink: this.props.ink ?? '#ededea',
+    };
+  }
+}
+</script>
+</body>
+</html>

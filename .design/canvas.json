@@ -1,0 +1,38 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",         "title": "Home — Granule / Stack",   "x": 0,    "y": 0,    "w": 390, "h": 844 },
+    { "file": "HomeCommand.dc.html",  "title": "Home — Granule / Command", "x": 500,  "y": 0,    "w": 390, "h": 844 },
+    { "file": "HomeVerdigris.dc.html","title": "Home — Verdigris",         "x": 1000, "y": 0,    "w": 390, "h": 844 },
+
+    { "file": "Pipeline.dc.html",     "title": "Pipeline",                 "x": 0,    "y": 1010, "w": 390, "h": 844 },
+    { "file": "StormTracer.dc.html",  "title": "Storm Tracer",             "x": 500,  "y": 1010, "w": 390, "h": 844 },
+    { "file": "Job.dc.html",          "title": "Job",                      "x": 1000, "y": 1010, "w": 390, "h": 844 },
+
+    { "file": "Capture.dc.html",      "title": "Capture",                  "x": 0,    "y": 2020, "w": 390, "h": 844 },
+    { "file": "Planner.dc.html",      "title": "Knock Planner",            "x": 500,  "y": 2020, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    {
+      "id": "granule-note",
+      "x": 0,
+      "y": -150,
+      "w": 890,
+      "text": "GRANULE — asphalt-shingle charcoal + safety orange.\nTwo Home layouts: Stack (today's shape) and Command (one huge action, tool rail, then the day).\nEvery artboard exposes accent / bg / surface / ink as tweaks — recolour any screen without touching markup."
+    },
+    {
+      "id": "verdigris-note",
+      "x": 1000,
+      "y": -150,
+      "w": 390,
+      "text": "VERDIGRIS — copper roofing and the patina it ages into, on a bone ground. Light-mode counterpart; accent + copper are separate tweaks."
+    },
+    {
+      "id": "screens-note",
+      "x": 0,
+      "y": 940,
+      "w": 890,
+      "text": "The rest of the app in Granule. Storm Tracer shows the new select-pins → Save → Start route bar; Capture shows the 10×10 test square with live hit detection against the 8-hit carrier bar."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -1,0 +1,337 @@
+<title>RoofWise Founder Video — 60s (speaking avatar)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --navy: #0C183C;
+    --navy-2: #16275f;
+    --orange: #FC6018;
+    --cream: #F0F0E4;
+    --slate: #546078;
+    --white: #FFFFFF;
+    --skin: #C98E6A;
+    --skin-dark: #B07A58;
+    --shirt: #3D4F6B;
+    --display: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #060d24; color: var(--cream); font-family: var(--display);
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; padding: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .stage-wrap { width: min(1050px, 96vw); }
+  .stage {
+    position: relative; width: 100%; aspect-ratio: 16 / 9;
+    background: radial-gradient(120% 140% at 30% 20%, var(--navy-2), var(--navy) 70%);
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
+    display: grid; grid-template-columns: 0.9fr 1.1fr;
+  }
+  @media (max-width: 640px) { .stage { grid-template-columns: 1fr; aspect-ratio: 9/14; } }
+
+  /* ---------- avatar side ---------- */
+  .avatar-side { position: relative; display: flex; align-items: flex-end; justify-content: center; }
+  .avatar-side::before {
+    content: ""; position: absolute; inset: 8% 12% 0;
+    background: rgba(240, 240, 228, 0.04);
+    border: 1px solid rgba(240, 240, 228, 0.1);
+    border-radius: 18px 18px 0 0;
+  }
+  .avatar { width: 78%; max-width: 380px; position: relative; z-index: 2; }
+  .lower-third {
+    position: absolute; left: 6%; bottom: 7%;
+    z-index: 3; background: var(--cream); color: var(--navy);
+    border-left: 5px solid var(--orange);
+    padding: 10px 18px 10px 14px; border-radius: 6px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  }
+  .lower-third b { display: block; font-size: clamp(13px, 1.6vw, 17px); letter-spacing: -0.01em; }
+  .lower-third span { font-family: var(--mono); font-size: clamp(9px, 1.1vw, 12px); color: var(--slate); letter-spacing: 0.06em; }
+
+  /* ---------- caption side ---------- */
+  .cap-side { display: flex; flex-direction: column; justify-content: center; padding: 7% 8% 7% 2%; position: relative; }
+  .cap-k {
+    font-family: var(--mono); font-size: clamp(10px, 1.2vw, 13px);
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--orange); margin-bottom: 2vw;
+  }
+  .cap {
+    font-size: clamp(17px, 2.5vw, 30px); font-weight: 700;
+    letter-spacing: -0.02em; line-height: 1.25; min-height: 5.2em;
+    text-wrap: balance;
+  }
+  .cap .said { color: var(--cream); }
+  .cap .unsaid { color: rgba(240, 240, 228, 0.3); }
+  .cap .hi { color: var(--orange); }
+  .segdots { display: flex; gap: 8px; margin-top: 2.4vw; }
+  .segdots i { width: 26px; height: 4px; border-radius: 99px; background: rgba(240, 240, 228, 0.18); transition: background 0.3s; }
+  .segdots i.on { background: var(--orange); }
+
+  /* ---------- avatar drawing ---------- */
+  .head-group { transform-origin: 190px 300px; animation: sway 6s ease-in-out infinite; }
+  @keyframes sway { 0%, 100% { transform: rotate(-0.9deg); } 50% { transform: rotate(1.1deg); } }
+  .brow { transform-origin: center; transition: transform 0.25s ease; }
+  .avatar.emph .brow-l { transform: translateY(-5px) rotate(-3deg); }
+  .avatar.emph .brow-r { transform: translateY(-5px) rotate(3deg); }
+  .lid { transform-origin: center; transform: scaleY(0); transition: transform 0.07s; }
+  .avatar.blink .lid { transform: scaleY(1); }
+  .mouth-shape { display: none; }
+  .mouth-shape.on { display: block; }
+
+  /* ---------- chrome ---------- */
+  .controls {
+    display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12px; color: rgba(240, 240, 228, 0.55);
+  }
+  .controls button {
+    background: var(--orange); border: none; color: var(--white);
+    font-family: var(--display); font-weight: 700; font-size: 15px;
+    padding: 12px 26px; border-radius: 99px; cursor: pointer;
+  }
+  .controls button:hover { background: #E04E0F; }
+  .controls button.secondary { background: none; border: 1.5px solid rgba(240, 240, 228, 0.3); color: var(--cream); font-family: var(--mono); font-size: 12px; font-weight: 400; padding: 9px 16px; }
+  .controls button.secondary:hover { border-color: var(--orange); color: var(--orange); }
+  .controls select {
+    background: var(--navy); color: var(--cream); border: 1.5px solid rgba(240, 240, 228, 0.3);
+    font-family: var(--mono); font-size: 12px; padding: 9px 12px; border-radius: 99px; max-width: 240px;
+  }
+  .note { max-width: min(1050px, 96vw); font-size: 12.5px; line-height: 1.65; color: rgba(240, 240, 228, 0.45); font-family: var(--mono); }
+  .note b { color: rgba(240, 240, 228, 0.75); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .head-group { animation: none; }
+  }
+</style>
+
+<div class="stage-wrap">
+  <div class="stage">
+    <div class="avatar-side">
+      <!-- Stylized founder portrait. Deliberately illustrated, not photoreal —
+           swap for a HeyGen/Synthesia render or real footage for launch. -->
+      <svg class="avatar" id="avatar" viewBox="0 0 380 520" aria-label="Animated founder avatar">
+        <g class="head-group">
+          <!-- shoulders / work shirt -->
+          <path d="M60 520 C60 430 120 395 190 395 C260 395 320 430 320 520 Z" fill="var(--shirt)"/>
+          <path d="M150 400 L190 460 L230 400 L215 392 L190 424 L165 392 Z" fill="#2C3B52"/>
+          <path d="M186 452 L194 452 L198 520 L182 520 Z" fill="#2C3B52"/>
+          <!-- collar -->
+          <path d="M148 398 L165 390 L190 422 L215 390 L232 398 L218 416 L190 438 L162 416 Z" fill="#4A5D7D"/>
+          <!-- neck -->
+          <path d="M162 340 H218 V404 C218 420 162 420 162 404 Z" fill="var(--skin-dark)"/>
+          <!-- head -->
+          <g>
+            <ellipse cx="190" cy="252" rx="92" ry="108" fill="var(--skin)"/>
+            <!-- ears -->
+            <ellipse cx="98" cy="262" rx="14" ry="22" fill="var(--skin)"/>
+            <ellipse cx="282" cy="262" rx="14" ry="22" fill="var(--skin)"/>
+            <ellipse cx="98" cy="264" rx="6" ry="11" fill="var(--skin-dark)" opacity="0.55"/>
+            <ellipse cx="282" cy="264" rx="6" ry="11" fill="var(--skin-dark)" opacity="0.55"/>
+            <!-- cap -->
+            <path d="M96 208 C96 130 284 130 284 208 L284 224 C284 214 96 214 96 224 Z" fill="var(--navy)"/>
+            <path d="M96 212 C96 200 284 200 284 212 L284 226 C240 214 140 214 96 226 Z" fill="var(--navy-2)"/>
+            <path d="M92 218 C60 222 52 238 58 244 C120 228 180 226 190 226 L190 210 C160 210 110 213 92 218 Z" fill="var(--navy)"/>
+            <!-- cap mark -->
+            <path d="M172 168 L190 152 L208 168" fill="none" stroke="var(--orange)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- brows -->
+            <rect class="brow brow-l" x="124" y="238" width="46" height="10" rx="5" fill="#4B3628"/>
+            <rect class="brow brow-r" x="210" y="238" width="46" height="10" rx="5" fill="#4B3628"/>
+            <!-- eyes -->
+            <g>
+              <ellipse cx="150" cy="268" rx="15" ry="10" fill="var(--white)"/>
+              <circle cx="152" cy="269" r="5.5" fill="#2A1E14"/>
+              <rect class="lid" x="133" y="258" width="34" height="20" rx="9" fill="var(--skin)"/>
+              <ellipse cx="230" cy="268" rx="15" ry="10" fill="var(--white)"/>
+              <circle cx="232" cy="269" r="5.5" fill="#2A1E14"/>
+              <rect class="lid" x="213" y="258" width="34" height="20" rx="9" fill="var(--skin)"/>
+            </g>
+            <!-- nose -->
+            <path d="M186 270 C182 292 178 300 182 308 C186 314 196 314 199 308" fill="none" stroke="var(--skin-dark)" stroke-width="5" stroke-linecap="round"/>
+            <!-- laugh lines -->
+            <path d="M154 316 C148 324 148 332 152 338" fill="none" stroke="var(--skin-dark)" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+            <path d="M226 316 C232 324 232 332 228 338" fill="none" stroke="var(--skin-dark)" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+            <!-- stubble -->
+            <path d="M120 300 C124 366 156 388 190 388 C224 388 256 366 260 300 C256 356 224 374 190 374 C156 374 124 356 120 300 Z" fill="#4B3628" opacity="0.28"/>
+            <!-- mouth visemes -->
+            <g id="mouth">
+              <!-- rest -->
+              <path class="mouth-shape on" data-v="rest" d="M158 342 C172 350 208 350 222 342" fill="none" stroke="#7A4A34" stroke-width="7" stroke-linecap="round"/>
+              <!-- small open -->
+              <g class="mouth-shape" data-v="small">
+                <ellipse cx="190" cy="346" rx="24" ry="10" fill="#5C2E1E"/>
+                <rect x="172" y="338" width="36" height="6" rx="3" fill="var(--white)"/>
+              </g>
+              <!-- wide open -->
+              <g class="mouth-shape" data-v="open">
+                <ellipse cx="190" cy="350" rx="28" ry="17" fill="#5C2E1E"/>
+                <rect x="168" y="336" width="44" height="8" rx="4" fill="var(--white)"/>
+                <ellipse cx="190" cy="360" rx="14" ry="7" fill="#B0522F"/>
+              </g>
+              <!-- pressed / M B P -->
+              <path class="mouth-shape" data-v="press" d="M162 344 C176 340 204 340 218 344" fill="none" stroke="#7A4A34" stroke-width="8" stroke-linecap="round"/>
+              <!-- rounded / O W -->
+              <g class="mouth-shape" data-v="round">
+                <ellipse cx="190" cy="347" rx="14" ry="13" fill="#5C2E1E"/>
+                <ellipse cx="190" cy="344" rx="9" ry="5" fill="var(--white)"/>
+              </g>
+            </g>
+          </g>
+        </g>
+      </svg>
+
+      <div class="lower-third">
+        <b id="founderName">[Founder Name]</b>
+        <span>FOUNDER · ROOFWISE</span>
+      </div>
+    </div>
+
+    <div class="cap-side">
+      <div class="cap-k">Founder message · 60 seconds</div>
+      <div class="cap" id="cap"><span class="unsaid">Press play — the avatar speaks the script aloud with synced captions.</span></div>
+      <div class="segdots" id="dots"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="play">▶ &nbsp;Play with voice</button>
+    <button class="secondary" id="stop">■ STOP</button>
+    <select id="voice" title="Voice"></select>
+    <span id="status"></span>
+  </div>
+</div>
+
+<p class="note">
+  <b>Script placeholders:</b> the lines marked [BRACKETS] are for the real founder's story — edit the
+  SCRIPT block at the top of this file's code. <b>Voice</b> uses your device's built-in speech engine
+  (pick the most natural en-US voice in the dropdown; quality varies by device — macOS "Evan" or
+  "Nathan" read well). <b>For a photorealistic human avatar</b>, paste the same script into HeyGen or
+  Synthesia and swap their MP4 into this slot. <b>To capture:</b> screen-record one play-through with
+  system audio (⌘⇧5 → record selected portion; enable microphone/system audio via an audio-loopback
+  tool like BlackHole, or record on an iPhone pointed at the screen for a scrappy cut).
+</p>
+
+<script>
+  // ===================== SCRIPT — edit these lines =====================
+  // Keep segments short: one breath each. [BRACKETED] lines are placeholders
+  // for the real founder's true story — replace before publishing.
+  const SCRIPT = [
+    { text: "I built RoofWise because good roofers keep losing claims they should win.", emph: false },
+    { text: "[YOUR STORY — one line on your years in roofing or claims.]", emph: false },
+    { text: "A denied claim costs a contractor five to twenty thousand dollars. Not because the damage isn't there — because proving it is brutal.", emph: true },
+    { text: "So we made the proof automatic. You walk the roof. The AI reads every shingle — thirteen damage categories, scored for severity and confidence.", emph: false },
+    { text: "Then HAAG thresholds — the same standards carriers use — decide if it's claim-worthy. By material. In writing.", emph: true },
+    { text: "You leave the driveway with a packet an adjuster can't wave away.", emph: false },
+    { text: "One extra approval a month pays for RoofWise. The rest is margin you were already earning.", emph: true },
+    { text: "We're taking early-access contractors now. Come win the claim you would have lost.", emph: false },
+  ];
+  // =====================================================================
+
+  const avatar = document.getElementById('avatar');
+  const cap = document.getElementById('cap');
+  const dots = document.getElementById('dots');
+  const statusEl = document.getElementById('status');
+  const voiceSel = document.getElementById('voice');
+  const shapes = [...document.querySelectorAll('.mouth-shape')];
+  const VISEMES = ['small', 'open', 'round', 'small', 'press', 'open'];
+
+  SCRIPT.forEach(() => dots.appendChild(document.createElement('i')));
+  const dotEls = [...dots.children];
+
+  // ---- blink loop ----
+  (function blink() {
+    setTimeout(() => {
+      avatar.classList.add('blink');
+      setTimeout(() => { avatar.classList.remove('blink'); blink(); }, 130);
+    }, 1800 + Math.random() * 2600);
+  })();
+
+  // ---- mouth engine ----
+  let mouthTimer = null;
+  function setMouth(v) {
+    shapes.forEach((s) => s.classList.toggle('on', s.dataset.v === v));
+  }
+  function mouthOn() {
+    clearInterval(mouthTimer);
+    let i = 0;
+    mouthTimer = setInterval(() => {
+      setMouth(VISEMES[i % VISEMES.length]);
+      i += 1 + Math.floor(Math.random() * 2);
+    }, 95);
+  }
+  function mouthOff() { clearInterval(mouthTimer); setMouth('rest'); }
+
+  // ---- voices ----
+  function loadVoices() {
+    const vs = speechSynthesis.getVoices().filter((v) => v.lang.startsWith('en'));
+    voiceSel.innerHTML = vs.map((v, i) => `<option value="${i}">${v.name} (${v.lang})</option>`).join('');
+    const pref = vs.findIndex((v) => /evan|nathan|aaron|daniel|alex|guy|male/i.test(v.name));
+    if (pref >= 0) voiceSel.value = String(pref);
+    return vs;
+  }
+  let voices = loadVoices();
+  speechSynthesis.onvoiceschanged = () => { voices = loadVoices(); };
+
+  // ---- word-synced caption ----
+  function renderCaption(seg, wordIdx) {
+    const words = seg.text.split(' ');
+    cap.innerHTML = words
+      .map((w, i) => `<span class="${i <= wordIdx ? 'said' : 'unsaid'}">${w}</span>`)
+      .join(' ');
+  }
+
+  let playing = false;
+  function speakSegment(i) {
+    if (!playing) return;
+    if (i >= SCRIPT.length) { stop('DONE — ⟲ PLAY AGAIN'); return; }
+    dotEls.forEach((d, n) => d.classList.toggle('on', n <= i));
+    const seg = SCRIPT[i];
+    avatar.classList.toggle('emph', seg.emph);
+    renderCaption(seg, -1);
+
+    const u = new SpeechSynthesisUtterance(seg.text.replace(/\[|\]/g, ''));
+    const v = voices[Number(voiceSel.value)];
+    if (v) u.voice = v;
+    u.rate = 0.97; u.pitch = 0.92;
+    let wordIdx = -1;
+    u.onboundary = (e) => {
+      if (e.name === 'word') { wordIdx += 1; renderCaption(seg, wordIdx); }
+    };
+    u.onstart = mouthOn;
+    u.onend = () => {
+      mouthOff();
+      renderCaption(seg, seg.text.split(' ').length);
+      setTimeout(() => speakSegment(i + 1), seg.emph ? 500 : 320);
+    };
+    u.onerror = () => {
+      // No/blocked TTS: fall back to timed captions (~380ms/word).
+      mouthOn();
+      const words = seg.text.split(' ');
+      let wi = 0;
+      const t = setInterval(() => {
+        renderCaption(seg, wi);
+        wi += 1;
+        if (wi > words.length) {
+          clearInterval(t); mouthOff();
+          setTimeout(() => speakSegment(i + 1), 350);
+        }
+      }, 380);
+    };
+    speechSynthesis.speak(u);
+  }
+
+  function stop(msg) {
+    playing = false;
+    speechSynthesis.cancel();
+    mouthOff();
+    avatar.classList.remove('emph');
+    statusEl.textContent = msg || '';
+  }
+
+  document.getElementById('play').addEventListener('click', () => {
+    stop();
+    playing = true;
+    statusEl.textContent = 'SPEAKING…';
+    speakSegment(0);
+  });
+  document.getElementById('stop').addEventListener('click', () => stop('STOPPED'));
+</script>

@@ -1,143 +1,125 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Link, usePathname } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { navItems } from './navItems';
-import { colors, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
+// Desktop-web left rail. Renders the SAME 5 destinations as BottomTabs
+// (Drift #2 — Home / Leads / Map / Plan / Train, nothing more) from the
+// shared navItems list, so phone and desktop can never drift apart.
+//
+// Like BottomTabs, this is the tab navigator's `tabBar` (mounted on the left
+// via `tabBarPosition: 'left'` in app/(tabs)/_layout.tsx), so it switches
+// tabs through the navigator itself — a JUMP_TO that keeps every tab's state
+// alive — rather than pushing routes.
 
-export function Sidebar() {
-  const pathname = usePathname();
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { navItems, type TabBarProps } from './navItems';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  radii,
+  spacing,
+  touchTarget,
+} from '@/theme/tokens';
+
+export function Sidebar({ state, descriptors, navigation }: TabBarProps) {
   return (
-    <View style={styles.wrap}>
-      <View style={styles.brand}>
-        <View style={styles.logo}>
-          <Ionicons name="home" size={18} color={colors.surface} />
+    <View style={styles.rail}>
+      <View style={styles.brandRow}>
+        <View style={styles.brandMark}>
+          <Ionicons name="home" size={20} color={colors.textInverse} />
         </View>
-        <View>
-          <Text style={styles.brandName}>RoofWise</Text>
-          <Text style={styles.brandSub}>Forensic AI</Text>
-        </View>
+        <Text style={styles.brandName}>RoofWise</Text>
       </View>
 
-      <View style={styles.list}>
-        {navItems.map((item) => {
-          const active = isActive(pathname, item.href);
+      <View style={styles.nav}>
+        {navItems.map((it) => {
+          const routeIndex = state.routes.findIndex((r) => r.name === it.name);
+          if (routeIndex === -1) return null;
+          const route = state.routes[routeIndex];
+          const active = state.index === routeIndex;
+          const label = descriptors[route.key]?.options.title ?? it.label;
+          // Filled icon variant when active (e.g. "home-outline" → "home"),
+          // mirroring BottomTabs.
+          const icon = active ? String(it.icon).replace('-outline', '') : it.icon;
           return (
-            <Link key={item.name} href={item.href as any} asChild>
-              <Pressable style={[styles.item, active && styles.itemActive]}>
-                <Ionicons
-                  name={item.icon}
-                  size={18}
-                  color={active ? colors.accent : colors.textMuted}
-                />
-                <Text style={[styles.itemLabel, active && styles.itemLabelActive]}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            </Link>
+            <Pressable
+              key={route.key}
+              style={[styles.item, active && styles.itemActive]}
+              onPress={() => {
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true,
+                });
+                if (active || event.defaultPrevented) return;
+                navigation.navigate(route.name, route.params);
+              }}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={label}
+            >
+              <Ionicons
+                name={icon as any}
+                size={22}
+                color={active ? colors.brand : colors.textMuted}
+              />
+              <Text style={[styles.itemLabel, active && styles.itemLabelActive]}>
+                {label}
+              </Text>
+            </Pressable>
           );
         })}
-      </View>
-
-      <View style={styles.upsell}>
-        <Text style={styles.upsellTitle}>Storm season</Text>
-        <Text style={styles.upsellBody}>
-          4 properties in your radius are flagged. Launch an outreach campaign in 2 taps.
-        </Text>
-        <Pressable style={styles.upsellBtn}>
-          <Text style={styles.upsellBtnLabel}>Open Storm Intel</Text>
-        </Pressable>
       </View>
     </View>
   );
 }
 
-function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/' || pathname === '/index';
-  return pathname.startsWith(href);
-}
+const SIDEBAR_WIDTH = 248;
 
 const styles = StyleSheet.create({
-  wrap: {
-    width: 248,
+  rail: {
+    width: SIDEBAR_WIDTH,
     backgroundColor: colors.surface,
     borderRightWidth: 1,
     borderRightColor: colors.border,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.md,
   },
-  brand: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xxl,
   },
-  logo: {
-    width: 36,
-    height: 36,
+  brandMark: {
+    width: 40,
+    height: 40,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
   },
   brandName: {
-    fontSize: fontSize.md,
+    fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
-    color: colors.text,
+    color: colors.navy,
   },
-  brandSub: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    fontWeight: fontWeight.medium,
-  },
-  list: { gap: 4, flex: 1 },
+  nav: { gap: spacing.xs },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
     borderRadius: radii.md,
   },
-  itemActive: {
-    backgroundColor: colors.accentSoft,
-  },
+  itemActive: { backgroundColor: colors.brandSoft },
   itemLabel: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
+    fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.medium,
+    color: colors.textMuted,
   },
   itemLabelActive: {
-    color: colors.accentPressed,
-    fontWeight: fontWeight.semibold,
-  },
-  upsell: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    marginTop: spacing.lg,
-  },
-  upsellTitle: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    color: colors.text,
-    marginBottom: 4,
-  },
-  upsellBody: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    lineHeight: 16,
-    marginBottom: spacing.md,
-  },
-  upsellBtn: {
-    backgroundColor: colors.text,
-    borderRadius: radii.pill,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  upsellBtnLabel: {
-    color: colors.textInverse,
-    fontSize: fontSize.xs,
+    color: colors.brand,
     fontWeight: fontWeight.semibold,
   },
 });

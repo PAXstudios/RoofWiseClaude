@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #ff6a13; } a:hover { color: #d4520a; }
+    .ic-s { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: {{bg}}; color: {{ink}}; overflow: hidden;">
+
+  <div style="padding: 56px 20px 22px; color: #fff; background: radial-gradient(80% 70% at 92% 4%, {{accent}} 0%, transparent 48%), linear-gradient(150deg, #101317, #23272c);">
+    <div style="font-size: 11px; opacity: 0.72; font-weight: 600; letter-spacing: 0.08em;">KNOCK PLANNER</div>
+    <div style="font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px;">Where should I knock?</div>
+
+    <!-- radius dial -->
+    <div style="width: 190px; height: 190px; margin: 14px auto 0; position: relative;">
+      <svg viewBox="0 0 190 190" style="width: 190px; height: 190px;">
+        <circle cx="95" cy="95" r="76" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="14" stroke-linecap="round" stroke-dasharray="358 478" transform="rotate(135 95 95)"></circle>
+        <circle cx="95" cy="95" r="76" fill="none" stroke="{{accent}}" stroke-width="14" stroke-linecap="round" stroke-dasharray="179 478" transform="rotate(135 95 95)"></circle>
+        <circle cx="31" cy="145" r="12" fill="#ffffff"></circle>
+      </svg>
+      <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <div style="font-size: 38px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;">25 mi</div>
+        <div style="font-size: 13px; opacity: 0.72; margin-top: 4px;">the county</div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 6px; font-size: 13px; opacity: 0.82;">
+      <span>Base: Plano, TX</span><span style="opacity: 0.5;">&middot;</span><span>Storm-hit streets</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px;">
+    <div style="display: flex; align-items: baseline; justify-content: space-between;">
+      <span style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em;">Ranked areas</span>
+      <span style="font-size: 11px; opacity: 0.5; font-weight: 600;">CALIBRATED FROM 128 DOORS</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 16px; background: {{surface}}; border: 1px solid rgba(255,255,255,0.07);">
+      <span style="width: 36px; height: 36px; border-radius: 12px; background: rgba(255,106,19,0.16); color: {{accent}}; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center;">1</span>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 15px; font-weight: 600;">Frisco &middot; Legacy Dr</div>
+        <div style="font-size: 11px; opacity: 0.6; margin-top: 2px;">2.00&Prime; hail &middot; Jun 14 &middot; 40 doors &rarr; expect ~22</div>
+      </div>
+      <span style="font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: {{accent}};">68</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 16px; background: {{surface}}; border: 1px solid rgba(255,255,255,0.07);">
+      <span style="width: 36px; height: 36px; border-radius: 12px; background: rgba(255,255,255,0.07); font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; opacity: 0.75;">2</span>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 15px; font-weight: 600;">Plano &middot; Coit Rd</div>
+        <div style="font-size: 11px; opacity: 0.6; margin-top: 2px;">1.75&Prime; hail &middot; Jun 14 &middot; 40 doors &rarr; expect ~19</div>
+      </div>
+      <span style="font-size: 24px; font-weight: 700; letter-spacing: -0.02em; opacity: 0.8;">61</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 16px; background: {{surface}}; border: 1px solid rgba(255,255,255,0.07);">
+      <span style="width: 36px; height: 36px; border-radius: 12px; background: rgba(255,255,255,0.07); font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; opacity: 0.75;">3</span>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 15px; font-weight: 600;">The Colony</div>
+        <div style="font-size: 11px; opacity: 0.6; margin-top: 2px;">1.50&Prime; hail &middot; May 2 &middot; 40 doors &rarr; expect ~15</div>
+      </div>
+      <span style="font-size: 24px; font-weight: 700; letter-spacing: -0.02em; opacity: 0.8;">54</span>
+    </div>
+
+    <div style="font-size: 11px; opacity: 0.5; line-height: 1.5; margin-top: 2px;">
+      Day 1 covers 3 stops &middot; 30 mi &middot; ~4 h 10 m. Willow Bend HOA excluded (do-not-knock).
+    </div>
+
+    <div style="height: 88px; border-radius: 20px; background: linear-gradient(150deg, {{accent}}, #d4520a); color: #fff; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: auto; margin-bottom: 8px;">
+      <svg class="ic-s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>Start day 1
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#ff6a13","options":["#ff6a13","#c87d3f","#f58426","#1b5f52"]},"bg":{"editor":"color","default":"#14171b"},"surface":{"editor":"color","default":"#1e2227"},"ink":{"editor":"color","default":"#ededea"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#ff6a13',
+      bg: this.props.bg ?? '#14171b',
+      surface: this.props.surface ?? '#1e2227',
+      ink: this.props.ink ?? '#ededea',
+    };
+  }
+}
+</script>
+</body>
+</html>

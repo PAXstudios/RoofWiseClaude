@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView from 'react-native-maps';
+import { Map, MapPin } from './Map';
 import { severityColor, magnitudeLabel } from '@/lib/noaa';
 import type { StormMapProps } from './types';
-import { colors, radii } from '@/theme/tokens';
 
 export default function StormHistoryMap({ events, center, zoom }: StormMapProps) {
   const ref = useRef<MapView>(null);
@@ -22,37 +21,24 @@ export default function StormHistoryMap({ events, center, zoom }: StormMapProps)
   }, [center.lat, center.lon, zoom]);
 
   return (
-    <View style={styles.wrap}>
-      <MapView
-        ref={ref}
-        provider={PROVIDER_GOOGLE}
-        style={StyleSheet.absoluteFill}
-        initialRegion={{
-          latitude: center.lat,
-          longitude: center.lon,
-          latitudeDelta: 4,
-          longitudeDelta: 4,
-        }}
-      >
-        {events.map((e) => (
-          <Marker
-            key={e.id}
-            coordinate={{ latitude: e.lat, longitude: e.lon }}
-            title={`${e.type === 'hail' ? 'Hail' : 'Wind'} · ${magnitudeLabel(e)}`}
-            description={`${new Date(e.occurredAt).toLocaleDateString()} ${e.city ?? ''}`}
-            pinColor={severityColor(e)}
-          />
-        ))}
-      </MapView>
-    </View>
+    <Map
+      ref={ref}
+      initialRegion={{
+        latitude: center.lat,
+        longitude: center.lon,
+        latitudeDelta: 4,
+        longitudeDelta: 4,
+      }}
+    >
+      {events.map((e) => (
+        <MapPin
+          key={e.id}
+          coordinate={{ latitude: e.lat, longitude: e.lon }}
+          title={`${e.type === 'hail' ? 'Hail' : 'Wind'} · ${magnitudeLabel(e)}`}
+          description={`${new Date(e.occurredAt).toLocaleDateString()} ${e.city ?? ''}`}
+          pinColor={severityColor(e)}
+        />
+      ))}
+    </Map>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    flex: 1,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-  },
-});

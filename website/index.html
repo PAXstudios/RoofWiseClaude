@@ -1,0 +1,628 @@
+<title>RoofWise — The objective layer between roofers and carriers</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --navy: #0C183C;
+    --navy-2: #16275f;
+    --orange: #FC6018;
+    --orange-press: #E04E0F;
+    --cream: #F0F0E4;
+    --slate: #546078;
+    --white: #FFFFFF;
+    --success: #2BB673;
+    --danger: #E5484D;
+    --line-navy: rgba(12, 24, 60, 0.14);
+    --line-cream: rgba(240, 240, 228, 0.16);
+    --display: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--display);
+    background: var(--navy);
+    color: var(--navy);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--orange); color: var(--white); }
+
+  /* ---------- shared band structure ---------- */
+  .band { padding: clamp(64px, 10vw, 128px) 24px; }
+  .band-inner { max-width: 1120px; margin: 0 auto; }
+  .band--navy { background: var(--navy); color: var(--cream); }
+  .band--cream { background: var(--cream); color: var(--navy); }
+  .band--white { background: var(--white); color: var(--navy); }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--orange);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 28px; height: 3px;
+    background: var(--orange);
+  }
+  h1, h2 { text-wrap: balance; letter-spacing: -0.035em; line-height: 1.04; }
+  h1 { font-size: clamp(40px, 6.4vw, 78px); font-weight: 800; }
+  h2 { font-size: clamp(30px, 4.4vw, 52px); font-weight: 800; }
+  .lede { font-size: clamp(17px, 2vw, 21px); max-width: 34em; }
+  .band--navy .lede { color: rgba(240, 240, 228, 0.78); }
+  .band--cream .lede, .band--white .lede { color: var(--slate); }
+
+  /* ---------- reveal on scroll ---------- */
+  .rv { opacity: 0; transform: translateY(26px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); }
+  .rv.in { opacity: 1; transform: none; }
+  .rv[data-d="1"] { transition-delay: 0.08s; }
+  .rv[data-d="2"] { transition-delay: 0.16s; }
+  .rv[data-d="3"] { transition-delay: 0.24s; }
+  .rv[data-d="4"] { transition-delay: 0.32s; }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(12, 24, 60, 0.86);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line-cream);
+  }
+  .nav-inner {
+    max-width: 1120px; margin: 0 auto;
+    display: flex; align-items: center; gap: 28px;
+    padding: 14px 24px;
+    color: var(--cream);
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -0.02em; }
+  .logo-mark { width: 26px; height: 26px; }
+  .nav-links { display: flex; gap: 22px; margin-left: auto; font-size: 14px; }
+  .nav-links a { color: rgba(240, 240, 228, 0.75); text-decoration: none; }
+  .nav-links a:hover, .nav-links a:focus-visible { color: var(--orange); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    background: var(--orange); color: var(--white);
+    font-weight: 700; font-size: 15px;
+    padding: 13px 24px; border-radius: 999px;
+    text-decoration: none; border: none; cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .btn:hover { background: var(--orange-press); transform: translateY(-1px); }
+  .btn:focus-visible, a:focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
+  .btn--ghost { background: transparent; border: 2px solid var(--line-cream); color: var(--cream); }
+  .btn--ghost:hover { background: rgba(240, 240, 228, 0.08); border-color: var(--cream); }
+  .nav .btn { padding: 9px 18px; font-size: 14px; }
+
+  /* ---------- hero ---------- */
+  .hero { position: relative; overflow: hidden; }
+  .hero .band-inner {
+    display: grid; grid-template-columns: 1.05fr 0.95fr;
+    gap: clamp(32px, 5vw, 72px); align-items: center;
+    position: relative; z-index: 2;
+  }
+  @media (max-width: 880px) { .hero .band-inner { grid-template-columns: 1fr; } }
+  .hero-ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; }
+  .hero-proof {
+    margin-top: 40px; display: flex; flex-wrap: wrap; gap: 26px;
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.04em;
+    color: rgba(240, 240, 228, 0.6);
+  }
+  .hero-proof b { color: var(--cream); font-weight: 600; }
+
+  /* radar ping backdrop */
+  .radar {
+    position: absolute; right: -180px; top: -180px;
+    width: 640px; height: 640px; z-index: 1; opacity: 0.5;
+    pointer-events: none;
+  }
+  .radar circle.ring { fill: none; stroke: rgba(240, 240, 228, 0.09); stroke-width: 1; }
+  .radar line { stroke: rgba(240, 240, 228, 0.08); stroke-width: 1; }
+  .sweep {
+    transform-origin: 320px 320px;
+    animation: sweep 5.5s linear infinite;
+  }
+  @keyframes sweep { to { transform: rotate(360deg); } }
+  .blip { fill: var(--orange); animation: blip 5.5s ease-out infinite; opacity: 0; }
+  .blip.b2 { animation-delay: 1.6s; }
+  .blip.b3 { animation-delay: 3.4s; }
+  @keyframes blip {
+    0%, 4% { opacity: 0; r: 3; }
+    8% { opacity: 1; }
+    36% { opacity: 0.25; r: 10; }
+    60%, 100% { opacity: 0; r: 3; }
+  }
+
+  /* ---------- phone mock with live detection ---------- */
+  .phone-wrap { display: flex; justify-content: center; }
+  .phone {
+    width: min(330px, 82vw);
+    border-radius: 42px;
+    background: #060d24;
+    border: 1px solid rgba(240, 240, 228, 0.18);
+    box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+    padding: 12px;
+  }
+  .screen {
+    border-radius: 32px; overflow: hidden; position: relative;
+    background: var(--navy-2);
+    aspect-ratio: 9 / 18.5;
+    display: flex; flex-direction: column;
+  }
+  .cam {
+    position: relative; flex: 1;
+    background:
+      linear-gradient(180deg, rgba(6, 13, 36, 0) 55%, rgba(6, 13, 36, 0.55)),
+      repeating-linear-gradient(100deg, #3d4f6b 0 26px, #35465f 26px 52px),
+      #35465f;
+  }
+  /* shingle courses */
+  .cam::before {
+    content: ""; position: absolute; inset: 0;
+    background: repeating-linear-gradient(180deg, transparent 0 30px, rgba(6, 13, 36, 0.35) 30px 32px);
+  }
+  .hud-top {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 14px;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em;
+    color: rgba(240, 240, 228, 0.85);
+    z-index: 3;
+  }
+  .rec { display: flex; align-items: center; gap: 6px; }
+  .rec i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--orange); display: inline-block;
+    animation: recblink 1.4s ease infinite;
+  }
+  @keyframes recblink { 50% { opacity: 0.25; } }
+
+  .det {
+    position: absolute; z-index: 2;
+    border: 2px solid var(--orange);
+    border-radius: 4px;
+    opacity: 0;
+    box-shadow: 0 0 0 1px rgba(6, 13, 36, 0.45);
+    animation: detpop 9s ease infinite;
+  }
+  .det .tag {
+    position: absolute; top: -20px; left: -2px;
+    background: var(--orange); color: var(--white);
+    font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+    letter-spacing: 0.04em; padding: 2px 7px; border-radius: 3px;
+    white-space: nowrap;
+  }
+  .det.d1 { left: 16%; top: 18%; width: 15%; aspect-ratio: 1; animation-delay: 0.6s; }
+  .det.d2 { left: 58%; top: 30%; width: 13%; aspect-ratio: 1; animation-delay: 1.5s; }
+  .det.d3 { left: 30%; top: 47%; width: 24%; aspect-ratio: 1.7; animation-delay: 2.4s; }
+  .det.d4 { left: 66%; top: 58%; width: 14%; aspect-ratio: 1; animation-delay: 3.3s; }
+  @keyframes detpop {
+    0%, 5% { opacity: 0; transform: scale(1.25); }
+    9%, 78% { opacity: 1; transform: scale(1); }
+    88%, 100% { opacity: 0; transform: scale(1); }
+  }
+  .verdict-chip {
+    position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 4;
+    background: var(--cream); color: var(--navy);
+    border-radius: 14px; padding: 11px 13px;
+    display: flex; align-items: center; gap: 10px;
+    opacity: 0; transform: translateY(14px);
+    animation: chipin 9s ease infinite;
+  }
+  @keyframes chipin {
+    0%, 42% { opacity: 0; transform: translateY(14px); }
+    50%, 80% { opacity: 1; transform: translateY(0); }
+    90%, 100% { opacity: 0; transform: translateY(0); }
+  }
+  .verdict-dot { width: 34px; height: 34px; border-radius: 10px; background: var(--success); flex: none;
+    display: flex; align-items: center; justify-content: center; color: var(--white); font-weight: 800; font-size: 16px; }
+  .verdict-chip b { font-size: 12.5px; display: block; letter-spacing: -0.01em; }
+  .verdict-chip span { font-family: var(--mono); font-size: 9.5px; color: var(--slate); }
+
+  /* ---------- stat band ---------- */
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--line-navy);
+  }
+  @media (max-width: 880px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { padding: 34px 26px; border-bottom: 1px solid var(--line-navy); }
+  .stat + .stat { border-left: 1px solid var(--line-navy); }
+  @media (max-width: 880px) { .stat:nth-child(3) { border-left: none; } }
+  .stat .n {
+    font-size: clamp(34px, 4.6vw, 56px); font-weight: 800; letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums; color: var(--orange);
+  }
+  .stat .l { font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slate); margin-top: 6px; }
+
+  /* ---------- category marquee ---------- */
+  .marquee-band { background: var(--orange); overflow: hidden; padding: 15px 0; }
+  .marquee { display: flex; gap: 0; white-space: nowrap; width: max-content; animation: scroll 36s linear infinite; }
+  @keyframes scroll { to { transform: translateX(-50%); } }
+  .marquee span {
+    font-family: var(--mono); font-weight: 700; font-size: 14px;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--white);
+    padding: 0 22px; display: inline-flex; align-items: center; gap: 22px;
+  }
+  .marquee span::after { content: "▪"; font-size: 10px; opacity: 0.75; }
+
+  /* ---------- how it works ---------- */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 54px; }
+  @media (max-width: 980px) { .steps { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .steps { grid-template-columns: 1fr; } }
+  .step {
+    background: var(--white); border-radius: 18px; padding: 26px 24px;
+    border: 1px solid var(--line-navy);
+    box-shadow: 0 2px 8px rgba(12, 24, 60, 0.05);
+  }
+  .step .k {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 700;
+    color: var(--orange); letter-spacing: 0.12em;
+  }
+  .step h3 { font-size: 20px; letter-spacing: -0.02em; margin: 10px 0 8px; }
+  .step p { font-size: 14.5px; color: var(--slate); }
+
+  /* ---------- evidence / HAAG ---------- */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 5vw, 72px); align-items: center; }
+  @media (max-width: 880px) { .split { grid-template-columns: 1fr; } }
+  .doc {
+    background: var(--white); color: var(--navy);
+    border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--line-navy);
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.35);
+    font-family: var(--mono); font-size: 13px;
+    position: relative;
+  }
+  .doc-head {
+    padding: 14px 18px; border-bottom: 2px solid var(--navy);
+    display: flex; justify-content: space-between; letter-spacing: 0.06em; font-size: 11.5px;
+  }
+  .doc table { width: 100%; border-collapse: collapse; }
+  .doc td, .doc th { padding: 11px 18px; text-align: left; border-bottom: 1px solid var(--line-navy); }
+  .doc th { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slate); }
+  .doc td:last-child, .doc th:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .stamp {
+    position: absolute; right: 16px; bottom: 14px;
+    border: 3px solid var(--success); color: var(--success);
+    font-weight: 700; font-size: 15px; letter-spacing: 0.14em;
+    padding: 7px 14px; border-radius: 6px;
+    transform: rotate(-7deg) scale(1);
+    opacity: 0;
+  }
+  .stamp.slam { animation: slam 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
+  @keyframes slam {
+    from { opacity: 0; transform: rotate(-7deg) scale(2.4); }
+    to { opacity: 1; transform: rotate(-7deg) scale(1); }
+  }
+
+  .checklist { list-style: none; display: grid; gap: 14px; margin-top: 30px; }
+  .checklist li { display: flex; gap: 13px; align-items: flex-start; font-size: 16px; }
+  .band--navy .checklist li { color: rgba(240, 240, 228, 0.85); }
+  .checklist i {
+    flex: none; width: 22px; height: 22px; margin-top: 1px;
+    border-radius: 50%; background: var(--orange);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .checklist svg { width: 12px; height: 12px; stroke: var(--white); stroke-width: 3; fill: none; }
+
+  /* ---------- field kit grid ---------- */
+  .kit { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 54px; }
+  @media (max-width: 980px) { .kit { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .kit { grid-template-columns: 1fr; } }
+  .kit-card {
+    border: 1px solid var(--line-cream); border-radius: 18px; padding: 24px;
+    background: rgba(240, 240, 228, 0.04);
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+  .kit-card:hover { transform: translateY(-4px); background: rgba(240, 240, 228, 0.07); }
+  .kit-card h3 { font-size: 17.5px; letter-spacing: -0.015em; margin-bottom: 6px; color: var(--cream); }
+  .kit-card p { font-size: 14px; color: rgba(240, 240, 228, 0.62); }
+  .kit-ic {
+    width: 40px; height: 40px; border-radius: 12px; margin-bottom: 16px;
+    background: rgba(252, 96, 24, 0.16);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .kit-ic svg { width: 20px; height: 20px; stroke: var(--orange); stroke-width: 2; fill: none; }
+
+  /* ---------- glove strip ---------- */
+  .glove { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 40px; }
+  .glove span {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.05em;
+    border: 1.5px solid var(--line-navy); border-radius: 999px;
+    padding: 10px 18px; color: var(--slate);
+  }
+  .glove b { color: var(--navy); }
+
+  /* ---------- CTA / footer ---------- */
+  .cta-final { text-align: center; }
+  .cta-final h2 { margin: 0 auto; max-width: 16em; }
+  .cta-final .lede { margin: 20px auto 0; }
+  footer {
+    background: var(--navy); color: rgba(240, 240, 228, 0.55);
+    padding: 34px 24px; border-top: 1px solid var(--line-cream);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em;
+  }
+  .foot-inner { max-width: 1120px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
+    html { scroll-behavior: auto; }
+    .rv { opacity: 1; transform: none; }
+  }
+</style>
+
+<nav>
+  <div class="nav-inner">
+    <div class="logo">
+      <svg class="logo-mark" viewBox="0 0 26 26" aria-hidden="true">
+        <path d="M2 14 L13 4 L24 14" fill="none" stroke="#FC6018" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="18.5" cy="8.5" r="2.6" fill="#F0F0E4"/>
+      </svg>
+      RoofWise
+    </div>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#evidence">HAAG evidence</a>
+      <a href="#kit">Field kit</a>
+    </div>
+    <a class="btn" href="mailto:contact@roofwise.app?subject=RoofWise%20early%20access">Get early access</a>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="band band--navy hero">
+  <svg class="radar" viewBox="0 0 640 640" aria-hidden="true">
+    <circle class="ring" cx="320" cy="320" r="110"/>
+    <circle class="ring" cx="320" cy="320" r="200"/>
+    <circle class="ring" cx="320" cy="320" r="290"/>
+    <line x1="30" y1="320" x2="610" y2="320"/>
+    <line x1="320" y1="30" x2="320" y2="610"/>
+    <g class="sweep">
+      <path d="M320 320 L320 40 A280 280 0 0 1 458 76 Z" fill="rgba(252,96,24,0.12)"/>
+    </g>
+    <circle class="blip" cx="416" cy="204" r="4"/>
+    <circle class="blip b2" cx="238" cy="410" r="4"/>
+    <circle class="blip b3" cx="470" cy="368" r="4"/>
+  </svg>
+
+  <div class="band-inner">
+    <div>
+      <div class="eyebrow rv">AI roof inspection · HAAG-protocol claim packets</div>
+      <h1 class="rv" data-d="1">The objective layer between roofers and carriers.</h1>
+      <p class="lede rv" data-d="2" style="margin-top: 24px;">
+        RoofWise turns a ten-minute walk on the roof into evidence an adjuster can't
+        wave away — AI damage detection, material-specific HAAG thresholds, and a
+        claim packet that argues for you.
+      </p>
+      <div class="hero-ctas rv" data-d="3">
+        <a class="btn" href="mailto:contact@roofwise.app?subject=RoofWise%20early%20access">Get early access</a>
+        <a class="btn btn--ghost" href="#how">See how it works</a>
+      </div>
+      <div class="hero-proof rv" data-d="4">
+        <div><b>13</b> damage categories</div>
+        <div><b>HAAG</b> material thresholds</div>
+        <div><b>0–100</b> confidence, every finding</div>
+      </div>
+    </div>
+
+    <div class="phone-wrap rv" data-d="2">
+      <div class="phone" aria-label="RoofWise app detecting hail damage on a shingle roof">
+        <div class="screen">
+          <div class="cam">
+            <div class="hud-top">
+              <span class="rec"><i></i>ANALYZING · SLOPE&nbsp;2/4</span>
+              <span>RW-2481</span>
+            </div>
+            <div class="det d1"><span class="tag">HAIL HIT · 96</span></div>
+            <div class="det d2"><span class="tag">HAIL HIT · 91</span></div>
+            <div class="det d3"><span class="tag">GRANULE LOSS · 84</span></div>
+            <div class="det d4"><span class="tag">BRUISING · 77</span></div>
+            <div class="verdict-chip">
+              <div class="verdict-dot">✓</div>
+              <div>
+                <b>Meets HAAG functional-damage threshold</b>
+                <span>9 hits / test square · architectural asphalt</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ ECONOMICS ============ -->
+<section class="band band--cream" style="padding-bottom: 0;">
+  <div class="band-inner">
+    <div class="eyebrow rv">The math on one claim</div>
+    <h2 class="rv" data-d="1">A denial costs you five figures.<br/>The rebuttal fits in your pocket.</h2>
+  </div>
+  <div class="band-inner stats" style="margin-top: 56px;">
+    <div class="stat rv"><div class="n" data-count="20" data-prefix="$" data-suffix="K">$0K</div><div class="l">cost of one denied claim</div></div>
+    <div class="stat rv" data-d="1"><div class="n" data-count="50" data-prefix="$" data-suffix="K">$0K</div><div class="l">value of one approved claim</div></div>
+    <div class="stat rv" data-d="2"><div class="n" data-count="13">0</div><div class="l">damage categories detected</div></div>
+    <div class="stat rv" data-d="3"><div class="n" data-count="1">0</div><div class="l">extra approval / month pays for it</div></div>
+  </div>
+</section>
+
+<!-- ============ MARQUEE ============ -->
+<div class="marquee-band" aria-hidden="true">
+  <div class="marquee" id="marquee"></div>
+</div>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="band band--cream" id="how">
+  <div class="band-inner">
+    <div class="eyebrow rv">How it works</div>
+    <h2 class="rv" data-d="1">Roof to claim packet in four moves.</h2>
+    <div class="steps">
+      <div class="step rv">
+        <span class="k">01 / SHOOT</span>
+        <h3>Walk the slopes</h3>
+        <p>Guided multi-photo capture with a camera HUD built for gloves and glare. Pitch gauge and voice notes included.</p>
+      </div>
+      <div class="step rv" data-d="1">
+        <span class="k">02 / DETECT</span>
+        <h3>AI reads the pixels</h3>
+        <p>Every photo is scanned across all 13 damage categories. Each finding gets a bounding box, severity, and a 0–100 confidence score.</p>
+      </div>
+      <div class="step rv" data-d="2">
+        <span class="k">03 / VERDICT</span>
+        <h3>HAAG does the arguing</h3>
+        <p>Material-specific functional-damage thresholds produce a per-slope and roof-level verdict with written reasoning.</p>
+      </div>
+      <div class="step rv" data-d="3">
+        <span class="k">04 / PACKET</span>
+        <h3>Send the evidence</h3>
+        <p>A claim packet with annotated photos, storm data, thresholds met, and signatures — ready for the carrier.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HAAG EVIDENCE ============ -->
+<section class="band band--navy" id="evidence">
+  <div class="band-inner split">
+    <div>
+      <div class="eyebrow rv">Objectivity, cited</div>
+      <h2 class="rv" data-d="1">Not "trust me." <br/>Trust the threshold.</h2>
+      <p class="lede rv" data-d="2" style="margin-top: 22px;">
+        Adjusters argue with opinions. They don't argue with HAAG functional-damage
+        criteria applied to the right material. RoofWise encodes the thresholds and
+        shows its work.
+      </p>
+      <ul class="checklist rv" data-d="3">
+        <li><i><svg viewBox="0 0 16 16"><path d="M3 8.5 L6.5 12 L13 4.5"/></svg></i>Severity and confidence on every finding — no black-box verdicts</li>
+        <li><i><svg viewBox="0 0 16 16"><path d="M3 8.5 L6.5 12 L13 4.5"/></svg></i>NOAA storm history matched to the property and date of loss</li>
+        <li><i><svg viewBox="0 0 16 16"><path d="M3 8.5 L6.5 12 L13 4.5"/></svg></i>You review and correct every AI call before it ships — the AI calibrates to you</li>
+      </ul>
+    </div>
+    <div class="rv" data-d="2">
+      <div class="doc" id="doc">
+        <div class="doc-head"><span>HAAG FUNCTIONAL-DAMAGE THRESHOLDS</span><span>RW-2481</span></div>
+        <table>
+          <tr><th>Roof material</th><th>Threshold / test square</th></tr>
+          <tr><td>3-tab asphalt</td><td>8 hits</td></tr>
+          <tr><td>Architectural asphalt</td><td>10 hits</td></tr>
+          <tr><td>Metal</td><td>penetration only</td></tr>
+          <tr><td>Tile</td><td>any crack qualifies</td></tr>
+          <tr><td colspan="2" style="color: var(--slate); font-size: 11.5px;">Slope 2 · architectural · 9 confirmed hits + mat exposure → functional</td></tr>
+        </table>
+        <div class="stamp" id="stamp">CLAIM-WORTHY</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FIELD KIT ============ -->
+<section class="band band--navy" id="kit" style="padding-top: 0;">
+  <div class="band-inner">
+    <div class="eyebrow rv">The rest of the truck</div>
+    <h2 class="rv" data-d="1" style="color: var(--cream);">A full field kit, one app.</h2>
+    <div class="kit">
+      <div class="kit-card rv"><div class="kit-ic"><svg viewBox="0 0 24 24"><path d="M12 3 L3 10 V21 H21 V10 Z"/><path d="M8 21 V14 H16 V21"/></svg></div><h3>Storm alerts</h3><p>Hail and wind events in your service area, matched to properties worth knocking.</p></div>
+      <div class="kit-card rv" data-d="1"><div class="kit-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3 V12 L17 15"/></svg></div><h3>Hail tracer</h3><p>NOAA storm history on a map — prove the date of loss before you pitch the claim.</p></div>
+      <div class="kit-card rv" data-d="2"><div class="kit-ic"><svg viewBox="0 0 24 24"><path d="M4 20 C6 12 10 8 20 4 M9 15 L4 20"/></svg></div><h3>Door knocking</h3><p>Route mode with live stats and outcome logging that feeds your lead pipeline.</p></div>
+      <div class="kit-card rv"><div class="kit-ic"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="13" rx="2"/><path d="M4 11 H20 M9 6 V4 M15 6 V4"/></svg></div><h3>Today's plan</h3><p>Inspections, follow-ups due, and routes in one glanceable day view.</p></div>
+      <div class="kit-card rv" data-d="1"><div class="kit-ic"><svg viewBox="0 0 24 24"><path d="M5 20 V10 M12 20 V4 M19 20 V14"/></svg></div><h3>Estimates &amp; proposals</h3><p>Roof measurements, cost ranges, and signed PDF proposals without leaving the driveway.</p></div>
+      <div class="kit-card rv" data-d="2"><div class="kit-ic"><svg viewBox="0 0 24 24"><path d="M8 12 L11 15 L16 9"/><circle cx="12" cy="12" r="9"/></svg></div><h3>Training loop</h3><p>Swipe-review the AI's calls. Your corrections tune detection to your inspection style.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GLOVE ============ -->
+<section class="band band--white">
+  <div class="band-inner">
+    <div class="eyebrow rv">Built for the roof, not the office</div>
+    <h2 class="rv" data-d="1">Designed for a gloved hand<br/>in full sun.</h2>
+    <p class="lede rv" data-d="2" style="margin-top: 22px;">
+      Every screen assumes work gloves, glare, and one free hand. If it can't be
+      used on a 140° shingle in July, it didn't ship.
+    </p>
+    <div class="glove rv" data-d="3">
+      <span><b>≥56pt</b> touch targets</span>
+      <span><b>88pt</b> primary actions in thumb reach</span>
+      <span><b>High-contrast</b> sun-readable palette</span>
+      <span><b>Voice notes</b> instead of typing</span>
+      <span><b>Confirm sheets</b> on destructive actions</span>
+      <span><b>No precision gestures</b> — ever</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FINAL CTA ============ -->
+<section class="band band--cream cta-final">
+  <div class="band-inner">
+    <div class="eyebrow rv" style="justify-content: center;">Early access</div>
+    <h2 class="rv" data-d="1">Win the next claim you would have lost.</h2>
+    <p class="lede rv" data-d="2">
+      RoofWise is in field trials with contractors now. Tell us your market and
+      volume — we'll put you on the shortlist.
+    </p>
+    <div class="rv" data-d="3" style="margin-top: 34px;">
+      <a class="btn" style="font-size: 17px; padding: 18px 36px;" href="mailto:contact@roofwise.app?subject=RoofWise%20early%20access">Request early access</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="foot-inner">
+    <span>ROOFWISE — THE OBJECTIVE LAYER</span>
+    <span>CONTACT@ROOFWISE.APP</span>
+  </div>
+</footer>
+
+<script>
+  // 13 canonical damage categories — the real taxonomy from the spec.
+  const CATEGORIES = [
+    'Hail Hits', 'Bruising', 'Granule Loss', 'Wind Damage', 'Wind Creasing',
+    'Blistering', 'Cracking', 'Flashing Damage', 'Algae / Moss',
+    'Missing Shingles', 'Splitting', 'Lifted Shingles', 'Structural Sagging',
+  ];
+  const marquee = document.getElementById('marquee');
+  // Two copies so the -50% translation loops seamlessly.
+  marquee.innerHTML = (CATEGORIES.map((c) => `<span>${c}</span>`).join('')).repeat(2);
+
+  // Scroll reveals.
+  const io = new IntersectionObserver(
+    (entries) => entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      e.target.classList.add('in');
+      if (e.target.querySelector && e.target.querySelector('.n[data-count]')) countUp(e.target);
+      io.unobserve(e.target);
+    }),
+    { threshold: 0.25 },
+  );
+  document.querySelectorAll('.rv').forEach((el) => io.observe(el));
+
+  // Stat count-ups.
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function countUp(scope) {
+    scope.querySelectorAll('.n[data-count]').forEach((el) => {
+      const target = Number(el.dataset.count);
+      const prefix = el.dataset.prefix || '';
+      const suffix = el.dataset.suffix || '';
+      if (reduced) { el.textContent = prefix + target + suffix; return; }
+      const t0 = performance.now();
+      const dur = 900;
+      (function tick(t) {
+        const p = Math.min(1, (t - t0) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = prefix + Math.round(target * eased) + suffix;
+        if (p < 1) requestAnimationFrame(tick);
+      })(t0);
+    });
+  }
+
+  // Verdict stamp slams when the HAAG doc scrolls into view.
+  const stamp = document.getElementById('stamp');
+  new IntersectionObserver((entries, obs) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      setTimeout(() => stamp.classList.add('slam'), 650);
+      obs.disconnect();
+    });
+  }, { threshold: 0.5 }).observe(document.getElementById('doc'));
+</script>

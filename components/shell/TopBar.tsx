@@ -1,42 +1,56 @@
-import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Avatar } from '@/components/ui/Avatar';
-import { colors, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
+// Desktop-web top bar. Shows the current destination's context (derived
+// from the same shared navItems list the Sidebar uses) plus the two primary
+// quick actions — New Job and Quick Inspection — mirroring the dashboard
+// hero CTAs (Drift #3).
+//
+// Mounted as the tab navigator's per-screen `header` (see
+// app/(tabs)/_layout.tsx), so the focused route arrives as a prop — no
+// pathname parsing. The quick actions push root-stack routes via expo-router.
 
-export function TopBar() {
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { navItems, type TabHeaderProps } from './navItems';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  radii,
+  spacing,
+  touchTarget,
+} from '@/theme/tokens';
+
+export function TopBar({ route, options }: TabHeaderProps) {
+  const router = useRouter();
+
+  // Settings is a route inside the group but not a nav item, so fall back to
+  // the screen's own title before the raw route name.
+  const title =
+    navItems.find((it) => it.name === route.name)?.label ?? options.title ?? route.name;
+
   return (
     <View style={styles.bar}>
-      <View style={styles.search}>
-        <Ionicons name="search" size={16} color={colors.textMuted} />
-        <TextInput
-          placeholder="Search leads, jobs, addresses, storm events…"
-          placeholderTextColor={colors.textSubtle}
-          style={styles.input}
-        />
-        <View style={styles.kbd}>
-          <Text style={styles.kbdLabel}>⌘K</Text>
-        </View>
-      </View>
-      <View style={styles.right}>
-        <Pressable style={styles.filterBtn}>
-          <Ionicons name="options-outline" size={16} color={colors.textMuted} />
-          <Text style={styles.filterLabel}>Filters</Text>
+      <Text style={styles.title}>{title}</Text>
+
+      <View style={styles.actions}>
+        <Pressable
+          style={[styles.btn, styles.btnSecondary]}
+          onPress={() => router.push('/new-job' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="New Job"
+        >
+          <Ionicons name="add" size={20} color={colors.navy} />
+          <Text style={styles.btnSecondaryText}>New Job</Text>
         </Pressable>
-        <Pressable style={styles.iconBtn}>
-          <Ionicons name="notifications-outline" size={18} color={colors.text} />
-          <View style={styles.dot} />
+        <Pressable
+          style={[styles.btn, styles.btnPrimary]}
+          onPress={() => router.push('/quick-inspection' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Quick Inspection"
+        >
+          <Ionicons name="camera-outline" size={20} color={colors.textInverse} />
+          <Text style={styles.btnPrimaryText}>Quick Inspection</Text>
         </Pressable>
-        <View style={styles.profile}>
-          <Avatar
-            name="Alex Coleman"
-            uri="https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&q=80&auto=format&fit=crop"
-            size={32}
-          />
-          <View>
-            <Text style={styles.profileName}>Alex Coleman</Text>
-            <Text style={styles.profileRole}>Lead Adjuster</Text>
-          </View>
-        </View>
       </View>
     </View>
   );
@@ -44,103 +58,45 @@ export function TopBar() {
 
 const styles = StyleSheet.create({
   bar: {
-    height: 64,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
+    justifyContent: 'space-between',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.md,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    gap: spacing.lg,
   },
-  search: {
-    flex: 1,
-    maxWidth: 520,
-    height: 40,
+  title: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    color: colors.navy,
+  },
+  actions: { flexDirection: 'row', gap: spacing.md },
+  btn: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.lg,
-  },
-  input: {
-    flex: 1,
-    fontSize: fontSize.sm,
-    color: colors.text,
-    // @ts-expect-error web-only
-    outlineStyle: 'none',
-  },
-  kbd: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  kbdLabel: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    fontWeight: fontWeight.semibold,
-  },
-  right: {
-    marginLeft: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  filterBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.md,
-    height: 36,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterLabel: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
-    fontWeight: fontWeight.semibold,
-  },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  dot: {
-    position: 'absolute',
-    top: 8,
-    right: 9,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.accent,
-    borderWidth: 1.5,
-    borderColor: colors.surface,
-  },
-  profile: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: spacing.sm,
-    paddingLeft: spacing.sm,
-    borderLeftWidth: 1,
-    borderLeftColor: colors.border,
-    paddingVertical: 4,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radii.pill,
   },
-  profileName: {
-    fontSize: fontSize.sm,
+  btnSecondary: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  btnSecondaryText: {
+    fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
-    color: colors.text,
+    color: colors.navy,
   },
-  profileRole: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
+  btnPrimary: { backgroundColor: colors.accent },
+  btnPrimaryText: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    color: colors.textInverse,
   },
 });
