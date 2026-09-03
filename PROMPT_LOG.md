@@ -2873,3 +2873,17 @@ The Context Summary now describes the tree as of #84 (determination chain incl. 
 **Verified:** publish output; three live model calls; typecheck + lint green. **Not verified:** the update on the owner's phone (Expo Go must be signed in as `roofwise`; it loads the newest `preview` update on launch).
 
 **Files touched:** `app/job/[id].tsx`, `BACKLOG.md`, `PROMPT_LOG.md`.
+
+### [2026-09-03] #87 — The two owner decisions, resolved: brittleness tick → BORDERLINE; mat-exposure tick scoped to damaged slopes only
+
+**Prompt:** "Okay so do it. Thanks. Go!" (after I recommended both on 2026-09-03)
+
+**Decision 1 — brittleness tick is BORDERLINE, not FAIL.** `collateralGateInputs` (`decisionEngine.ts`) mapped the job screen's "Brittleness observed on test shingles" checkbox to `'FAIL'`; it now maps to `'BORDERLINE'`. §3 gates BORDERLINE and FAIL identically (`docs/HAAG_DECISION_ENGINE.md` line 79 — "Brittleness test FAIL or BORDERLINE → repairs not feasible → replacement"), so the replacement outcome is unchanged. The only thing that changes is what the packet prints: a checkbox is not the documented flex test, and asserting "brittleness test: FAIL" off an unphotographed tick over-claims and is the first line a carrier's engineer challenges. The formal `brittlenessProtocol` (result + photos) is still the only path that asserts FAIL, and a recorded PASS is never overridden by the tick.
+
+**Decision 2 — mat-exposure tick lands on damaged slopes ONLY.** `slopesForSubstrateExposure` fell back from damaged slopes to photographed slopes to *all* slopes, so a single roof-level "mat exposed" tick could blanket planes the inspector never looked at (and move an existing REPAIR job to PARTIAL_REPLACEMENT across the whole roof). It now pins substrate exposure to the slopes that already show damage and nothing else. Exposed mat is granule loss deep enough to bare the bitumen AT an impact (§1), so it is meaningless on a slope with no impacts; a tick on a job with no damaged slope yet drives no verdict but is still recorded and printed as a collateral observation. This is both the conservative and the more HAAG-correct scoping.
+
+**Not changed (the other two Wave D consequences were never open decisions):** evidence-less legacy hits reading "not functional" after a marker edit is the honest state (the reason string says re-analyze); a coordinate-only address remaining unsaveable is correct — a packet must not go out addressed to a lat/lng.
+
+**Verified:** 8 pure assertions (`scratchpad/gate-decisions.test.ts`): brittleness tick → BORDERLINE through both `collateralGateInputs` and the full `engineInputFromInspection`; mat-exposed lands on the damaged slope only, on nothing when no slope is damaged, and never without the tick. Typecheck + lint green. Republished (below).
+
+**Files touched:** `lib/services/decisionEngine.ts`, `BACKLOG.md`, `PROMPT_LOG.md`.

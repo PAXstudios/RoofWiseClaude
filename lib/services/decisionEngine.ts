@@ -1032,15 +1032,29 @@ export function collateralGateInputs(checklist: Record<string, boolean>): {
   return {
     layers: checklist[CHECKLIST_GATE_KEYS.multiLayer] === true ? 2 : undefined,
     substrate_exposure: checklist[CHECKLIST_GATE_KEYS.matExposed] === true ? true : undefined,
+    // A quick-observation tick is BORDERLINE, not FAIL. BORDERLINE gates
+    // repairs identically to FAIL (§3, docs/HAAG_DECISION_ENGINE.md line 79),
+    // so the replacement outcome is the same — but a checkbox is not the
+    // documented flex test, and printing "brittleness test: FAIL" off an
+    // unphotographed tick over-claims and is the first line a carrier's
+    // engineer challenges. The formal `brittlenessProtocol` (result + photos)
+    // is the only path that asserts FAIL. Owner decision 2026-09-03.
     brittleness_result:
-      checklist[CHECKLIST_GATE_KEYS.brittlenessObserved] === true ? 'FAIL' : undefined,
+      checklist[CHECKLIST_GATE_KEYS.brittlenessObserved] === true ? 'BORDERLINE' : undefined,
   };
 }
 
 /**
  * Which slopes a roof-level "mat exposure on damaged slopes" tick lands on:
- * the slopes with recorded damage; failing that, the slopes with photos
- * (the inspector saw it on something they shot); failing that, all of them.
+ * ONLY the slopes that already show damage. Exposed mat is granule loss deep
+ * enough to bare the bitumen AT an impact (docs/HAAG_DECISION_ENGINE.md §1),
+ * so it is meaningless on a slope with no impacts — and a roof-level checkbox
+ * must never make an undamaged elevation look damaged. If no slope shows
+ * damage yet, the tick lands on nothing (it is still recorded and printed as a
+ * collateral observation); it drives no verdict until the inspector marks the
+ * hits it accompanies. Owner decision 2026-09-03. (Earlier this fell back to
+ * photographed, then all, slopes — which could blanket planes the inspector
+ * never looked at from a single tick.)
  */
 function slopesForSubstrateExposure(slopes: Slope[]): Set<string> {
   const damaged = slopes.filter(
@@ -1051,9 +1065,7 @@ function slopesForSubstrateExposure(slopes: Slope[]): Set<string> {
       s.windLiftCount > 0 ||
       s.missingCount > 0,
   );
-  const photographed = slopes.filter((s) => s.photoPaths.length > 0);
-  const targets = damaged.length > 0 ? damaged : photographed.length > 0 ? photographed : slopes;
-  return new Set(targets.map((s) => s.id));
+  return new Set(damaged.map((s) => s.id));
 }
 
 export function engineInputFromInspection(
@@ -1075,9 +1087,10 @@ export function engineInputFromInspection(
 
   // Brittleness: the field protocol (result + photos) wins, then the legacy
   // quick-capture chip, then the checklist's "brittleness observed on test
-  // shingles" — which is a FAIL by definition (the shingles broke when
-  // lifted; §3 gates FAIL and BORDERLINE identically). A recorded PASS is
-  // never overridden by the tick.
+  // shingles" — which maps to BORDERLINE, not FAIL (a checkbox is not the
+  // documented flex test; §3 gates BORDERLINE and FAIL identically, so the
+  // replacement outcome is unchanged, but the packet reads honestly). A
+  // recorded PASS is never overridden by the tick.
   const brittleness: BrittlenessResult | undefined =
     inspection.brittlenessProtocol?.result ??
     legacyBrittlenessToResult(inspection.brittlenessTest) ??
@@ -1089,10 +1102,11 @@ export function engineInputFromInspection(
 
   // "Mat exposure visible on damaged slopes" is a roof-level tick, but the
   // engine reads substrate exposure per slope and counts a slope with it as
-  // damaged. Pin it to the slopes that already show damage so an undamaged
-  // elevation is not made to look damaged by a roof-level checkbox; if no
-  // slope shows damage yet, the inspector saw it on whatever was
-  // photographed. Unticked → undefined on every slope (unknown, not "no").
+  // damaged. Pin it ONLY to the slopes that already show damage, so a single
+  // roof-level checkbox can never make an undamaged elevation look damaged; if
+  // no slope shows damage yet, the tick drives no slope (it is still recorded
+  // and printed as a collateral observation). Unticked → undefined on every
+  // slope (unknown, not "no").
   const substrateSlopeIds = gates.substrate_exposure
     ? slopesForSubstrateExposure(inspection.slopes)
     : new Set<string>();
