@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
   // Storm
   blipWrap: { position: 'absolute', width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   blipRing: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: brand.burnt,
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
 
   // Scan
   shingleField: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: radii.xl,
     overflow: 'hidden',
     justifyContent: 'space-evenly',
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(0,0,0,0.35)',
   },
   scanScrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: radii.xl,
     backgroundColor: 'rgba(10,12,20,0.28)',
   },
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   gaugeFill: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     right: undefined,
     borderRadius: 7,
     backgroundColor: brand.burnt,

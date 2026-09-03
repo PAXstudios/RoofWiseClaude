@@ -40,6 +40,7 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withSpring,
+  type AnimatedStyle,
 } from 'react-native-reanimated';
 import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import type { DrawerDetent } from '@/lib/stores/mapChromeStore';
@@ -211,8 +212,16 @@ export function MapDrawer({
   );
 
   // Unmeasured → size to content (== peek). Static → plain height.
-  const sizing: StyleProp<ViewStyle> = !measured ? undefined : cut ? { height: target } : heightStyle;
-  const Container = cut ? View : Animated.View;
+  // Reanimated 4's `useAnimatedStyle` returns an opaque `AnimatedStyleHandle`,
+  // not a plain style object, so this union no longer fits `StyleProp<ViewStyle>`
+  // on its own — `cut` ties it 1:1 with which `Container` renders below, but
+  // TS can't correlate two separately-computed ternaries, hence the cast.
+  const sizing: StyleProp<ViewStyle> | AnimatedStyle<ViewStyle> =
+    !measured ? undefined : cut ? { height: target } : heightStyle;
+  // Cast to Animated.View's type (its `style` prop accepts both plain and
+  // animated styles) even on the `cut` branch, where this is really a plain
+  // `View` — safe, since a plain style is exactly what a plain `View` expects.
+  const Container = (cut ? View : Animated.View) as typeof Animated.View;
 
   return (
     <Container
@@ -270,7 +279,7 @@ const styles = StyleSheet.create({
   },
   // Sun-readable ground behind everything in the drawer (barFill is the
   // tab-bar white; the iOS blur beneath makes it glass, elsewhere it stands alone).
-  fill: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.barFill },
+  fill: { ...StyleSheet.absoluteFill, backgroundColor: colors.barFill },
   handleRow: { height: HANDLE_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   grabber: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.borderStrong },
   header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },

@@ -606,7 +606,7 @@ const styles = StyleSheet.create({
   findingLine: { fontSize: fontSize.bodySm, color: colors.navy, marginTop: 2 },
 
   cueLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     padding: spacing.lg,
     justifyContent: 'space-between',
     alignItems: 'center',

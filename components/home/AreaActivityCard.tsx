@@ -1001,7 +1001,7 @@ export function AreaActivityCard() {
                     showsUserLocation={false}
                     showsCompass={false}
                     onMapReady={onTilesReady}
-                    style={StyleSheet.absoluteFillObject}
+                    style={StyleSheet.absoluteFill}
                   >
                     {layer === 'storms'
                       ? stormPins.map((e) => (

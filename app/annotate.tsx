@@ -37,7 +37,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import type { NavigationAction } from '@react-navigation/native';
+// SDK 57: expo-router no longer depends on the standalone `@react-navigation/native`
+// package — it vendors React Navigation internally and re-exports it from this
+// public subpath (same pattern as `expo-router/stack`, `expo-router/tabs`, etc.).
+import type { NavigationAction } from 'expo-router/react-navigation';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';

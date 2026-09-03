@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bullseyeOuter: { ...StyleSheet.absoluteFillObject, borderWidth: 2, borderRadius: 70 },
+  bullseyeOuter: { ...StyleSheet.absoluteFill, borderWidth: 2, borderRadius: 70 },
   bullseyeDot: { width: 24, height: 24, borderRadius: 12 },
 
   altRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

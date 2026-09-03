@@ -122,6 +122,25 @@ module.exports = {
             'Allow RoofWise to access your photo library to attach inspection photos.',
         },
       ],
+      // SDK 57: `expo install --fix` started flagging these as unlinked
+      // plugins (each now ships an app.plugin.js). All are true no-ops
+      // without props except expo-audio, which is pinned to `false`/`false`
+      // below so it does NOT silently opt the app into a background-audio
+      // UIBackgroundMode we don't use — everything else here just registers
+      // cleanly for EAS Build with default behavior unchanged.
+      'expo-asset',
+      'expo-font',
+      'expo-image',
+      'expo-sharing',
+      'expo-status-bar',
+      'expo-web-browser',
+      [
+        'expo-audio',
+        {
+          enableBackgroundPlayback: false,
+          enableBackgroundRecording: false,
+        },
+      ],
     ],
     experiments: {
       typedRoutes: false,

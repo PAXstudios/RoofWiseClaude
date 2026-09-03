@@ -2,7 +2,9 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "baseUrl": ".",
+    // TypeScript 6.0 deprecates `baseUrl`; since TS 5.0, `paths` alone
+    // resolves relative to this file's directory (which `baseUrl: "."`
+    // pointed at anyway), so dropping it is a no-op for `@/*` resolution.
     "paths": {
       "@/*": [
         "./*"

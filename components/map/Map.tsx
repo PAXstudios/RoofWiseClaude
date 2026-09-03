@@ -289,7 +289,7 @@ export const Map = forwardRef(function Map(
           // Apple's POI pins and building extrusions don't poke through at
           // tile seams or while a tile is still loading. Defaults otherwise
           // (and on PROVIDER_GOOGLE these are no-ops / their own defaults).
-          showsPointsOfInterest={!tilesLive}
+          showsPointsOfInterests={!tilesLive}
           showsBuildings={!tilesLive}
           showsTraffic={false}
           initialRegion={initialRegion}

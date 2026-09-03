@@ -171,13 +171,13 @@ const styles = StyleSheet.create({
   image: { width: '100%', height: '100%' },
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', opacity: 0.7 },
   ring: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: radii.md,
     borderWidth: 2.5,
   },
   ringEmpty: { borderColor: glass.smokeBorder, borderStyle: 'dashed' },
   importOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.scrim,
     alignItems: 'center',
     justifyContent: 'center',

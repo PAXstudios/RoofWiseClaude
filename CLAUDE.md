@@ -35,7 +35,7 @@ entry number. When the user asks "what's next," answer from BACKLOG.md.
 
 ## Stack
 
-- **Framework:** Expo SDK 54, React Native 0.81, React 19, TypeScript, expo-router 6 (file-based). **New Architecture is ON** (`newArchEnabled: true`) — Expo Go 52+ runs nothing else; never turn it off to make something compile. Reanimated 4 + `react-native-worklets` (babel plugin is `react-native-worklets/plugin`, last in the list). Upgraded from SDK 51 in #55 because the App Store's Expo Go runs SDK 54.
+- **Framework:** Expo SDK 57, React Native 0.86, React 19.2, TypeScript 6, expo-router 57 (file-based). **New Architecture is ON** (`newArchEnabled: true`) — Expo Go 52+ runs nothing else; never turn it off to make something compile. Reanimated 4.5 + `react-native-worklets` 0.10 (babel plugin is `react-native-worklets/plugin`, last in the list — note SDK 57's `babel-preset-expo` also auto-injects it; the explicit entry is kept and is harmless). Upgraded SDK 51→54 in #55 and **SDK 54→57 in #105**, each time because the App Store's Expo Go moved to the newer SDK and Expo Go carries only the latest runtime. The durable escape from this SDK-chase is an EAS **Build** (pinned SDK), gated on the Apple Developer account — see BACKLOG.
 - **State:** Zustand stores with `persist` + AsyncStorage. Per-feature store under `lib/stores/`.
 - **Backend:** Supabase (auth + Postgres + Storage). Client at `lib/supabase.ts`. Auth store at `lib/auth/authStore.ts`.
 - **AI vision:** Gemini **newest Flash** (`gemini-3.8-flash` as of 2026-09-02) via Google AI Studio direct REST (`lib/services/gemini.ts`). Model is env-configurable (`EXPO_PUBLIC_GEMINI_MODEL`) with a deprecation-proof fallback chain (3.8 → 3.7 → 3.5 → 2.5-flash) that walks ONLY on 404/"no longer available"; every result records `modelUsed`. **`gemini-2.5-pro` is retired for new API keys** (HTTP 404) — it killed every analysis on the first device run. Drift Warning #9.
@@ -125,14 +125,14 @@ Pulled from `PROMPT_LOG.md`. The full list is canonical there; this is the short
 ```sh
 # Dev
 npm install                       # or: npm ci  (preferred when lockfile is current)
-npx expo install --check          # verify native module versions match SDK 54
+npx expo install --check          # verify native module versions match SDK 57
 npx expo-doctor                   # 18 checks; must stay green after any dependency change
 npx expo start --clear            # clear Metro cache; press i for iOS Expo Go, a for Android
 npm run typecheck                 # tsc --noEmit
 npm run lint                      # expo lint
 ```
 
-**Native modules:** install via `npx expo install <pkg>` (not plain `npm install`) so versions stay pinned to the SDK. The AsyncStorage version-mismatch crash (`Native module is null, cannot access legacy storage`) came from a plain `npm install` — fix is `npx expo install @react-native-async-storage/async-storage` (SDK 54 pins `2.2.0`; SDK 51 pinned `1.23.1`).
+**Native modules:** install via `npx expo install <pkg>` (not plain `npm install`) so versions stay pinned to the SDK. The AsyncStorage version-mismatch crash (`Native module is null, cannot access legacy storage`) came from a plain `npm install` — fix is `npx expo install @react-native-async-storage/async-storage` (SDK 57 and SDK 54 both pin `2.2.0`; SDK 51 pinned `1.23.1`). **SDK-upgrade gotcha (from #105):** after `expo install --fix`, run it a second time — the first pass bumps `dependencies`, a second is needed for `devDependencies` (typescript / babel-preset-expo / eslint-config-expo / @types/react). If `expo-modules-core` lands nested (`node_modules/expo/node_modules/expo-modules-core`) instead of hoisted, native-module types (`expo-audio`/`expo-camera` `addListener`) fail to resolve — briefly add `expo-modules-core` as a direct dep to force the hoist, install, then remove the direct entry (expo-doctor flags a direct install); the fix persists in `package-lock.json`.
 
 **Publishing (`eas update`) — the EXPO_PUBLIC cache gotcha:** `EXPO_PUBLIC_*` vars are inlined into the bundle by a Babel transform that is **cached**. When you ADD a new `EXPO_PUBLIC_*` key (env or `.env.local`) after a prior export, the stale Metro transform re-uses the old value and inlines the new key as `undefined` — the bundle ships without it and every gate for it silently reads "not configured" (this bit the Census key in #88: it was in the EAS env and verified live, but absent from the phone bundle). Always publish a new key with a busted cache: `rm -rf .expo node_modules/.cache && npx expo export --clear …` then `eas update --clear-cache`, and **grep the exported `.hbc` for the key's own value before publishing** — a missing key is a 0, a present key is a 1.
 

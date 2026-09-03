@@ -309,7 +309,7 @@ export function DamageMarkerLayer({
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
-  image: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  image: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
   marker: {
     position: 'absolute',
     borderWidth: 2,

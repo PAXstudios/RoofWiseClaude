@@ -1462,7 +1462,7 @@ const styles = StyleSheet.create({
 
   // --- Sheets ------------------------------------------------------------
   sheetRoot: { flex: 1, justifyContent: 'flex-end' },
-  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
+  sheetBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: colors.overlay },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radii.xl,

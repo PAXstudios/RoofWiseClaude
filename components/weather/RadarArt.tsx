@@ -632,7 +632,7 @@ function wedgePath(center: number, radius: number, sweepDeg: number): string {
 
 const styles = StyleSheet.create({
   cell: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  cellHalo: { ...StyleSheet.absoluteFillObject, borderWidth: 1.5 },
+  cellHalo: { ...StyleSheet.absoluteFill, borderWidth: 1.5 },
   pulse: { position: 'absolute', borderWidth: 1.5 },
   veil: { overflow: 'hidden' },
   streak: { position: 'absolute', top: 0 },
