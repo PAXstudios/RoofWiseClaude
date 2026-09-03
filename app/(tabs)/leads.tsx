@@ -36,8 +36,7 @@ import { useEstimateStore } from '@/lib/stores/estimateStore';
 import { useTaskStore } from '@/lib/stores/taskStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Aurora } from '@/components/glass/Aurora';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Image } from 'expo-image';
 import { PressableScale } from '@/components/PressableScale';
@@ -61,6 +60,7 @@ import {
   sortItems,
   stageLabel,
   stageAgeTone,
+  groupOf,
   formatMoneyShort,
   BOARD_COLUMNS,
   PIPELINE_GROUPS,
@@ -73,10 +73,11 @@ import {
 import {
   brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
-  gradients,
   motion,
   radii,
   shadows,
@@ -348,13 +349,11 @@ function PipelineSummaryHero({ summary }: { summary: ReturnType<typeof summarize
   return (
     <FadeSlideIn style={styles.summaryWrap}>
       <View style={styles.summaryHero}>
-        <LinearGradient
-          colors={gradients.stormNight}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
-        <Aurora transparent />
+        {/* 1A cooler/violet mesh — deliberately distinct from Home's warmer
+            hero (docs/DESIGN_1A.md §2/§6: Pipeline board header carries no
+            orange stop). */}
+        <MeshBackground variant="night" style={styles.summaryMesh} />
+        <Text style={styles.summaryEyebrow}>CRM · PIPELINE</Text>
         <View style={styles.summaryRow}>
           <SummaryStat icon="layers-outline" tone="blue" value={String(summary.activeCount)} label="Active" />
           <View style={styles.summaryDivider} />
@@ -892,10 +891,16 @@ function PipelineCard({
 
   const tone = stageAgeTone(item);
   const badge = recordStatusBadge(item.propertyRecord);
+  // The mock's 07 · Pipeline board Signed column: cards go solid ink-fill,
+  // amount picked out in burnt-light — the one place the board celebrates
+  // instead of nagging (docs/DESIGN_1A.md §6). Board only, so the dense List
+  // view keeps its flat white-card language.
+  const dark = variant === 'board' && leadStageColumn(item.stage) === 'signed';
+  const topBadge = cardTopBadge(item, tone);
 
   return (
-    <Animated.View style={[styles.card, glowStyle]}>
-      {variant === 'board' && accent ? <View style={[styles.cardAccent, { backgroundColor: accent }]} /> : null}
+    <Animated.View style={[styles.card, dark && styles.cardDark, glowStyle]}>
+      {variant === 'board' && accent && !dark ? <View style={[styles.cardAccent, { backgroundColor: accent }]} /> : null}
       <PressableScale
         style={styles.cardBody}
         pressedScale={0.98}
@@ -903,27 +908,55 @@ function PipelineCard({
         accessibilityRole="button"
         accessibilityLabel={`${item.customerName}, ${item.address}`}
       >
+        {/* Top-left status chip — the mock's "78 SEVERE" / report-id language,
+            mapped onto the board's own real signals (age, a viewed proposal)
+            rather than a fabricated score. */}
+        {(topBadge || item.reportId) && (
+          <View style={styles.cardTopBadgeRow}>
+            {topBadge ? (
+              <View style={[styles.topBadge, { backgroundColor: topBadge.bg }]}>
+                <Text style={[styles.topBadgeText, { color: topBadge.fg }]}>{topBadge.label}</Text>
+              </View>
+            ) : null}
+            {item.reportId ? (
+              <Text style={[styles.topBadgeId, dark && styles.topBadgeIdDark]}>{item.reportId}</Text>
+            ) : null}
+          </View>
+        )}
+
         <View style={styles.cardTopRow}>
           {item.coverUri ? (
             <Image source={{ uri: item.coverUri }} style={styles.cardThumb} contentFit="cover" transition={120} />
           ) : (
-            <View style={[styles.initialDisc, { backgroundColor: CHIP_TONES[avatarTone(item.id)].bg }]}>
-              <Text style={[styles.initialText, { color: CHIP_TONES[avatarTone(item.id)].fg }]}>
+            <View
+              style={[
+                styles.initialDisc,
+                dark ? styles.initialDiscDark : { backgroundColor: CHIP_TONES[avatarTone(item.id)].bg },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.initialText,
+                  dark ? styles.initialTextDark : { color: CHIP_TONES[avatarTone(item.id)].fg },
+                ]}
+              >
                 {item.customerName.trim().charAt(0).toUpperCase() || '?'}
               </Text>
             </View>
           )}
           <View style={styles.cardMain}>
             <View style={styles.cardNameRow}>
-              <Text style={styles.cardName} numberOfLines={1}>
+              <Text style={[styles.cardName, dark && styles.cardNameDark]} numberOfLines={1}>
                 {item.customerName}
               </Text>
-              {item.amount != null && <Text style={styles.cardAmount}>{formatMoneyShort(item.amount)}</Text>}
+              {item.amount != null && (
+                <Text style={[styles.cardAmount, dark && styles.cardAmountDark]}>{formatMoneyShort(item.amount)}</Text>
+              )}
             </View>
-            <Text style={styles.cardAddress} numberOfLines={1}>
+            <Text style={[styles.cardAddress, dark && styles.cardAddressDark]} numberOfLines={1}>
               {item.address || 'Address pending'}
             </Text>
-            <Text style={styles.cardNextAction} numberOfLines={1}>
+            <Text style={[styles.cardNextAction, dark && styles.cardNextActionDark]} numberOfLines={1}>
               {item.nextAction}
             </Text>
           </View>
@@ -938,17 +971,17 @@ function PipelineCard({
             />
           )}
           {item.tasks.total > 0 && (
-            <View style={styles.metaChip}>
-              <Ionicons name="checkbox-outline" size={13} color={colors.textMuted} />
-              <Text style={styles.metaChipText}>
+            <View style={[styles.metaChip, dark && styles.metaChipDark]}>
+              <Ionicons name="checkbox-outline" size={13} color={dark ? colors.onMesh : colors.textMuted} />
+              <Text style={[styles.metaChipText, dark && styles.metaChipTextDark]}>
                 {item.tasks.done}/{item.tasks.total}
               </Text>
             </View>
           )}
           {item.photoCount > 0 && (
-            <View style={styles.metaChip}>
-              <Ionicons name="camera-outline" size={13} color={colors.textMuted} />
-              <Text style={styles.metaChipText}>{item.photoCount}</Text>
+            <View style={[styles.metaChip, dark && styles.metaChipDark]}>
+              <Ionicons name="camera-outline" size={13} color={dark ? colors.onMesh : colors.textMuted} />
+              <Text style={[styles.metaChipText, dark && styles.metaChipTextDark]}>{item.photoCount}</Text>
             </View>
           )}
           {item.storm && <Pill label="Storm" tone="accent" size="sm" icon="thunderstorm-outline" />}
@@ -963,22 +996,45 @@ function PipelineCard({
           coords={{ lat: item.lat, lng: item.lng }}
           onBook={onBook}
           onContacted={onContacted}
+          tone={dark ? 'dark' : 'light'}
           style={styles.cardActions}
         />
 
         <PressableScale
           pressedScale={0.96}
-          style={styles.moveBtn}
+          style={[styles.moveBtn, dark && styles.moveBtnDark]}
           onPress={onRequestMove}
           accessibilityRole="button"
           accessibilityLabel={`Move ${item.customerName} to another stage`}
         >
-          <Text style={styles.moveBtnText}>Move</Text>
-          <Ionicons name="arrow-forward" size={16} color={colors.text} />
+          <Text style={[styles.moveBtnText, dark && styles.moveBtnTextDark]}>Move</Text>
+          <Ionicons name="arrow-forward" size={16} color={dark ? colors.onMesh : colors.text} />
         </PressableScale>
       </PressableScale>
     </Animated.View>
   );
+}
+
+/**
+ * The card's top-left status chip. Mapped onto signals the board already
+ * computes — a cooling lead's age (`stageAgeTone`, the board's own urgency
+ * clock) takes priority, then a proposal the homeowner has actually opened —
+ * never a fabricated severity score the pipeline has no data for.
+ */
+function cardTopBadge(
+  item: PipelineItem,
+  tone: ReturnType<typeof stageAgeTone>,
+): { label: string; bg: string; fg: string } | undefined {
+  if (tone === 'red' && item.daysInStage != null) {
+    return { label: `${item.daysInStage}D STALE`, bg: colors.dangerSoft, fg: colors.danger };
+  }
+  if (tone === 'amber' && item.daysInStage != null) {
+    return { label: `${item.daysInStage}D IN STAGE`, bg: colors.warnSoft, fg: colors.warn };
+  }
+  if (item.proposalStatus === 'viewed') {
+    return { label: 'Viewed', bg: colors.infoSoft, fg: brand.royalDeep };
+  }
+  return undefined;
 }
 
 // -----------------------------------------------------------------------------
@@ -1174,31 +1230,27 @@ function avatarTone(id: string): ChipTone {
   return AVATAR_TONES[hash % AVATAR_TONES.length];
 }
 
-/** Board accent per stage. Tokens only — never a raw hex. */
+/**
+ * Board accent per stage — tokens only, never a raw hex. Follows the mock's
+ * 07 · Pipeline board dot colours (docs/DESIGN_1A.md §6): New/Contacted and
+ * everything still pre-estimate reads royal, the estimate/proposal columns
+ * read burnt, and every won-or-later column (through Lost, which keeps its
+ * own semantic red) reads success green. Derived from `groupOf()` — the same
+ * grouping the filter chips and the summary hero already use — so the board
+ * and the chips never disagree about which family a stage belongs to.
+ */
 function stageAccent(stage: LeadStage): string {
-  switch (stage) {
-    case 'new':
-      return colors.textSubtle;
-    case 'contacted':
-      return colors.slate;
-    case 'inspection_scheduled':
-    case 'inspected':
-      return colors.brand;
+  if (stage === 'lost') return colors.danger;
+  switch (groupOf(stage)) {
+    case 'leads':
     case 'inspecting':
-      return colors.accent;
-    case 'proposal_sent':
-    case 'estimate_sent':
-    case 'invoiced':
-      return colors.warn;
-    case 'install_scheduled':
-    case 'in_progress':
-      return colors.accent;
-    case 'signed':
-    case 'completed':
-    case 'paid':
+      return brand.royal;
+    case 'estimating':
+      return brand.burnt;
+    case 'sold':
+    case 'production':
+    case 'done':
       return colors.success;
-    case 'lost':
-      return colors.danger;
     default:
       return colors.borderStrong;
   }
@@ -1227,6 +1279,9 @@ const styles = StyleSheet.create({
     backgroundColor: brand.royalInk,
     ...shadows.hero,
   },
+  summaryMesh: { borderRadius: radii.xl },
+  // "CRM · PIPELINE" — the mono eyebrow the mock opens every header with.
+  summaryEyebrow: { ...dataLabel, color: colors.onMesh, opacity: 0.7, marginBottom: spacing.sm },
   summaryRow: { flexDirection: 'row', alignItems: 'center' },
   summaryStat: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   summaryStatBody: { flexShrink: 1, gap: 1 },
@@ -1238,21 +1293,17 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     fontSize: fontSize.titleSm,
+    fontFamily: fontFamily.archivo.extrabold,
     fontWeight: fontWeight.bold,
     color: colors.textInverse,
     letterSpacing: -0.3,
     fontVariant: ['tabular-nums'],
   },
-  summaryLabel: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.semibold,
-    color: colors.brandSoft,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+  summaryLabel: { ...dataLabel, color: colors.brandSoft },
   summaryGroupLine: {
     marginTop: spacing.md,
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.brandSoft,
     fontVariant: ['tabular-nums'],
   },
@@ -1281,7 +1332,12 @@ const styles = StyleSheet.create({
     ...shadows.thumb,
   },
   segment: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  segmentText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textMuted },
+  segmentText: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+    color: colors.textMuted,
+  },
   segmentTextActive: { color: colors.text },
 
   // --- Chip language ---------------------------------------------------
@@ -1302,11 +1358,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   chipActive: { backgroundColor: colors.text },
-  chipText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  chipText: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
   chipTextMuted: { color: colors.textMuted },
   chipTextActive: { color: colors.textInverse },
   chipCount: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     color: colors.textSubtle,
     fontVariant: ['tabular-nums'],
@@ -1330,7 +1392,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  searchInput: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text, paddingVertical: spacing.sm },
+  searchInput: {
+    flex: 1,
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.text,
+    paddingVertical: spacing.sm,
+  },
   sortChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1349,8 +1417,18 @@ const styles = StyleSheet.create({
   listGap: { gap: spacing.md },
 
   empty: { alignItems: 'center', paddingTop: spacing.xl, paddingHorizontal: spacing.xxl, gap: spacing.sm },
-  emptyTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  emptyBody: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
+  emptyTitle: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+  emptyBody: {
+    fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
   emptyBtn: {
     minHeight: touchTarget.standard,
     marginTop: spacing.sm,
@@ -1361,7 +1439,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.raised,
   },
-  emptyBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
+  emptyBtnText: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+    color: colors.textInverse,
+  },
 
   // --- Board ---------------------------------------------------------------
   boardRoot: { flex: 1 },
@@ -1383,12 +1466,14 @@ const styles = StyleSheet.create({
   stageSummaryRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   stageSummaryCount: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
   stageSummaryValue: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.bold,
     fontWeight: fontWeight.bold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
@@ -1403,8 +1488,19 @@ const styles = StyleSheet.create({
   },
 
   columnEmpty: { alignItems: 'center', paddingTop: spacing.xl, paddingHorizontal: spacing.xxl, gap: spacing.sm },
-  columnEmptyText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, textAlign: 'center' },
-  columnEmptyHint: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
+  columnEmptyText: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  columnEmptyHint: {
+    fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
 
   // --- The card --------------------------------------------------------
   card: {
@@ -1415,23 +1511,55 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     ...shadows.raised,
   },
+  // Signed column, board view only — solid ink fill, the one card on the
+  // board that celebrates instead of nagging (docs/DESIGN_1A.md §6).
+  cardDark: { backgroundColor: brand.royalInk, borderColor: brand.royalInk },
   cardAccent: { width: 4, borderTopLeftRadius: radii.card, borderBottomLeftRadius: radii.card },
   cardBody: { flex: 1, padding: spacing.lg, gap: spacing.sm },
+
+  // Top-left status chip row — the mock's "78 SEVERE · RW-2841" language.
+  cardTopBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  topBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radii.control },
+  topBadgeText: { ...dataLabel },
+  topBadgeId: { ...dataLabel, color: colors.textSubtle },
+  topBadgeIdDark: { color: colors.onMesh, opacity: 0.6 },
+
   cardTopRow: { flexDirection: 'row', gap: spacing.md },
   cardThumb: { width: 52, height: 52, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
   initialDisc: { width: 52, height: 52, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center' },
-  initialText: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  // Dark-card avatar picks up the brand-burnt fill the mock uses for the
+  // Lead Detail header chip — the one warm accent against the ink ground.
+  initialDiscDark: { backgroundColor: brand.burnt },
+  initialText: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold },
+  initialTextDark: { color: colors.textInverse },
   cardMain: { flex: 1, gap: 2, justifyContent: 'center' },
   cardNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  cardName: { flexShrink: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  cardName: {
+    flexShrink: 1,
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+  cardNameDark: { color: colors.onMesh },
   cardAmount: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.bold,
     fontWeight: fontWeight.bold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  cardAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  cardNextAction: { fontSize: fontSize.bodySm, color: colors.brand, fontWeight: fontWeight.medium },
+  // "…the amount in brand.burntLight" (docs/DESIGN_1A.md §6).
+  cardAmountDark: { color: brand.burntLight },
+  cardAddress: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
+  cardAddressDark: { color: colors.onMesh, opacity: 0.7 },
+  cardNextAction: {
+    fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.medium,
+    color: colors.brand,
+    fontWeight: fontWeight.medium,
+  },
+  cardNextActionDark: { color: colors.onMesh, opacity: 0.7 },
   cardBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' },
   metaChip: {
     flexDirection: 'row',
@@ -1442,12 +1570,15 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.fillQuiet,
   },
+  metaChipDark: { backgroundColor: glass.fill },
   metaChipText: {
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
+  metaChipTextDark: { color: colors.onMesh },
   cardActions: { marginTop: spacing.xs },
   moveBtn: {
     flexDirection: 'row',
@@ -1458,7 +1589,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  moveBtnText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  moveBtnDark: { backgroundColor: glass.fill },
+  moveBtnText: {
+    color: colors.text,
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+  },
+  moveBtnTextDark: { color: colors.onMesh },
 
   // --- Sheets ------------------------------------------------------------
   sheetRoot: { flex: 1, justifyContent: 'flex-end' },
@@ -1480,8 +1618,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.hairline,
     marginBottom: spacing.md,
   },
-  sheetTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
-  sheetSubtitle: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  sheetTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold, color: colors.text },
+  sheetSubtitle: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
   sheetScroll: { marginTop: spacing.md },
   sheetScrollContent: { gap: spacing.sm, paddingBottom: spacing.md },
   sheetRow: {
@@ -1495,16 +1633,16 @@ const styles = StyleSheet.create({
   },
   sheetRowCurrent: { opacity: 0.5 },
   sheetRowDot: { width: 10, height: 10, borderRadius: radii.pill },
-  sheetRowText: { flex: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  sheetRowText: {
+    flex: 1,
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
   sheetRowTextMuted: { color: colors.textMuted },
   sheetRowTextCurrent: { color: colors.textMuted },
-  sheetRowTag: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+  sheetRowTag: { ...dataLabel, color: colors.textSubtle },
   sheetCancel: {
     minHeight: touchTarget.standard,
     borderRadius: radii.button,
@@ -1513,7 +1651,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.sm,
   },
-  sheetCancelText: { color: colors.text, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  sheetCancelText: {
+    color: colors.text,
+    fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+  },
 
   newMenuOptions: { gap: spacing.md, marginTop: spacing.md },
   newMenuOption: {
@@ -1526,6 +1669,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   newMenuOptionBody: { flex: 1, gap: 2 },
-  newMenuOptionTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
-  newMenuOptionSub: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  newMenuOptionTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold, color: colors.text },
+  newMenuOptionSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
 });

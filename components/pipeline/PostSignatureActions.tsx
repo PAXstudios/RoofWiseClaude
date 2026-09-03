@@ -12,7 +12,7 @@ import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
 import { formatDateShort } from '@/lib/format/date';
 import { LEAD_STAGE_LABELS, leadStageColumn, type Inspection } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, spacing, touchTarget } from '@/theme/tokens';
 import { findLinkedLead, nextStageFor } from './chain';
 import { FOLLOW_UP_OPTIONS, FollowUpSheet, INSTALL_OPTIONS } from './FollowUpSheet';
 
@@ -215,7 +215,7 @@ function ActionRow({
 }
 
 const styles = StyleSheet.create({
-  note: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
+  note: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, lineHeight: 20 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -226,6 +226,6 @@ const styles = StyleSheet.create({
   },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   rowBody: { flex: 1 },
-  rowLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  rowLabel: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.text },
+  rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
 });

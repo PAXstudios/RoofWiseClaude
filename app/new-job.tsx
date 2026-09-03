@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, {
   FadeInDown,
@@ -24,8 +25,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
+  gradients,
   motion,
   radii,
   shadows,
@@ -727,22 +731,32 @@ export default function NewJobWizard() {
 
           <View style={styles.footer}>
             <Pressable
-              style={[styles.primaryBtn, !canAdvance && styles.primaryBtnDisabled]}
+              style={styles.primaryBtn}
               onPress={onNext}
               disabled={!canAdvance}
               accessibilityRole="button"
               accessibilityState={{ disabled: !canAdvance }}
             >
-              <Text style={[styles.primaryBtnText, !canAdvance && styles.primaryBtnTextDisabled]}>
-                {stepKey === 'review' ? 'Save job' : 'Next'}
-              </Text>
-              {stepKey !== 'review' && (
-                <Ionicons
-                  name="arrow-forward"
-                  size={20}
-                  color={canAdvance ? colors.textInverse : colors.textMuted}
-                />
-              )}
+              <View style={styles.primaryBtnClip}>
+                {canAdvance && (
+                  <LinearGradient
+                    colors={gradients.accent}
+                    style={StyleSheet.absoluteFill}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  />
+                )}
+                <Text style={[styles.primaryBtnText, !canAdvance && styles.primaryBtnTextDisabled]}>
+                  {stepKey === 'review' ? 'Save job' : 'Next'}
+                </Text>
+                {stepKey !== 'review' && (
+                  <Ionicons
+                    name="arrow-forward"
+                    size={20}
+                    color={canAdvance ? colors.textInverse : colors.textMuted}
+                  />
+                )}
+              </View>
             </Pressable>
           </View>
         </KeyboardAvoidingView>
@@ -1880,7 +1894,7 @@ function Field({
 
 const styles = StyleSheet.create({
   ageHint: { minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.button, backgroundColor: colors.brandSoft, marginTop: spacing.sm },
-  ageHintText: { flex: 1, fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  ageHintText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.text, lineHeight: 18 },
   root: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
 
@@ -1897,9 +1911,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerStep: { fontSize: fontSize.caption, color: colors.textSubtle, fontWeight: fontWeight.semibold },
+  // "STEP 2 OF 6" — the mock's mono step eyebrow (docs/DESIGN_1A.md §3).
+  headerStep: { ...dataLabel, color: colors.textSubtle },
   // Inline wizard title — iOS sub-screen bar: 17/semibold ink.
-  headerTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
+  headerTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.navy },
 
   // Progress is a thin ink bar, not an orange pill (orange is saved for the CTA).
   progressTrack: {
@@ -1913,7 +1928,7 @@ const styles = StyleSheet.create({
 
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.lg },
   stepBody: { gap: spacing.lg },
-  helperText: { fontSize: fontSize.bodyMd, color: colors.slate },
+  helperText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.slate },
 
   footer: {
     padding: spacing.xl,
@@ -1921,22 +1936,35 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
   },
-  // The screen's one orange moment (Drift #1: sticky 88pt CTA).
+  // The screen's one orange moment (Drift #1: sticky 88pt CTA) — burnt
+  // gradient depth to match every other primary CTA in the app
+  // (`gradients.accent`), not a flat fill.
   primaryBtn: {
     height: touchTarget.sticky,
     borderRadius: radii.button,
-    backgroundColor: colors.orange,
+    ...shadows.raised,
+  },
+  // Flat neutral fill while disabled, not a washed accent and not element
+  // opacity: a tinted burnt fill at 88pt full width still reads as a live
+  // primary button (so a gloved roofer taps a dead control), and white on it
+  // measures ~1.9:1. Neutral fill + muted ink reads as disabled AND stays
+  // legible in sun. The gradient only mounts once `canAdvance` is true.
+  primaryBtnClip: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
+    borderRadius: radii.button,
+    overflow: 'hidden',
+    backgroundColor: colors.fillDisabled,
   },
-  // Flat neutral fill, not a washed accent and not element opacity: a tinted
-  // burnt fill at 88pt full width still reads as a live primary button (so a
-  // gloved roofer taps a dead control), and white on it measures ~1.9:1.
-  // Neutral fill + muted ink reads as disabled AND stays legible in sun.
-  primaryBtnDisabled: { backgroundColor: colors.fillDisabled },
-  primaryBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  primaryBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+  },
   primaryBtnTextDisabled: { color: colors.textMuted },
 
   secondaryBtn: {
@@ -1948,10 +1976,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  secondaryBtnText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  secondaryBtnText: { color: colors.navy, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold },
 
   field: { gap: spacing.xs },
-  fieldLabel: { fontSize: fontSize.bodySm, color: colors.slate, fontWeight: fontWeight.medium },
+  fieldLabel: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.slate, fontWeight: fontWeight.medium },
   // Grouped white input cells — hairline edge on the grouped ground.
   input: {
     minHeight: touchTarget.standard,
@@ -1962,6 +1990,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.navy,
   },
   inputMultiline: { minHeight: 88, textAlignVertical: 'top' },
@@ -1969,6 +1998,7 @@ const styles = StyleSheet.create({
   // iOS grouped-list section header.
   subSection: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     color: colors.textSubtle,
     textTransform: 'uppercase',
@@ -1987,7 +2017,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   carrierSelected: { backgroundColor: colors.navy },
-  carrierLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy, textAlign: 'center' },
+  carrierLabel: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.navy, textAlign: 'center' },
   carrierLabelSelected: { color: colors.textInverse },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -2001,7 +2031,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bigChipSelected: { backgroundColor: colors.navy },
-  bigChipText: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.semibold },
+  bigChipText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, color: colors.navy, fontWeight: fontWeight.semibold },
   bigChipTextSelected: { color: colors.textInverse },
 
   // Stepper as a quiet track with white thumb-style buttons (segmented language).
@@ -2026,6 +2056,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     fontSize: fontSize.titleSm,
+    fontFamily: fontFamily.archivo.bold,
     fontWeight: fontWeight.bold,
     color: colors.navy,
   },
@@ -2038,7 +2069,7 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  reviewTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
+  reviewTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.navy },
   reviewEdit: {
     width: touchTarget.small,
     height: touchTarget.small,
@@ -2048,8 +2079,8 @@ const styles = StyleSheet.create({
     marginRight: -spacing.sm,
   },
   reviewLine: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
-  reviewLabel: { fontSize: fontSize.bodySm, color: colors.slate, flex: 1 },
-  reviewValue: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium, flex: 2, textAlign: 'right' },
+  reviewLabel: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate, flex: 1 },
+  reviewValue: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.medium, color: colors.navy, fontWeight: fontWeight.medium, flex: 2, textAlign: 'right' },
 
   // ---------- Insurance Claim mode ----------
 
@@ -2067,9 +2098,9 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   kindCardSelected: { backgroundColor: colors.navy, borderColor: colors.navy },
-  kindTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
+  kindTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.navy },
   kindTitleSelected: { color: colors.textInverse },
-  kindSub: { fontSize: fontSize.bodySm, color: colors.slate },
+  kindSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate },
   kindSubSelected: { color: colors.textInverse },
 
   pairRow: { flexDirection: 'row', gap: spacing.sm },
@@ -2081,7 +2112,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   stormHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  stormTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
+  stormTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.navy },
 
   warnBox: {
     flexDirection: 'row',
@@ -2099,6 +2130,7 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.preferred,
     textAlign: 'center',
     fontSize: fontSize.titleSm,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
   },
   noaaRow: {
@@ -2109,7 +2141,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.control,
     padding: spacing.md,
   },
-  noaaText: { flex: 1, fontSize: fontSize.bodySm, color: colors.slate },
+  noaaText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate },
   noaaMatchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2120,12 +2152,13 @@ const styles = StyleSheet.create({
   },
   noaaMatchText: {
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.success,
     fontWeight: fontWeight.semibold,
   },
-  noaaMatchSub: { fontSize: fontSize.bodySm, color: colors.success },
-  warnText: { flex: 1, fontSize: fontSize.bodySm, color: colors.warn, fontWeight: fontWeight.medium },
-  okText: { fontSize: fontSize.bodySm, color: colors.success, fontWeight: fontWeight.medium },
+  noaaMatchSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.success },
+  warnText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.warn, fontWeight: fontWeight.medium },
+  okText: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.success, fontWeight: fontWeight.medium },
 
   zoneCard: {
     backgroundColor: colors.surface,
@@ -2142,8 +2175,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     minHeight: touchTarget.standard,
   },
-  zoneTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
-  zoneHint: { fontSize: fontSize.bodySm, color: colors.slate },
+  zoneTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.navy },
+  zoneHint: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate },
   zoneNote: {
     minHeight: touchTarget.standard,
     backgroundColor: colors.fillQuiet,
@@ -2151,6 +2184,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.navy,
   },
 
@@ -2174,5 +2208,5 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     backgroundColor: colors.surface,
   },
-  addPhotoText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  addPhotoText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.navy },
 });

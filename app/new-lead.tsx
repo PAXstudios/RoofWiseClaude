@@ -28,6 +28,7 @@ import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -356,6 +357,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     color: colors.text,
     letterSpacing: -0.2,
@@ -374,6 +376,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -390,15 +393,23 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.text,
   },
 
   recordCard: { marginTop: spacing.md, gap: spacing.xs, padding: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
   recordHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  recordTitle: { flex: 1, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
-  recordBadge: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  recordLine: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
-  recordRoof: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  recordTitle: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.text },
+  recordBadge: {
+    fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  recordLine: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, lineHeight: 18 },
+  recordRoof: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.text, lineHeight: 18 },
   sectionHeaderSpacing: { marginBottom: spacing.sm },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
@@ -410,7 +421,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipActive: { backgroundColor: colors.text },
-  chipText: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.semibold },
+  chipText: { fontSize: fontSize.bodyMd, color: colors.text, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold },
   chipTextActive: { color: colors.textInverse },
 
   footer: {
@@ -440,6 +451,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     color: colors.textInverse,
+    fontFamily: fontFamily.archivo.bold,
     fontWeight: fontWeight.bold,
     fontSize: fontSize.bodyLg,
   },

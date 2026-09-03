@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PressableScale } from '@/components/PressableScale';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 export type WhenOption = { label: string; days: number };
 
@@ -159,8 +159,8 @@ const styles = StyleSheet.create({
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   titleBlock: { flex: 1 },
-  title: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
-  subtitle: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  title: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold, color: colors.text },
+  subtitle: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
   scroll: { marginTop: spacing.md },
   scrollContent: { gap: spacing.sm, paddingBottom: spacing.md },
   row: {
@@ -175,15 +175,12 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1,
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     color: colors.text,
   },
   rowTextDanger: { color: colors.danger },
-  rowDate: {
-    fontSize: fontSize.bodySm,
-    color: colors.textMuted,
-    fontVariant: ['tabular-nums'],
-  },
+  rowDate: { ...dataLabel, color: colors.textMuted },
   cancel: {
     minHeight: touchTarget.standard,
     borderRadius: radii.button,
@@ -192,5 +189,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.sm,
   },
-  cancelText: { color: colors.text, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  cancelText: { color: colors.text, fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold },
 });

@@ -1,12 +1,12 @@
 import { PressableScale } from '@/components/PressableScale';
-import { ScreenHeader } from '@/components/ScreenHeader';
 import { FadeSlideIn } from '@/components/motion';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { Pill } from '@/components/ui/Pill';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { formatDateShort } from '@/lib/format/date';
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View, Text, StyleSheet, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -15,6 +15,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useActivityStore } from '@/lib/stores/activityStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
@@ -29,17 +30,24 @@ import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
 import { recordFactsLine, recordHeroUrl, recordRoofLine, recordStatusBadge } from '@/lib/services/propertyRecord';
 import { openMail, openPhone } from '@/components/pipeline/contact';
 import { TasksCard } from '@/components/pipeline/TasksCard';
+import { groupOf, PIPELINE_GROUPS, PIPELINE_GROUP_LABELS, type PipelineGroup } from '@/lib/services/pipeline';
 import {
+  INSURANCE_CARRIER_LABELS,
   LEAD_STAGE_LABELS,
   LEAD_STAGE_ORDER,
   leadStageColumn,
+  type ActivityEventKind,
   type Lead,
   type LeadStage,
 } from '@/lib/models/types';
 import {
+  brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
+  glass,
   gradients,
   radii,
   shadows,
@@ -228,27 +236,97 @@ export default function LeadDetail() {
     });
   }
 
+  // The mock's "label left, value right" insurance row (docs/DESIGN_1A.md
+  // §6) — sourced from the linked JOB, since carrier/claim/deductible live on
+  // `Inspection`, not `Lead` (lib/models/types.ts). Real fields only: a lead
+  // never converted yet simply has no row here.
+  const insuranceRows: { key: string; label: string; value: string; mono?: boolean }[] = [];
+  if (linkedInspection?.carrier) {
+    insuranceRows.push({ key: 'carrier', label: 'Carrier', value: INSURANCE_CARRIER_LABELS[linkedInspection.carrier] });
+  }
+  if (linkedInspection?.claimNumber) {
+    insuranceRows.push({ key: 'claim', label: 'Claim #', value: linkedInspection.claimNumber, mono: true });
+  }
+  if (linkedInspection?.deductible != null) {
+    insuranceRows.push({ key: 'deductible', label: 'Deductible', value: `$${linkedInspection.deductible.toLocaleString()}` });
+  }
+  if (linkedInspection?.adjusterName) {
+    insuranceRows.push({ key: 'adjuster', label: 'Adjuster', value: linkedInspection.adjusterName });
+  }
+
+  // Stage-progress bar (docs/DESIGN_1A.md §6): the mock's 5 segments, mapped
+  // onto the real `PIPELINE_GROUPS` a lead actually moves through — the same
+  // grouping the Pipeline board's filter chips use, so this never disagrees
+  // with the board. Lost is terminal and off this progression (pipeline.ts).
+  const stageGroups: PipelineGroup[] = PIPELINE_GROUPS.filter((g) => g !== 'lost');
+  const currentGroup = groupOf(leadStageColumn(lead.stage));
+  const currentGroupIndex = stageGroups.indexOf(currentGroup);
+  const isLost = leadStageColumn(lead.stage) === 'lost';
+
+  const initials = lead.customerName.trim().charAt(0).toUpperCase() || '?';
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScreenHeader
-        title={lead.customerName}
-        subtitle={`${lead.source ? `${sourceLabel(lead.source)} · ` : ''}${formatDateShort(
-          lead.createdAt,
-        )}`}
-        back
-        right={
+
+      {/* The bluer, no-orange cut of the mesh (docs/DESIGN_1A.md §2/§6) —
+          distinct from the Pipeline board's cooler violet and from Home's
+          warmer hero. */}
+      <View style={styles.hero}>
+        <MeshBackground variant="cool" style={styles.heroMesh} />
+        <View style={styles.heroTopRow}>
+          <PressableScale
+            onPress={() => router.back()}
+            hitSlop={8}
+            style={styles.heroIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.onMesh} />
+          </PressableScale>
+          <Text style={styles.heroEyebrow} numberOfLines={1}>
+            {linkedInspection ? `LEAD · ${linkedInspection.reportId}` : 'LEAD'}
+          </Text>
           <PressableScale
             onPress={onDelete}
             hitSlop={8}
-            style={styles.deleteBtn}
+            style={styles.heroIconBtn}
             accessibilityRole="button"
             accessibilityLabel="Delete lead"
           >
-            <Ionicons name="trash-outline" size={22} color={colors.danger} />
+            <Ionicons name="trash-outline" size={20} color={colors.onMesh} />
           </PressableScale>
-        }
-      />
+        </View>
+
+        <View style={styles.heroIdentity}>
+          <View style={styles.heroAvatar}>
+            <Text style={styles.heroAvatarText}>{initials}</Text>
+          </View>
+          <View style={styles.heroIdentityBody}>
+            <Text style={styles.heroName} numberOfLines={1}>
+              {lead.customerName}
+            </Text>
+            <Text style={styles.heroSub} numberOfLines={1}>
+              {[lead.address || 'Address pending', lead.source ? sourceLabel(lead.source) : null]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.heroActions}>
+          <HeroAction
+            icon="call-outline"
+            label="Call"
+            disabled={!lead.customerPhone}
+            primary
+            onPress={onCall}
+          />
+          <HeroAction icon="chatbubble-outline" label="Text" disabled={!lead.customerPhone} onPress={onText} />
+          <HeroAction icon="mail-outline" label="Email" disabled={!lead.customerEmail} onPress={onEmail} />
+          <HeroAction icon="navigate-outline" label="Directions" onPress={onDirections} />
+        </View>
+      </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* A knock-created lead announces what it is missing before anything
@@ -333,32 +411,6 @@ export default function LeadDetail() {
           </FadeSlideIn>
         ) : null}
 
-        {/* Contact actions — colour-chipped so each action reads before the label does. */}
-        <FadeSlideIn index={0} style={styles.actionsRow}>
-          <ActionButton
-            icon="call-outline"
-            tone="green"
-            label="Call"
-            disabled={!lead.customerPhone}
-            onPress={onCall}
-          />
-          <ActionButton
-            icon="chatbubble-outline"
-            tone="blue"
-            label="Text"
-            disabled={!lead.customerPhone}
-            onPress={onText}
-          />
-          <ActionButton
-            icon="mail-outline"
-            tone="purple"
-            label="Email"
-            disabled={!lead.customerEmail}
-            onPress={onEmail}
-          />
-          <ActionButton icon="navigate-outline" tone="orange" label="Directions" onPress={onDirections} />
-        </FadeSlideIn>
-
         {/* Contact card — icon-chipped detail rows, hairline-separated. */}
         <FadeSlideIn index={1}>
           <RichCard
@@ -376,8 +428,72 @@ export default function LeadDetail() {
           </RichCard>
         </FadeSlideIn>
 
+        {/* Insurance — the mock's label-left/value-right hairline rows
+            (docs/DESIGN_1A.md §6). Carrier/claim/deductible/adjuster live on
+            the linked JOB, not the lead, so this reads real data only and is
+            simply absent before the lead becomes a job. */}
+        {insuranceRows.length > 0 && (
+          <FadeSlideIn index={2}>
+            <SectionHeader title="Insurance" style={styles.sectionHeaderSpacing} />
+            <View style={styles.infoCard}>
+              {insuranceRows.map((row, i) => (
+                <View key={row.key} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                  <Text style={styles.infoLabel}>{row.label}</Text>
+                  <Text style={[styles.infoValue, row.mono && styles.infoValueMono]} numberOfLines={1}>
+                    {row.value}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </FadeSlideIn>
+        )}
+
+        {/* Stage-progress bar — the mock's segmented royal→burnt strip
+            (docs/DESIGN_1A.md §6), mapped onto the real `PIPELINE_GROUPS` a
+            lead moves through. The interactive 12-stage chip picker beneath
+            it is the actual control; this is the at-a-glance read. */}
         <FadeSlideIn index={2}>
-          <RichCard title="Stage" icon="git-branch-outline" iconTone="purple">
+          <SectionHeader title="Stage" style={styles.sectionHeaderSpacing} />
+          {isLost ? (
+            <View style={styles.lostBanner}>
+              <Ionicons name="close-circle-outline" size={18} color={colors.danger} />
+              <Text style={styles.lostBannerText}>Marked lost — pick a stage below to bring it back.</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.progressTrack}>
+                {stageGroups.map((g, i) => (
+                  <View
+                    key={g}
+                    style={[
+                      styles.progressSegment,
+                      i < currentGroupIndex && styles.progressSegmentDone,
+                      i === currentGroupIndex && styles.progressSegmentCurrent,
+                    ]}
+                  />
+                ))}
+              </View>
+              <View style={styles.progressLabelRow}>
+                {stageGroups.map((g, i) => (
+                  <Text
+                    key={g}
+                    numberOfLines={1}
+                    style={[
+                      styles.progressLabel,
+                      i === currentGroupIndex && styles.progressLabelCurrent,
+                      i > currentGroupIndex && styles.progressLabelAhead,
+                    ]}
+                  >
+                    {PIPELINE_GROUP_LABELS[g]}
+                  </Text>
+                ))}
+              </View>
+            </>
+          )}
+        </FadeSlideIn>
+
+        <FadeSlideIn index={2}>
+          <RichCard title="Every stage" icon="git-branch-outline" iconTone="purple">
             <View style={styles.chipWrap}>
               {STAGES.map((s) => {
                 const active = leadStageColumn(lead.stage) === s.id;
@@ -435,6 +551,10 @@ export default function LeadDetail() {
           <SectionHeader title="Tasks" style={styles.sectionHeaderSpacing} />
           <TasksCard itemIds={[lead.id, linkedInspection?.id]} addToItemId={lead.id} />
         </FadeSlideIn>
+
+        {/* Timeline — real `activityStore` events for this lead (and its
+            linked job), never invented event types. */}
+        <LeadTimeline leadId={lead.id} inspectionId={linkedInspection?.id} />
 
         {/* The one accent-gradient moment on this screen. Once the lead has
             become a job, the primary action is that job — not a second one. */}
@@ -532,32 +652,112 @@ function formatStormMatch(match: NonNullable<Lead['lastStormMatch']>): string {
   return `${miles}${hail} · ${formatDateShort(match.eventDate)}`;
 }
 
-function ActionButton({
+/**
+ * Call/Text/Email/Directions — the mock's mesh-hero action row: the first
+ * (primary) tile a solid paper pill, the rest glass-over-art (`theme/tokens.ts`
+ * `glass.fill`/`glass.border` — never a flat white chip laid over the mesh).
+ */
+function HeroAction({
   icon,
-  tone,
   label,
   disabled,
+  primary,
   onPress,
 }: {
   icon: IoniconName;
-  tone: ChipTone;
   label: string;
   disabled?: boolean;
+  primary?: boolean;
   onPress: () => void;
 }) {
   return (
     <PressableScale
-      style={[styles.actionBtn, disabled && styles.actionBtnDisabled]}
+      style={[styles.heroAction, primary && styles.heroActionPrimary, disabled && styles.heroActionDisabled]}
       disabled={disabled}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
     >
-      <IconChip name={icon} tone={tone} size="md" />
-      <Text style={styles.actionLabel}>{label}</Text>
+      <Ionicons name={icon} size={18} color={primary ? colors.text : colors.onMesh} />
+      <Text style={[styles.heroActionText, primary && styles.heroActionTextPrimary]} numberOfLines={1}>
+        {label}
+      </Text>
     </PressableScale>
   );
+}
+
+/**
+ * Vertical dot-and-line activity history — real `activityStore` events for
+ * this lead (and the job it became), never a new event type. Absent
+ * entirely for a lead nothing has happened to yet.
+ */
+function LeadTimeline({ leadId, inspectionId }: { leadId: string; inspectionId?: string }) {
+  const events = useActivityStore((s) => s.events);
+  const items = useMemo(
+    () => events.filter((e) => e.leadId === leadId || (inspectionId && e.inspectionId === inspectionId)).slice(0, 8),
+    [events, leadId, inspectionId],
+  );
+
+  if (items.length === 0) return null;
+
+  return (
+    <FadeSlideIn index={5}>
+      <SectionHeader title="Timeline" style={styles.sectionHeaderSpacing} />
+      <View>
+        {items.map((evt, i) => (
+          <View key={evt.id} style={styles.timelineRow}>
+            <View style={styles.timelineRail}>
+              <View style={[styles.timelineDot, { backgroundColor: timelineDotColor(evt.kind) }]} />
+              {i < items.length - 1 && <View style={styles.timelineLine} />}
+            </View>
+            <View style={styles.timelineBody}>
+              <Text style={styles.timelineMsg} numberOfLines={2}>
+                {evt.message}
+              </Text>
+              <Text style={styles.timelineStamp}>{timelineStamp(evt.createdAt)}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </FadeSlideIn>
+  );
+}
+
+/** Dot colour per event family — the same groupings `app/activity.tsx` colours, expressed in 1A brand tokens. */
+function timelineDotColor(kind: ActivityEventKind): string {
+  switch (kind) {
+    case 'proposal_signed':
+    case 'signature_recorded':
+    case 'inspection_completed':
+    case 'route_completed':
+    case 'task_done':
+      return colors.success;
+    case 'automation_ran':
+    case 'ai_calibration_updated':
+      return brand.magenta;
+    case 'proposal_sent':
+    case 'knock_logged':
+    case 'knock_converted_to_lead':
+    case 'storm_alert_received':
+    case 'lead_created':
+    case 'stage_changed':
+      return brand.burnt;
+    default:
+      return brand.royal;
+  }
+}
+
+/** "TODAY 8:14 AM" / "23 APR 4:10 PM" — the mock's uppercase mono timestamp, via `dataLabel`'s own textTransform. */
+function timelineStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const sameDay =
+    d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  if (sameDay) return `Today ${time}`;
+  return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${time}`;
 }
 
 function DetailRow({
@@ -586,23 +786,71 @@ function DetailRow({
 
 const styles = StyleSheet.create({
   housePhoto: { width: '100%', height: 190, borderRadius: radii.card, backgroundColor: colors.surfaceMuted },
-  recordHint: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  recordHint: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.text, lineHeight: 18 },
   agentRow: { gap: spacing.sm, marginTop: spacing.sm },
   agentBtns: { flexDirection: 'row', gap: spacing.sm },
   agentBtn: { flex: 1, minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
-  agentBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  agentBtnText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.text },
   root: { flex: 1, backgroundColor: colors.bg },
 
-  deleteBtn: {
+  // --- Mesh hero — the "cool", no-orange cut (docs/DESIGN_1A.md §2/§6) -----
+  hero: {
+    paddingTop: spacing.xxl,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+    overflow: 'hidden',
+    gap: spacing.lg,
+  },
+  heroMesh: {},
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  heroIconBtn: {
     width: touchTarget.standard,
     height: touchTarget.standard,
+    marginHorizontal: -spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  heroEyebrow: { ...dataLabel, flex: 1, textAlign: 'center', color: colors.onMesh, opacity: 0.75 },
+  heroIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  heroAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: radii.md,
+    backgroundColor: brand.burnt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroAvatarText: { fontSize: fontSize.titleSm, fontFamily: fontFamily.archivo.extrabold, color: colors.textInverse },
+  heroIdentityBody: { flex: 1, gap: 2 },
+  heroName: { fontSize: fontSize.titleSm, fontFamily: fontFamily.archivo.extrabold, color: colors.onMesh, letterSpacing: -0.3 },
+  heroSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.onMesh, opacity: 0.72 },
+  heroActions: { flexDirection: 'row', gap: spacing.sm },
+  heroAction: {
+    flex: 1,
+    minHeight: touchTarget.standard,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radii.control,
+    backgroundColor: glass.fill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: glass.border,
+  },
+  heroActionPrimary: { backgroundColor: colors.onMesh, borderWidth: 0 },
+  heroActionDisabled: { opacity: 0.4 },
+  heroActionText: {
+    fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.semibold,
+    color: colors.onMesh,
+  },
+  heroActionTextPrimary: { color: colors.text },
 
   scroll: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.lg,
     gap: spacing.lg,
     paddingBottom: spacing.xxxl,
   },
@@ -619,26 +867,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.warn,
   },
-  missingTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
-  missingBody: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginTop: 2 },
-
-  actionsRow: { flexDirection: 'row', gap: spacing.sm },
-  actionBtn: {
-    flex: 1,
-    minHeight: touchTarget.preferred,
-    borderRadius: radii.card,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    ...shadows.raised,
-  },
-  actionBtnDisabled: { opacity: 0.35 },
-  actionLabel: {
-    fontSize: fontSize.bodySm,
-    color: colors.text,
-    fontWeight: fontWeight.semibold,
-  },
+  missingTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold, color: colors.text },
+  missingBody: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, lineHeight: 18, marginTop: 2 },
 
   // Contact card — icon-chipped rows, hairline separators inset past the chip.
   detailRow: {
@@ -653,16 +883,58 @@ const styles = StyleSheet.create({
     backgroundColor: colors.hairline,
     marginLeft: 32 + spacing.md,
   },
-  rowLabel: {
-    fontSize: fontSize.caption,
-    color: colors.textSubtle,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  rowValue: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
+  rowLabel: { ...dataLabel, color: colors.textSubtle },
+  rowValue: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.medium, color: colors.text, fontWeight: fontWeight.medium },
 
   sectionHeaderSpacing: { marginBottom: spacing.sm },
+
+  // --- Insurance — label-left/value-right hairline rows (docs/DESIGN_1A.md §6) ---
+  infoCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    overflow: 'hidden',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+  },
+  infoRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
+  infoLabel: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
+  infoValue: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.text },
+  infoValueMono: { ...dataLabel, color: colors.text },
+
+  // --- Stage-progress bar — segmented, royal fill behind, burnt at the
+  // current segment (docs/DESIGN_1A.md §6). ---
+  progressTrack: { flexDirection: 'row', gap: spacing.xs },
+  progressSegment: { flex: 1, height: 6, borderRadius: radii.sm, backgroundColor: colors.border },
+  progressSegmentDone: { backgroundColor: brand.royal },
+  progressSegmentCurrent: { backgroundColor: brand.burnt },
+  progressLabelRow: { flexDirection: 'row', marginTop: spacing.sm },
+  progressLabel: {
+    flex: 1,
+    fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.medium,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  progressLabelCurrent: { fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold, color: brand.burnt },
+  progressLabelAhead: { color: colors.textSubtle },
+  lostBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.control,
+    backgroundColor: colors.dangerSoft,
+  },
+  lostBannerText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.danger },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
@@ -675,7 +947,7 @@ const styles = StyleSheet.create({
   },
   chipActive: { backgroundColor: colors.text },
   chipLost: { backgroundColor: colors.danger },
-  chipText: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.semibold },
+  chipText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, color: colors.text, fontWeight: fontWeight.semibold },
   chipTextActive: { color: colors.textInverse },
 
   followUpBanner: {
@@ -687,7 +959,16 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     marginBottom: spacing.sm,
   },
-  followUpText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium },
+  followUpText: { color: colors.text, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.medium, fontWeight: fontWeight.medium },
+
+  // --- Timeline — vertical dot-and-line activity history --------------------
+  timelineRow: { flexDirection: 'row', gap: spacing.md },
+  timelineRail: { alignItems: 'center', width: 12 },
+  timelineDot: { width: 11, height: 11, borderRadius: radii.pill },
+  timelineLine: { flex: 1, width: 2, minHeight: 20, backgroundColor: colors.border, marginTop: 2 },
+  timelineBody: { flex: 1, paddingBottom: spacing.md },
+  timelineMsg: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.text },
+  timelineStamp: { ...dataLabel, marginTop: 3, color: colors.textSubtle },
 
   // Convert CTA — outer view carries the (unclipped) lift, inner clip carries
   // the gradient, same split `heroPrimaryShadow`/`heroPrimaryClip` use on Home:
@@ -710,6 +991,7 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
   },
   secondaryBtn: {
@@ -721,6 +1003,7 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     color: colors.textMuted,
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
   },
 
@@ -732,7 +1015,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.sm,
   },
-  emptyText: { color: colors.textMuted, fontSize: fontSize.bodyMd },
+  emptyText: { color: colors.textMuted, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular },
   textBtn: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
@@ -741,6 +1024,7 @@ const styles = StyleSheet.create({
   },
   textBtnLabel: {
     color: colors.text,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     fontSize: fontSize.bodyMd,
   },

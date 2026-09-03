@@ -15,7 +15,7 @@ import {
   type InspectionStatus,
   type Lead,
 } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
 import { QuickActions } from './QuickActions';
 
 /**
@@ -146,10 +146,11 @@ export function JobPipelineCard({
 const styles = StyleSheet.create({
   cover: { width: '100%', height: 120, borderRadius: radii.md, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
   body: { gap: spacing.sm },
-  meta: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  meta: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   activity: {
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     color: colors.textSubtle,
     marginRight: spacing.xs,

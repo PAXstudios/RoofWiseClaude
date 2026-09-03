@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { PressableScale } from '@/components/PressableScale';
 import { useTaskStore } from '@/lib/stores/taskStore';
 import type { Task } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   /** Every id this item answers to — a linked lead+job shares one list. */
@@ -162,12 +162,13 @@ const styles = StyleSheet.create({
   },
   checkDone: { backgroundColor: colors.success, borderColor: colors.success },
   rowBody: { flex: 1, gap: 2 },
-  title: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  title: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.text },
   titleDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
-  due: { fontSize: fontSize.caption, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  dueOverdue: { color: colors.danger, fontWeight: fontWeight.semibold },
+  due: { ...dataLabel, color: colors.textMuted },
+  dueOverdue: { color: colors.danger },
   autoTag: {
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     fontStyle: 'italic',
   },
@@ -187,11 +188,13 @@ const styles = StyleSheet.create({
   addInput: {
     flex: 1,
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.text,
     paddingVertical: spacing.sm,
   },
   empty: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
