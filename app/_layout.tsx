@@ -55,7 +55,7 @@ export default function RootLayout() {
     if (!navReady) return;
     const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
       const data = resp.notification.request.content.data as
-        | { kind?: string; alertId?: string; leadId?: string }
+        | { kind?: string; alertId?: string; leadId?: string; planId?: string }
         | undefined;
       if (data?.kind === 'storm_alert' && data.alertId) {
         router.push({ pathname: '/storm-alert/[id]', params: { id: data.alertId } } as any);
@@ -63,6 +63,8 @@ export default function RootLayout() {
         // `scheduleFollowUpReminder` (pushNotifications.ts) stamps the lead
         // id; the tap lands on the lead the reminder is about.
         router.push({ pathname: '/lead/[id]', params: { id: data.leadId } } as any);
+      } else if (data?.kind === 'knock_plan' && data.planId) {
+        router.push({ pathname: '/knock-plan/[id]', params: { id: data.planId } } as any);
       } else if (data?.kind === 'calibration_weekly') {
         // navigate, not push: a push while a detail screen is open stacks a
         // second tab shell on the root stack instead of switching the one

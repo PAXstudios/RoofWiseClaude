@@ -11,8 +11,8 @@
 // "Failed · Retry". Retries happen only for failures a retry can fix.
 
 import { useAnalysisQueueStore, type AnalysisJob } from '../stores/analysisQueueStore';
+import { useNotificationStore } from '../stores/notificationStore';
 import { useActivityStore } from '../stores/activityStore';
-import { useInspectionStore } from '../stores/inspectionStore';
 import type { Inspection } from '../models/types';
 import {
   analyzeSlope,
@@ -106,6 +106,7 @@ export async function drainAnalysisQueue(): Promise<void> {
         // once the key is in place.
         store.setStatus(job.id, 'failed');
         markPhotosFailed(job.inspectionId, job.slopeId, NOT_CONFIGURED_REASON);
+        useNotificationStore.getState().push({ kind: 'analysis_failed', key: `analysis_${job.id}`, title: `Analysis not run · ${job.slopeLabel}`, body: NOT_CONFIGURED_REASON, href: `/job/${job.inspectionId}` });
         notifyFailure(job, NOT_CONFIGURED_REASON);
         continue;
       }
@@ -132,6 +133,7 @@ export async function drainAnalysisQueue(): Promise<void> {
         }
 
         useAnalysisQueueStore.getState().setStatus(job.id, 'done');
+        useNotificationStore.getState().push({ kind: 'analysis_done', key: `analysis_${job.id}`, title: `Analysis finished · ${job.slopeLabel}`, body: 'Findings are on the job.', href: `/job/${job.inspectionId}` });
         measure(jobMark, { metric: QUEUE_JOB_METRIC, n: attempted });
         useActivityStore.getState().log({
           kind: 'analysis_ran',
@@ -155,6 +157,7 @@ export async function drainAnalysisQueue(): Promise<void> {
           MAX_ATTEMPTS;
         const giveUp = !retryable || attempts >= MAX_ATTEMPTS;
         useAnalysisQueueStore.getState().setStatus(job.id, giveUp ? 'failed' : 'queued');
+        if (giveUp) useNotificationStore.getState().push({ kind: 'analysis_failed', key: `analysis_${job.id}`, title: `Analysis failed · ${job.slopeLabel}`, body: reason, href: `/job/${job.inspectionId}` });
         if (__DEV__) {
           console.warn(
             `[analysisQueue] job ${job.id} (${job.slopeLabel}) attempt ${attempts} failed: ${reason}` +

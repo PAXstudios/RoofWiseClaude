@@ -43,6 +43,7 @@ import { AnimatedCounter } from '@/components/motion';
 import { AreaActivityCard } from '@/components/home/AreaActivityCard';
 import { TodayModule, useTodayAgenda } from '@/components/home/TodayModule';
 import { QuickActionsSheet } from '@/components/sheets/QuickActionsSheet';
+import { selectUnreadCount, useNotificationStore } from '@/lib/stores/notificationStore';
 import { coverPhotoUri, recordCardUrl } from '@/lib/services/propertyRecord';
 import { activityHref } from '@/components/home/activityRoute';
 import { Aurora } from '@/components/glass/Aurora';
@@ -145,6 +146,7 @@ export default function HomeScreen() {
   const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
   // Today's real next actions — same helper Plan reads, so the two agree.
   const agenda = useTodayAgenda();
+  const unread = useNotificationStore(selectUnreadCount);
 
   // Activity rows route to the record they describe and stay plain text when
   // it no longer exists — never a button that opens "Job not found".
@@ -351,6 +353,12 @@ export default function HomeScreen() {
                 icon="search-outline"
                 label="Search"
                 onPress={() => router.push('/search')}
+              />
+              <HeaderIconButton
+                icon={unread > 0 ? 'notifications' : 'notifications-outline'}
+                label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+                badge={unread}
+                onPress={() => router.push('/notifications')}
               />
               <HeaderIconButton
                 icon="person-circle-outline"
@@ -868,10 +876,13 @@ function formatRelative(iso: string): string {
 function HeaderIconButton({
   icon,
   label,
+  badge,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  /** Unread count; hidden at 0. */
+  badge?: number;
   onPress: () => void;
 }) {
   return (
@@ -883,6 +894,11 @@ function HeaderIconButton({
     >
       <View style={styles.iconBtnFill}>
         <Ionicons name={icon} size={22} color={colors.textInverse} />
+        {badge && badge > 0 ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
+          </View>
+        ) : null}
       </View>
     </PressableScale>
   );
@@ -975,6 +991,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   headerActions: { flexDirection: 'row' },
+  badge: { position: 'absolute', top: -4, right: -6, minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, borderWidth: 2, borderColor: colors.navy },
+  badgeText: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, color: colors.textInverse },
   iconBtn: {
     width: touchTarget.standard,
     height: touchTarget.standard,

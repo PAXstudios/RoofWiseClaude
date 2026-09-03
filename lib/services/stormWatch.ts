@@ -15,6 +15,7 @@
 import { fetchStormHistory, type StormEvent, type StormType } from '../noaa';
 import { useServiceAreaStore } from '../stores/serviceAreaStore';
 import { useStormAlertStore } from '../stores/stormAlertStore';
+import { useNotificationStore } from '../stores/notificationStore';
 import { useInspectionStore } from '../stores/inspectionStore';
 import { useLeadStore } from '../stores/leadStore';
 import { sendLocalNotification } from './pushNotifications';
@@ -345,6 +346,7 @@ export async function checkStormWatch(): Promise<StormWatchResult> {
       severity,
     });
     newAlerts.push(alert);
+    useNotificationStore.getState().push({ kind: 'storm_alert', key: `alert_${alert.id}`, title: alertTitle(kind, hailMax, windMax), body: `${magnitudeLine(hailMax, windMax)}${where ? ` near ${where.label}` : ''} · ${propertyCount} propert${propertyCount === 1 ? 'y' : 'ies'} in range`, href: `/storm-alert/${alert.id}` });
 
     // --- Storm-matched lead clustering. Stamping every match with the alert's
     // firedAt is what lets `leadsInStormCluster()` rebuild this cluster from

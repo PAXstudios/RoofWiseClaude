@@ -1120,9 +1120,29 @@ export type Job = {
 // Knock + KnockSession (door-knocking mode)
 // -----------------------------------------------------------------------------
 
+/**
+ * What happened at the door. The first line is the original set — kept
+ * verbatim so persisted knocks never fail to load; `not_home` and
+ * `inspection_scheduled` are the legacy spellings of `no_answer` and
+ * `appointment` and fold into them for display (`outcomeMeta()` in
+ * lib/services/knockOutcomes.ts). Every member's meaning, colour, and what it
+ * does to the pipeline lives in that one table.
+ */
 export type KnockOutcome =
   | 'not_home' | 'interested' | 'not_interested'
-  | 'inspection_scheduled' | 'follow_up';
+  | 'inspection_scheduled' | 'follow_up'
+  | 'no_answer' | 'appointment' | 'inspected' | 'signed'
+  | 'already_has_roofer' | 'renter' | 'do_not_knock' | 'vacant' | 'come_back';
+
+/** "Not now, try later" — when the homeowner said to come back. */
+export type ComeBackWhen = 'morning' | 'afternoon' | 'evening' | 'weekend';
+
+/** A previous outcome at the same door, kept when the pin is upgraded. */
+export type KnockHistoryEntry = {
+  outcome: KnockOutcome;
+  at: string;
+  notes?: string;
+};
 
 export type Knock = {
   id: string;
@@ -1135,7 +1155,29 @@ export type Knock = {
   followUpAt?: string;
   createdLeadId?: string;
   createdAt: string;
+  /** Last edit — absent on knocks logged before pins were editable. */
+  updatedAt?: string;
+  /**
+   * Prior outcomes at this door, oldest first. A second visit that turns
+   * "No answer" into "Interested" keeps the first visit here rather than
+   * overwriting it — the door's story is the roofer's evidence of effort.
+   */
+  history?: KnockHistoryEntry[];
+  /** Who answered (or, for a renter, the owner they named). */
+  contactName?: string;
+  contactPhone?: string;
+  /** Zillow record when the roofer spent a lookup on this house. */
+  propertyRecord?: PropertyRecord;
+  /** `inspected` only: whether damage was seen on the roof. */
+  damageNoted?: boolean;
+  /** `come_back` only: the time of day the homeowner suggested. */
+  comeBackWhen?: ComeBackWhen;
+  /** How the pin was placed — at the phone's fix or by a tap on the map. */
+  placedBy?: 'gps' | 'map_tap';
 };
+
+/** Thinned GPS track point — what the walked-path polyline is drawn from. */
+export type KnockTrackPoint = { lat: number; lng: number; ts: number };
 
 export type KnockSession = {
   id: string;
@@ -1145,6 +1187,29 @@ export type KnockSession = {
   /** Where this session is aimed — set when started from a storm alert or the map. */
   routeTarget?: KnockRouteTarget;
   knocks: Knock[];
+  /**
+   * Multi-stop route (the knock planner's trip plan), in visiting order.
+   * `routeTarget` stays the single-target fallback for sessions aimed at one
+   * storm core. Absent on sessions started without a plan.
+   */
+  routeStops?: KnockRouteTarget[];
+  /** Index into `routeStops` of the stop being worked. */
+  currentStopIndex?: number;
+  /**
+   * Miles covered during the session, from the mileage trip that ran with
+   * it. Written at end; absent on sessions that predate live tracking.
+   */
+  miles?: number;
+  /** The MileageTrip (lib/stores/mileageStore.ts) this session's track was saved as. */
+  mileageTripId?: string;
+  /**
+   * True when the session started its own trip (and therefore ends it). False
+   * when a trip the roofer started by hand was already running — that trip
+   * keeps running when the route wraps.
+   */
+  mileageTripOwned?: boolean;
+  /** Thinned GPS track (≤ ~500 points) for the walked-path polyline. */
+  track?: KnockTrackPoint[];
 };
 
 // -----------------------------------------------------------------------------

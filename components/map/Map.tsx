@@ -46,6 +46,7 @@ import MapView, {
   PROVIDER_DEFAULT,
   type Region,
   type MapMarkerProps,
+  type MapPressEvent,
   type MapPolylineProps,
   type MapPolygonProps,
   type MapCircleProps,
@@ -114,6 +115,12 @@ export type MapProps = {
   children?: ReactNode;
   /** Native map reported ready (children mount on this). */
   onMapReady?: () => void;
+  /**
+   * A plain tap on the map itself (not on a marker) — the door-knocking
+   * "drop a pin on this house". Marker taps are delivered to the marker's
+   * own onPress and never reach this.
+   */
+  onPress?: (coord: MapCoordinate) => void;
   onLongPress?: (coord: MapCoordinate) => void;
   /** The viewport settled after a pan/zoom. Debounce in the caller. */
   onRegionChangeComplete?: (region: Region) => void;
@@ -187,6 +194,7 @@ export const Map = forwardRef(function Map(
     style,
     children,
     onMapReady,
+    onPress,
     onLongPress,
     onRegionChangeComplete,
     mapType,
@@ -290,6 +298,21 @@ export const Map = forwardRef(function Map(
           onRegionChangeComplete={
             wantGoogleTiles || onRegionChangeComplete ? handleRegionChangeComplete : undefined
           }
+          // Only sent when a caller listens — an `undefined` handler still
+          // crosses the bridge as a prop on Fabric. Marker presses carry
+          // action 'marker-press' on both providers and are filtered out so
+          // a tap on a pin never doubles as a tap on the map beneath it.
+          {...(onPress
+            ? {
+                onPress: (e: MapPressEvent) => {
+                  if (e.nativeEvent.action === 'marker-press') return;
+                  onPress({
+                    latitude: e.nativeEvent.coordinate.latitude,
+                    longitude: e.nativeEvent.coordinate.longitude,
+                  });
+                },
+              }
+            : null)}
           onLongPress={
             onLongPress
               ? (e) =>
