@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -65,6 +65,8 @@ import {
   shortAreaTag,
 } from '@/lib/services/captureSession';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
+import { CaptureCoach } from '@/components/capture/CaptureCoach';
+import { coachProgress, coachSteps, nextIncompleteStep, zoneForAreaTag } from '@/lib/services/captureCoach';
 import {
   COMPASS_USABLE_ACCURACY,
   useCompassHeading,
@@ -249,6 +251,11 @@ function QuickInspectionNative() {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<LibraryImportProgress | null>(null);
   const multiSelectImport = useCaptureSettingsStore((s) => s.multiSelectImport);
+  const coachEnabled = useCaptureSettingsStore((s) => s.coachEnabled);
+  const setCoachEnabled = useCaptureSettingsStore((s) => s.setCoachEnabled);
+  const coachStepByJob = useCaptureSettingsStore((s) => s.coachStepByJob);
+  const setCoachStep = useCaptureSettingsStore((s) => s.setCoachStep);
+  const setCollateralZone = useInspectionStore((s) => s.setCollateralZone);
   const [capturing, setCapturing] = useState(false);
   const [torch, setTorch] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -358,6 +365,49 @@ function QuickInspectionNative() {
     setSlopeMode('pinned');
     if (!areaTagPinned) setAreaTag(defaultAreaTagForSlope(next));
     Haptics.selectionAsync().catch(() => {});
+  };
+
+  // ── Guided capture ────────────────────────────────────────────────────
+  // The walk for this job and how far its photos have got. Resumes on the
+  // step the inspector left, else the first step still short of shots.
+  const coachStepsList = useMemo(
+    () => coachSteps({ kind: inspection?.kind ?? 'general' }),
+    [inspection?.kind],
+  );
+  const coachProg = useMemo(
+    () =>
+      coachProgress(
+        {
+          kind: inspection?.kind ?? 'general',
+          slopes: inspection?.slopes ?? [],
+          brittlenessProtocol: inspection?.brittlenessProtocol,
+        },
+        coachStepsList,
+      ),
+    [inspection?.kind, inspection?.slopes, inspection?.brittlenessProtocol, coachStepsList],
+  );
+  const savedStepId = targetId ? coachStepByJob[targetId] : undefined;
+  const [coachIndex, setCoachIndex] = useState<number>(() => {
+    const saved = savedStepId ? coachStepsList.findIndex((st) => st.id === savedStepId) : -1;
+    if (saved >= 0) return saved;
+    const next = nextIncompleteStep(coachProg);
+    return next ? coachStepsList.indexOf(next.step) : 0;
+  });
+
+  /** A step chosen → the camera is set up for it. Pins the slope: the coach
+   *  is an explicit choice, and a compass wobble must not re-tag its photos. */
+  const applyCoachStep = (i: number) => {
+    const st = coachStepsList[i];
+    if (!st) return;
+    setCoachIndex(i);
+    if (targetId) setCoachStep(targetId, st.id);
+    if (st.slope) {
+      setSlope(st.slope);
+      setSlopeMode('pinned');
+    }
+    setAreaTag(st.areaTag);
+    setAreaTagPinned(st.kind !== 'slope');
+    setCaptureMode(st.captureMode);
   };
 
   /** Photos already filed per slope on this job — shown in the picker. */
@@ -607,6 +657,17 @@ function QuickInspectionNative() {
   const addPhoto = (uri: string, imported?: boolean) => {
     const inspectionId = ensureInspection();
     attachRawPhotos(inspectionId, [{ uri, slope, areaTag, captureMode }]);
+    // A collateral photo fills its claim-evidence zone by existing — the
+    // checklist is never ticked by hand for a surface nobody photographed.
+    const zone = zoneForAreaTag(areaTag);
+    const job = useInspectionStore.getState().getById(inspectionId);
+    if (zone && job?.kind === 'insurance_claim') {
+      const prev = job.collateralEvidence?.[zone];
+      setCollateralZone(inspectionId, zone, {
+        checked: true,
+        photoIds: [...(prev?.photoIds ?? []), uri],
+      });
+    }
     const stored = useInspectionStore
       .getState()
       .inspections.find((i) => i.id === inspectionId)
@@ -1027,6 +1088,14 @@ function QuickInspectionNative() {
           style={styles.bottomDock}
           onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
         >
+          {coachEnabled && coachProg.length > 0 && (
+            <CaptureCoach
+              progress={coachProg}
+              activeIndex={Math.min(coachIndex, coachProg.length - 1)}
+              onSelectStep={applyCoachStep}
+              onDismiss={() => setCoachEnabled(false)}
+            />
+          )}
           {photos.length > 0 && (
             <ReviewStrip
               photos={photos}

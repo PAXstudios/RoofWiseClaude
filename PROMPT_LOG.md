@@ -2645,3 +2645,20 @@ There was no exit. Once a pass started, the primary button became a spinner, "Re
 **Verified headless:** roof report, gutter report, junk-params state, and the job's Damage detail section all render with zero page errors. Typecheck, lint, worked examples green.
 
 **Files touched:** `app/photo-report.tsx` (new), `components/DamageDetailSection.tsx` (new), `lib/models/types.ts`, `lib/services/{gemini,analyzeSlope,decisionEngine,damageScore}.ts`, `app/job/[id].tsx`, `app/analyze.tsx`.
+
+---
+
+### [2026-09-03] #73 — Guided capture: the walk, one step at a time over the camera
+
+**Prompt:**
+> "I think there should be some kind of on screen guidance as well that is an option that walks through the picture taking process for each slope of the roof and other items that need to be taken a picture of such as water spouts, window siding, the metal that comes with a sky window (on the ceiling) and more."
+
+**Built.**
+- `lib/services/captureCoach.ts` (pure, unit-tested): the walk for a job — the four cardinal slopes first (S/E/N/W, one 10×10 test square each; HAAG's minimum is one per direction), then the four collateral zones (gutters/downspouts, siding + window screens, HVAC condenser fins, soft-metal roof vents incl. skylight and chimney flashing), then the brittleness test on an insurance claim. **Progress is derived from the photos** (`photoMeta` slope + area tag, alternates accepted — a chimney cap satisfies the soft-metal step; the brittleness protocol's photos satisfy that step). Nothing is ticked by hand; nothing is ticked by a photo that was never taken.
+- `components/capture/CaptureCoach.tsx`: a glass strip above the dock — "STEP 3 OF 9 · 2 DONE · Rear slope (north) · 1/1" with the one-line hint, 56pt Prev/Next, tap for the full list (done ticks, per-step shot counts), and "Turn guided capture off". Selecting a step sets the camera up for it (slope pinned, area tag, capture mode). Resumes on the step the inspector left per job, else the first step still short of shots.
+- On an insurance claim, a collateral photo **fills its claim-evidence zone by existing** (`setCollateralZone` with the photo id) — the checklist is never ticked for a surface nobody photographed.
+- "Guided capture" switch in the capture settings sheet; ON by default (a complete packet is the point), one tap off for the roofer who knows the walk.
+
+**Verified:** 13 pure assertions (walk order, claim adds brittleness, per-slope and per-zone progress incl. alternate tags, next-incomplete resolution, tag→zone lookup); typecheck, lint, web export green. The strip itself only renders on the native camera — the web build shows the camera fallback — so the pure test is the check.
+
+**Files touched:** `lib/services/captureCoach.ts` (new), `components/capture/CaptureCoach.tsx` (new), `lib/stores/captureSettingsStore.ts`, `components/capture/CaptureSettingsSheet.tsx`, `app/quick-inspection.tsx`.

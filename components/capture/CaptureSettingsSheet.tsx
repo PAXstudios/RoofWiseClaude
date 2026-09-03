@@ -145,6 +145,8 @@ export function CaptureSettingsSheet({ visible, onClose, livePausedReason }: Pro
   const setLiveOverlay = useCaptureSettingsStore((s) => s.setLiveOverlay);
   const setGuides = useCaptureSettingsStore((s) => s.setGuides);
   const setArNotify = useCaptureSettingsStore((s) => s.setArNotify);
+  const coachEnabled = useCaptureSettingsStore((s) => s.coachEnabled);
+  const setCoachEnabled = useCaptureSettingsStore((s) => s.setCoachEnabled);
 
   // Always reopen on the main list, not on whichever explainer was last read.
   useEffect(() => {
@@ -181,6 +183,18 @@ export function CaptureSettingsSheet({ visible, onClose, livePausedReason }: Pro
                 What the camera shows you while you shoot. Photos and reports are unchanged.
               </Text>
 
+              <SettingRow
+                icon="footsteps-outline"
+                title="Guided capture"
+                subtitle={
+                  coachEnabled
+                    ? 'On · walks every slope, then gutters, siding, condenser, vents and flashing'
+                    : 'Off · the step strip over the camera is hidden'
+                }
+                trailing={<SwitchVisual on={coachEnabled} />}
+                onPress={() => toggle(setCoachEnabled, coachEnabled)}
+                accessibilityState={{ checked: coachEnabled }}
+              />
               <SettingRow
                 icon="scan-outline"
                 title="Live overlay"

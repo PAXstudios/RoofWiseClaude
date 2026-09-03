@@ -24,12 +24,20 @@ type State = {
   /** Model id that last answered a live frame (honest provenance for the
    *  "LIVE · <model>" label before the first frame of a new session). */
   lastLiveModel: string | null;
+  /** Guided capture: the step strip over the camera that walks every slope
+   *  and collateral surface. ON by default — a complete packet is the point;
+   *  a one-tap switch off for the roofer who knows the walk. */
+  coachEnabled: boolean;
+  /** Which step each job is on, so leaving and coming back resumes there. */
+  coachStepByJob: Record<string, string>;
 
   setLiveOverlay: (v: boolean) => void;
   setGuides: (v: boolean) => void;
   setArNotify: (v: boolean) => void;
   setLastLiveModel: (model: string | null) => void;
   setMultiSelectImport: (v: boolean) => void;
+  setCoachEnabled: (v: boolean) => void;
+  setCoachStep: (jobId: string, stepId: string) => void;
 };
 
 export const useCaptureSettingsStore = create<State>()(
@@ -45,6 +53,11 @@ export const useCaptureSettingsStore = create<State>()(
       setArNotify: (v) => set({ arNotify: v }),
       setLastLiveModel: (model) => set({ lastLiveModel: model }),
       setMultiSelectImport: (v) => set({ multiSelectImport: v }),
+      coachEnabled: true,
+      coachStepByJob: {},
+      setCoachEnabled: (v) => set({ coachEnabled: v }),
+      setCoachStep: (jobId, stepId) =>
+        set((s) => ({ coachStepByJob: { ...s.coachStepByJob, [jobId]: stepId } })),
     }),
     {
       name: 'roofwise.captureSettings.v1',
@@ -55,6 +68,8 @@ export const useCaptureSettingsStore = create<State>()(
         arNotify: s.arNotify,
         lastLiveModel: s.lastLiveModel,
         multiSelectImport: s.multiSelectImport,
+        coachEnabled: s.coachEnabled,
+        coachStepByJob: s.coachStepByJob,
       }),
     },
   ),
