@@ -982,12 +982,24 @@ function hailHitsPerSquare(s: Slope): number {
   const total = s.squareHitCount ?? s.hailCount ?? 0;
   if (total <= 0) return 0;
 
+  // A photo the model identified as NOT a roof (a gutter, a condenser, siding)
+  // is not a test square, whatever mode it was shot in — counting it in the
+  // denominator halves the rate on a slope with one collateral photo. That is
+  // the #65 unit bug in the other direction.
+  const nonRoof = new Set<number>();
+  s.photoPaths.forEach((uri, i) => {
+    if (s.photoAnalysis?.[uri]?.noRoofDetected === true) nonRoof.add(i);
+  });
+
   const meta = s.photoMeta;
   const squares =
     meta && meta.length > 0
-      ? meta.filter((m) => (m.captureMode ?? 'square_10x10') === 'square_10x10').length
-      : // No per-photo metadata (pre-tagging inspection): every photo is a square.
-        s.photoPaths.length;
+      ? meta.filter(
+          (m) =>
+            (m.captureMode ?? 'square_10x10') === 'square_10x10' && !nonRoof.has(m.photoIndex),
+        ).length
+      : // No per-photo metadata (pre-tagging inspection): every roof photo is a square.
+        s.photoPaths.filter((_, i) => !nonRoof.has(i)).length;
 
   // A slope with hits but no countable square still reports the raw total rather
   // than dividing by zero — over-stating is caught by review, inventing is not.

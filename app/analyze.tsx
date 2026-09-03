@@ -259,7 +259,7 @@ export default function AnalyzeView() {
         )}
 
         <SectionHeader title="Photos" />
-        <Text style={styles.hint}>Tap to edit detections · Long-press to rotate or delete.</Text>
+        <Text style={styles.hint}>Tap for the photo's damage report · Long-press to rotate or delete.</Text>
         <View style={styles.grid}>
           {slope.photoPaths.map((uri, i) => {
             const analyzed = (slope.analyzedPhotoIndices ?? []).includes(i);
@@ -279,7 +279,7 @@ export default function AnalyzeView() {
                 style={styles.thumb}
                 onPress={() =>
                   router.push({
-                    pathname: '/edit-detection',
+                    pathname: '/photo-report',
                     params: {
                       inspectionId: inspection.id,
                       slopeId: slope.id,

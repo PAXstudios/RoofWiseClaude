@@ -223,6 +223,13 @@ async function runAnalyzeSlope(
         latencyMs: r.latencyMs,
         findingCount: r.markers.length,
         noRoofDetected: r.noRoofDetected,
+        // What THIS photo shows, for the per-photo report: the shingle type
+        // read here (not the job's declared material), and — when the frame
+        // is not a roof — what it is and the collateral damage on it.
+        shingleType: r.shingleType,
+        subject: r.subject,
+        subjectDetail: r.subjectDetail,
+        collateralDamage: r.collateralDamage,
       });
       measure(photoMark, { metric: PHOTO_ANALYSIS_METRIC.photo, n: 1 });
 

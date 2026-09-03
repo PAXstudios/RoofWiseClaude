@@ -40,6 +40,7 @@ import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
 import { DamageScoreCard } from '@/components/DamageScoreCard';
 import { PropertyIntelCard } from '@/components/PropertyIntelCard';
+import { DamageDetailSection } from '@/components/DamageDetailSection';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
@@ -659,6 +660,12 @@ export default function JobDetail() {
           ]}
         />
 
+        <SectionHeader title="Damage detail" style={styles.sectionSpacing} />
+
+        {/* Everything the PDF says, readable here: every category found, on
+            which slopes, tap → the photo. */}
+        <DamageDetailSection inspection={inspection} />
+
         <RichCard
           icon={RECOMMENDATION_ICON[haag.roofwise_recommendation]}
           iconTone={RECOMMENDATION_TONE[haag.roofwise_recommendation]}
@@ -1198,9 +1205,11 @@ function SlopeBlock({
             {slope.photoPaths.map((uri, i) => (
               <PressableScale
                 key={i}
+                // The per-photo REPORT first (what's in this photo); it links
+                // on to the marker editor. Reading before editing.
                 onPress={() =>
                   router.push({
-                    pathname: '/edit-detection',
+                    pathname: '/photo-report',
                     params: { inspectionId: inspection.id, slopeId: slope.id, photoIndex: String(i) },
                   })
                 }

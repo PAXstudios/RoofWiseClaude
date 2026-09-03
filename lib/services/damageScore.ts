@@ -628,13 +628,22 @@ export function evidenceFromInspection(inspection: Inspection): ScoreEvidence {
   const photosBySlope: Record<string, number> = {};
   for (const slope of inspection.slopes) {
     photosBySlope[slope.id] = slope.photoPaths.length;
+    // Same denominator rule as the engine: a photo the model identified as
+    // not-a-roof is not a test square, whatever mode it was shot in.
+    const nonRoof = new Set<number>();
+    slope.photoPaths.forEach((uri, i) => {
+      if (slope.photoAnalysis?.[uri]?.noRoofDetected === true) nonRoof.add(i);
+    });
     const meta = slope.photoMeta;
     testSquaresBySlope[slope.id] =
       meta && meta.length > 0
-        ? meta.filter((m) => (m.captureMode ?? 'square_10x10') === 'square_10x10').length
-        : // Pre-tagging inspection: every photo counted as a square, matching
-          // the same fallback the engine's per-square denominator uses.
-          slope.photoPaths.length;
+        ? meta.filter(
+            (m) =>
+              (m.captureMode ?? 'square_10x10') === 'square_10x10' && !nonRoof.has(m.photoIndex),
+          ).length
+        : // Pre-tagging inspection: every roof photo counted as a square,
+          // matching the engine's per-square denominator.
+          slope.photoPaths.filter((_, i) => !nonRoof.has(i)).length;
   }
   return { testSquaresBySlope, photosBySlope };
 }

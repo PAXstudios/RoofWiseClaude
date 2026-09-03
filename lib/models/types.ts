@@ -428,6 +428,90 @@ export type PhotoMeta = {
  * Failed · Retry). A photo must never sit in an implicit "pending" state —
  * a failure carries its reason in plain words.
  */
+/**
+ * What the camera was actually pointed at. A photo that is not a roof field
+ * is IDENTIFIED, not just rejected — a dented gutter or crushed condenser fins
+ * are HAAG collateral corroboration of hail size and direction, and they
+ * strengthen a claim. They never count toward the roof's per-square hit
+ * threshold (Drift #7): collateral is evidence about the storm, not the roof.
+ */
+export const PHOTO_SUBJECTS = [
+  'roof_field',
+  'gutter_downspout',
+  'hvac_condenser',
+  'siding',
+  'window_screen',
+  'fascia_soffit',
+  'garage_door',
+  'fence_gate',
+  'roof_vent_soft_metal',
+  'chimney',
+  'skylight',
+  'vehicle',
+  'other',
+  'unidentifiable',
+] as const;
+
+export type PhotoSubject = (typeof PHOTO_SUBJECTS)[number];
+
+export const PHOTO_SUBJECT_LABELS: Record<PhotoSubject, string> = {
+  roof_field: 'Roof field',
+  gutter_downspout: 'Gutter / downspout',
+  hvac_condenser: 'HVAC condenser',
+  siding: 'Siding',
+  window_screen: 'Window / screen',
+  fascia_soffit: 'Fascia / soffit',
+  garage_door: 'Garage door',
+  fence_gate: 'Fence / gate',
+  roof_vent_soft_metal: 'Roof vent / soft metal',
+  chimney: 'Chimney',
+  skylight: 'Skylight',
+  vehicle: 'Vehicle',
+  other: 'Other',
+  unidentifiable: 'Unidentifiable',
+};
+
+/** Which collateral checklist zone a subject corroborates, when one does. */
+export const PHOTO_SUBJECT_ZONE: Partial<Record<PhotoSubject, CollateralZone>> = {
+  gutter_downspout: 'gutters_downspouts',
+  hvac_condenser: 'hvac_condenser_fins',
+  siding: 'siding_window_screens',
+  window_screen: 'siding_window_screens',
+  roof_vent_soft_metal: 'soft_metal_roof_vents',
+  chimney: 'soft_metal_roof_vents',
+  skylight: 'soft_metal_roof_vents',
+};
+
+export const COLLATERAL_DAMAGE_KINDS = [
+  'dents',
+  'bent_fins',
+  'spatter',
+  'cracks',
+  'punctures',
+  'tears',
+  'other',
+] as const;
+
+export type CollateralDamageKind = (typeof COLLATERAL_DAMAGE_KINDS)[number];
+
+export const COLLATERAL_DAMAGE_LABELS: Record<CollateralDamageKind, string> = {
+  dents: 'Dents',
+  bent_fins: 'Bent fins',
+  spatter: 'Hail spatter',
+  cracks: 'Cracks',
+  punctures: 'Punctures',
+  tears: 'Tears',
+  other: 'Other damage',
+};
+
+/** Damage observed on a non-roof subject. Corroboration, never a roof hit. */
+export type CollateralFinding = {
+  kind: CollateralDamageKind;
+  severity: Severity;
+  confidence: number; // 0-100
+  note?: string;
+};
+
 export type PhotoAnalysisStatus = 'queued' | 'analyzing' | 'done' | 'failed';
 
 export type PhotoAnalysisState = {
@@ -448,6 +532,14 @@ export type PhotoAnalysisState = {
   noRoofDetected?: boolean;
   /** Attempts so far for this photo — drives the Retry affordance copy. */
   attempts?: number;
+  /** Shingle/roof type read from THIS photo, with confidence. */
+  shingleType?: ShingleTypeClassification;
+  /** What the frame shows. `roof_field` for a normal roof photo. */
+  subject?: PhotoSubject;
+  /** Model's short free-text description of the subject ("gutter, north side, dented"). */
+  subjectDetail?: string;
+  /** Damage on a non-roof subject — collateral corroboration (never roof hits). */
+  collateralDamage?: CollateralFinding[];
 };
 
 // -----------------------------------------------------------------------------

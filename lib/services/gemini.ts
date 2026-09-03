@@ -26,6 +26,11 @@ import {
   type Severity,
   type ShingleTypeClassification,
   type SlopeOrientation,
+  PHOTO_SUBJECTS,
+  COLLATERAL_DAMAGE_KINDS,
+  type PhotoSubject,
+  type CollateralFinding,
+  type CollateralDamageKind,
 } from '../models/types';
 import { env, isGeminiConfigured } from '../env';
 
@@ -384,6 +389,11 @@ export type AnalysisResult = {
    *  roof/shingle surface in frame. Findings and markers are always empty
    *  when set — surface NO_ROOF_MESSAGE in the UI. */
   noRoofDetected: boolean;
+  /** What the frame shows — identified even when it is not a roof. */
+  subject?: PhotoSubject;
+  subjectDetail?: string;
+  /** Damage on a non-roof subject. Corroboration only, never roof hits. */
+  collateralDamage?: CollateralFinding[];
   shingleType?: ShingleTypeClassification;
   /** Persisted on the result for calibration logging/sync. Absent on older
    *  cached results that predate scale-aware detection. */
@@ -423,6 +433,16 @@ Return STRICT JSON only (no markdown wrapper), with this exact schema:
     "confidence": 0-100,
     "note": "<short evidence>"
   },
+  "subject": "roof_field|gutter_downspout|hvac_condenser|siding|window_screen|fascia_soffit|garage_door|fence_gate|roof_vent_soft_metal|chimney|skylight|vehicle|other|unidentifiable",
+  "subject_detail": "<one short line: what is in frame and where, e.g. 'aluminum gutter run, north eave, several dents'>",
+  "collateral_damage": [
+    {
+      "kind": "dents|bent_fins|spatter|cracks|punctures|tears|other",
+      "severity": "minor|moderate|severe",
+      "confidence": 0-100,
+      "note": "<short pixel evidence>"
+    }
+  ],
   "findings": [
     {
       "label": "hail_hits|bruising|granule_loss|wind_damage|wind_creasing|blistering|cracking|flashing_damage|algae_moss|missing_shingles|splitting|lifted_shingles|structural_sagging",
@@ -444,8 +464,10 @@ Return STRICT JSON only (no markdown wrapper), with this exact schema:
   ]
 }
 
-STEP 0 — ANTI-FABRICATION GUARD (absolute; evaluate before anything else)
-If you cannot positively identify a roof or shingle surface in the frame (grass, sky, indoors, a person, a vehicle, pavement, a blank or corrupted image, an unrelated screenshot), you MUST return exactly: "analyzed": false, "no_roof_detected": true, empty "findings", empty "detections", and "shingle_scale_estimate" with pixels_per_inch null. NEVER invent findings to be helpful — zero findings on a non-roof photo is the correct, expected answer. When a roof IS identifiable, set "no_roof_detected": false and continue.
+STEP 0 — IDENTIFY THE SUBJECT, THEN THE ANTI-FABRICATION GUARD (absolute; evaluate before anything else)
+First say what the frame shows in "subject". A roof/shingle surface is "roof_field". Anything else — a gutter or downspout, an HVAC condenser, siding, a window or screen, fascia/soffit, a garage door, a fence, a roof vent / turbine / soft-metal cap, a chimney, a skylight, a vehicle — is named with the matching value and described in one line in "subject_detail"; use "other" for a recognisable subject not in the list and "unidentifiable" only when you genuinely cannot tell (blank, corrupted, indoors, sky, an unrelated screenshot).
+If the subject is NOT "roof_field", you MUST return "analyzed": false, "no_roof_detected": true, EMPTY "findings", EMPTY "detections", and "shingle_scale_estimate" with pixels_per_inch null — the 13 roof categories and the per-square hit count apply ONLY to a roof field. Instead, describe the damage you can see on that subject in "collateral_damage" (dents, bent condenser fins, hail spatter on oxidised metal, cracks, punctures, torn screens) with severity and confidence. Collateral damage is corroborating evidence about the hailstorm — its size, hardness and direction — and is valuable, but it is never a roof hit. NEVER invent findings to be helpful: zero roof findings on a non-roof photo is the correct, expected answer, and zero collateral findings on an undamaged gutter is too.
+When the subject IS "roof_field", set "no_roof_detected": false, leave "collateral_damage" empty, and continue.
 
 STEP 1 — CALIBRATE SCALE (before sizing any detection)
 Standard asphalt shingles are manufactured to known dimensions: a full shingle is 12in tall x 36in wide, and the exposed course (the visible band between horizontal course lines) is ~5.6in tall. On 3-tab shingles each tab is ~12in wide. Use whichever of these is most cleanly visible as an in-photo ruler:
@@ -598,6 +620,15 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
     !!parsed?.findings?.find?.((f: any) => f?.label === 'no_roof_detected');
 
   const shingleScaleEstimate = parseScaleEstimate(parsed?.shingle_scale_estimate);
+  const subject = parseSubject(parsed?.subject, noRoofDetected);
+  const subjectDetail =
+    typeof parsed?.subject_detail === 'string' && parsed.subject_detail.trim().length > 0
+      ? parsed.subject_detail.trim().slice(0, 200)
+      : undefined;
+  // Collateral only ever rides a NON-roof frame: a roof photo's damage is in
+  // the 13 categories, and letting a model attach "dents" to a shingle field
+  // would be a second, uncounted channel for roof findings (Drift #7).
+  const collateralDamage = noRoofDetected ? parseCollateral(parsed?.collateral_damage) : undefined;
 
   if (noRoofDetected) {
     // Anti-fabrication guard: a no-roof verdict wins over any detections the
@@ -609,6 +640,9 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
     return {
       analyzed: false,
       noRoofDetected: true,
+      subject,
+      subjectDetail,
+      collateralDamage,
       shingleType: undefined,
       shingleScaleEstimate,
       findings: [],
@@ -695,6 +729,8 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
     analyzed: parsed?.analyzed !== false,
     // Always false here — the no-roof case returned early above.
     noRoofDetected: false,
+    subject,
+    subjectDetail,
     shingleType,
     shingleScaleEstimate,
     findings,
@@ -706,6 +742,40 @@ function normalize(parsed: any, raw: unknown): AnalysisResult {
     },
     raw,
   };
+}
+
+/** Subject enum, defensively. A roof frame without a subject is a roof field;
+ *  a non-roof frame without one is unidentifiable — never a guess. */
+function parseSubject(raw: unknown, noRoof: boolean): PhotoSubject {
+  if (typeof raw === 'string' && (PHOTO_SUBJECTS as readonly string[]).includes(raw)) {
+    const s = raw as PhotoSubject;
+    // A model saying "roof_field" while also saying no roof contradicts itself;
+    // the anti-fabrication verdict wins and the subject becomes unidentifiable.
+    if (noRoof && s === 'roof_field') return 'unidentifiable';
+    return s;
+  }
+  return noRoof ? 'unidentifiable' : 'roof_field';
+}
+
+function parseCollateral(raw: unknown): CollateralFinding[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: CollateralFinding[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const kind = (COLLATERAL_DAMAGE_KINDS as readonly string[]).includes(String((item as any).kind))
+      ? ((item as any).kind as CollateralDamageKind)
+      : 'other';
+    const sevRaw = String((item as any).severity ?? '');
+    const severity: Severity =
+      sevRaw === 'severe' || sevRaw === 'moderate' || sevRaw === 'minor' ? sevRaw : 'minor';
+    out.push({
+      kind,
+      severity,
+      confidence: clamp(Number((item as any).confidence ?? 0), 0, 100),
+      note: typeof (item as any).note === 'string' ? (item as any).note.slice(0, 200) : undefined,
+    });
+  }
+  return out;
 }
 
 // Defensive parse of the scale-calibration block. Older cached responses
