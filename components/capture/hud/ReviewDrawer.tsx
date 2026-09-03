@@ -11,11 +11,14 @@
 import { useRef } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { Pill } from '@/components/ui/Pill';
 import type { Inspection } from '@/lib/models/types';
 import { shortAreaTag } from '@/lib/services/captureSession';
+import { useAnnotationStore } from '@/lib/stores/annotationStore';
 import { colors, fontSize, fontWeight, glass, radii, spacing, touchTarget } from '@/theme/tokens';
 import { HUD_GAP } from './glass';
 import {
@@ -55,9 +58,22 @@ export function ReviewDrawer({
   statusLine,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const summary = summarizeSession(photos, inspection, localAnalysis);
   const n = photos.length;
+
+  // Annotate is a long-press away rather than its own small target — the
+  // whole 96pt thumbnail stays the touch area (Drift #1) instead of a second
+  // tap-sized icon competing with it for a gloved thumb.
+  const onAnnotate = (p: CapturedPhoto) => {
+    Haptics.selectionAsync().catch(() => {});
+    onClose();
+    router.push({
+      pathname: '/annotate',
+      params: { uri: p.uri, inspectionId: p.inspectionId, slopeId: p.slopeId, index: String(p.photoIndex) },
+    });
+  };
 
   const parts: string[] = [];
   if (summary.done > 0) parts.push(`${summary.done} analyzed`);
@@ -115,12 +131,13 @@ export function ReviewDrawer({
                   const a11y =
                     state.status === 'failed'
                       ? `Photo ${p.photoIndex + 1}, ${shortAreaTag(p.areaTag)}, ${p.slope} slope. Analysis failed${state.error ? `: ${state.error}` : ''}. Tap to retry.`
-                      : `Photo ${p.photoIndex + 1}, ${shortAreaTag(p.areaTag)}, ${p.slope} slope, ${pill.label}. Tap to open.`;
+                      : `Photo ${p.photoIndex + 1}, ${shortAreaTag(p.areaTag)}, ${p.slope} slope, ${pill.label}. Tap to open. Long press to draw on it.`;
                   return (
                     <Pressable
                       key={p.uri}
                       style={({ pressed }) => [styles.thumbCol, pressed && styles.pressed]}
                       onPress={() => onOpen(p, state)}
+                      onLongPress={() => onAnnotate(p)}
                       accessibilityRole="button"
                       accessibilityLabel={a11y}
                     >
@@ -141,6 +158,7 @@ export function ReviewDrawer({
                             <Ionicons name="images" size={11} color={colors.textInverse} />
                           </View>
                         )}
+                        <AnnotationCountDot uri={p.uri} />
                       </View>
                       <Pill
                         label={pill.label}
@@ -172,6 +190,18 @@ export function ReviewDrawer({
         </View>
       </Pressable>
     </Modal>
+  );
+}
+
+/** Pencil + count, bottom-right of a thumbnail — only when this photo has a drawing on it. */
+function AnnotationCountDot({ uri }: { uri: string }) {
+  const n = useAnnotationStore((s) => s.byUri[uri]?.items.length ?? 0);
+  if (n === 0) return null;
+  return (
+    <View style={styles.annotateDot} pointerEvents="none">
+      <Ionicons name="brush" size={10} color={colors.textInverse} />
+      <Text style={styles.annotateDotText}>{n}</Text>
+    </View>
   );
 }
 
@@ -228,6 +258,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   thumbImportDot: { right: undefined, left: 4, backgroundColor: colors.textMuted },
+  // Same bottom-right pencil badge AnnotatedPhoto draws everywhere else this
+  // photo shows, so a thumbnail already carries the tell before it's opened.
+  annotateDot: {
+    position: 'absolute',
+    right: 3,
+    bottom: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    backgroundColor: colors.scrim,
+  },
+  annotateDotText: { color: colors.textInverse, fontSize: 9, fontWeight: fontWeight.bold },
   // The session's one orange moment, at the sticky size (Drift #1).
   done: {
     height: touchTarget.sticky,

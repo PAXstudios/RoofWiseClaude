@@ -70,6 +70,9 @@ import {
   tierFor,
   type ConfidenceTier,
 } from './confidenceTiers';
+import type { Annotation } from '../models/annotations';
+import { annotatedImageHtml } from './annotationSvg';
+import { useAnnotationStore } from '../stores/annotationStore';
 
 export type GeneratedReport = {
   uri: string;
@@ -106,7 +109,26 @@ export type ReportPhoto = {
   avgConfidence: number | null;
   /** Presentation tier derived from avgConfidence (spec confidence layer). */
   tier: ConfidenceTier | null;
+  /**
+   * The roofer's freehand drawing on this photo (lib/models/annotations.ts) —
+   * an arrow at the hit, a circle round the crease, a label. Same items the
+   * app overlays everywhere this photo shows (components/photo/AnnotatedPhoto.tsx),
+   * printed here as inline SVG over the <img> so the packet matches the app.
+   */
+  annotations: readonly Annotation[];
+  /** Pixel size the annotations were normalised against; 0 when unrecorded. */
+  imageW: number;
+  imageH: number;
 };
+
+/** `.slope-photo`'s CSS aspect-ratio (REPORT_BASE_CSS) — the crop the printed <img> shows. */
+const REPORT_PHOTO_ASPECT = 4 / 3;
+
+/** One photo's annotation record from the store, by its captured URI. */
+function annotationsFor(uri: string): { items: readonly Annotation[]; imageW: number; imageH: number } {
+  const rec = useAnnotationStore.getState().getRecord(uri);
+  return { items: rec?.items ?? [], imageW: rec?.imageW ?? 0, imageH: rec?.imageH ?? 0 };
+}
 
 /** Was this photo run through Gemini? */
 function wasAnalyzed(slope: Inspection['slopes'][number], index: number): boolean {
@@ -143,6 +165,7 @@ async function preparePhotoDataUris(
       if (dataUri) {
         const marks = slope.damage.filter((m) => m.photoIndex === index);
         const avg = averageConfidence(marks.map((m) => m.confidence));
+        const ann = annotationsFor(uri);
         encoded.push({
           index,
           dataUri,
@@ -150,6 +173,9 @@ async function preparePhotoDataUris(
           findingCount: marks.length,
           avgConfidence: avg,
           tier: avg === null ? null : tierFor(avg),
+          annotations: ann.items,
+          imageW: ann.imageW,
+          imageH: ann.imageH,
         });
       }
     }
@@ -175,17 +201,23 @@ async function encodeJpegDataUri(uri: string): Promise<string | null> {
   }
 }
 
+/** A brittleness protocol photo, encoded, with any freehand annotation on it. */
+type BrittlenessPhoto = { dataUri: string; annotations: readonly Annotation[]; imageW: number; imageH: number };
+
 /**
  * Brittleness field-protocol photos (Professional Report §VII-C): the test
  * process and result must be photographed. These embed in the Insurance
  * Claim Supplement as the evidence behind the repairability conclusion.
  */
-async function prepareBrittlenessPhotoUris(ins: Inspection): Promise<string[]> {
+async function prepareBrittlenessPhotoUris(ins: Inspection): Promise<BrittlenessPhoto[]> {
   const ids = ins.brittlenessProtocol?.photoIds ?? [];
-  const encoded: string[] = [];
+  const encoded: BrittlenessPhoto[] = [];
   for (const uri of ids) {
     const dataUri = await encodeJpegDataUri(uri);
-    if (dataUri) encoded.push(dataUri);
+    if (dataUri) {
+      const ann = annotationsFor(uri);
+      encoded.push({ dataUri, annotations: ann.items, imageW: ann.imageW, imageH: ann.imageH });
+    }
   }
   return encoded;
 }
@@ -353,7 +385,7 @@ export const REPORT_BASE_CSS = `
 function renderHtml(
   ins: Inspection,
   photoMap: Record<string, ReportPhoto[]> = {},
-  brittlenessPhotos: string[] = [],
+  brittlenessPhotos: BrittlenessPhoto[] = [],
 ): string {
   // The determination is READ, not re-derived: `resolveEngineResult` returns
   // the stored engine snapshot when the inspection still has the inputs it was
@@ -655,6 +687,30 @@ const COLLATERAL_LABELS: Record<string, string> = {
   gutters_dented: 'Dents in gutters or downspouts',
 };
 
+/**
+ * `<img class="slope-photo">`, with the roofer's freehand annotations (if
+ * any) drawn over it as inline SVG at the same crop the CSS gives the <img>
+ * (`.slope-photo` is `object-fit: cover` at REPORT_PHOTO_ASPECT) — so an
+ * arrow drawn on the photo lands on the same spot in the printed packet as it
+ * does on the phone. Falls back to a bare <img> when there is nothing to
+ * draw, or when the photo was annotated before its pixel size was recorded
+ * (pre-#101 data) and a cover crop can't be computed — the photo still
+ * prints, just without the drawing.
+ */
+function photoImgHtml(dataUri: string, items: readonly Annotation[], imageW: number, imageH: number): string {
+  if (items.length === 0 || imageW <= 0 || imageH <= 0) {
+    return `<img class="slope-photo" src="${dataUri}" />`;
+  }
+  return annotatedImageHtml({
+    src: dataUri,
+    width: imageW,
+    height: imageH,
+    items,
+    aspect: REPORT_PHOTO_ASPECT,
+    imgClass: 'slope-photo',
+  });
+}
+
 /** One photo in a slope card, captioned with its analysis + confidence state. */
 function photoFigure(p: ReportPhoto): string {
   const tagClass = p.tier ? `tag-${p.tier}` : 'tag-none';
@@ -663,9 +719,11 @@ function photoFigure(p: ReportPhoto): string {
     : p.tier
     ? `${TIER_SHORT[p.tier]} · ${p.findingCount} finding${p.findingCount === 1 ? '' : 's'}`
     : 'Analyzed · clean';
+  const n = p.annotations.length;
+  const annNote = n > 0 ? ` · ${n} annotation${n === 1 ? '' : 's'}` : '';
   return `<figure class="photo-fig">
-    <img class="slope-photo" src="${p.dataUri}" />
-    <figcaption>Photo ${p.index + 1} · <span class="tag ${tagClass}">${esc(label)}</span></figcaption>
+    ${photoImgHtml(p.dataUri, p.annotations, p.imageW, p.imageH)}
+    <figcaption>Photo ${p.index + 1} · <span class="tag ${tagClass}">${esc(label)}</span>${annNote}</figcaption>
   </figure>`;
 }
 
@@ -792,7 +850,7 @@ function ruleCitationFor(category: DamageCategory, material: RoofMaterial): stri
 
 function insuranceSupplement(
   ins: Inspection,
-  brittlenessPhotos: string[],
+  brittlenessPhotos: BrittlenessPhoto[],
   inspector: InspectorProfile,
 ): string {
   const threshold = thresholdFor(ins.material);
@@ -869,8 +927,8 @@ function insuranceSupplement(
     brittlenessPhotoBlock =
       `<div class="photo-row">${brittlenessPhotos
         .map(
-          (uri, i) =>
-            `<figure class="photo-fig"><img class="slope-photo" src="${uri}" /><figcaption>Brittleness field protocol — photo ${i + 1} of ${brittlenessPhotos.length}</figcaption></figure>`,
+          (p, i) =>
+            `<figure class="photo-fig">${photoImgHtml(p.dataUri, p.annotations, p.imageW, p.imageH)}<figcaption>Brittleness field protocol — photo ${i + 1} of ${brittlenessPhotos.length}</figcaption></figure>`,
         )
         .join('')}</div>` +
       (protoPhotoCount > brittlenessPhotos.length

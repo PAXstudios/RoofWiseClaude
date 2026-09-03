@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { DamageMarkerLayer } from '@/components/DamageMarkerLayer';
+import { AnnotatedPhoto } from '@/components/photo/AnnotatedPhoto';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { RichCard } from '@/components/ui/RichCard';
@@ -178,15 +178,24 @@ export default function PhotoReportScreen() {
         back={() => router.back()}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* The photo with its markers, read-only. Taps do nothing here — editing
-            is a deliberate step, one card down. */}
+        {/* The photo with its AI markers and any freehand annotation, both
+            read-only — editing markers is a deliberate step, one card down.
+            Tapping the photo opens the annotator, RoofBid-style: draw on
+            it, add a label, straight from the report. */}
         <View style={styles.photoCard}>
-          <DamageMarkerLayer
-            photoUri={uri}
+          <AnnotatedPhoto
+            uri={uri}
+            style={styles.photoFill}
+            contentFit="contain"
+            zoomable
             markers={markers}
-            selectedMarkerId={null}
-            onTapPhoto={() => {}}
-            onSelectMarker={() => {}}
+            onPress={() =>
+              router.push({
+                pathname: '/annotate',
+                params: { inspectionId: inspection.id, slopeId: slope.id, index: String(index) },
+              })
+            }
+            accessibilityLabel="Photo. Tap to draw on it or add a label."
           />
         </View>
 
@@ -416,6 +425,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     ...shadows.raised,
   },
+  photoFill: { flex: 1 },
   headline: { gap: spacing.sm },
   headlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headlineTitle: {
