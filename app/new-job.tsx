@@ -62,6 +62,7 @@ import {
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { researchProperty } from '@/lib/services/propertyIntel';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import {
   DOL_MATCH_WINDOW_DAYS,
@@ -280,6 +281,7 @@ const MODAL_SCREEN_OPTIONS = {
 export default function NewJobWizard() {
   const router = useRouter();
   const createInspection = useInspectionStore((s) => s.create);
+  const setPropertyIntel = useInspectionStore((s) => s.setPropertyIntel);
   const setEvent = useInspectionStore((s) => s.setEvent);
   const setStormSearchOutcome = useInspectionStore((s) => s.setStormSearchOutcome);
   const logActivity = useActivityStore((s) => s.log);
@@ -495,6 +497,26 @@ export default function NewJobWizard() {
         });
       }
     };
+
+    // Background property research — measure the roof from aerial imagery the
+    // moment the job exists, so the inspector walks up already knowing how many
+    // squares it is, and the §5 cost formula (RC = D x U x R x A) has an A.
+    // Every outcome is persisted, failures included with their reason, so the
+    // job screen can say what happened instead of showing an empty measurement.
+    researchProperty({ address: ins.address, lat: ins.lat, lng: ins.lng })
+      .then((intel) => {
+        setPropertyIntel(ins.id, intel);
+        if (intel.status === 'measured' && intel.totalSquares != null) {
+          toast({
+            tone: 'success',
+            title: 'Roof measured',
+            body: `${intel.totalSquares.toFixed(1)} squares from aerial imagery${
+              intel.imageryDate ? ` (${intel.imageryDate})` : ''
+            }`,
+          });
+        }
+      })
+      .catch(() => {});
 
     if (ins.lat !== undefined && ins.lng !== undefined) {
       const state = stateFromAddress(ins.address);

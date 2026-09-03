@@ -581,6 +581,13 @@ export type Inspection = {
   /** How the automatic storm search resolved — absent on inspections that never searched. */
   stormSearchOutcome?: StormSearchOutcome;
 
+  /**
+   * Aerial roof measurement + property research, run automatically when the
+   * job is created. Absent on inspections created before this existed and on
+   * any job whose address never resolved to coordinates.
+   */
+  propertyIntel?: PropertyIntel;
+
   // Slopes
   slopes: Slope[];
 
@@ -616,6 +623,61 @@ export type Inspection = {
 
   // Free-form notes
   notes?: string;
+};
+
+/**
+ * What the app found out about the property on its own, before anyone climbed
+ * a ladder — measured from aerial imagery (Google Solar `buildingInsights`,
+ * used for ROOF GEOMETRY, not solar production).
+ *
+ * This is the record that lets the rest of the app stop guessing: real squares
+ * feed the HAAG §5 repair-cost formula (RC = D x U x R x A, which computes to
+ * zero without A), the cost estimator, the proposal, and the report's own
+ * statement of how the roof was measured.
+ *
+ * `status` is deliberately part of the record. A failed or unavailable
+ * measurement is STORED as a failure with its reason, so every surface can say
+ * "not measured, here's why" instead of quietly showing zero squares as if
+ * that were a finding (Drift #5).
+ */
+export type PropertyIntel = {
+  /** ISO timestamp the research ran. */
+  measuredAt: string;
+  /** How it was measured. Aerial = Google Solar building insights. */
+  source: 'aerial';
+  status: PropertyIntelStatus;
+  /** Total roof area in squares (1 square = 100 sq ft). Only when measured. */
+  totalSquares?: number;
+  /** Per roof-face geometry, as returned by the imagery. Only when measured. */
+  slopes?: PropertyIntelSlope[];
+  /** Capture date of the aerial imagery, YYYY-MM-DD. Carriers ask. */
+  imageryDate?: string;
+  imageryQuality?: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+  center?: { lat: number; lng: number };
+  /**
+   * Plain-English reason, shown verbatim when `status` is not 'measured'.
+   * Never a synthesized measurement and never a bare error code.
+   */
+  reason?: string;
+};
+
+export type PropertyIntelStatus =
+  /** Imagery found and measured. */
+  | 'measured'
+  /** Google answered but has no building at this point. */
+  | 'no_building'
+  /** Key, quota, billing, or network — retryable. */
+  | 'unavailable'
+  /** No coordinates to measure from (address never geocoded). */
+  | 'no_location';
+
+export type PropertyIntelSlope = {
+  orientation: SlopeOrientation;
+  pitchDegrees: number;
+  /** "5/12" — how a roofer says it. */
+  pitchRatio: string;
+  squares: number;
+  azimuthDegrees: number;
 };
 
 export type AudioNote = {

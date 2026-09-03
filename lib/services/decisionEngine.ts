@@ -36,6 +36,9 @@ import {
   thresholdFor,
   type ThresholdObservation,
 } from './haagThresholds';
+// Pure readers only — the measurement itself is fetched by the job flow and
+// persisted on the Inspection, so no I/O crosses this import (Drift #8).
+import { slopeSquares, totalSquares } from './propertyIntel';
 import {
   assessClaimViability,
   carrierSpecificRequirements,
@@ -1022,11 +1025,18 @@ export function engineInputFromInspection(
   const eventHoursFromDol =
     tripleCheck?.daysFromDol != null ? Math.abs(tripleCheck.daysFromDol) * 24 : undefined;
 
+  // Roof area, from the aerial measurement or whatever the inspector entered.
+  // §5's RC = D x U x R x A is identically zero without A, so an unmeasured
+  // roof must leave these UNDEFINED rather than pass 0 — a real zero would
+  // report "$0 to repair" as if it were a finding (Drift #5).
+  const roofSquares = totalSquares(inspection);
+
   return {
     structural: {
       material_type: inspection.material,
       age_of_roof: inspection.ageYears,
       number_of_slopes: inspection.slopes.length,
+      square_footage: roofSquares != null ? roofSquares * 100 : undefined,
       brittleness_result: brittleness,
       // is_discontinued / layers / mat_transfer are not captured by the legacy
       // model — left undefined so the engine reports them as uncertainty (§9)
@@ -1047,6 +1057,9 @@ export function engineInputFromInspection(
         // The legacy model has no independent cosmetic flag — left undefined
         // (unknown) so raw counts still drive the §4 tree.
         collateral_damage: i === 0 ? collateral : [],
+        // Per-slope area (§5's A): hand-entered wins, then the aerial
+        // measurement for that elevation, then undefined.
+        area_squares: slopeSquares(inspection, s),
         observation: legacyObservation(inspection.material, s),
       })),
     },

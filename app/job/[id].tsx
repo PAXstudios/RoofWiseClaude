@@ -39,6 +39,7 @@ import { SignaturePad } from '@/components/SignaturePad';
 import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
 import { DamageScoreCard } from '@/components/DamageScoreCard';
+import { PropertyIntelCard } from '@/components/PropertyIntelCard';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { transcribeAudio } from '@/lib/services/transcribeAudio';
@@ -87,6 +88,17 @@ import {
   spacing,
   touchTarget,
 } from '@/theme/tokens';
+
+/**
+ * Roof-system subtitle. Fields absent on an older persisted inspection are
+ * DROPPED, never interpolated — a card reading "undefined · 12 yr · undefined"
+ * is worse than one reading "12 yr".
+ */
+function roofSystemLine(ins: Inspection): string {
+  return [ins.geometry, `${ins.ageYears} yr`, ins.condition]
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    .join(' · ');
+}
 
 /** Rates are read by adjusters — print 6.9, never 6.888888888888889. */
 function fmtRate(n: number): string {
@@ -148,6 +160,7 @@ export default function JobDetail() {
   const setStatus = useInspectionStore((s) => s.setStatus);
   const setInspectorSignature = useInspectionStore((s) => s.setInspectorSignature);
   const setCollateralItem = useInspectionStore((s) => s.setCollateralItem);
+  const setPropertyIntel = useInspectionStore((s) => s.setPropertyIntel);
   const setCollateralZone = useInspectionStore((s) => s.setCollateralZone);
   const setBrittlenessProtocol = useInspectionStore((s) => s.setBrittlenessProtocol);
   const setReportFinalizedAt = useInspectionStore((s) => s.setReportFinalizedAt);
@@ -572,11 +585,19 @@ export default function JobDetail() {
 
         <SectionHeader title="Property" style={styles.sectionSpacing} />
 
+        {/* What the app worked out on its own. Every per-square number on this
+            screen — HAAG §5 repair cost, the estimate, the proposal — is priced
+            against this measurement, so it leads the section. */}
+        <PropertyIntelCard
+          inspection={inspection}
+          onMeasured={(intel) => setPropertyIntel(inspection.id, intel)}
+        />
+
         <RichCard
           icon="layers-outline"
           iconTone="blue"
           title={ROOF_MATERIAL_LABELS[inspection.material]}
-          subtitle={`${inspection.geometry} · ${inspection.ageYears} yr · ${inspection.condition}`}
+          subtitle={roofSystemLine(inspection)}
         />
 
         {(inspection.carrier || isClaim) && (

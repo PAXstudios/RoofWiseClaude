@@ -22,7 +22,9 @@ import type {
   SlopeOrientation,
   DamageMarker,
   InspectionFinding,
+  PropertyIntel,
 } from '../models/types';
+import { squaresFacing } from '../services/propertyIntel';
 import { bucketHitCountsByMode } from '../services/captureSession';
 import {
   brittlenessResultToLegacy,
@@ -39,11 +41,18 @@ function newSlopeId(): string {
   return `slp_${Date.now()}_${counter++}`;
 }
 
-function makeSlope(orientation: SlopeOrientation): Slope {
+/**
+ * @param intel  the job's aerial measurement, when it has one — a slope
+ *   created later (the inspector walks a new elevation) still gets its
+ *   measured area, so area does not depend on capture order.
+ */
+function makeSlope(orientation: SlopeOrientation, intel?: PropertyIntel): Slope {
+  const detected = squaresFacing(intel, orientation);
   return {
     id: newSlopeId(),
     orientation,
     areaSquares: 0,
+    detectedAreaSquares: detected,
     damage: [],
     hailCount: 0,
     windLiftCount: 0,
@@ -146,6 +155,12 @@ type InspectionStoreState = {
   setStatus: (id: string, status: InspectionStatus) => void;
   setEvent: (id: string, event: Inspection['event']) => void;
   setStormSearchOutcome: (id: string, outcome: Inspection['stormSearchOutcome']) => void;
+  /**
+   * Store the aerial roof measurement and seed every slope's
+   * `detectedAreaSquares` from it, so the cost formula, the estimator and the
+   * proposal all read the same number without each re-deriving it.
+   */
+  setPropertyIntel: (id: string, intel: PropertyIntel) => void;
   setInspectorSignature: (id: string, svg: string) => void;
   setCollateralItem: (id: string, key: string, value: boolean) => void;
   setKind: (id: string, kind: InspectionKind) => void;
@@ -332,6 +347,25 @@ export const useInspectionStore = create<InspectionStoreState>()(
         set((s) => ({
           inspections: s.inspections.map((i) =>
             i.id === id ? { ...i, stormSearchOutcome: outcome } : i,
+          ),
+        })),
+
+      setPropertyIntel: (id, intel) =>
+        set((st) => ({
+          inspections: st.inspections.map((i) =>
+            i.id === id
+              ? {
+                  ...i,
+                  propertyIntel: intel,
+                  // Seed the measured area onto slopes that have none. A number
+                  // the inspector typed always wins — they were on the roof.
+                  slopes: i.slopes.map((sl) => {
+                    if (sl.detectedAreaSquares != null) return sl;
+                    const squares = squaresFacing(intel, sl.orientation);
+                    return squares == null ? sl : { ...sl, detectedAreaSquares: squares };
+                  }),
+                }
+              : i,
           ),
         })),
 
@@ -582,7 +616,7 @@ export const useInspectionStore = create<InspectionStoreState>()(
             for (const cap of captures) {
               let slope = slopes.find((sl) => sl.orientation === cap.slope);
               if (!slope) {
-                slope = makeSlope(cap.slope);
+                slope = makeSlope(cap.slope, ins.propertyIntel);
                 slopes.push(slope);
               }
               const photoIndex = slope.photoPaths.length;
@@ -603,7 +637,7 @@ export const useInspectionStore = create<InspectionStoreState>()(
             for (const cap of captures) {
               let slope = slopes.find((sl) => sl.orientation === cap.slope);
               if (!slope) {
-                slope = makeSlope(cap.slope);
+                slope = makeSlope(cap.slope, ins.propertyIntel);
                 slopes.push(slope);
               }
               const photoIndex = slope.photoPaths.length;

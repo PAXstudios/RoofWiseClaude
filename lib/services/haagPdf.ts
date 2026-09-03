@@ -51,6 +51,11 @@ import { resolveEngineResult } from './storedEngine';
 import { stampReportIntegrity } from './reportIntegrity';
 import { recordReportMs } from './telemetry';
 import { tripleCheckDateOfLoss } from './stormMatch';
+import {
+  imageryPredatesLoss,
+  isMeasured,
+  totalSquares as totalSquaresFor,
+} from './propertyIntel';
 import { evaluateMaterialThreshold, thresholdFor } from './haagThresholds';
 import {
   CONFIDENCE_BOUNDS,
@@ -491,6 +496,7 @@ function renderHtml(
     <tr><th>Geometry</th><td>${esc(ins.geometry)}</td></tr>
     <tr><th>Condition</th><td>${esc(ins.condition)}</td></tr>
     <tr><th>Brittleness test</th><td>${esc(ins.brittlenessTest.replace(/_/g, ' '))}</td></tr>
+    <tr><th>Roof area</th><td>${esc(roofAreaLine(ins))}</td></tr>
     <tr><th>Haag threshold applied</th><td><strong>${esc(threshold.rule)}</strong></td></tr>
   </table>
 
@@ -1107,6 +1113,32 @@ function narrative(ins: Inspection, decision: DecisionEngineResult): string {
  *   MEDIUM → the hedged path (close to the line; verify before filing)
  *   HIGH   → the strong path (file; this report is built for the adjuster)
  */
+/**
+ * How big the roof is AND how that was established. An adjuster strikes a bare
+ * square count with no provenance, and an unmeasured roof must say so rather
+ * than print a zero that reads like a measurement (Drift #5).
+ */
+function roofAreaLine(ins: Inspection): string {
+  const squares = totalSquaresFor(ins);
+  if (squares == null) return 'Not measured — squares were never established for this roof.';
+  const intel = ins.propertyIntel;
+  if (isMeasured(intel)) {
+    const stale = imageryPredatesLoss(intel, ins.dateOfLoss)
+      ? ' Imagery predates the reported date of loss; roof area is unchanged by the event.'
+      : '';
+    return (
+      `${squares.toFixed(1)} squares (~${Math.round(squares * 100).toLocaleString()} sq ft), ` +
+      `measured from aerial imagery captured ${intel.imageryDate ?? 'on an unstated date'}` +
+      `${intel.imageryQuality && intel.imageryQuality !== 'UNKNOWN' ? ` at ${intel.imageryQuality.toLowerCase()} quality` : ''}` +
+      `, across ${intel.slopes.length} roof face${intel.slopes.length === 1 ? '' : 's'}.${stale}`
+    );
+  }
+  return (
+    `${squares.toFixed(1)} squares (~${Math.round(squares * 100).toLocaleString()} sq ft), ` +
+    'entered by the inspector on site.'
+  );
+}
+
 function homeownerSummary(
   ins: Inspection,
   decision: DecisionEngineResult,

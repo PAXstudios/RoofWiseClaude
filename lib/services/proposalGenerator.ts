@@ -2,6 +2,7 @@
 // Uses the Decision Engine + CostEstimator to seed line items, scope, and total.
 
 import type { Inspection, Proposal, ProposalLineItem } from '../models/types';
+import { totalSquares as totalSquaresFor } from './propertyIntel';
 import { resolveEngineResult } from './storedEngine';
 import { estimateCost, regionForState, type DamageScope } from './costEstimator';
 
@@ -49,12 +50,18 @@ export function generateProposalDraft(
       ? 'partial_replacement'
       : 'repair';
 
-  const totalSquares =
-    opts.totalSquares ??
-    Math.max(
-      1,
-      inspection.slopes.reduce((s, sl) => s + (sl.detectedAreaSquares ?? sl.areaSquares ?? 0), 0),
-    );
+  // One roof, one area. `measuredSquares` reads the aerial measurement, then
+  // hand-entered slope areas, in that order — the same reader the HAAG cost
+  // formula and the estimator use, so a proposal can never quote a different
+  // size than the packet the homeowner was shown.
+  //
+  // The `Math.max(1, ...)` floor below is a LAST RESORT, and it is why this
+  // roof must be measured: without it the generator used to price a 1-square
+  // roof in silence, which reads as a real quote for about $400. When it fires,
+  // `squaresAreEstimated` is true and the scope of work says so in words.
+  const measuredSquares = totalSquaresFor(inspection);
+  const squaresAreEstimated = opts.totalSquares == null && measuredSquares == null;
+  const totalSquares = opts.totalSquares ?? measuredSquares ?? 1;
 
   const cost = estimateCost({
     material: inspection.material,
@@ -87,7 +94,7 @@ export function generateProposalDraft(
     jobId: inspection.id,
     status: 'draft',
     coverNarrative: buildCoverNarrative(inspection),
-    scopeOfWork: buildScope(decision.roofVerdictReasoning, totalSquares),
+    scopeOfWork: buildScope(decision.roofVerdictReasoning, totalSquares, squaresAreEstimated),
     lineItems,
     subtotal: Math.round(subtotal),
     tax: Math.round(tax),
@@ -112,11 +119,14 @@ function buildCoverNarrative(ins: Inspection): string {
   );
 }
 
-function buildScope(reasoning: string, squares: number): string {
-  return (
-    `Scope of work covers ${squares.toFixed(1)} squares (~${Math.round(squares * 100)} sq ft). ` +
-    `${reasoning} All materials installed per manufacturer specification and applicable code.`
-  );
+function buildScope(reasoning: string, squares: number, estimated: boolean): string {
+  // An unmeasured roof says so IN THE PROPOSAL. A homeowner signing a price
+  // is entitled to know the area behind it was never established.
+  const area = estimated
+    ? 'Roof area has not been measured yet — this price is a placeholder until it is. ' +
+      'Measure the roof (aerial or on site) and re-issue before sending.'
+    : `Scope of work covers ${squares.toFixed(1)} squares (~${Math.round(squares * 100)} sq ft).`;
+  return `${area} ${reasoning} All materials installed per manufacturer specification and applicable code.`;
 }
 
 function buildTerms(warrantyYears: number): string {
