@@ -20,3 +20,7 @@ android/
 
 # Design canvas: keep the artboard sources, not the 2.5MB seeded editor payload
 .design/roofwise-app-screens.html
+# Raw markup extracted from the owner's Claude Design mock while building
+# docs/DESIGN_1A.md — that doc is the curated, real source of truth; this is
+# scratch provenance, not worth carrying in the repo.
+.design/1a-raw.html
