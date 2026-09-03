@@ -82,6 +82,18 @@ The recommendation sets the range. This guarantees score↔verdict agreement.
 | `PARTIAL_REPLACEMENT` | **Compromised — partial replacement** | 31–60 |
 | `FULL_REPLACEMENT` | **Failed — full replacement indicated** | 0–30 |
 
+**One documented refinement.** `NO_STORM_DAMAGE` is a strong claim: §4 step 1 fires only
+when there is no functional damage **and** a storm search actually ran and found nothing.
+A pristine roof whose storm search never ran therefore exits the tree as `REPAIR` with the
+matched rule *"No qualifying storm damage found."* Scoring that roof 61–85 would imply
+repairs on a roof with nothing to repair, so **`REPAIR` with zero documented damage on every
+countable slope maps to Sound**. Everything else follows the table.
+
+**Not-assessed is a state, not a score.** With no slope documented there is nothing to score;
+`computeDamageScore` returns `{ assessed: false }` and the UI shows "Not assessed" (Drift #5 —
+an absent determination is stated, never synthesized). A score of 100 for an uninspected roof
+would be a fabrication.
+
 ## Step 2 — Position within the band by severity (0 = least severe → band top)
 
 `severity = Σ(weight × component)`, each component 0..1, clamped. Cosmetic-only slopes
@@ -90,10 +102,15 @@ contribute **0** (§1: cosmetic never counts).
 | # | Component | W | Definition (all from engine inputs/outputs) |
 |---|---|---|---|
 | S1 | **Threshold exceedance** | .35 | `max over slopes(hail_hits_per_square ÷ material_threshold)`; mapped so 1.0× = 0.5 and ≥2.0× = 1.0; below threshold scales 0→0.5. Cites §2 + the material rule. |
-| S2 | **Breadth across slopes** | .25 | `slopes_meeting_threshold ÷ slopes_documented`. §4 escalates to FULL when functional damage spans >2 slopes; storms hitting every elevation are worse. |
+| S2 | **Breadth across slopes** | .25 | `max(slopes meeting the §2 threshold, slopes flagged functional under §1) ÷ slopes documented`. §4 escalates to FULL when functional damage spans >2 slopes; storms hitting every elevation are worse. |
 | S3 | **Repairability gates** | .20 | `gates_triggered ÷ 4` (discontinued material, brittleness FAIL/BORDERLINE, layers ≥2, appearance/granular mismatch). §3 — these remove any repair path. |
-| S4 | **Functional severity** | .15 | Presence of §1 hard markers: mat fracture, punctures, substrate exposure, `mat_transfer == severe`, missing shingles. Fraction of markers present. |
-| S5 | **Other perils** | .05 | Wind: `wind_damaged_pct ÷ 5%` threshold, creased courses vs 3, missing vs 1; metal/tile/flat use their §2 percentages. |
+| S4 | **Functional severity** | .15 | Fraction of these five §1 hard markers present: `functional_damage_present` on any countable slope, `substrate_exposure`, `mat_transfer == severe`, `missing_shingles > 0`, and a material-specific breach (membrane puncture, underlayment exposure, or metal seam disengagement). |
+| S5 | **Other perils** | .05 | Wind, per countable slope: `max(wind_damaged_pct ÷ 5, creased ÷ 3, missing ÷ 1)`, clamped. The material's own §2 rule is already carried by S1. |
+
+When a material's §2 rule fired but its magnitude was never quantified — a membrane
+puncture recorded as a boolean, say, with no puncture-density percent — S1 takes **0.75**
+(threshold met, magnitude unknown) and the unrecorded measurement is named in `missing`.
+Placing it below 1.0 keeps an unquantified finding from scoring as the worst case.
 
 `score = band_top − severity × (band_top − band_bottom)`, rounded, clamped to the band.
 

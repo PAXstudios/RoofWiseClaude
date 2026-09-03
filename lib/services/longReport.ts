@@ -582,7 +582,9 @@ export function renderLongReportHtml(payload: LongReportPayload): string {
         </tr>`;
       }).join('')
     : '';
-  const legacyChecklist = Object.entries(ins.collateralChecklist);
+  // Guarded like every other read site: the field is required by the type
+  // but absent on inspections persisted before it was added.
+  const legacyChecklist = Object.entries(ins.collateralChecklist ?? {});
   const collateralSection = `
     ${engineCollateral.length > 0
       ? `<table>

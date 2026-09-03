@@ -10,7 +10,12 @@
 //   3. Per-slope evaluation (§1, §2, §9)
 //   4. Repairability gates (§3) + roof-level decision tree (§4, first match wins)
 //   5. Top-level engine (§9): runHaagDecisionEngine()
-//   6. Legacy compatibility layer: evaluate() / damageScore() / claimWorthiness()
+//   6. Legacy compatibility layer: evaluate()
+//
+// The 0-100 damage score lives in ./damageScore.ts, DERIVED from this
+// engine's result (docs/DAMAGE_SCORE.md). It used to live here with invented
+// weights running in the opposite direction, which is how a severely
+// hail-damaged roof scored low and read as ordinary age wear.
 
 import {
   ROOF_MATERIAL_LABELS,
@@ -282,6 +287,17 @@ function slopeObservation(s: SlopeInput): ThresholdObservation {
 }
 
 /**
+ * Hits per test square is a RATE (total hits ÷ squares shot), so it is rarely a
+ * whole number. Every string in this file is read by an adjuster — print 6.9,
+ * never 6.888888888888889. A report that shows its arithmetic residue invites
+ * the exact pushback the citation exists to prevent.
+ */
+function fmtRate(n: number): string {
+  if (!Number.isFinite(n)) return '0';
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/**
  * §1: a slope flagged cosmetic-only (and not functional) does not count toward
  * roof-level aggregates — "wear and tear must be ruled out before a finding
  * counts". The flags are authoritative inputs, never re-derived.
@@ -322,7 +338,7 @@ function evaluateSlopeInput(
   const th = evaluateMaterialThreshold(material, slopeObservation(s));
   const observed = slopeHasObservedDamage(s);
   const threshold = thresholdFor(material);
-  const hailText = Number.isInteger(hail) ? String(hail) : hail.toFixed(1);
+  const hailText = fmtRate(hail);
   const summary = `Observed: ${hailText} hail hits/square, ${creased} creased, ${missing} missing.`;
 
   let action: SlopeRecommendedAction;
@@ -500,13 +516,13 @@ function decideRoof(input: HaagEngineInput): RoofDecision {
 
   // ---- §4 step 3: hail_hits_per_square >= 8 → FULL_REPLACEMENT
   if (maxHail >= 8) {
-    path.push(`§4 step 3 matched: ${maxHail} hail hits per square >= 8.`);
+    path.push(`§4 step 3 matched: ${fmtRate(maxHail)} hail hits per square >= 8.`);
     return done(
       'FULL_REPLACEMENT',
-      `${maxHail} hail hits per test square meets the >= 8 full-replacement trigger (HAAG §4, step 3).`,
+      `${fmtRate(maxHail)} hail hits per test square meets the >= 8 full-replacement trigger (HAAG §4, step 3).`,
     );
   }
-  path.push(`§4 step 3 not matched: max hail ${maxHail}/square < 8.`);
+  path.push(`§4 step 3 not matched: max hail ${fmtRate(maxHail)}/square < 8.`);
 
   // ---- §4 step 4: wind_creased_shingles >= 3 AND multi_slope → FULL_REPLACEMENT
   if (totalCreased >= 3 && windDamagedSlopes.length >= 2) {
@@ -548,13 +564,13 @@ function decideRoof(input: HaagEngineInput): RoofDecision {
 
   // ---- §4 step 5: hail_hits_per_square between 4 and 7 → PARTIAL_REPLACEMENT
   if (maxHail >= 4 && maxHail <= 7) {
-    path.push(`§4 step 5 matched: ${maxHail} hail hits per square in the 4–7 band.`);
+    path.push(`§4 step 5 matched: ${fmtRate(maxHail)} hail hits per square in the 4–7 band.`);
     return done(
       'PARTIAL_REPLACEMENT',
-      `${maxHail} hail hits per test square falls in the 4–7 partial-replacement band (HAAG §4, step 5).`,
+      `${fmtRate(maxHail)} hail hits per test square falls in the 4–7 partial-replacement band (HAAG §4, step 5).`,
     );
   }
-  path.push(`§4 step 5 not matched: max hail ${maxHail}/square outside 4–7.`);
+  path.push(`§4 step 5 not matched: max hail ${fmtRate(maxHail)}/square outside 4–7.`);
 
   // ---- §4 step 6: isolated single-slope wind damage → PARTIAL_REPLACEMENT
   if (windDamagedSlopes.length === 1) {
@@ -593,7 +609,7 @@ function decideRoof(input: HaagEngineInput): RoofDecision {
 
   // ---- §4 REPAIR — requires ALL strict preconditions.
   const failedPreconditions: string[] = [];
-  if (!(maxHail < 4)) failedPreconditions.push(`hail < 4 per square (observed ${maxHail})`);
+  if (!(maxHail < 4)) failedPreconditions.push(`hail < 4 per square (observed ${fmtRate(maxHail)})`);
   if (!(totalCreased <= 2)) failedPreconditions.push(`creased ≤ 2 (observed ${totalCreased})`);
   if (!(totalMissing <= 1)) failedPreconditions.push(`missing ≤ 1 (observed ${totalMissing})`);
   if (!(damagedSlopes.length <= 2) || anyWidespreadDiscontinuity) {
@@ -1123,48 +1139,6 @@ export function evaluate(
     haag,
   };
 }
-
-/**
- * @deprecated The claimability protocol is qualitative (§6): use
- * `runHaagDecisionEngine().claim_viability` / `assessClaimViability()` from
- * `./claimViability` instead. This numeric score is NOT part of the HAAG spec
- * (its weights were never in any source document) and is retained only so the
- * existing dashboard chip keeps rendering until the UI migrates to the band.
- */
-export function damageScore(inspection: Inspection): number {
-  let score = 0;
-  for (const slope of inspection.slopes) {
-    score += slope.hailCount * 1.5;
-    score += slope.bruisingCount * 1.0;
-    score += slope.windLiftCount * 2.0;
-    score += slope.missingCount * 4.0;
-    score += slope.wearCount * 0.5;
-  }
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
-/** @deprecated Use the §6 HIGH/MEDIUM/LOW band from `claimViability.ts` instead. */
-export type ClaimWorthiness = 'not_claimable' | 'borderline' | 'claimable' | 'urgent';
-
-/**
- * @deprecated Use `runHaagDecisionEngine().claim_viability` (HIGH/MEDIUM/LOW,
- * §6) instead. Retained for existing callers (job detail, HAAG PDF).
- */
-export function claimWorthiness(result: DecisionEngineResult, damage: number): ClaimWorthiness {
-  if (result.roofRecommendation === 'full_replacement' && damage >= 70) return 'urgent';
-  if (result.roofRecommendation === 'full_replacement') return 'claimable';
-  if (result.roofRecommendation === 'partial_replacement') return 'claimable';
-  if (damage >= 30) return 'borderline';
-  return 'not_claimable';
-}
-
-/** @deprecated See `claimWorthiness`. */
-export const CLAIM_WORTHINESS_LABELS: Record<ClaimWorthiness, string> = {
-  not_claimable: 'Not Claimable',
-  borderline: 'Borderline',
-  claimable: 'Claimable',
-  urgent: 'Urgent',
-};
 
 // Re-exports so report layers can cite bands/ratings without extra imports.
 export { CLAIM_VIABILITY_LABELS } from './claimViability';

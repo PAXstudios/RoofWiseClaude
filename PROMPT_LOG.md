@@ -2497,3 +2497,39 @@ Recorded as a second **⚡ STANDING TRIGGER** at the top of `BACKLOG.md` "Now", 
 **Process:** three attempts to run this as a workflow died on the recurring infrastructure fault (permission handler stripping subagent tool parameters → StructuredOutput unusable; agents correctly refused to fabricate results, repo untouched). Completed in the main thread instead.
 
 **Files touched:** `lib/services/decisionEngine.ts`, `lib/services/haagThresholds.ts`, `docs/DAMAGE_SCORE.md`, `PROMPT_LOG.md`, `BACKLOG.md`.
+
+---
+
+### [2026-09-03] #66 — The RoofWise Damage Score: researched, implemented, and wired so it cannot contradict the verdict
+
+**Prompt:**
+> "So my ask: do you have the actual scoring methodolog? - no I do not. So research can come up with one that actually is realistic and meets the Haag standards"
+> (earlier, same thread) "100 being a roof that doesn't need repair or replacement and is perfect, and 0 being the worst damged roof — all based on how Haag calculates a roof replacement need using Insurance."
+
+**The research that decided the design.** Two findings, both load-bearing:
+
+1. **The 0–100 condition index is an established engineering convention, not a RoofWise idea.** The US Army Corps of Engineers (ERDC-CERL) Condition Index family — Pavement (PCI, ASTM D6433), Building (BCI), Roof (RCI) — all run 0–100 where **100 = "free from observable distress"** and 70–100 means the asset retains good remaining life. Anchoring there means the number is legible to anyone who has read a facility condition report, and it matches the owner's requested direction exactly.
+2. **HAAG's own damage definition is a service-life argument.** HAAG counts granule loss exposing bitumen as damage precisely *"due to the potential loss of remaining service life."* Damage is scored because it costs life — so a remaining-condition scale is the natural expression of a HAAG finding rather than a decoration on top of one.
+
+Also: HAAG thresholds derive from decades of controlled impact testing (the UL 2218 lineage), which is why the score keys off them rather than off weights someone invented; and age drives **repairability**, not damage.
+
+**The design — the score is DERIVED, never parallel.** The band comes from the §4 recommendation, so score↔verdict disagreement is structurally impossible:
+NO_STORM_DAMAGE → Sound 86–100 · REPAIR → Serviceable 61–85 · PARTIAL → Compromised 31–60 · FULL → Failed 0–30.
+Position *within* the band comes from five weighted, rule-cited severity components: S1 threshold exceedance .35 (ratio to the material's own §2 rule, from `haagThresholds.ts`, never a hardcoded number), S2 breadth across slopes .25, S3 §3 repairability gates .20, S4 §1 hard functional markers .15, S5 other perils .05. Cosmetic-only slopes contribute **0** (§1 is authoritative and is consumed, never re-derived). Confidence (slopes vs 4 elevations, test squares, brittleness, verified event) qualifies the number and never changes it.
+
+**Age is deliberately NOT a silent deduction.** A condition index would normally decay with age; this one doesn't. The score communicates *storm-damage severity for a claim*, and a 25-year-old undamaged roof scoring 40 on age alone would imply a claim where HAAG requires wear and tear to be **ruled out** (§1). Age enters only through the §3 gates and is surfaced as a labelled context line.
+
+**One documented refinement.** §4 step 1 fires NO_STORM_DAMAGE only when a storm search actually ran and found nothing, so a pristine roof whose search never ran exits the tree as REPAIR with *"No qualifying storm damage found."* REPAIR + zero documented damage therefore maps to **Sound**, not 61–85. And with nothing documented at all the result is `{ assessed: false }` — "Not assessed" is a state, never a score of 100 (Drift #5).
+
+**Verified by worked example** (every case from the doc, plus invariants across 3-tab / architectural / wood / tile / membrane / metal): owner's case 62 hits ÷ 9 squares = 6.9/sq → **45, "Compromised — partial replacement"**, and it can never read as age wear; pristine 4-slope roof → 100 Sound; 5/sq vs 6/sq → 47 vs 46 (both PARTIAL — the categorical signal is the threshold-met citation, not a score cliff); architectural at 6/sq (under its >8 rule) scores 48 vs 3-tab's 46; discontinued material + 2 hits → 18 Failed on the §3 gate alone; identical input → byte-identical output. Every case: score inside its band, deductions summing exactly to 100 − score, band agreeing with the §4 verdict, band label always present.
+
+**Three real bugs found while verifying, all fixed:**
+- **The §4 tree printed raw floats into the claim packet** — `matched_rule` read *"6.888888888888889 hail hits per test square."* #65 rounded the per-slope justifications and the §2 rule citations but not the tree's own. All rate strings now route through one `fmtRate`.
+- **The job screen crashed on any inspection missing `collateralChecklist`** — `TypeError: Cannot read properties of undefined (reading 'brittleness_observed')`, reproduced headless. The field is required by the type but has no persist migration, so records saved before it existed (or round-tripped through sync) take the screen down. Three services already guarded it with `?? {}`; `app/job/[id].tsx`, `haagPdf.ts` and `longReport.ts` did not. Now they do. This is a plausible source of the owner's "the app keeps crashing."
+- **The slope card printed the same unit error the engine had** — *"62 hits observed · threshold 6+ per 10×10' square."* It now leads with the rate the engine actually used (6.9 per square) and keeps the total as context ("62 hits documented across 9 photos").
+
+**UI.** New `components/DamageScoreCard.tsx`: the number and its band label are one inseparable block, a four-zone 0–100 scale with the marker at the score, a confidence pill, and a ≥56pt disclosure row opening the full deduction list with HAAG rule citations, the evidence gaps, and the age context line. The deprecated `damageScore()` / `claimWorthiness()` / `CLAIM_WORTHINESS_LABELS` are deleted; `DamageScoreBar` keeps its §6 claim-viability job and loses its legacy numeric path. Claimability is a band; severity is a score — two determinations, two components.
+
+**Gates:** typecheck, lint, `expo export --platform web` all green; headless boot of every tab plus `/inspections`, `/processing`, `/estimator`, `/reports` with zero page errors; the job screen rendered end-to-end from a seeded record with the card and its expanded breakdown correct.
+
+**Files touched:** `lib/services/damageScore.ts` (new), `components/DamageScoreCard.tsx` (new), `docs/DAMAGE_SCORE.md`, `lib/services/decisionEngine.ts`, `lib/services/haagPdf.ts`, `lib/services/longReport.ts`, `components/DamageScoreBar.tsx`, `app/job/[id].tsx`, `lib/models/types.ts`, `PROMPT_LOG.md`, `BACKLOG.md`.

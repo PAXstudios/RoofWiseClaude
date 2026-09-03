@@ -38,6 +38,8 @@ import { DEFAULT_CAPTURE_MODE, defaultAreaTagForSlope } from '@/lib/services/cap
 import { SignaturePad } from '@/components/SignaturePad';
 import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
+import { DamageScoreCard } from '@/components/DamageScoreCard';
+import { damageScoreFromEngine } from '@/lib/services/damageScore';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { transcribeAudio } from '@/lib/services/transcribeAudio';
 import { useToastStore } from '@/lib/stores/toastStore';
@@ -85,6 +87,12 @@ import {
   spacing,
   touchTarget,
 } from '@/theme/tokens';
+
+/** Rates are read by adjusters — print 6.9, never 6.888888888888889. */
+function fmtRate(n: number): string {
+  if (!Number.isFinite(n)) return '0';
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
 
 const COLLATERAL_ITEMS = [
   { key: 'brittleness_observed', label: 'Brittleness observed on test shingles' },
@@ -607,6 +615,12 @@ export default function JobDetail() {
 
         <SectionHeader title="Assessment" style={styles.sectionSpacing} />
 
+        {/* Condition severity (0-100, 100 = sound) derived from the SAME engine
+            result the verdict below cites - passing `haag` rather than letting
+            the score re-run the engine is what keeps the two in agreement on a
+            frozen packet. */}
+        <DamageScoreCard result={damageScoreFromEngine(inspection, haag)} />
+
         <DamageScoreBar
           band={haag.claim_viability}
           stats={[
@@ -662,6 +676,11 @@ export default function JobDetail() {
                 verdict={result?.verdict ?? 'repair'}
                 reasoning={result?.reasoning ?? ''}
                 confidenceAvg={result?.confidenceAvg ?? 0}
+                // The rate the ENGINE used, not a second derivation — the test
+                // square line must state the same number the verdict cites.
+                hitsPerSquare={
+                  haag.slope_evaluations.find((e) => e.slope === slope.id)?.hail_hits_per_square
+                }
               />
             );
           })
@@ -684,7 +703,10 @@ export default function JobDetail() {
 
         <RichCard icon="checkbox-outline" iconTone="blue" title="Collateral Checklist" contentStyle={styles.bodyRows}>
           {COLLATERAL_ITEMS.map((item) => {
-            const checked = !!inspection.collateralChecklist[item.key];
+            // `?? {}`: inspections persisted before this field existed (and
+            // records round-tripped through sync) arrive without it, and a
+            // bare index here took the whole job screen down.
+            const checked = !!(inspection.collateralChecklist ?? {})[item.key];
             return (
               <PressableScale
                 key={item.key}
@@ -1097,12 +1119,15 @@ function SlopeBlock({
   verdict,
   reasoning,
   confidenceAvg,
+  hitsPerSquare,
 }: {
   inspection: Inspection;
   slope: Slope;
   verdict: SlopeVerdict;
   reasoning: string;
   confidenceAvg: number;
+  /** The engine's `hail_hits_per_square` for this slope — a RATE, not a total. */
+  hitsPerSquare?: number;
 }) {
   const router = useRouter();
   const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
@@ -1160,13 +1185,28 @@ function SlopeBlock({
         </ScrollView>
       )}
 
+      {/* HAAG §2 is a RATE — hits per ONE 100 sq ft test square. Printing the
+          slope TOTAL against a per-square threshold ("62 hits observed ·
+          threshold 6+ per square") is the same unit error that made the engine
+          over-call damage: the more photos an inspector took, the worse it
+          read. Lead with the rate the engine used; keep the total as context. */}
       <View style={styles.testSquare}>
         <Text style={styles.testSquareLabel}>HAAG test square</Text>
         <Text style={styles.testSquareLine}>
-          {slope.hailCount} hits observed · threshold {threshold.hitsPerTestSquare === 0
+          {hitsPerSquare != null
+            ? `${fmtRate(hitsPerSquare)} hits per 10×10' square`
+            : `${slope.hailCount} hits observed`}
+          {' · threshold '}
+          {threshold.hitsPerTestSquare === 0
             ? '(penetration / crack)'
             : `${threshold.hitsPerTestSquare}+ per 10×10' square`}
         </Text>
+        {hitsPerSquare != null && (
+          <Text style={styles.testSquareLine}>
+            {slope.hailCount} hit{slope.hailCount === 1 ? '' : 's'} documented across{' '}
+            {slope.photoPaths.length} photo{slope.photoPaths.length === 1 ? '' : 's'} on this slope.
+          </Text>
+        )}
         <Text style={styles.testSquareRule}>{threshold.rule}</Text>
       </View>
 

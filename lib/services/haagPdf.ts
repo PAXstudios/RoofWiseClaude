@@ -587,9 +587,9 @@ function renderHtml(
 
   <h2><span class="n">09</span>Collateral Evidence</h2>
   ${
-    Object.keys(ins.collateralChecklist).length === 0
+    Object.keys(ins.collateralChecklist ?? {}).length === 0
       ? '<p class="reasoning">No collateral checklist recorded.</p>'
-      : `<table>${Object.entries(ins.collateralChecklist)
+      : `<table>${Object.entries(ins.collateralChecklist ?? {})
           .map(([k, v]) => `<tr><th>${esc(collateralLabel(k))}</th><td>${v ? '<span class="pill pill-ok">Yes</span>' : '<span class="pill pill-slate">No</span>'}</td></tr>`)
           .join('')}</table>`
   }

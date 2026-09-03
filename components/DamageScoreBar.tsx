@@ -1,11 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  claimWorthiness,
-  type ClaimViabilityBand,
-  type ClaimWorthiness,
-  type DecisionEngineResult,
-} from '@/lib/services/decisionEngine';
+import { type ClaimViabilityBand } from '@/lib/services/decisionEngine';
 import { ProgressBar, type ProgressTone } from '@/components/ui/ProgressBar';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import type { IoniconName } from '@/components/ui/IconChip';
@@ -30,21 +25,18 @@ import {
  * "68 of 100" invites a roofer to argue a number with an adjuster that no
  * standard backs; a band says exactly what the engine is willing to stand on.
  *
- * Pass `band` — the engine's `claim_viability`. The `score` prop is kept for
- * call sites that still hold the deprecated number and is mapped to a band
- * through the engine's own `claimWorthiness()` (see below), never through
- * thresholds restated here. `stats` is a purely presentational, optional
- * addendum — pre-formatted counts (slopes, photos, findings…) that give the
- * verdict evidentiary weight without this component knowing what they mean.
+ * Pass `band` — the engine's `claim_viability`. `stats` is a purely
+ * presentational, optional addendum — pre-formatted counts (slopes, photos,
+ * findings…) that give the verdict evidentiary weight without this component
+ * knowing what they mean.
+ *
+ * Condition SEVERITY is a different determination and a different component:
+ * `DamageScoreCard` renders the 0–100 RoofWise Damage Score
+ * (docs/DAMAGE_SCORE.md). Claimability is a band; severity is a score.
  */
 type Props = {
-  /** The §6 claim-viability band from the decision engine. Preferred. */
+  /** The §6 claim-viability band from the decision engine. */
   band?: ClaimViabilityBand;
-  /**
-   * @deprecated Deprecated 0–100 damage score. Mapped to a band for display.
-   * Pass `band` instead — see `decisionEngine.damageScore()`'s deprecation note.
-   */
-  score?: number;
   /**
    * Supporting evidence counts — e.g. slopes evaluated, photos captured,
    * findings documented. Pre-formatted by the caller and rendered in tabular
@@ -86,41 +78,8 @@ const UNASSESSED_TONE = {
   icon: 'help-circle-outline' as IoniconName,
 };
 
-/**
- * `claimWorthiness()` reads exactly two things: the roof recommendation and
- * the number. Passing a recommendation-neutral probe means only its NUMERIC
- * branch can fire, so the deprecated score is banded by the engine's own
- * boundaries instead of boundaries copied into this file.
- */
-const NUMERIC_PROBE = {
-  perSlope: [],
-  roofRecommendation: 'repair',
-  roofVerdictReasoning: '',
-  verifyWithInspector: false,
-} as unknown as DecisionEngineResult;
-
-const WORTHINESS_TO_BAND: Record<ClaimWorthiness, ClaimViabilityBand> = {
-  urgent: 'HIGH',
-  claimable: 'HIGH',
-  borderline: 'MEDIUM',
-  not_claimable: 'LOW',
-};
-
-/**
- * Deprecated 0–100 score → §6 band, via the engine's `claimWorthiness()`.
- *
- * A bare number tops out at MEDIUM by construction: HIGH viability requires
- * weather corroboration and threshold findings the score knows nothing about,
- * so this path never asserts a strong claim on a number alone.
- */
-export function bandFromDeprecatedScore(score: number): ClaimViabilityBand {
-  const clamped = Math.max(0, Math.min(100, score));
-  return WORTHINESS_TO_BAND[claimWorthiness(NUMERIC_PROBE, clamped)];
-}
-
-export function DamageScoreBar({ band, score, stats }: Props) {
-  const resolved: ClaimViabilityBand | null =
-    band ?? (typeof score === 'number' ? bandFromDeprecatedScore(score) : null);
+export function DamageScoreBar({ band, stats }: Props) {
+  const resolved: ClaimViabilityBand | null = band ?? null;
 
   // Nothing evaluated yet reads as "not assessed" — never as a zero band
   // (Drift #5: an absent determination is stated, never synthesized).
@@ -178,11 +137,7 @@ export function DamageScoreBar({ band, score, stats }: Props) {
         </View>
       )}
 
-      <Text style={styles.footnote}>
-        {band === undefined && typeof score === 'number'
-          ? 'HAAG §6 band, estimated from the legacy damage score.'
-          : 'HAAG §6 band — viability is a band, not a score.'}
-      </Text>
+      <Text style={styles.footnote}>HAAG §6 band — viability is a band, not a score.</Text>
     </View>
   );
 }

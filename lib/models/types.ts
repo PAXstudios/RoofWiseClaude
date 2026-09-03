@@ -758,7 +758,13 @@ export type Job = {
   customerName: string;
   address: string;
   status: JobStatus;
-  damageScore?: number;          // 0-100
+  /**
+   * Cached RoofWise Damage Score: 0–100, 100 = sound (docs/DAMAGE_SCORE.md).
+   * Only ever write a value produced by `damageScore.ts` — it is derived from
+   * the HAAG engine result so it cannot disagree with the verdict, and a
+   * hand-rolled number here would reintroduce exactly that contradiction.
+   */
+  damageScore?: number;
   scheduledAt?: string;
   installStartAt?: string;
   installEndAt?: string;
