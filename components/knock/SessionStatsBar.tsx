@@ -7,7 +7,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import { Ionicons } from '@expo/vector-icons';
 import type { SessionStats } from '@/lib/services/knockOutcomes';
 import { formatElapsed, formatMiles } from '@/lib/services/knockTrip';
-import { colors, fontSize, fontWeight, spacing } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, spacing } from '@/theme/tokens';
 
 type Props = {
   stats: SessionStats;
@@ -69,19 +69,21 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center', gap: 1 },
   divider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.hairline },
   value: {
+    fontFamily: fontFamily.archivo.extrabold,
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
     letterSpacing: -0.3,
   },
-  label: {
-    fontSize: fontSize.caption,
-    color: colors.textMuted,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+  // The "DOORS" / "ANSWERED · N" convention — dataLabel's mono/tracked meta style.
+  label: { ...dataLabel, color: colors.textMuted },
   stopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingTop: spacing.xs },
-  stopText: { flex: 1, fontSize: fontSize.bodySm, color: colors.brand, fontWeight: fontWeight.semibold },
+  stopText: {
+    flex: 1,
+    fontFamily: fontFamily.archivo.semibold,
+    fontSize: fontSize.bodySm,
+    color: colors.brand,
+    fontWeight: fontWeight.semibold,
+  },
 });

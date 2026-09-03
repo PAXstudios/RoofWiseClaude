@@ -46,7 +46,7 @@ import {
   type StormSwath,
   type SwathPeril,
 } from '@/lib/services/stormSwath';
-import { colors, fontSize, fontWeight, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 const TONE_STROKE: Record<StormTone, string> = {
   hail: colors.stormHail,
@@ -412,12 +412,14 @@ const styles = StyleSheet.create({
   glyphSelected: { borderWidth: 3, transform: [{ scale: 1.15 }] },
   glyphCount: {
     color: colors.textInverse,
+    fontFamily: fontFamily.mono,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.bold,
     fontVariant: ['tabular-nums'],
   },
   glyphMag: {
     color: colors.textInverse,
+    fontFamily: fontFamily.mono,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.semibold,
     marginTop: -2,

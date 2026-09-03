@@ -20,7 +20,7 @@ import { clockFromStart, fmtMinutes, type TripDay } from '@/lib/services/knockOp
 import { cancelKnockDayReminder, scheduleKnockDayReminder } from '@/lib/services/pushNotifications';
 import { fetchDailyForecast } from '@/lib/services/weatherForecast';
 import { isWeatherConfigured } from '@/lib/env';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 export type ScheduleDaySheetProps = {
   visible: boolean;
@@ -241,13 +241,8 @@ export function ScheduleDaySheet({ visible, plan, day, onClose }: ScheduleDayShe
 }
 
 const styles = StyleSheet.create({
-  groupLabel: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+  // "WHICH DAY" / "START" — the mock's STEP-eyebrow convention.
+  groupLabel: { ...dataLabel, color: colors.textMuted },
   chipRow: { gap: spacing.sm, paddingVertical: spacing.xs },
   chip: {
     minHeight: touchTarget.standard,
@@ -260,7 +255,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   chipOn: { backgroundColor: colors.navy },
-  chipText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  chipText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   chipTextOn: { color: colors.textInverse },
   hourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   hourChip: {
@@ -272,15 +267,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  quiet: { fontSize: fontSize.bodySm, color: colors.textSubtle, lineHeight: 18 },
-  warn: { fontSize: fontSize.bodySm, color: colors.warn, lineHeight: 18 },
+  quiet: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textSubtle, lineHeight: 18 },
+  warn: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodySm, color: colors.warn, lineHeight: 18 },
   stops: { gap: 0 },
   stopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, minHeight: touchTarget.standard },
   stopBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   stopMain: { flex: 1, gap: 2 },
-  stopTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  stopSub: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  stopScore: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.accent },
+  stopTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  stopSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
+  stopScore: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.accent },
   // Sticky 88pt primary (Drift #1).
   primaryBtn: {
     flexDirection: 'row',
@@ -293,5 +288,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   primaryBtnBusy: { backgroundColor: colors.accentDisabled },
-  primaryBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  primaryBtnText: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
 });

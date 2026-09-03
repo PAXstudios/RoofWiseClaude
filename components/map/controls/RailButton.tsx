@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { PressableScale } from '@/components/PressableScale';
 import type { IoniconName } from '@/components/ui/IconChip';
-import { brand, colors, fontSize, fontWeight, gradients, radii, shadows, touchTarget } from '@/theme/tokens';
+import { brand, colors, fontFamily, fontSize, fontWeight, gradients, radii, shadows, touchTarget } from '@/theme/tokens';
 
 export const RAIL_BUTTON_SIZE = touchTarget.standard;
 
@@ -129,6 +129,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: colors.textInverse,
+    fontFamily: fontFamily.mono,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
     fontVariant: ['tabular-nums'],

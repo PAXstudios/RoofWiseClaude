@@ -11,7 +11,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import { Ionicons } from '@expo/vector-icons';
 import { GlassCard } from '@/components/glass/GlassCard';
 import type { IoniconName } from '@/components/ui/IconChip';
-import { colors, fontSize, fontWeight, radii, shadows, spacing } from '@/theme/tokens';
+import { colors, dataLabel, radii, shadows, spacing } from '@/theme/tokens';
 
 export type LegendItem = {
   label: string;
@@ -69,11 +69,13 @@ export function LegendStrip({ title, items, testID, style }: Props) {
 const styles = StyleSheet.create({
   shadow: { borderRadius: radii.card, alignSelf: 'flex-start', maxWidth: '100%', ...shadows.float },
   card: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.xs },
-  title: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, color: colors.text },
+  // The legend's own title and item labels read as the mock's mono meta
+  // convention ("HAIL · 1.5–2\" · REPORT") — docs/DESIGN_1A.md §3.
+  title: { ...dataLabel, color: colors.text },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.md, rowGap: spacing.xs },
   item: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   dot: { width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   ramp: { flexDirection: 'row', borderRadius: 3, overflow: 'hidden' },
   rampCell: { width: 9, height: 10 },
-  label: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
+  label: { ...dataLabel, color: colors.text },
 });

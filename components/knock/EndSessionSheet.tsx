@@ -12,7 +12,7 @@ import { PressableScale } from '@/components/PressableScale';
 import type { KnockSession } from '@/lib/models/types';
 import { sessionStats } from '@/lib/services/knockOutcomes';
 import { formatElapsed, formatMiles } from '@/lib/services/knockTrip';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -122,14 +122,22 @@ const styles = StyleSheet.create({
   },
   tileText: { flex: 1, gap: 1 },
   tileValue: {
+    fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  tileLabel: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: fontWeight.semibold },
+  // Matches SessionStatsBar's own stat labels — the same numbers, the same convention.
+  tileLabel: { ...dataLabel, color: colors.textMuted },
   note: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
-  noteText: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  noteText: {
+    flex: 1,
+    fontFamily: fontFamily.archivo.regular,
+    fontSize: fontSize.bodySm,
+    color: colors.textMuted,
+    lineHeight: 18,
+  },
   row: { flexDirection: 'row', gap: spacing.sm },
   // 56pt each (Drift #1).
   btn: {
@@ -141,6 +149,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   btnPrimary: { backgroundColor: colors.brand },
-  keepText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  confirmText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.textInverse },
+  keepText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  confirmText: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.textInverse },
 });

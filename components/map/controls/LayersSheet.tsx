@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { IconChip, type IoniconName } from '@/components/ui/IconChip';
 import { PressableScale } from '@/components/PressableScale';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 export type LayersOption = {
   id: string;
@@ -240,14 +240,9 @@ function LinkRow({ row }: { row: Extract<LayersRow, { kind: 'link' }> }) {
 const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   sectionHead: { gap: 2 },
-  sectionTitle: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  sectionHint: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  // "SHOW ON THE MAP" / "TIME RANGE" — the mock's mono eyebrow convention.
+  sectionTitle: { ...dataLabel, color: colors.textSubtle },
+  sectionHint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
 
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
@@ -260,7 +255,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   chipActive: { backgroundColor: colors.brand },
-  chipText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  chipText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   chipTextActive: { color: colors.textInverse },
   swatch: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: colors.surface },
 
@@ -274,8 +269,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   listRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
-  listText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
-  listTextActive: { fontWeight: fontWeight.semibold, color: colors.brand },
+  listText: { flex: 1, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.text },
+  listTextActive: { fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.brand },
 
   row: {
     flexDirection: 'row',
@@ -289,8 +284,8 @@ const styles = StyleSheet.create({
   },
   rowPressed: { opacity: 0.7 },
   rowText: { flex: 1, gap: 2 },
-  rowLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  rowHint: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  rowLabel: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  rowHint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
   track: {
     width: 44,
     height: 26,
@@ -312,7 +307,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  resetText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  resetText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   doneBtn: {
     flex: 1,
     minHeight: touchTarget.standard,
@@ -321,5 +316,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  doneText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.textInverse },
+  doneText: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.textInverse },
 });

@@ -25,7 +25,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { brand, colors, fontSize, fontWeight, radii } from '@/theme/tokens';
+import { brand, colors, fontFamily, fontSize, fontWeight, radii } from '@/theme/tokens';
 
 const AnimatedG = Animated.createAnimatedComponent(G);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -252,5 +252,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   captionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: brand.burnt },
-  caption: { flex: 1, color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  caption: {
+    flex: 1,
+    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.semibold,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+  },
 });

@@ -96,7 +96,8 @@ import { useMapChrome } from '@/lib/stores/mapChromeStore';
 import { useMileageStore } from '@/lib/stores/mileageStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useToastStore } from '@/lib/stores/toastStore';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { MeshBackground } from '@/components/ui/MeshBackground';
+import { colors, fontFamily, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ARCHIVE_WINDOW_MS = 30 * DAY_MS;
@@ -604,7 +605,12 @@ export default function DoorKnockingScreen() {
           </View>
         ) : (
           <View style={styles.waiting}>
-            {!locationDenied && <ActivityIndicator color={colors.textMuted} />}
+            {/* The 1A "dark map ground" for the knock-map family
+                (docs/DESIGN_1A.md §2/§6) — desaturated, no orange stop, so
+                the honest "waiting" state reads as part of the map system
+                rather than a blank grey box (Drift #5: never a stand-in city). */}
+            <MeshBackground variant="map" style={StyleSheet.absoluteFill} />
+            {!locationDenied && <ActivityIndicator color={colors.onMesh} />}
             <Text style={styles.waitingTitle}>{locationDenied ? 'Location is off' : 'Waiting for location'}</Text>
             <Text style={styles.waitingBody}>
               {locationDenied
@@ -930,8 +936,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerText: { flex: 1 },
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
-  statsLine: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  title: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
+  statsLine: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
 
   // Full-bleed map under a hairline — the route IS the screen.
   mapWrap: {
@@ -960,9 +966,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.scrim,
   },
-  locatingText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
+  locatingText: { color: colors.textInverse, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
-  // Honest no-fix state in the map's own frame (Drift #5: never a stand-in city).
+  // Honest no-fix state in the map's own frame (Drift #5: never a stand-in
+  // city) — over the 1A dark map mesh, so it reads as the map system loading
+  // rather than an error.
   waiting: {
     flex: 1,
     alignItems: 'center',
@@ -971,14 +979,14 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
     paddingBottom: touchTarget.sticky * 2,
   },
-  waitingTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.text },
-  waitingBody: { fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center' },
+  waitingTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.onMesh },
+  waitingBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.onMesh, opacity: 0.78, textAlign: 'center' },
 
   // Drawer header: stats, then the meta line with Next / Wrap (56pt each).
   drawerHead: { gap: spacing.sm },
-  headHint: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, paddingVertical: spacing.xs },
+  headHint: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, paddingVertical: spacing.xs },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headMeta: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  headMeta: { flex: 1, fontFamily: fontFamily.mono, fontSize: fontSize.bodySm, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   headBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -988,22 +996,24 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  headBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodySm },
+  headBtnText: { color: colors.navy, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, fontSize: fontSize.bodySm },
   headBtnNext: { backgroundColor: colors.brandSoft },
-  headBtnNextText: { color: colors.brand, fontWeight: fontWeight.semibold, fontSize: fontSize.bodySm },
+  headBtnNextText: { color: colors.brand, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, fontSize: fontSize.bodySm },
 
   // The one primary CTA — 88pt, burnt, in the thumb zone at every detent.
+  // Full-pill radius: the same floating-pill family as the tab bar and every
+  // other 1A primary action (docs/DESIGN_1A.md §4).
   cta: {
     flexDirection: 'row',
     gap: spacing.sm,
     height: touchTarget.sticky,
-    borderRadius: radii.lg,
+    borderRadius: radii.pill,
     backgroundColor: colors.orange,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.card,
   },
-  ctaText: { color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
+  ctaText: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
   btnBusy: { opacity: 0.6 },
 
   // The pins list.
@@ -1029,11 +1039,11 @@ const styles = StyleSheet.create({
   },
   pinDiscMuted: { opacity: 0.75 },
   pinText: { flex: 1, gap: 1 },
-  pinTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  pinTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   pinTitleMuted: { color: colors.textMuted },
-  pinSub: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  pinSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
   archiveHead: { marginTop: spacing.sm },
-  emptyText: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 19, paddingVertical: spacing.xs },
+  emptyText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 19, paddingVertical: spacing.xs },
 
   deniedCard: {
     backgroundColor: colors.surface,
@@ -1044,8 +1054,8 @@ const styles = StyleSheet.create({
     borderColor: colors.dangerSoft,
   },
   deniedHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  deniedTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.text },
-  deniedBody: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
+  deniedTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.text },
+  deniedBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
   deniedRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   deniedBtn: {
     flex: 1,
@@ -1056,6 +1066,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   deniedBtnPrimary: { backgroundColor: colors.brand },
-  deniedBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  deniedBtnText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   deniedBtnPrimaryText: { color: colors.textInverse },
 });

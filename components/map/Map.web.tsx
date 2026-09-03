@@ -22,8 +22,9 @@ import {
   type Ref,
 } from 'react';
 import { View, Text, StyleSheet, type ViewStyle } from 'react-native';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import { env } from '@/lib/env';
-import { colors, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
 
 export type MapCoordinate = { latitude: number; longitude: number };
 
@@ -265,6 +266,7 @@ export const Map = forwardRef(function Map(
   if (!hasWebKey) {
     return (
       <View style={[styles.wrap, style as ViewStyle, fallbackAnchor]}>
+        <MeshBackground variant="map" style={styles.fallbackMesh} />
         <View style={styles.inner}>
           <View style={styles.pinGlyph}>
             <View style={styles.pinHead} />
@@ -283,6 +285,7 @@ export const Map = forwardRef(function Map(
   if (failed) {
     return (
       <View style={[styles.wrap, style as ViewStyle, fallbackAnchor]}>
+        <MeshBackground variant="map" style={styles.fallbackMesh} />
         <View style={styles.inner}>
           <View style={styles.pinGlyph}>
             <View style={styles.pinHead} />
@@ -598,6 +601,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // The 1A "dark map ground" (docs/DESIGN_1A.md §2/§6) — desaturated, no
+  // orange stop, so the burnt pin glyph stays the one warm note on it.
+  fallbackMesh: { borderRadius: radii.lg },
   inner: { alignItems: 'center', gap: spacing.sm, padding: spacing.xxl, maxWidth: 420 },
   pinGlyph: { alignItems: 'center', marginBottom: spacing.sm },
   pinHead: {
@@ -606,7 +612,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: colors.orange,
     borderWidth: 4,
-    borderColor: colors.surface,
+    borderColor: colors.onMesh,
   },
   pinTip: {
     width: 0,
@@ -619,6 +625,19 @@ const styles = StyleSheet.create({
     borderTopColor: colors.orange,
     marginTop: -3,
   },
-  title: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, textAlign: 'center' },
-  sub: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center', lineHeight: 20 },
+  title: {
+    fontFamily: fontFamily.archivo.bold,
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    color: colors.onMesh,
+    textAlign: 'center',
+  },
+  sub: {
+    fontFamily: fontFamily.archivo.regular,
+    fontSize: fontSize.bodyMd,
+    color: colors.onMesh,
+    opacity: 0.72,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
 });

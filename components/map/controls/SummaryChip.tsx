@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { PressableScale } from '@/components/PressableScale';
 import type { IoniconName } from '@/components/ui/IconChip';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   text: string;
@@ -65,6 +65,7 @@ const styles = StyleSheet.create({
   },
   text: {
     flexShrink: 1,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     color: colors.text,

@@ -26,7 +26,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { RichCard } from '@/components/ui/RichCard';
 import type { IoniconName } from '@/components/ui/IconChip';
 import type { BasePoint } from '@/lib/services/knockOpportunities';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 export const BASE_MAP_HEIGHT = 260;
 const METERS_PER_MILE = 1609.344;
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   map: { flex: 1, borderRadius: 0 },
   mapHint: { position: 'absolute', top: spacing.md, left: spacing.md, right: spacing.md, alignItems: 'flex-start' },
   mapHintPill: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 36, paddingHorizontal: spacing.md, maxWidth: '100%' },
-  mapHintText: { flexShrink: 1, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
+  mapHintText: { flexShrink: 1, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
   chips: { flexDirection: 'row', gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.md },
   chip: {
     flex: 1,
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   chipOn: { backgroundColor: colors.navy },
-  chipText: { flexShrink: 1, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
+  chipText: { flexShrink: 1, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
   chipTextOn: { color: colors.textInverse },
   addressWrap: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
   note: {
@@ -270,5 +270,5 @@ const styles = StyleSheet.create({
     borderRadius: radii.control,
     backgroundColor: colors.surfaceMuted,
   },
-  noteText: { flex: 1, fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  noteText: { flex: 1, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
 });

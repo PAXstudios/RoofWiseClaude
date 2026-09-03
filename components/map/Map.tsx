@@ -53,6 +53,7 @@ import MapView, {
   type MapHeatmapProps,
 } from 'react-native-maps';
 import { GoogleTileAttribution, GoogleTileLayer } from '@/components/map/GoogleTileLayer';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import { recordError } from '@/lib/services/diagnostics';
 import { isValidLatLon, isValidRadius } from '@/lib/services/stormCluster';
 import { isTileSessionValid, useMapTilesStore, type TileMapType } from '@/lib/stores/mapTilesStore';
@@ -275,6 +276,12 @@ export const Map = forwardRef(function Map(
 
   return (
     <View style={[styles.wrap, style]} onLayout={wantGoogleTiles ? onLayout : undefined}>
+      {/* The 1A "dark map ground" (docs/DESIGN_1A.md §2/§6) — desaturated,
+          no orange stop, so pin colours stay the only warm note. Shows only
+          in the gap before the native map mounts (a real MapView is opaque
+          once up); a cheap, on-brand upgrade over a flat grey box either
+          way. */}
+      <MeshBackground variant="map" grain={false} style={StyleSheet.absoluteFill} />
       {mountMap ? (
         <MapView
           ref={ref}

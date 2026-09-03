@@ -30,7 +30,7 @@ import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop, Text as SvgText } 
 import Animated, { Easing, useAnimatedProps, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { PressableScale } from '@/components/PressableScale';
 import { MAX_SEARCH_RADIUS_MILES, MIN_SEARCH_RADIUS_MILES } from '@/lib/services/knockOpportunities';
-import { brand, colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { brand, colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 // ── pure maths ──────────────────────────────────────────────────────────────
 // No imports above this line are used below it. Angles are degrees clockwise
@@ -277,7 +277,7 @@ export function RadiusDial({ value, onChange, onCommit, disabled = false, testID
             {LABELLED.map((m) => {
               const p = pointOnArc(CX, CY, LABEL_R, angleForMiles(m, DIAL_TRACK_MAX_MILES));
               return (
-                <SvgText key={m} x={p.x} y={p.y + 4} fontSize={fontSize.bodySm} fontWeight={fontWeight.semibold} fill={colors.textMuted} textAnchor="middle">
+                <SvgText key={m} x={p.x} y={p.y + 4} fontSize={fontSize.bodySm} fontFamily={fontFamily.archivo.semibold} fontWeight={fontWeight.semibold} fill={colors.textMuted} textAnchor="middle">
                   {String(m)}
                 </SvgText>
               );
@@ -357,9 +357,25 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
-  value: { fontSize: fontSize.display, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'], letterSpacing: -1 },
-  unit: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.textMuted },
-  caption: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.textMuted, textAlign: 'center', lineHeight: 17 },
+  // The dial's own "big location line" — the mock's heaviest number gets the
+  // heaviest cut of Archivo (docs/DESIGN_1A.md §3).
+  value: {
+    fontFamily: fontFamily.archivo.extrabold,
+    fontSize: fontSize.display,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -1,
+  },
+  unit: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.textMuted },
+  caption: {
+    fontFamily: fontFamily.archivo.semibold,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
   captionFloor: { color: colors.warn },
   buttons: { height: touchTarget.standard, marginTop: -spacing.sm, justifyContent: 'center' },
   roundBtn: {
@@ -379,6 +395,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     maxWidth: 120,
     textAlign: 'center',
+    fontFamily: fontFamily.archivo.medium,
     fontSize: fontSize.caption,
     color: colors.textSubtle,
     lineHeight: 14,

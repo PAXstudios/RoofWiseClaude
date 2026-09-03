@@ -125,6 +125,8 @@ import { useToastStore } from '@/lib/stores/toastStore';
 import type { Inspection, KnockRouteTarget, Lead } from '@/lib/models/types';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
@@ -2082,7 +2084,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  loadingText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
+  loadingText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
 
   // Drawer header: the stat line beside the Planner button (56pt).
   drawerHead: { gap: spacing.sm },
@@ -2090,6 +2092,7 @@ const styles = StyleSheet.create({
   statText: {
     flex: 1,
     color: colors.text,
+    fontFamily: fontFamily.archivo.medium,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.medium,
     fontVariant: ['tabular-nums'],
@@ -2103,7 +2106,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.brandSoft,
   },
-  plannerText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
+  plannerText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
 
   // Select mode's action bar — "N areas selected" + Save / Start route /
   // Clear. Lives in the drawer header so it is visible at every detent, same
@@ -2114,7 +2117,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     backgroundColor: colors.brandSoft,
   },
-  selectionCount: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
+  selectionCount: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
   selectionActions: { flexDirection: 'row', gap: spacing.sm },
   selectionBtn: {
     flexDirection: 'row',
@@ -2128,7 +2131,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   selectionBtnPrimary: { backgroundColor: colors.brand },
-  selectionBtnText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
+  selectionBtnText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
   selectionBtnPrimaryText: { color: colors.textInverse },
   selectionClearBtn: {
     width: touchTarget.standard,
@@ -2150,20 +2153,22 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.accent,
   },
-  savedRouteBarText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.textInverse },
+  savedRouteBarText: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.textInverse },
 
   // The one primary CTA — 88pt, burnt, in the thumb zone at every detent.
+  // Full-pill radius: the same floating-pill family as the tab bar and every
+  // other 1A primary action (docs/DESIGN_1A.md §4).
   cta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
     height: touchTarget.sticky,
-    borderRadius: radii.lg,
+    borderRadius: radii.pill,
     backgroundColor: colors.accent,
     ...shadows.card,
   },
-  ctaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  ctaText: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
 
   // Safety-mode row: one line, one tap, ≥56pt.
   safetyRow: {
@@ -2178,6 +2183,7 @@ const styles = StyleSheet.create({
   },
   safetyText: {
     flex: 1,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     color: colors.text,
@@ -2193,7 +2199,7 @@ const styles = StyleSheet.create({
   },
   // Ink, not danger, for the words: danger-on-dangerSoft is 3.7:1, ink is
   // 15:1 (Drift #1). The icon carries the tone.
-  errorText: { flex: 1, color: colors.text, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
+  errorText: { flex: 1, color: colors.text, fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
 
   // Storm-lead cluster row (real counts only) and the storm detail card share
   // one grammar: chip, two-line text, trailing affordance.
@@ -2207,13 +2213,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
   },
   insightText: { flex: 1, gap: 1 },
-  insightLabel: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    color: colors.accent,
-    letterSpacing: 0.8,
-  },
+  // "STORM MATCH" / "LEAD" / "SAVED AREA · 3 MI CANVASS" — the mock's mono
+  // eyebrow convention for a storm-event citation (docs/DESIGN_1A.md §3).
+  insightLabel: { ...dataLabel, color: colors.accent },
   insightHeadline: {
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     color: colors.text,
@@ -2234,6 +2238,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
   },
   detailRemark: {
+    fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.caption,
     color: colors.textMuted,
     marginTop: 2,
@@ -2259,7 +2264,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   detailActionBtnDanger: { backgroundColor: colors.dangerSoft },
-  detailActionText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
+  detailActionText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
   detailActionTextDanger: { color: colors.danger },
 
   // Storm days — one 56pt row per day, newest first.
@@ -2274,8 +2279,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   rowPressed: { opacity: 0.7 },
-  dayText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
-  dayTextActive: { fontWeight: fontWeight.semibold, color: colors.brand },
+  dayText: { flex: 1, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.text },
+  dayTextActive: { fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.brand },
 
-  drawerHint: { fontSize: fontSize.bodySm, color: colors.textMuted, paddingVertical: spacing.sm },
+  drawerHint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, paddingVertical: spacing.sm },
 });

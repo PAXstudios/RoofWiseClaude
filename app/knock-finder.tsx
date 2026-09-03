@@ -40,7 +40,7 @@ import type { FinderMode } from '@/lib/services/knockFinder';
 import { ownActivityNow, startKnockPlan, cancelKnockPlan } from '@/lib/services/knockPlanRunner';
 import { LOOKBACK_MONTHS, type BasePoint } from '@/lib/services/knockOpportunities';
 import { formatDate, formatRelative } from '@/lib/format/date';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 const MODES: { id: FinderMode; label: string; icon: 'thunderstorm-outline' | 'home-outline' }[] = [
   { id: 'storm', label: 'Storm-hit streets', icon: 'thunderstorm-outline' },
@@ -349,7 +349,7 @@ function PlanRow({ plan, latest, onPress }: { plan: KnockPlan; latest?: boolean;
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: touchTarget.sticky * 2 + spacing.xxxl * 2 },
-  body: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 21 },
+  body: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 21 },
   runSummaryWrap: { alignItems: 'center' },
   runSummaryPill: {
     flexDirection: 'row',
@@ -360,16 +360,18 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.navy,
   },
-  runSummaryText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
+  runSummaryText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
   dayGroup: { gap: spacing.sm },
-  dayLabel: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+  // "TODAY" / "SEP 2" — the mock's mono eyebrow, same convention as every
+  // other date/section heading in the 1A system (docs/DESIGN_1A.md §3).
+  dayLabel: { ...dataLabel, color: colors.textMuted },
   calRows: { gap: spacing.sm },
   calRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 28 },
-  calLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
-  calRates: { fontSize: fontSize.bodyMd, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  calYours: { fontWeight: fontWeight.bold, color: colors.text },
-  calDoors: { fontSize: fontSize.bodySm, color: colors.textSubtle, minWidth: 72, textAlign: 'right' },
-  calFoot: { fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 16, marginTop: spacing.xs },
+  calLabel: { flex: 1, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.text },
+  calRates: { fontFamily: fontFamily.mono, fontSize: fontSize.bodyMd, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  calYours: { fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold, color: colors.text },
+  calDoors: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textSubtle, minWidth: 72, textAlign: 'right' },
+  calFoot: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 16, marginTop: spacing.xs },
   planRow: {
     minHeight: touchTarget.sticky,
     flexDirection: 'row',
@@ -383,12 +385,13 @@ const styles = StyleSheet.create({
   },
   planRowLatest: { borderColor: colors.accent, borderWidth: 1.5, ...shadows.card },
   planRing: { width: 52, height: 52, borderRadius: 26, borderWidth: 3, borderColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  planRingValue: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.accent },
+  planRingValue: { fontFamily: fontFamily.archivo.extrabold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.accent },
   planMain: { flex: 1, gap: 2 },
   planTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  planTitle: { flexShrink: 1, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.navy },
-  planSub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 17 },
-  planMeta: { fontSize: fontSize.caption, color: colors.textSubtle },
+  planTitle: { flexShrink: 1, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.navy },
+  planSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 17 },
+  // "2H AGO" — a timestamp, the mock's mono meta convention.
+  planMeta: { ...dataLabel, fontSize: fontSize.caption, letterSpacing: 0.6, color: colors.textSubtle },
   dock: {
     position: 'absolute',
     left: 0,
@@ -415,11 +418,11 @@ const styles = StyleSheet.create({
   },
   modeChipOn: { backgroundColor: colors.navy },
   modeChipOff: { backgroundColor: colors.fillDisabled },
-  modeText: { flexShrink: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  modeText: { flexShrink: 1, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   modeTextOn: { color: colors.textInverse },
   modeTextOff: { color: colors.textSubtle },
   primaryBtn: { flexDirection: 'row', gap: spacing.sm, height: touchTarget.sticky, borderRadius: radii.pill, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, ...shadows.card },
   primaryBtnDisabled: { backgroundColor: colors.accentDisabled },
-  primaryBtnText: { flexShrink: 1, color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, textAlign: 'center' },
-  dockHint: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
+  primaryBtnText: { flexShrink: 1, color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, textAlign: 'center' },
+  dockHint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
 });

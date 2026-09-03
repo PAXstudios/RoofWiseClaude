@@ -23,7 +23,7 @@ import { SearchAnimation } from '@/components/knock/SearchAnimation';
 import type { ActiveRun } from '@/lib/stores/knockFinderStore';
 import { FINDER_STEPS, finderStepLabel, type FinderMode } from '@/lib/services/knockFinder';
 import { estimateRemainingSeconds, remainingLabel, type RunHistoryEntry } from '@/lib/services/knockRunEstimate';
-import { brand, colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { brand, colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 /** After this long the animation's caption says out loud that leaving is fine. */
 const REASSURE_AFTER_S = 15;
@@ -173,19 +173,19 @@ export function RunProgress({ run, runHistory, fallbackRadiusMiles, fallbackMode
 const styles = StyleSheet.create({
   body: { gap: spacing.lg, padding: spacing.lg },
   timeBlock: { gap: spacing.sm },
-  eta: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.text },
-  etaBasis: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium, color: colors.textMuted },
+  eta: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.text },
+  etaBasis: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium, color: colors.textMuted },
   bar: { height: 8, borderRadius: radii.pill, backgroundColor: colors.fillQuiet, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: radii.pill, backgroundColor: colors.brand },
-  elapsed: { fontSize: fontSize.bodySm, color: colors.textSubtle, fontVariant: ['tabular-nums'] },
+  elapsed: { fontFamily: fontFamily.mono, fontSize: fontSize.bodySm, color: colors.textSubtle, fontVariant: ['tabular-nums'] },
   steps: { gap: spacing.sm },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 28 },
-  stepText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.textSubtle, lineHeight: 20 },
+  stepText: { flex: 1, fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodyMd, color: colors.textSubtle, lineHeight: 20 },
   stepDone: { color: colors.textMuted },
-  stepActive: { color: colors.text, fontWeight: fontWeight.semibold },
-  stepTime: { minWidth: 40, textAlign: 'right', fontSize: fontSize.bodySm, color: colors.textSubtle, fontVariant: ['tabular-nums'] },
+  stepActive: { color: colors.text, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold },
+  stepTime: { minWidth: 40, textAlign: 'right', fontFamily: fontFamily.mono, fontSize: fontSize.bodySm, color: colors.textSubtle, fontVariant: ['tabular-nums'] },
   stepTimeActive: { color: colors.text, fontWeight: fontWeight.semibold },
-  partial: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  partial: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
   background: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -196,8 +196,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
   },
   backgroundText: { flex: 1, gap: 2 },
-  backgroundTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.text },
-  backgroundBody: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  backgroundTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.text },
+  backgroundBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
   leaveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
     paddingHorizontal: spacing.lg,
   },
-  leaveText: { flexShrink: 1, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: brand.royalDeep },
+  leaveText: { flexShrink: 1, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: brand.royalDeep },
   cancelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -222,6 +222,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   cancelBtnArmed: { backgroundColor: colors.dangerSoft, borderColor: colors.danger },
-  cancelText: { flexShrink: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textMuted },
+  cancelText: { flexShrink: 1, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textMuted },
   cancelTextArmed: { color: colors.danger },
 });
