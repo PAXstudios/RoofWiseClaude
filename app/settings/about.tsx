@@ -21,8 +21,11 @@ import { FadeSlideIn } from '@/components/motion';
 import { IconChip } from '@/components/ui/IconChip';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -65,22 +68,19 @@ export default function AboutScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <FadeSlideIn index={0}>
-          {/* The one cinematic moment on this screen: the same royal-black
-              wash the onboarding sky runs on, so "About" reads as the same
-              product as the pitch a contractor saw on day one. */}
-          <LinearGradient
-            colors={gradients.stormNight}
-            style={styles.brandCard}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
+          {/* The one cinematic moment on this screen: the 1A mesh gradient,
+              the same signature the onboarding splash runs on, so "About"
+              reads as the same product as the pitch a contractor saw on day
+              one (docs/DESIGN_1A.md §2). */}
+          <View style={styles.brandCard}>
+            <MeshBackground variant="hero" style={styles.brandMesh} />
             <View style={styles.brandMark}>
               <Text style={styles.brandInitials}>RW</Text>
             </View>
             <Text style={styles.brandName}>RoofWise</Text>
             <Text style={styles.brandTag}>The objective layer between roofing contractors and insurance carriers.</Text>
             <Text style={styles.version}>Version {VERSION}</Text>
-          </LinearGradient>
+          </View>
         </FadeSlideIn>
 
         <FadeSlideIn index={1} style={styles.section}>
@@ -184,8 +184,10 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
     alignItems: 'center',
     gap: spacing.sm,
+    overflow: 'hidden',
     ...shadows.hero,
   },
+  brandMesh: { borderRadius: radii.card },
   brandMark: {
     width: 64,
     height: 64,
@@ -198,23 +200,26 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.titleLg,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
   brandName: {
     fontSize: fontSize.titleXl,
     fontWeight: fontWeight.bold,
-    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.onMesh,
   },
   brandTag: {
     fontSize: fontSize.bodyMd,
-    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.onMesh,
     opacity: 0.8,
     textAlign: 'center',
     lineHeight: 22,
   },
   version: {
-    fontSize: fontSize.caption,
-    color: colors.textInverse,
-    opacity: 0.6,
+    ...dataLabel,
+    color: colors.onMesh,
+    opacity: 0.7,
     marginTop: spacing.sm,
   },
 
@@ -235,10 +240,12 @@ const styles = StyleSheet.create({
   featureTitle: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.text,
   },
   featureDesc: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textMuted,
     marginTop: 2,
     lineHeight: 18,
@@ -256,10 +263,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyMd,
     color: colors.text,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
   },
 
   tag: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     textAlign: 'center',
     fontStyle: 'italic',
@@ -273,7 +282,7 @@ const styles = StyleSheet.create({
   sqlText: {
     fontSize: fontSize.caption,
     color: colors.textInverse,
-    fontFamily: 'Courier',
+    fontFamily: fontFamily.mono,
     lineHeight: 16,
   },
   sqlBtnShadow: { borderRadius: radii.button, marginTop: spacing.xs },
@@ -289,6 +298,7 @@ const styles = StyleSheet.create({
   sqlBtnText: {
     color: colors.textInverse,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyMd,
   },
 });

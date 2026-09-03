@@ -29,6 +29,7 @@ import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -211,7 +212,7 @@ export default function BrandingScreen() {
                       selected && styles.swatchSelected,
                     ]}
                   >
-                    {selected ? <Ionicons name="checkmark" size={18} color="#fff" /> : null}
+                    {selected ? <Ionicons name="checkmark" size={18} color={colors.textInverse} /> : null}
                   </View>
                 </Pressable>
               );
@@ -291,6 +292,7 @@ const styles = StyleSheet.create({
   },
   help: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     lineHeight: 18,
     paddingHorizontal: spacing.lg,
@@ -300,6 +302,7 @@ const styles = StyleSheet.create({
   sectionHeaderSpacing: { marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
   footer: {
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     lineHeight: 16,
     paddingHorizontal: spacing.lg,
@@ -319,11 +322,13 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.textMuted,
     fontWeight: fontWeight.medium,
   },
   input: {
     fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.text,
     paddingVertical: spacing.xs,
   },
@@ -353,11 +358,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
-  logoBtnText: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  logoBtnText: {
+    color: colors.textInverse,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    fontSize: fontSize.bodyMd,
+  },
   logoRemoveText: {
     color: colors.danger,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
     textAlign: 'center',
   },
 
@@ -397,5 +408,6 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
 });

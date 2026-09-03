@@ -23,7 +23,7 @@ import { FadeSlideIn } from '@/components/motion';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { colors, fontSize, fontWeight, motion, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, motion, radii, spacing, touchTarget } from '@/theme/tokens';
 
 /** Icon + tone per rule — purely cosmetic, keyed off the id so a rule added
  *  later still renders (falls back to a generic bolt). */
@@ -223,14 +223,20 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hairline,
   },
   headerBtn: { width: touchTarget.small, height: touchTarget.small, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
-  sub: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 1 },
+  title: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
+  sub: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.regular, color: colors.textSubtle, marginTop: 1 },
 
   scroll: { padding: spacing.lg, paddingTop: spacing.md, gap: spacing.xl },
   section: {},
   sectionHeaderSpacing: { marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
   footer: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     lineHeight: 18,
     paddingHorizontal: spacing.lg,
@@ -247,16 +253,28 @@ const styles = StyleSheet.create({
   },
   sep: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: spacing.lg },
   rowText: { flex: 1, gap: 2 },
-  rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, lineHeight: 20 },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
-  rowLast: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
+  rowTitle: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, lineHeight: 18 },
+  rowLast: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.regular, color: colors.textSubtle, marginTop: 2 },
 
   templateRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   templateHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  resetText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
+  resetText: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.brand,
+  },
   templateInput: {
     minHeight: 64,
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.text,
     backgroundColor: colors.fillQuiet,
     borderRadius: radii.control,

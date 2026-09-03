@@ -18,6 +18,8 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { IconChip } from '@/components/ui/IconChip';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -331,7 +333,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { flex: 1, color: colors.textInverse, fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, textAlign: 'center' },
+  headerTitle: {
+    flex: 1,
+    color: colors.textInverse,
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    textAlign: 'center',
+  },
 
   scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
 
@@ -346,9 +355,15 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignSelf: 'flex-start',
   },
-  heroChipText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.bold, textTransform: 'uppercase', letterSpacing: 0.5 },
-  heroArea: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy, marginTop: spacing.sm },
-  heroSub: { fontSize: fontSize.bodyMd, color: colors.slate },
+  heroChipText: { ...dataLabel, color: colors.textInverse },
+  heroArea: {
+    fontSize: fontSize.titleXl,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.navy,
+    marginTop: spacing.sm,
+  },
+  heroSub: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.mono, color: colors.slate },
 
   statRow: { flexDirection: 'row', gap: spacing.md },
   statCard: {
@@ -359,8 +374,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...shadows.card,
   },
-  statValue: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.orange },
-  statLabel: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: spacing.xs },
+  statValue: {
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.orange,
+  },
+  // "HAIL SIZE" / "IN RANGE" — the mock's stat-label convention (§3).
+  statLabel: { ...dataLabel, color: colors.slate, marginTop: spacing.xs },
 
   row: {
     flexDirection: 'row',
@@ -371,8 +392,13 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.standard,
   },
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  rowTitle: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
+  rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate, marginTop: 2 },
   // Knock-plan row — a 56pt target (Drift #1) with a live spinner while planning.
   planRow: {
     flexDirection: 'row',
@@ -385,7 +411,7 @@ const styles = StyleSheet.create({
   planSpinner: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
 
   emptyCardInner: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
-  emptyCardText: { color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },
+  emptyCardText: { color: colors.textMuted, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, textAlign: 'center' },
 
   primaryBtn: {
     flexDirection: 'row',
@@ -397,7 +423,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  primaryBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  primaryBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
 
   secondaryBtn: {
     flexDirection: 'row',
@@ -410,8 +441,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  secondaryBtnText: {
+    color: colors.navy,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    fontSize: fontSize.bodyMd,
+  },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyText: { color: colors.slate, fontSize: fontSize.bodyMd },
+  emptyText: { color: colors.slate, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular },
 });

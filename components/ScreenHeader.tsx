@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   spacing,
@@ -94,6 +95,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.text,
     letterSpacing: -0.5,
   },
@@ -115,11 +117,13 @@ const styles = StyleSheet.create({
   inlineTitle: {
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
     letterSpacing: -0.2,
   },
   subtitle: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textMuted,
     marginTop: 2,
   },

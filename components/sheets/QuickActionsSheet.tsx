@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { PressableScale } from '@/components/PressableScale';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 type Action = {
   id: string;
@@ -93,5 +93,10 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     justifyContent: 'space-between',
   },
-  tileLabel: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.brand },
+  tileLabel: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.brand,
+  },
 });

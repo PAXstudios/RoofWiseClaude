@@ -3,6 +3,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '@/components/PressableScale';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -147,21 +149,21 @@ const styles = StyleSheet.create({
   value: {
     fontSize: fontSize.titleXl,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
     letterSpacing: -1,
     fontVariant: ['tabular-nums'],
   },
+  // "REVENUE YTD" / "LEADS" — the mock's stat-label convention (§3).
   label: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
+    ...dataLabel,
     color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
   },
   deltaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   deltaText: {
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     fontVariant: ['tabular-nums'],
   },
 });

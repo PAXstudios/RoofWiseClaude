@@ -31,6 +31,7 @@ import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -300,6 +301,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.text,
     paddingVertical: spacing.sm,
   },
@@ -313,6 +315,7 @@ const styles = StyleSheet.create({
   },
   footerCaption: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     lineHeight: 18,
   },
@@ -335,6 +338,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyMd,
     color: colors.text,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
   },
   removeBtn: {
     width: touchTarget.standard,
@@ -352,11 +356,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
     marginTop: spacing.xs,
   },
   emptyBody: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textMuted,
     textAlign: 'center',
   },
@@ -376,5 +382,6 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
   },
 });

@@ -16,7 +16,7 @@ import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconC
 import { Pill } from '@/components/ui/Pill';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 export type AddPhotosChoice =
   | { kind: 'new_customer' }
@@ -254,8 +254,13 @@ const styles = StyleSheet.create({
   },
   optionMain: { flex: 1, gap: 2 },
   optionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  optionTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.brand },
-  optionSub: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
+  optionTitle: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.brand,
+  },
+  optionSub: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, lineHeight: 20 },
   picker: { gap: spacing.md, maxHeight: 460 },
   search: {
     minHeight: touchTarget.standard,
@@ -266,7 +271,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  searchInput: { flex: 1, fontSize: fontSize.bodyLg, color: colors.text, paddingVertical: spacing.sm },
+  searchInput: {
+    flex: 1,
+    fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.text,
+    paddingVertical: spacing.sm,
+  },
   list: { flexGrow: 0 },
   row: {
     minHeight: touchTarget.standard,
@@ -278,9 +289,25 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hairline,
   },
   rowMain: { flex: 1, gap: 2 },
-  rowTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  empty: { fontSize: fontSize.bodyMd, color: colors.textMuted, paddingVertical: spacing.lg, textAlign: 'center' },
+  rowTitle: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
+  rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
+  empty: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.textMuted,
+    paddingVertical: spacing.lg,
+    textAlign: 'center',
+  },
   back: { minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  backText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  backText: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
 });

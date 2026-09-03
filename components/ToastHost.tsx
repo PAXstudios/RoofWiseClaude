@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToastStore, type Toast } from '@/lib/stores/toastStore';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   motion,
@@ -107,10 +108,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
   },
   body: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textMuted,
     marginTop: 2,
   },

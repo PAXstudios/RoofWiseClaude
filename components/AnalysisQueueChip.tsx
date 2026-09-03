@@ -12,6 +12,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { IconChip } from '@/components/ui/IconChip';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -90,8 +91,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  sub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  sub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
 });

@@ -21,6 +21,7 @@ import { Pill } from '@/components/ui/Pill';
 import { ROOF_MATERIAL_LABELS, type RoofMaterial } from '@/lib/models/types';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -267,6 +268,7 @@ const styles = StyleSheet.create({
   },
   help: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     lineHeight: 18,
     paddingHorizontal: spacing.lg,
@@ -274,6 +276,7 @@ const styles = StyleSheet.create({
   statusRow: { paddingHorizontal: spacing.lg },
   provenance: {
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textMuted,
     paddingHorizontal: spacing.lg,
   },
@@ -282,6 +285,7 @@ const styles = StyleSheet.create({
   sectionHeaderSpacing: { marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
   footer: {
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     lineHeight: 16,
     paddingHorizontal: spacing.lg,
@@ -304,14 +308,16 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyMd,
     color: colors.text,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
   },
-  fieldHint: { fontSize: fontSize.caption, color: colors.textSubtle },
+  fieldHint: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.regular, color: colors.textSubtle },
   rateRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  rateAffix: { fontSize: fontSize.bodyLg, color: colors.textMuted },
+  rateAffix: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
   rateInput: {
     minWidth: 70,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
     paddingVertical: spacing.xs,
   },
@@ -323,7 +329,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: touchTarget.standard,
   },
-  resetText: { color: colors.danger, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  resetText: {
+    color: colors.danger,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
 
   doneBtnShadow: { borderRadius: radii.button },
   doneBtn: {
@@ -337,5 +348,6 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
 });

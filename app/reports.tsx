@@ -39,7 +39,10 @@ import { RichCard } from '@/components/ui/RichCard';
 import { StatCard } from '@/components/ui/StatCard';
 import { Pill } from '@/components/ui/Pill';
 import {
+  brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   motion,
@@ -601,12 +604,13 @@ function BarChart({
 
 const chartStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  label: { width: 84, fontSize: fontSize.bodySm, color: colors.textMuted },
+  label: { width: 84, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
   value: {
     width: 56,
     textAlign: 'right',
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.mono,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
@@ -705,18 +709,20 @@ function htmlBarRows(bars: { label: string; value: number }[], fmt: (n: number) 
 }
 
 async function exportReportPdf(p: ExportPayload): Promise<void> {
+  // 1A palette, resolved from the same tokens the app renders with
+  // (docs/DESIGN_1A.md §1) — never a hand-picked hex, even in a print template.
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>RoofWise Report</title>
   <style>
-    body { font-family: -apple-system, sans-serif; color: #0E1330; padding: 24px; }
-    h1 { font-size: 20px; margin-bottom: 2px; }
-    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: #5A6180; margin: 26px 0 8px; }
-    .sub { color: #5A6180; font-size: 12px; margin-bottom: 18px; }
+    body { font-family: Archivo, -apple-system, sans-serif; color: ${colors.text}; padding: 24px; }
+    h1 { font-size: 20px; margin-bottom: 2px; font-weight: 700; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: ${colors.textMuted}; margin: 26px 0 8px; }
+    .sub { color: ${colors.textMuted}; font-size: 12px; margin-bottom: 18px; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid #E6E8F0; }
+    th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid ${colors.border}; }
     td.num, th.num { text-align: right; }
     .barcell { width: 55%; }
-    .bartrack { background: #F0F0E8; border-radius: 6px; height: 10px; overflow: hidden; }
-    .bar { background: #2B4EF5; height: 10px; border-radius: 6px; }
+    .bartrack { background: ${colors.surfaceMuted}; border-radius: 6px; height: 10px; overflow: hidden; }
+    .bar { background: ${brand.royal}; height: 10px; border-radius: 6px; }
   </style></head><body>
   <h1>RoofWise Report</h1>
   <div class="sub">${escHtml(p.rangeLabel)} · Generated ${escHtml(new Date().toLocaleString('en-US'))}</div>
@@ -762,8 +768,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
-  sub: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 1 },
+  title: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
+  sub: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.regular, color: colors.textSubtle, marginTop: 1 },
 
   scroll: { padding: spacing.lg, paddingTop: spacing.md },
   sections: { gap: spacing.md },
@@ -780,12 +791,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rangeChipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
-  rangeChipText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
+  rangeChipText: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
   rangeChipTextActive: { color: colors.textInverse },
 
   customRow: { flexDirection: 'row', gap: spacing.md },
   customField: { flex: 1, gap: 2 },
-  customLabel: { fontSize: fontSize.caption, color: colors.textSubtle },
+  customLabel: { ...dataLabel, color: colors.textSubtle, letterSpacing: 0.4 },
   customInput: {
     minHeight: touchTarget.small,
     borderWidth: StyleSheet.hairlineWidth,
@@ -793,6 +809,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.control,
     paddingHorizontal: spacing.md,
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.text,
     backgroundColor: colors.surface,
   },
@@ -812,22 +829,23 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.small,
     paddingVertical: spacing.sm,
   },
-  statLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.textMuted },
+  statLabel: { flex: 1, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
   statValue: {
     fontSize: fontSize.bodyLg,
     color: colors.text,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     fontVariant: ['tabular-nums'],
   },
 
-  emptyChart: { fontSize: fontSize.bodySm, color: colors.textSubtle, paddingVertical: spacing.sm },
-
-  subSection: {
-    fontSize: fontSize.caption,
+  emptyChart: {
+    fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    paddingVertical: spacing.sm,
   },
+
+  // "Most corrected categories" — the mock's small-caps eyebrow (§3).
+  subSection: { ...dataLabel, color: colors.textSubtle },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

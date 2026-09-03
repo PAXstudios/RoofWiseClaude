@@ -10,6 +10,8 @@ import {
 } from '@/lib/models/types';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   spacing,
@@ -229,23 +231,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.navy },
-  sub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  title: {
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.navy,
+  },
+  sub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate, marginTop: 2 },
 
   scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 
   cardBody: { gap: spacing.xs },
-  what: { fontSize: fontSize.bodyLg, color: colors.text },
+  what: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.regular, color: colors.text },
 
-  subSection: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    color: colors.slate,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: spacing.md,
-  },
+  // "VISUAL CHARACTERISTICS" — the mock's small-caps eyebrow (§3).
+  subSection: { ...dataLabel, color: colors.slate, marginTop: spacing.md },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginTop: 4 },
-  bullet: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy, lineHeight: 20 },
-  coverage: { fontSize: fontSize.bodyMd, color: colors.navy, lineHeight: 20, fontStyle: 'italic', marginTop: 4 },
+  bullet: { flex: 1, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.navy, lineHeight: 20 },
+  coverage: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.navy,
+    lineHeight: 20,
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
 });

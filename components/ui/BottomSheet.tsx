@@ -23,7 +23,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, fontSize, fontWeight, motion, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, motion, radii, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -178,8 +178,23 @@ const styles = StyleSheet.create({
   grabber: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.fillQuiet },
   // 56pt so a gloved thumb cancels without hunting (Drift #1).
   cancel: { minHeight: touchTarget.standard, justifyContent: 'center', alignSelf: 'flex-start' },
-  cancelText: { color: colors.accent, fontSize: fontSize.bodyLg, fontWeight: fontWeight.medium },
+  cancelText: {
+    color: colors.accent,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
+  },
   head: { gap: spacing.xs },
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.brand },
-  subtitle: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 21 },
+  title: {
+    fontSize: fontSize.titleXl,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.brand,
+  },
+  subtitle: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.textMuted,
+    lineHeight: 21,
+  },
 });

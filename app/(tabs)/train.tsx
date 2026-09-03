@@ -9,7 +9,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, type PropsWithChildren, type ReactNode } from 'react';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import Svg, { Circle } from 'react-native-svg';
 import Animated, {
@@ -17,11 +16,11 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { Aurora } from '@/components/glass/Aurora';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { useTrainingQueueStore } from '@/lib/stores/trainingQueueStore';
 import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
@@ -34,9 +33,10 @@ import {
 import {
   brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
-  gradients,
   motion,
   radii,
   shadows,
@@ -167,16 +167,10 @@ function AccuracyDial({
   return (
     <View style={styles.dialShell}>
       <View style={styles.dialCard}>
-        {/* Same hero language as WeatherHero's frame: the brand sky plus the
-            drifting `Aurora` from onboarding. The card was a near-flat black
-            with nothing brand about it. */}
-        <LinearGradient
-          colors={gradients.stormNight}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
-        <Aurora transparent />
+        {/* Same 1A mesh signature the hero cards run everywhere else — the
+            cooler `night` cut, since this is calibration, not a CTA moment
+            (docs/DESIGN_1A.md §2, §6). */}
+        <MeshBackground variant="night" style={StyleSheet.absoluteFill} />
         <View style={styles.dialRingWrap}>
           <AccuracyRing value={accuracy} color={tint} />
           <View style={styles.dialCenter} pointerEvents="none">
@@ -186,7 +180,7 @@ function AccuracyDial({
                 <Text style={styles.dialUnit}>%</Text>
               </Text>
             ) : (
-              <Ionicons name="hourglass-outline" size={26} color={colors.textInverse} style={styles.dialIcon} />
+              <Ionicons name="hourglass-outline" size={26} color={colors.onMesh} style={styles.dialIcon} />
             )}
             <Text style={styles.dialCaption}>ACCURACY</Text>
           </View>
@@ -480,45 +474,42 @@ const styles = StyleSheet.create({
   dialValue: {
     fontSize: fontSize.titleXl,
     fontWeight: fontWeight.regular,
-    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.extrabold,
+    color: colors.onMesh,
     fontVariant: ['tabular-nums'],
     letterSpacing: -0.5,
   },
   dialUnit: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.regular,
-    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.onMesh,
   },
+  // "ACCURACY" — the mock's stat-label convention (§3).
   dialCaption: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    // Full opacity: at 11pt over near-black, a 0.6 wash was unreadable in
+    ...dataLabel,
+    // Full opacity: at 11pt over near-black, a wash was unreadable in
     // sun (Drift #1). Small and bold is the contrast device here, not dimness.
-    color: colors.textInverse,
+    color: colors.onMesh,
     letterSpacing: 1.2,
   },
   dialFooter: { alignItems: 'center', gap: 2 },
   dialFooterTitle: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
-    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.onMesh,
   },
   dialFooterText: {
     fontSize: fontSize.bodySm,
-    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.onMesh,
     opacity: 0.72,
     textAlign: 'center',
   },
 
-  // iOS grouped-list section headers.
-  sectionTitle: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing.sm,
-  },
+  // iOS grouped-list section headers — the mock's small-caps eyebrow (§3).
+  sectionTitle: { ...dataLabel, color: colors.textSubtle, marginBottom: spacing.sm },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -528,6 +519,7 @@ const styles = StyleSheet.create({
   sectionMeta: {
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.mono,
     color: colors.accent,
     fontVariant: ['tabular-nums'],
   },
@@ -556,12 +548,19 @@ const styles = StyleSheet.create({
   rowLabel: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.text,
   },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
 
-  emptyRowText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.textMuted },
-  seeAllText: { flex: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  emptyRowText: { flex: 1, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
+  seeAllText: {
+    flex: 1,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
 
   // Crafted review-queue cell — a real inspection photo, never a placeholder.
   queueCell: {
@@ -581,7 +580,9 @@ const styles = StyleSheet.create({
   queueTitle: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
   },
-  queueSub: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
+  // "4m ago" — timestamp convention (§3).
+  queueSub: { fontSize: fontSize.caption, fontFamily: fontFamily.mono, color: colors.textSubtle, marginTop: 2 },
 });

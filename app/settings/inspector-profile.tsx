@@ -23,6 +23,7 @@ import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -247,6 +248,7 @@ const styles = StyleSheet.create({
   },
   help: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     lineHeight: 18,
     paddingHorizontal: spacing.lg,
@@ -268,11 +270,13 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.textMuted,
     fontWeight: fontWeight.medium,
   },
   input: {
     fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.text,
     paddingVertical: spacing.xs,
   },
@@ -298,9 +302,10 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.text,
   },
-  toggleSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  toggleSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
 
   switchTrack: {
     width: 51,
@@ -331,5 +336,6 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
 });

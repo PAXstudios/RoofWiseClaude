@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { IoniconName } from '@/components/ui/IconChip';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { PressableScale } from '@/components/PressableScale';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -94,8 +94,13 @@ const styles = StyleSheet.create({
   preview: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   thumb: { width: 72, height: 72, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
   previewMain: { flex: 1, gap: 2 },
-  title: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.brand },
-  caption: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  title: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.brand,
+  },
+  caption: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
   // 56pt rows (Drift #1).
   row: {
     minHeight: touchTarget.standard,
@@ -106,10 +111,15 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  rowText: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
+  rowText: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
   rowDanger: { color: colors.danger },
   confirm: { gap: spacing.sm, padding: spacing.md, borderRadius: radii.card, backgroundColor: colors.dangerSoft },
-  confirmText: { fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 20 },
+  confirmText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.text, lineHeight: 20 },
   confirmRow: { flexDirection: 'row', gap: spacing.sm },
   confirmBtn: {
     flex: 1,
@@ -119,7 +129,17 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.surface,
   },
-  confirmKeep: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  confirmKeep: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
   confirmDelete: { backgroundColor: colors.danger },
-  confirmDeleteText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.textInverse },
+  confirmDeleteText: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.textInverse,
+  },
 });

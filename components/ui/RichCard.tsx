@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '@/components/PressableScale';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -193,10 +194,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
     letterSpacing: -0.2,
   },
-  subtitle: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  subtitle: {
+    fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.textMuted,
+    lineHeight: 18,
+  },
 
   action: {
     flexDirection: 'row',
@@ -209,6 +216,7 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.brand,
   },
 

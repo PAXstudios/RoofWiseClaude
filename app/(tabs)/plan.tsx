@@ -28,8 +28,6 @@ import { directionsUrl } from '@/lib/services/knockFinder';
 import { fmtMinutes } from '@/lib/services/knockOpportunities';
 import { KNOCK_ROUTE_RADIUS_MILES } from '@/lib/services/stormWatch';
 import { cancelKnockDayReminder } from '@/lib/services/pushNotifications';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Aurora } from '@/components/glass/Aurora';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { AnimatedCounter, PulseRing } from '@/components/motion';
@@ -37,6 +35,7 @@ import { RichCard } from '@/components/ui/RichCard';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import { IconChip, CHIP_TONES, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import {
   followUpsDue as followUpsDueFor,
   inspectionsThisWeek,
@@ -50,10 +49,11 @@ import type { Inspection, KnockRouteTarget } from '@/lib/models/types';
 import {
   brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
-  gradients,
   motion,
   radii,
   shadows,
@@ -255,19 +255,13 @@ export default function PlanScreen() {
       showsVerticalScrollIndicator={false}
     >
       {/* Plan's one cinematic moment: a branded day header carrying the real
-          date and today's real counts, in the onboarding's language (brand
-          sky + the same drifting `Aurora`). This screen used to open on a
+          date and today's real counts — the same mesh signature Home's hero
+          runs (docs/DESIGN_1A.md §2, §6). This screen used to open on a
           plain title over three white stat cells — the purest "Apple
           Settings menu" surface in the app. */}
       <Rise index={0}>
         <View style={styles.dayHero}>
-          <LinearGradient
-            colors={gradients.stormNight}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          />
-          <Aurora transparent />
+          <MeshBackground variant="home" style={styles.dayHeroMesh} />
           <Text style={styles.dayHeroKicker}>TODAY</Text>
           <Text style={styles.dayHeroDate} numberOfLines={2}>
             {today}
@@ -785,20 +779,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     padding: spacing.lg,
     gap: spacing.xs,
-    // Painted under the gradient so the card is never briefly transparent.
+    // Painted under the mesh so the card is never briefly transparent.
     backgroundColor: brand.royalInk,
     ...shadows.hero,
   },
-  dayHeroKicker: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    color: colors.brandSoft,
-    letterSpacing: 1.4,
-  },
+  dayHeroMesh: { borderRadius: radii.xl },
+  dayHeroKicker: { ...dataLabel, color: colors.onMesh, opacity: 0.8, letterSpacing: 1.4 },
   dayHeroDate: {
     fontSize: fontSize.titleXl,
     fontWeight: fontWeight.bold,
-    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.onMesh,
     letterSpacing: -0.6,
   },
 
@@ -819,16 +810,16 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: fontSize.titleLg,
     fontWeight: fontWeight.bold,
-    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.onMesh,
     fontVariant: ['tabular-nums'],
   },
-  statValueNone: { fontSize: fontSize.titleMd, color: colors.brandSoft },
+  statValueNone: { fontSize: fontSize.titleMd, fontFamily: fontFamily.archivo.regular, color: colors.brandSoft },
+  // "INSPECTIONS" / "KNOCKS TODAY" — the mock's stat-label convention (§3).
   statLabel: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
+    ...dataLabel,
     color: colors.brandSoft,
-    textTransform: 'uppercase',
-    // 0.3 rather than 0.5: at three-across, "INSPECTIONS" broke mid-word.
+    // 0.3 rather than 1.1: at three-across, "INSPECTIONS" broke mid-word.
     letterSpacing: 0.3,
   },
 
@@ -854,19 +845,13 @@ const styles = StyleSheet.create({
   segLabel: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.textMuted,
   },
   segLabelActive: { color: colors.text },
 
-  // iOS grouped-list section headers.
-  sectionLabel: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing.sm,
-  },
+  // iOS grouped-list section headers — the mock's small-caps eyebrow (§3).
+  sectionLabel: { ...dataLabel, color: colors.textSubtle, marginBottom: spacing.sm },
 
   // Today's Schedule — a rail with a dot per stop; RichCard carries each stop.
   rail: { gap: 0 },
@@ -876,6 +861,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg + 2,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.mono,
     color: colors.textSubtle,
     fontVariant: ['tabular-nums'],
   },
@@ -915,10 +901,11 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
   },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
-  rowMeta: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
+  rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
+  rowMeta: { fontSize: fontSize.caption, fontFamily: fontFamily.mono, color: colors.textSubtle, marginTop: 2 },
 
   actionRow: {
     flexDirection: 'row',
@@ -933,11 +920,18 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyMd,
     color: colors.text,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
   },
 
   // Knock days — scheduled trip days from a plan.
   knockDays: { gap: spacing.md },
-  knockDayLine: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginBottom: spacing.md },
+  knockDayLine: {
+    fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.textMuted,
+    lineHeight: 18,
+    marginBottom: spacing.md,
+  },
   // Today's day gets the sticky 88pt primary; a future day a 56pt secondary.
   knockStartPrimary: {
     flexDirection: 'row',
@@ -949,7 +943,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  knockStartPrimaryText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  knockStartPrimaryText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
   knockStartSecondary: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -961,7 +960,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  knockStartSecondaryText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  knockStartSecondaryText: {
+    color: colors.navy,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   knockActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   knockBtn: {
     flex: 1,
@@ -974,7 +978,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.xs,
   },
-  knockBtnText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.navy },
+  knockBtnText: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
   knockBtnDanger: { color: colors.danger },
 
   // Compact top-anchored empty — thin icon, 15pt message, no card, no void.
@@ -987,11 +996,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
     marginTop: spacing.xs,
   },
   emptyBody: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textMuted,
     textAlign: 'center',
   },

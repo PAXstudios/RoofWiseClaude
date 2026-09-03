@@ -14,6 +14,7 @@ import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconC
 import { activityHref } from '@/components/home/activityRoute';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -240,9 +241,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { flex: 1, fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
+  title: {
+    flex: 1,
+    fontSize: fontSize.titleXl,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.navy,
+  },
   clearBtn: { minHeight: touchTarget.standard, paddingHorizontal: spacing.sm, justifyContent: 'center' },
-  clear: { color: colors.orange, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  clear: {
+    color: colors.orange,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
 
   chipScroll: { maxHeight: 56 },
   chipScrollContent: { paddingHorizontal: spacing.xl, gap: spacing.sm },
@@ -256,7 +268,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  chipText: { fontSize: fontSize.bodySm, color: colors.navy, fontWeight: fontWeight.medium },
+  chipText: {
+    fontSize: fontSize.bodySm,
+    color: colors.navy,
+    fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
+  },
   chipTextActive: { color: colors.textInverse },
 
   content: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.md },
@@ -272,8 +289,9 @@ const styles = StyleSheet.create({
   // A row that opens something is a target, so it takes the glove floor
   // (Drift #1); the chevron carries the "this goes somewhere" cue.
   rowPressable: { alignItems: 'center', minHeight: touchTarget.standard },
-  msg: { fontSize: fontSize.bodyMd, color: colors.text },
-  time: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
+  msg: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.text },
+  // "Mar 4, 2:14 PM" — timestamp convention (§3).
+  time: { fontSize: fontSize.caption, fontFamily: fontFamily.mono, color: colors.textSubtle, marginTop: 2 },
 
   empty: {
     alignItems: 'center',
@@ -281,6 +299,12 @@ const styles = StyleSheet.create({
     minHeight: 180,
     justifyContent: 'center',
   },
-  emptyTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, marginTop: spacing.sm },
-  emptyBody: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },
+  emptyTitle: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+    marginTop: spacing.sm,
+  },
+  emptyBody: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.slate, textAlign: 'center' },
 });

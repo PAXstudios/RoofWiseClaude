@@ -8,7 +8,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { brand, colors, fontSize, fontWeight, motion, radii, spacing } from '@/theme/tokens';
+import { brand, colors, fontFamily, fontSize, fontWeight, motion, radii, spacing } from '@/theme/tokens';
 import type { IoniconName } from './IconChip';
 
 /** Status colour. Semantic tones state a verdict; brand tones state identity. */
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   },
   pillSm: { minHeight: 22, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   pillMd: { minHeight: 28, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  label: { fontWeight: fontWeight.semibold, letterSpacing: 0.2 },
+  label: { fontWeight: fontWeight.semibold, fontFamily: fontFamily.archivo.semibold, letterSpacing: 0.2 },
   labelSm: { fontSize: fontSize.caption },
   labelMd: { fontSize: fontSize.bodySm },
   dot: { width: 7, height: 7, borderRadius: 4 },

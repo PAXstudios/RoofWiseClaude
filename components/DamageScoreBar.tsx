@@ -6,6 +6,8 @@ import { Pill, type PillTone } from '@/components/ui/Pill';
 import type { IoniconName } from '@/components/ui/IconChip';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -156,28 +158,25 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   eyebrowGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  eyebrow: {
-    fontSize: fontSize.bodySm,
-    color: colors.textSubtle,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
+  // "CLAIM VIABILITY" — the mock's small-caps eyebrow (§3).
+  eyebrow: { ...dataLabel, color: colors.textSubtle, letterSpacing: 0.6 },
   // The big band word — the typographic contrast the design calls for: a
   // huge, confident label carrying the semantic colour, not a plain number.
   headline: {
     fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.extrabold,
     letterSpacing: -1,
   },
   track: { marginTop: 2 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  legend: { flex: 1, fontSize: fontSize.caption, color: colors.textSubtle },
+  legend: { flex: 1, ...dataLabel, fontWeight: fontWeight.medium, color: colors.textSubtle, letterSpacing: 0.4 },
   legendStart: { textAlign: 'left' },
   legendMid: { textAlign: 'center' },
   legendEnd: { textAlign: 'right' },
   caption: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textMuted,
     lineHeight: 18,
   },
@@ -193,15 +192,11 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  statLabel: {
-    fontSize: fontSize.caption,
-    color: colors.textSubtle,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  footnote: { fontSize: fontSize.caption, color: colors.textSubtle },
+  // "SLOPES" / "PHOTOS" / "FINDINGS" — the mock's stat-label convention (§3).
+  statLabel: { ...dataLabel, color: colors.textSubtle, letterSpacing: 0.4 },
+  footnote: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.regular, color: colors.textSubtle },
 });

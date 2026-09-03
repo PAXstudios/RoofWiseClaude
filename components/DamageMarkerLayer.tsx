@@ -13,7 +13,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { colors, fontSize, fontWeight, radii } from '@/theme/tokens';
+import { brand, colors, fontFamily, fontSize, fontWeight, radii } from '@/theme/tokens';
 import type { DamageMarker, Severity } from '@/lib/models/types';
 
 type Props = {
@@ -25,11 +25,19 @@ type Props = {
   onSelectMarker: (id: string) => void;
 };
 
+// Matches components/capture/LiveOverlay.tsx's SEVERITY_TINT/SEVERITY_INK —
+// the same finding should read the same color live and in the photo report.
 const SEVERITY_COLORS: Record<Severity, string> = {
-  none: colors.slate,
-  minor: colors.info,
-  moderate: colors.warn,
-  severe: colors.danger,
+  none: colors.textSubtle,
+  minor: brand.royal,
+  moderate: brand.amber,
+  severe: brand.burntDeep,
+};
+const SEVERITY_INK: Record<Severity, string> = {
+  none: colors.text,
+  minor: colors.textInverse,
+  moderate: colors.text,
+  severe: colors.textInverse,
 };
 
 const MIN_SCALE = 1;
@@ -236,6 +244,7 @@ export function DamageMarkerLayer({
 
           {markers.map((m) => {
             const tint = SEVERITY_COLORS[m.severity];
+            const ink = SEVERITY_INK[m.severity];
             const selected = m.id === selectedMarkerId;
 
             // Bbox markers (#32 follow-up) draw the model's actual rectangle
@@ -268,7 +277,7 @@ export function DamageMarkerLayer({
                   ]}
                 >
                   <View style={[styles.confidenceBubble, { backgroundColor: tint }]}>
-                    <Text style={styles.confidenceText}>{m.confidence}</Text>
+                    <Text style={[styles.confidenceText, { color: ink }]}>{m.confidence}</Text>
                   </View>
                 </View>
               );
@@ -296,7 +305,7 @@ export function DamageMarkerLayer({
                 ]}
               >
                 <View style={[styles.confidenceBubble, { backgroundColor: tint }]}>
-                  <Text style={styles.confidenceText}>{m.confidence}</Text>
+                  <Text style={[styles.confidenceText, { color: ink }]}>{m.confidence}</Text>
                 </View>
               </View>
             );
@@ -308,7 +317,7 @@ export function DamageMarkerLayer({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
+  wrap: { flex: 1, backgroundColor: brand.black, overflow: 'hidden' },
   image: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
   marker: {
     position: 'absolute',
@@ -325,9 +334,11 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: radii.pill,
   },
+  // "94" — a confidence score readout, the mock's mono-data convention (§3).
   confidenceText: {
     color: colors.textInverse,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.mono,
   },
 });

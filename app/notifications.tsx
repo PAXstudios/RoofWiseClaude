@@ -24,7 +24,7 @@ import { useLeadStore } from '@/lib/stores/leadStore';
 import { FINDER_STEPS } from '@/lib/services/knockFinder';
 import { followUpsDue } from '@/components/home/todayAgenda';
 import { formatRelative } from '@/lib/format/date';
-import { colors, fontSize, fontWeight, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 const KIND_META: Record<AppNotificationKind, { icon: IoniconName; tone: ChipTone }> = {
   plan_queued: { icon: 'compass-outline', tone: 'orange' },
@@ -196,13 +196,13 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl * 2 },
   headerBtn: { width: touchTarget.standard, height: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
-  body: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 21 },
-  row: { minHeight: touchTarget.preferred, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: 16, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
+  body: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, lineHeight: 21 },
+  row: { minHeight: touchTarget.preferred, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radii.card, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
   rowUnread: { backgroundColor: colors.brandSoft },
   rowMain: { flex: 1, gap: 2 },
-  rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  rowTitleUnread: { fontWeight: fontWeight.bold },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 17 },
+  rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, fontFamily: fontFamily.archivo.semibold, color: colors.text },
+  rowTitleUnread: { fontWeight: fontWeight.bold, fontFamily: fontFamily.archivo.bold },
+  rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, lineHeight: 17 },
   unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
   liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.success },
 });

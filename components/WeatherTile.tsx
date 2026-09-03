@@ -16,6 +16,8 @@ import {
 import { SkeletonBlock } from '@/components/motion';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -160,12 +162,18 @@ const styles = StyleSheet.create({
   temp: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  feels: { fontSize: fontSize.bodySm, color: colors.textMuted, fontWeight: fontWeight.regular },
-  desc: { fontSize: fontSize.bodyMd, color: colors.textMuted, marginTop: 2 },
-  meta: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  feels: {
+    fontSize: fontSize.bodySm,
+    color: colors.textMuted,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.archivo.regular,
+  },
+  desc: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
+  meta: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
 
   safetyChip: {
     flexDirection: 'row',
@@ -176,5 +184,5 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
   },
-  safetyChipText: { fontSize: fontSize.caption, fontWeight: fontWeight.bold },
+  safetyChipText: { ...dataLabel, fontWeight: fontWeight.bold },
 });

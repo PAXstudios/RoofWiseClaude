@@ -55,6 +55,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -995,6 +996,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.text,
     letterSpacing: -0.5,
   },
@@ -1003,6 +1005,7 @@ const styles = StyleSheet.create({
   sectionHeaderSpacing: { marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
   footer: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     lineHeight: 18,
     paddingHorizontal: spacing.lg,
@@ -1034,18 +1037,21 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     letterSpacing: 0.5,
   },
   profileText: { flex: 1, gap: 5 },
   profileName: {
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.text,
     letterSpacing: -0.3,
   },
   profileMetaRow: { flexDirection: 'row', gap: spacing.xs },
   profileSignIn: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textMuted,
   },
 
@@ -1067,12 +1073,14 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.text,
   },
-  rowTitleMuted: { color: colors.textMuted, fontWeight: fontWeight.regular },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  rowTitleMuted: { color: colors.textMuted, fontWeight: fontWeight.regular, fontFamily: fontFamily.archivo.regular },
+  rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
   detail: {
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.mono,
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
@@ -1094,8 +1102,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   apiText: { flex: 1 },
-  apiTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium, color: colors.text },
-  apiSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2, lineHeight: 17 },
+  apiTitle: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
+    color: colors.text,
+  },
+  apiSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2, lineHeight: 17 },
   apiCheckBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1106,8 +1119,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
     marginTop: spacing.xs,
   },
-  apiCheckText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
-  apiFooter: { fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 15 },
+  apiCheckText: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
+  apiFooter: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.regular, color: colors.textSubtle, lineHeight: 15 },
 
   // AI thresholds — expanded per-category list under the AI thresholds row.
   aiToggleRow: {
@@ -1127,7 +1145,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     minHeight: touchTarget.standard,
   },
-  aiStepperLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
+  aiStepperLabel: { flex: 1, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.text },
   aiStepperControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   aiStepperBtn: {
     width: 36,
@@ -1142,6 +1160,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.mono,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
@@ -1173,5 +1192,6 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
   },
 });

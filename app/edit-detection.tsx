@@ -13,7 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { IconChip } from '@/components/ui/IconChip';
 import * as Haptics from 'expo-haptics';
 import {
+  brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -409,7 +412,7 @@ function uniqueCategories(markers: DamageMarker[]): DamageCategory[] {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
+  root: { flex: 1, backgroundColor: brand.black },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -425,9 +428,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { flex: 1, color: colors.textInverse, fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold },
+  headerTitle: {
+    flex: 1,
+    color: colors.textInverse,
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
 
-  canvas: { flex: 1, backgroundColor: '#000' },
+  canvas: { flex: 1, backgroundColor: brand.black },
 
   toolbar: {
     backgroundColor: colors.navy,
@@ -436,7 +445,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     gap: spacing.sm,
   },
-  toolbarLabel: { color: colors.cream, fontSize: fontSize.bodySm, textAlign: 'center' },
+  toolbarLabel: { color: colors.onMesh, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, textAlign: 'center' },
 
   chipRow: { gap: spacing.sm, paddingVertical: spacing.sm },
   catChip: {
@@ -448,16 +457,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   catChipActive: { backgroundColor: colors.orange },
-  catChipText: { color: colors.cream, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  catChipText: {
+    color: colors.onMesh,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   catChipTextActive: { color: colors.textInverse },
 
-  rowLabel: {
-    color: colors.cream,
-    opacity: 0.6,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    marginRight: spacing.xs,
-  },
+  rowLabel: { ...dataLabel, color: colors.onMesh, opacity: 0.6, marginRight: spacing.xs },
   // Evidence chips: brand-blue when active so they never read as the orange
   // category selection; the soft-spot toggle goes green — it is a confirmation.
   evChip: {
@@ -471,7 +479,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   evChipActive: { backgroundColor: colors.brand },
-  evChipText: { color: colors.cream, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  evChipText: {
+    color: colors.onMesh,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   evChipTextActive: { color: colors.textInverse },
   softChip: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   softChipActive: { backgroundColor: colors.success, borderColor: colors.success },
@@ -486,7 +499,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sevChipActive: { backgroundColor: colors.cream },
-  sevText: { color: colors.cream, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  sevText: {
+    color: colors.onMesh,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   sevTextActive: { color: colors.navy },
 
   saveBtn: {
@@ -498,10 +516,15 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   saveBtnDisabled: { opacity: 0.4 },
-  saveBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  saveBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl, backgroundColor: colors.bg },
-  emptyText: { color: colors.slate, fontSize: fontSize.bodyMd },
+  emptyText: { color: colors.slate, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular },
   backBtn: {
     height: touchTarget.preferred,
     paddingHorizontal: spacing.xxl,
@@ -510,5 +533,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backBtnText: { color: colors.textInverse, fontWeight: fontWeight.semibold },
+  backBtnText: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontFamily: fontFamily.archivo.semibold },
 });

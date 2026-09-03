@@ -24,11 +24,15 @@ import type { MileageTrip } from '@/lib/models/types';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { IconChip } from '@/components/ui/IconChip';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { ConfirmSheet } from '@/components/sheets/ConfirmSheet';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import {
+  brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -94,16 +98,18 @@ async function exportTripsPdf(trips: MileageTrip[]): Promise<void> {
       </tr>`,
     )
     .join('');
+  // 1A palette, resolved from the same tokens the app renders with
+  // (docs/DESIGN_1A.md §1) — never a hand-picked hex, even in a print template.
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>RoofWise Mileage Log</title>
   <style>
-    body { font-family: -apple-system, sans-serif; color: #0E1330; padding: 24px; }
-    h1 { font-size: 20px; margin-bottom: 2px; }
-    .sub { color: #5A6180; font-size: 12px; margin-bottom: 18px; }
+    body { font-family: Archivo, -apple-system, sans-serif; color: ${colors.text}; padding: 24px; }
+    h1 { font-size: 20px; margin-bottom: 2px; font-weight: 700; }
+    .sub { color: ${colors.textMuted}; font-size: 12px; margin-bottom: 18px; }
     table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid #E6E8F0; }
-    th { background: #F5F6FA; text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.5px; }
+    th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid ${colors.border}; }
+    th { background: ${colors.surfaceMuted}; text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.5px; }
     td.num, th.num { text-align: right; }
-    tfoot td { font-weight: 700; border-top: 2px solid #0E1330; border-bottom: none; }
+    tfoot td { font-weight: 700; border-top: 2px solid ${colors.text}; border-bottom: none; }
   </style></head><body>
   <h1>RoofWise Mileage Log</h1>
   <div class="sub">Generated ${escHtml(new Date().toLocaleString('en-US'))} · IRS business-mileage rate $${IRS_RATE_PER_MILE.toFixed(2)}/mi (${IRS_RATE_YEAR} published rate — confirm the current year's)</div>
@@ -171,12 +177,14 @@ const webStyles = StyleSheet.create({
   title: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.navy,
     textAlign: 'center',
     maxWidth: 420,
   },
   body: {
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.slate,
     textAlign: 'center',
     maxWidth: 420,
@@ -194,6 +202,7 @@ const webStyles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
   },
 });
 
@@ -354,6 +363,7 @@ function MileageNative() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {active ? (
           <View style={styles.activeCard}>
+            <MeshBackground variant="hero" style={styles.activeMesh} />
             <Text style={styles.activeLabel}>Trip in progress</Text>
             <Text style={styles.activeMiles}>{liveMiles.toFixed(2)} mi</Text>
             <Text style={styles.activePurpose}>{active.purpose ?? 'Business'}</Text>
@@ -458,22 +468,35 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   headerBtn: { minWidth: touchTarget.standard, minHeight: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
-  sub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  title: {
+    fontSize: fontSize.titleXl,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.navy,
+  },
+  sub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.mono, color: colors.slate, marginTop: 2 },
 
   scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 
+  // Live-trip hero — the one moment on this screen the roofer is watching in
+  // real time, so it carries the 1A mesh signature (docs/DESIGN_1A.md §2).
   activeCard: {
-    backgroundColor: colors.navy,
     borderRadius: radii.card,
     padding: spacing.xxl,
     alignItems: 'center',
     gap: spacing.sm,
-    ...shadows.card,
+    overflow: 'hidden',
+    ...shadows.hero,
   },
-  activeLabel: { color: 'rgba(240,240,228,0.78)', fontSize: fontSize.bodySm, textTransform: 'uppercase', letterSpacing: 0.5 },
-  activeMiles: { color: colors.orange, fontSize: 56, fontWeight: fontWeight.bold },
-  activePurpose: { color: colors.cream, fontSize: fontSize.bodyMd },
+  activeMesh: { borderRadius: radii.card },
+  activeLabel: { ...dataLabel, color: colors.onMesh, opacity: 0.78 },
+  activeMiles: {
+    color: brand.burntLight,
+    fontSize: 56,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.extrabold,
+  },
+  activePurpose: { color: colors.onMesh, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.medium },
   stopBtn: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -485,7 +508,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.md,
   },
-  stopBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  stopBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
 
   card: {
     backgroundColor: colors.surface,
@@ -494,8 +522,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card,
   },
-  cardTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
-  cardSub: { fontSize: fontSize.bodyMd, color: colors.slate },
+  cardTitle: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
+  cardSub: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.slate },
 
   purposeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   purposeChip: {
@@ -507,7 +540,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   purposeChipActive: { backgroundColor: colors.brand },
-  purposeText: { color: colors.navy, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
+  purposeText: {
+    color: colors.navy,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
+  },
   purposeTextActive: { color: colors.textInverse },
 
   startBtn: {
@@ -520,9 +558,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.md,
   },
-  startBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  startBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
 
-  section: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy, marginTop: spacing.md },
+  section: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+    marginTop: spacing.md,
+  },
 
   tripRow: {
     flexDirection: 'row',
@@ -539,12 +588,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tripRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  tripMiles: { fontSize: fontSize.bodyLg, color: colors.navy, fontWeight: fontWeight.semibold },
-  tripDate: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
-  tripDeduct: { fontSize: fontSize.bodyMd, color: colors.success, fontWeight: fontWeight.semibold },
+  tripMiles: {
+    fontSize: fontSize.bodyLg,
+    color: colors.navy,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
+  // "Mar 4 · 2:14 PM" — timestamp convention (§3).
+  tripDate: { fontSize: fontSize.bodySm, fontFamily: fontFamily.mono, color: colors.slate, marginTop: 2 },
+  tripDeduct: {
+    fontSize: fontSize.bodyMd,
+    color: colors.success,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.mono,
+  },
 
   empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
-  emptyText: { color: colors.slate, fontSize: fontSize.bodyMd },
+  emptyText: { color: colors.slate, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular },
 
-  errorText: { color: colors.danger, fontSize: fontSize.bodySm },
+  errorText: { color: colors.danger, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular },
 });

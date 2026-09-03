@@ -23,7 +23,7 @@ import { ROOF_MATERIAL_LABELS } from '@/lib/models/types';
 import { useEstimateStore } from '@/lib/stores/estimateStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { imageryIsStale } from '@/lib/services/solar';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 const SCOPE_LABEL = {
   repair: 'Repair only',
@@ -193,11 +193,17 @@ export default function SavedEstimateScreen() {
 
 const styles = StyleSheet.create({
   housePhoto: { width: '100%', height: 200, borderRadius: radii.card, backgroundColor: colors.surfaceMuted },
-  facts: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: -spacing.xs },
+  facts: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: -spacing.xs },
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl },
   addressBlock: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  address: { flex: 1, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
+  address: {
+    flex: 1,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.text,
+  },
   factsRow: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
@@ -207,10 +213,17 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   fact: { flex: 1, gap: 2 },
-  factValue: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
-  factLabel: { fontSize: fontSize.caption, color: colors.textSubtle, fontWeight: fontWeight.semibold, letterSpacing: 0.4 },
+  factValue: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  // "SQUARES" / "ROOF FACES" / "IMAGERY" — the mock's stat-label convention (§3).
+  factLabel: { ...dataLabel, color: colors.textSubtle },
   notice: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  noticeText: { flex: 1, fontSize: fontSize.bodySm, color: colors.warn },
+  noticeText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.warn },
   priceCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
@@ -221,11 +234,23 @@ const styles = StyleSheet.create({
     ...shadows.raised,
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
-  priceLabel: { fontSize: fontSize.bodySm, color: colors.textSubtle, fontWeight: fontWeight.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
-  priceMid: { fontSize: fontSize.display, fontWeight: fontWeight.bold, color: colors.text, letterSpacing: -1, fontVariant: ['tabular-nums'] },
-  priceRange: { fontSize: fontSize.bodyMd, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  priceFoot: { marginTop: spacing.sm, fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 15 },
-  cardSub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  priceLabel: { ...dataLabel, color: colors.textSubtle },
+  priceMid: {
+    fontSize: fontSize.display,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.extrabold,
+    color: colors.text,
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
+  },
+  priceRange: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.mono,
+    color: colors.textMuted,
+    fontVariant: ['tabular-nums'],
+  },
+  priceFoot: { marginTop: spacing.sm, fontSize: fontSize.caption, fontFamily: fontFamily.archivo.regular, color: colors.textSubtle, lineHeight: 15 },
+  cardSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, lineHeight: 18 },
   actions: { gap: spacing.sm },
   primary: {
     minHeight: touchTarget.preferred,
@@ -236,7 +261,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.brand,
   },
-  primaryText: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.textInverse },
+  primaryText: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.textInverse,
+  },
   secondaryRow: { flexDirection: 'row', gap: spacing.sm },
   secondary: {
     flex: 1,
@@ -250,8 +280,25 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  secondaryText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  secondaryText: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
-  emptyTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, textAlign: 'center' },
-  emptyText: { fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  emptyTitle: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
 });

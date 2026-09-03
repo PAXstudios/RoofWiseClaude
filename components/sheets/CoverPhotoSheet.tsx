@@ -19,7 +19,7 @@ import { PressableScale } from '@/components/PressableScale';
 import type { IoniconName } from '@/components/ui/IconChip';
 import type { CoverPhoto, Inspection } from '@/lib/models/types';
 import { coverPhotoSource, coverPhotoUri, zillowPhotoUrl } from '@/lib/services/propertyRecord';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -172,8 +172,8 @@ function Row({ icon, label, busy, onPress }: { icon: IoniconName; label: string;
 const styles = StyleSheet.create({
   currentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   currentThumb: { width: 72, height: 54, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
-  currentText: { fontSize: fontSize.bodyMd, color: colors.textMuted },
-  groupLabel: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+  currentText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
+  groupLabel: { ...dataLabel, color: colors.textMuted },
   strip: { gap: spacing.sm },
   // 96×72 tiles — big enough to read the house, ≥56pt tall (Drift #1).
   tile: { width: 96, height: 72, borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.surfaceMuted },
@@ -187,5 +187,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  rowText: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
+  rowText: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
 });

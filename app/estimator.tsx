@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IconChip } from '@/components/ui/IconChip';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import { AddressAutocomplete, type ResolvedLocation } from '@/components/AddressAutocomplete';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useEstimateStore } from '@/lib/stores/estimateStore';
@@ -20,7 +21,10 @@ import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
 import { RoofOverheadView } from '@/components/RoofOverheadView';
 import { useToastStore } from '@/lib/stores/toastStore';
 import {
+  brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -364,6 +368,7 @@ export default function CostEstimatorScreen() {
                 />
               )}
               <View style={styles.priceCard}>
+                <MeshBackground variant="cool" style={styles.priceMesh} />
                 <Text style={styles.priceLabel}>Estimated cost range</Text>
                 <Text style={styles.priceMid}>${estimate.totalMid.toLocaleString()}</Text>
                 <Text style={styles.priceRange}>
@@ -500,15 +505,20 @@ const styles = StyleSheet.create({
   },
   // 56pt (Drift #1) — was a 34pt pad around the glyph.
   headerBtn: { minWidth: touchTarget.standard, minHeight: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
-  stepCount: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold },
-  stepTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  stepCount: { ...dataLabel, color: colors.slate },
+  stepTitle: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
 
   progressTrack: { height: 4, backgroundColor: colors.surfaceMuted, marginHorizontal: spacing.xl, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: 4, backgroundColor: colors.orange, borderRadius: 2 },
 
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl },
 
-  helper: { fontSize: fontSize.bodyMd, color: colors.slate },
+  helper: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.slate },
 
   // Raised content-card rung, matching the crafted cards on Home/Leads/Job.
   card: {
@@ -520,8 +530,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.raised,
   },
-  cardTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
-  cardSub: { fontSize: fontSize.bodyMd, color: colors.slate },
+  cardTitle: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
+  cardSub: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.slate },
 
   secondaryBtn: {
     height: touchTarget.preferred,
@@ -531,7 +546,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.sm,
   },
-  secondaryBtnText: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  secondaryBtnText: {
+    color: colors.textInverse,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    fontSize: fontSize.bodyMd,
+  },
 
   warnBanner: {
     flexDirection: 'row',
@@ -541,7 +561,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     alignItems: 'center',
   },
-  warnText: { color: colors.navy, fontSize: fontSize.bodySm, flex: 1 },
+  warnText: { color: colors.navy, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, flex: 1 },
 
   errorBanner: {
     flexDirection: 'row',
@@ -551,7 +571,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     alignItems: 'center',
   },
-  errorText: { color: colors.danger, fontSize: fontSize.bodySm, flex: 1 },
+  errorText: { color: colors.danger, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, flex: 1 },
 
   stepperRow: {
     flexDirection: 'row',
@@ -570,9 +590,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.surface,
   },
-  stepperValue: { flex: 1, textAlign: 'center', fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.navy },
+  stepperValue: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.mono,
+    color: colors.navy,
+  },
 
-  subSection: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
+  subSection: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   bigChip: {
@@ -586,7 +618,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bigChipSelected: { backgroundColor: colors.navy, borderColor: colors.navy },
-  bigChipText: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
+  bigChipText: {
+    fontSize: fontSize.bodyMd,
+    color: colors.navy,
+    fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
+  },
   bigChipTextSelected: { color: colors.textInverse },
 
   scopeCard: {
@@ -600,21 +637,42 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   scopeCardSelected: { backgroundColor: colors.navy },
-  scopeTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
+  scopeTitle: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
   scopeTitleSel: { color: colors.textInverse },
-  scopeSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
-  scopeSubSel: { color: 'rgba(240,240,228,0.78)' },
+  scopeSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate, marginTop: 2 },
+  scopeSubSel: { color: colors.onMesh, opacity: 0.78 },
 
   priceCard: {
-    backgroundColor: colors.navy,
     borderRadius: radii.card,
     padding: spacing.xxl,
     alignItems: 'center',
-    ...shadows.card,
+    overflow: 'hidden',
+    ...shadows.hero,
   },
-  priceLabel: { color: 'rgba(240,240,228,0.78)', fontSize: fontSize.bodyMd, marginBottom: spacing.sm },
-  priceMid: { color: colors.orange, fontSize: 48, fontWeight: fontWeight.bold },
-  priceRange: { color: colors.cream, fontSize: fontSize.bodyMd, marginTop: spacing.xs },
+  priceMesh: { borderRadius: radii.card },
+  priceLabel: {
+    ...dataLabel,
+    color: colors.onMesh,
+    opacity: 0.78,
+    marginBottom: spacing.sm,
+  },
+  priceMid: {
+    color: brand.burntLight,
+    fontSize: 48,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.extrabold,
+  },
+  priceRange: {
+    color: colors.onMesh,
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.medium,
+    marginTop: spacing.xs,
+  },
 
   provenanceRow: {
     flexDirection: 'row',
@@ -623,8 +681,8 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.small,
     paddingHorizontal: spacing.md,
   },
-  provenanceText: { flex: 1, fontSize: fontSize.bodySm, color: colors.slate },
-  provenanceTextWarn: { color: colors.warn, fontWeight: fontWeight.medium },
+  provenanceText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate },
+  provenanceTextWarn: { color: colors.warn, fontWeight: fontWeight.medium, fontFamily: fontFamily.archivo.medium },
 
   lineItem: {
     flexDirection: 'row',
@@ -633,8 +691,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  lineItemLabel: { fontSize: fontSize.bodyMd, color: colors.navy },
-  lineItemValue: { fontSize: fontSize.bodyMd, color: colors.slate, fontWeight: fontWeight.medium },
+  lineItemLabel: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.navy },
+  lineItemValue: {
+    fontSize: fontSize.bodyMd,
+    color: colors.slate,
+    fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.mono,
+  },
 
   footer: {
     padding: spacing.xl,
@@ -650,7 +713,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryBtnDisabled: { opacity: 0.5 },
-  primaryBtnText: { color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
+  primaryBtnText: {
+    color: colors.textInverse,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    fontSize: fontSize.bodyLg,
+  },
 
   convertBtn: {
     flexDirection: 'row',
@@ -661,7 +729,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.navy,
   },
-  convertBtnText: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  convertBtnText: {
+    color: colors.textInverse,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    fontSize: fontSize.bodyMd,
+  },
 
   secondarySaveBtn: {
     flexDirection: 'row',
@@ -674,5 +747,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.navy,
   },
-  secondarySaveText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  secondarySaveText: {
+    color: colors.navy,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    fontSize: fontSize.bodyMd,
+  },
 });

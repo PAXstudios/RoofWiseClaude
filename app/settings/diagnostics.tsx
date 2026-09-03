@@ -31,6 +31,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -291,6 +292,7 @@ const styles = StyleSheet.create({
   actionBtnText: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.navy,
   },
 
@@ -298,7 +300,7 @@ const styles = StyleSheet.create({
   sectionHeaderSpacing: { marginBottom: spacing.sm },
 
   emptyWrap: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
-  emptyText: { fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center' },
+  emptyText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, textAlign: 'center' },
 
   entryHeader: {
     flexDirection: 'row',
@@ -306,20 +308,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
   },
-  entryWhen: { fontSize: fontSize.bodySm, color: colors.textSubtle },
+  // "3h ago" — timestamp convention (§3).
+  entryWhen: { fontSize: fontSize.bodySm, fontFamily: fontFamily.mono, color: colors.textSubtle },
   entryMessage: {
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.text,
     marginBottom: spacing.sm,
   },
   entryMetaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 2 },
-  entryMetaText: { fontSize: fontSize.caption, color: colors.textSubtle, flexShrink: 1 },
+  entryMetaText: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.regular, color: colors.textSubtle, flexShrink: 1 },
 
   expandHint: {
     fontSize: fontSize.caption,
     color: colors.brand,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     marginTop: spacing.sm,
   },
   stackScroll: {
@@ -330,13 +335,14 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   stack: {
-    fontFamily: 'monospace',
+    fontFamily: fontFamily.mono,
     fontSize: fontSize.bodySm,
     color: colors.textMuted,
     lineHeight: 18,
   },
   entryFullTime: {
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.mono,
     color: colors.textSubtle,
     marginTop: spacing.sm,
   },
@@ -349,12 +355,12 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.small,
     paddingVertical: spacing.xs,
   },
-  buildLabel: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  buildLabel: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
   buildValue: {
     flex: 1,
     fontSize: fontSize.bodySm,
     color: colors.text,
     textAlign: 'right',
-    fontFamily: 'monospace',
+    fontFamily: fontFamily.mono,
   },
 });

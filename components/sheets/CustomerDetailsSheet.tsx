@@ -39,7 +39,7 @@ import {
   isPlaceholderAddress,
   isPlaceholderName,
 } from '@/lib/services/placeholderDetails';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 export type CustomerDetailsResult = {
   customerName: string;
@@ -415,13 +415,7 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 0 },
   body: { gap: spacing.lg, paddingBottom: spacing.md },
   field: { gap: spacing.sm },
-  fieldLabel: {
-    fontSize: fontSize.bodySm,
-    color: colors.textSubtle,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+  fieldLabel: { ...dataLabel, color: colors.textSubtle },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -431,10 +425,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.control,
     backgroundColor: colors.surfaceMuted,
   },
-  input: { flex: 1, fontSize: fontSize.bodyLg, color: colors.text },
+  input: { flex: 1, fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.regular, color: colors.text },
   addressBlock: { gap: spacing.sm },
   note: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
-  noteText: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  noteText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, lineHeight: 18 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   stepperBtn: {
@@ -445,7 +439,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.fillQuiet,
   },
-  stepperValue: { flex: 1, textAlign: 'center', fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text },
+  stepperValue: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.text,
+  },
   hintChip: {
     minHeight: touchTarget.standard,
     flexDirection: 'row',
@@ -455,7 +456,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.brandSoft,
   },
-  hintText: { flex: 1, fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  hintText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.text, lineHeight: 18 },
   // 56pt chips (Drift #1).
   chip: {
     minHeight: touchTarget.standard,
@@ -466,7 +467,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipActive: { backgroundColor: colors.text },
-  chipText: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.semibold },
+  chipText: {
+    fontSize: fontSize.bodyMd,
+    color: colors.text,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   chipTextActive: { color: colors.textInverse },
   footer: { gap: spacing.sm, paddingTop: spacing.sm },
   saveBtn: {
@@ -477,9 +483,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveBtnDisabled: { backgroundColor: colors.fillDisabled },
-  saveText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  saveText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
   saveTextDisabled: { color: colors.textMuted },
-  saveHint: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
+  saveHint: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, textAlign: 'center' },
   skipBtn: { minHeight: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
-  skipText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textMuted },
+  skipText: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.textMuted,
+  },
 });

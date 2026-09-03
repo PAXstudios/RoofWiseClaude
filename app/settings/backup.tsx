@@ -17,6 +17,8 @@ import { FadeSlideIn } from '@/components/motion';
 import { RichCard } from '@/components/ui/RichCard';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -295,6 +297,7 @@ const styles = StyleSheet.create({
 
   footerCaption: {
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.textSubtle,
     lineHeight: 18,
   },
@@ -312,6 +315,7 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
 
   secondaryBtn: {
@@ -326,6 +330,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
   },
 
   // Knocking data row — 56pt glove target, stacked with a 12pt gap.
@@ -343,19 +348,18 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   stat: { flex: 1, gap: 2 },
-  statLabel: {
-    fontSize: fontSize.caption,
-    color: colors.textSubtle,
-    fontWeight: fontWeight.medium,
-  },
+  // "Last synced" / "Rows synced" — the mock's stat-label convention (§3).
+  statLabel: { ...dataLabel, color: colors.textSubtle, letterSpacing: 0.6 },
   statValue: {
     fontSize: fontSize.bodyMd,
     color: colors.text,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
   },
   warnText: {
     marginTop: spacing.md,
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.warn,
     lineHeight: 18,
   },

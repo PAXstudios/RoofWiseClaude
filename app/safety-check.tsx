@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
@@ -81,7 +82,8 @@ export default function SafetyCheckScreen() {
                 <Ionicons
                   name={on ? 'checkmark-circle' : 'ellipse-outline'}
                   size={24}
-                  color={on ? colors.success : 'rgba(240,240,228,0.55)'}
+                  color={on ? colors.success : colors.onMesh}
+                  style={!on ? styles.itemIconOff : undefined}
                 />
                 <Text style={[styles.itemText, on && styles.itemTextOn]}>
                   {item.label}
@@ -134,7 +136,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
+  title: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.textInverse,
+  },
 
   scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
 
@@ -145,8 +152,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  heroTitle: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.cream },
-  heroBody: { fontSize: fontSize.bodyMd, color: 'rgba(240,240,228,0.82)', textAlign: 'center' },
+  heroTitle: {
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.onMesh,
+  },
+  heroBody: {
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.onMesh,
+    opacity: 0.82,
+    textAlign: 'center',
+  },
 
   list: {
     backgroundColor: glass.fillLow,
@@ -161,14 +179,23 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.preferred,
   },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: glass.border },
-  itemText: { flex: 1, fontSize: fontSize.bodyLg, color: 'rgba(240,240,228,0.78)' },
-  itemTextOn: { color: colors.cream, fontWeight: fontWeight.semibold },
+  itemIconOff: { opacity: 0.55 },
+  itemText: {
+    flex: 1,
+    fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.regular,
+    color: colors.onMesh,
+    opacity: 0.78,
+  },
+  itemTextOn: { color: colors.onMesh, opacity: 1, fontWeight: fontWeight.semibold, fontFamily: fontFamily.archivo.semibold },
 
   // Secondary opt-out still takes a glove-sized target (Drift #1).
   skipBtn: { minHeight: touchTarget.standard, justifyContent: 'center' },
   skipText: {
-    color: 'rgba(240,240,228,0.62)',
+    color: colors.onMesh,
+    opacity: 0.62,
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     textAlign: 'center',
     textDecorationLine: 'underline',
   },
@@ -183,5 +210,10 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   confirmBtnDisabled: { opacity: 0.35 },
-  confirmBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  confirmBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
 });

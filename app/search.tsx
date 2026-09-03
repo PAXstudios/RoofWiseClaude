@@ -17,6 +17,7 @@ import { RichCard } from '@/components/ui/RichCard';
 import { IconChip } from '@/components/ui/IconChip';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -216,7 +217,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  searchInput: { flex: 1, fontSize: fontSize.bodyMd, color: colors.navy },
+  searchInput: { flex: 1, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.navy },
 
   scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 
@@ -229,11 +230,23 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.standard,
   },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
-  primary: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
-  secondary: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
-  meta: { fontSize: fontSize.caption, color: colors.slate, marginTop: 2, textTransform: 'capitalize' },
+  primary: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
+  secondary: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate, marginTop: 2 },
+  // Report/claim ids mixed with status — the mock's mono-data convention (§3).
+  meta: { fontSize: fontSize.caption, fontFamily: fontFamily.mono, color: colors.slate, marginTop: 2, textTransform: 'capitalize' },
 
   empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
-  emptyTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy, marginTop: spacing.sm },
-  emptyBody: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },
+  emptyTitle: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+    marginTop: spacing.sm,
+  },
+  emptyBody: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.slate, textAlign: 'center' },
 });

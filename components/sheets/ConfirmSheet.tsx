@@ -6,7 +6,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { PressableScale } from '@/components/PressableScale';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -70,7 +70,7 @@ export function ConfirmSheet({
 const styles = StyleSheet.create({
   panel: { gap: spacing.md, padding: spacing.md, borderRadius: radii.card, backgroundColor: colors.fillQuiet },
   panelDanger: { backgroundColor: colors.dangerSoft },
-  body: { fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 20 },
+  body: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.text, lineHeight: 20 },
   row: { flexDirection: 'row', gap: spacing.sm },
   // 56pt each (Drift #1).
   btn: {
@@ -83,6 +83,16 @@ const styles = StyleSheet.create({
   },
   btnDanger: { backgroundColor: colors.danger },
   btnPrimary: { backgroundColor: colors.brand },
-  keepText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  confirmText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.textInverse },
+  keepText: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.text,
+  },
+  confirmText: {
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.textInverse,
+  },
 });

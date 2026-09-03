@@ -25,8 +25,12 @@ import { findLinkedLead, nextStageFor, type ChainEvent } from '@/components/pipe
 import { generateProposalDraft } from '@/lib/services/proposalGenerator';
 import { generateProposalPdf } from '@/lib/services/proposalPdf';
 import { SignaturePad } from '@/components/SignaturePad';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import {
+  brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -242,6 +246,7 @@ export default function ProposalView() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.priceCard}>
+          <MeshBackground variant="cool" style={styles.priceMesh} />
           <Text style={styles.priceLabel}>Total</Text>
           <Text style={styles.priceTotal}>${proposal.total.toLocaleString()}</Text>
           <Text style={styles.priceSub}>
@@ -386,24 +391,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  reportId: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold },
-  title: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.navy },
+  reportId: { fontSize: fontSize.caption, fontFamily: fontFamily.mono, color: colors.slate, fontWeight: fontWeight.semibold },
+  title: {
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.navy,
+  },
 
   statusPill: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radii.pill },
-  statusText: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, textTransform: 'uppercase', letterSpacing: 0.5 },
+  statusText: { ...dataLabel },
 
   scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 
+  // The proposal total — the hero moment, carrying the 1A mesh (docs/DESIGN_1A.md §2, §6).
   priceCard: {
-    backgroundColor: colors.navy,
     borderRadius: radii.card,
     padding: spacing.xxl,
     alignItems: 'center',
-    ...shadows.card,
+    overflow: 'hidden',
+    ...shadows.hero,
   },
-  priceLabel: { color: 'rgba(240,240,228,0.78)', fontSize: fontSize.bodySm, textTransform: 'uppercase', letterSpacing: 0.5 },
-  priceTotal: { color: colors.orange, fontSize: 44, fontWeight: fontWeight.bold, marginTop: spacing.sm },
-  priceSub: { color: colors.cream, fontSize: fontSize.bodyMd, marginTop: spacing.sm },
+  priceMesh: { borderRadius: radii.card },
+  priceLabel: { ...dataLabel, color: colors.onMesh, opacity: 0.78 },
+  priceTotal: {
+    color: brand.burntLight,
+    fontSize: 44,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.extrabold,
+    marginTop: spacing.sm,
+  },
+  priceSub: { color: colors.onMesh, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.medium, marginTop: spacing.sm },
 
   card: {
     backgroundColor: colors.surface,
@@ -412,9 +430,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card,
   },
-  section: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.navy },
+  section: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    color: colors.navy,
+  },
   cardBody: { gap: spacing.sm },
-  body: { fontSize: fontSize.bodyMd, color: colors.navy, lineHeight: 20 },
+  body: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.navy, lineHeight: 20 },
 
   row: {
     flexDirection: 'row',
@@ -424,14 +447,34 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  rowLabel: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
-  rowValue: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.semibold },
+  rowLabel: {
+    fontSize: fontSize.bodyMd,
+    color: colors.navy,
+    fontWeight: fontWeight.medium,
+    fontFamily: fontFamily.archivo.medium,
+  },
+  rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate, marginTop: 2 },
+  rowValue: {
+    fontSize: fontSize.bodyMd,
+    color: colors.navy,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.mono,
+  },
 
   totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm },
   grandTotal: { borderTopWidth: 2, borderTopColor: colors.navy, marginTop: spacing.sm, paddingTop: spacing.md },
-  grandLabel: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.navy },
-  grandValue: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.orange },
+  grandLabel: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.navy,
+  },
+  grandValue: {
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.extrabold,
+    color: colors.orange,
+  },
 
   signedBadge: {
     flexDirection: 'row',
@@ -444,7 +487,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     marginTop: spacing.sm,
   },
-  signedText: { color: colors.success, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  signedText: {
+    color: colors.success,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
 
   secondaryBtn: {
     flexDirection: 'row',
@@ -457,7 +505,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.navy,
   },
-  secondaryBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  secondaryBtnText: {
+    color: colors.navy,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+    fontSize: fontSize.bodyMd,
+  },
   previewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -480,8 +533,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  primaryBtnText: { color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
+  primaryBtnText: {
+    color: colors.textInverse,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    fontSize: fontSize.bodyLg,
+  },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyText: { color: colors.slate, fontSize: fontSize.bodyMd },
+  emptyText: { color: colors.slate, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular },
 });

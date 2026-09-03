@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, fontSize, fontWeight, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, spacing, touchTarget } from '@/theme/tokens';
 import type { IoniconName } from './IconChip';
 
 type Action = {
@@ -77,6 +77,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.textSubtle,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -94,6 +95,7 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.brand,
   },
   actionTextOnDark: { color: colors.textInverse },
