@@ -92,11 +92,13 @@ export async function researchProperty(input: ResearchInput): Promise<PropertyIn
           pitchRatio: s.pitchRatio,
           squares: s.squares,
           azimuthDegrees: s.azimuthDegrees,
+          bounds: s.bounds,
         }),
       ),
       imageryDate: m.imageryDate,
       imageryQuality: m.imageryQuality,
       center: m.center,
+      bounds: m.bounds,
     };
   } catch (e) {
     if (e instanceof SolarNotFoundError) {

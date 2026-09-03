@@ -11,6 +11,7 @@ import {
   roofPlanes,
 } from '@/lib/services/propertyIntel';
 import { Pill, type PillTone } from '@/components/ui/Pill';
+import { RoofOverheadView } from '@/components/RoofOverheadView';
 import {
   colors,
   fontSize,
@@ -125,6 +126,15 @@ export function PropertyIntelCard({ inspection, onMeasured }: Props) {
               </View>
             ))}
           </View>
+
+          {/* The property from above with the measured faces drawn on. */}
+          <RoofOverheadView
+            planes={intel.slopes}
+            bounds={intel.bounds}
+            center={intel.center}
+            height={200}
+            legend={false}
+          />
 
           <Text style={styles.caption}>{measurementSummary(intel)}</Text>
           {staleForLoss && (

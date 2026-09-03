@@ -746,6 +746,8 @@ export type PropertyIntel = {
   imageryDate?: string;
   imageryQuality?: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
   center?: { lat: number; lng: number };
+  /** The building footprint rectangle — frames the overhead view. */
+  bounds?: { sw: { lat: number; lng: number }; ne: { lat: number; lng: number } };
   /**
    * Plain-English reason, shown verbatim when `status` is not 'measured'.
    * Never a synthesized measurement and never a bare error code.
@@ -770,6 +772,8 @@ export type PropertyIntelSlope = {
   pitchRatio: string;
   squares: number;
   azimuthDegrees: number;
+  /** The face's rectangle in the imagery — drawn as the roof overlay. */
+  bounds?: { sw: { lat: number; lng: number }; ne: { lat: number; lng: number } };
 };
 
 export type AudioNote = {
@@ -1109,6 +1113,18 @@ export type SavedEstimate = {
   totalLow: number;
   totalMid: number;
   totalHigh: number;
+  /**
+   * The aerial measurement behind `totalSquares`, kept so the saved estimate
+   * can show the property — overhead imagery with the roof planes drawn on —
+   * instead of just a number. Absent when squares were entered by hand.
+   */
+  measurement?: {
+    imageryDate: string;
+    imageryQuality: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+    center?: { lat: number; lng: number };
+    bounds?: { sw: { lat: number; lng: number }; ne: { lat: number; lng: number } };
+    planes: PropertyIntelSlope[];
+  };
 };
 
 export type MileageTrip = {

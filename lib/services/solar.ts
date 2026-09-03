@@ -57,12 +57,21 @@ export class SolarServiceError extends GoogleApiError {
   }
 }
 
+/** A lat/lng rectangle, as the imagery reports it. */
+export type LatLngBounds = {
+  sw: { lat: number; lng: number };
+  ne: { lat: number; lng: number };
+};
+
 export type SlopeMeasurement = {
   orientation: SlopeOrientation;
   pitchDegrees: number;
   pitchRatio: string;            // "5/12"
   squares: number;               // 1 sq = 100 sq ft = 9.290304 m²
   azimuthDegrees: number;
+  /** Where this face sits — drawn over satellite imagery as the roof overlay. */
+  bounds?: LatLngBounds;
+  center?: { lat: number; lng: number };
 };
 
 export type RoofMeasurement = {
@@ -71,6 +80,8 @@ export type RoofMeasurement = {
   imageryDate: string;            // YYYY-MM-DD
   imageryQuality: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
   center: { lat: number; lng: number };
+  /** The whole building's footprint rectangle — frames the overhead view. */
+  bounds?: LatLngBounds;
 };
 
 const M2_PER_SQUARE = 9.290304;
@@ -138,6 +149,8 @@ export async function measureRoof(
       pitchRatio: pitchDegreesToRatio(pitchDeg),
       squares: areaM2 / M2_PER_SQUARE,
       azimuthDegrees: azimuth,
+      bounds: parseBounds(seg?.boundingBox),
+      center: parseLatLng(seg?.center),
     };
   });
 
@@ -150,7 +163,20 @@ export async function measureRoof(
       lat: Number(data?.center?.latitude ?? coord.lat),
       lng: Number(data?.center?.longitude ?? coord.lng),
     },
+    bounds: parseBounds(data?.boundingBox),
   };
+}
+
+function parseLatLng(raw: any): { lat: number; lng: number } | undefined {
+  const lat = Number(raw?.latitude);
+  const lng = Number(raw?.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : undefined;
+}
+
+function parseBounds(raw: any): LatLngBounds | undefined {
+  const sw = parseLatLng(raw?.sw);
+  const ne = parseLatLng(raw?.ne);
+  return sw && ne ? { sw, ne } : undefined;
 }
 
 /**

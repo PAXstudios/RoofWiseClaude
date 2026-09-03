@@ -677,7 +677,10 @@ export default function HomeScreen() {
               <PressableScale
                 key={est.id}
                 style={styles.estimateCard}
-                onPress={() => router.push('/estimator')}
+                accessibilityRole="button"
+                accessibilityLabel={`Saved estimate, ${est.address || 'no address'}, $${est.totalMid.toLocaleString()}. Open.`}
+                // The saved estimate itself — not a fresh wizard.
+                onPress={() => router.push({ pathname: '/estimate/[id]', params: { id: est.id } } as any)}
               >
                 <Text style={styles.estimateAmount}>
                   ${est.totalMid.toLocaleString()}

@@ -2662,3 +2662,25 @@ There was no exit. Once a pass started, the primary button became a spinner, "Re
 **Verified:** 13 pure assertions (walk order, claim adds brittleness, per-slope and per-zone progress incl. alternate tags, next-incomplete resolution, tag→zone lookup); typecheck, lint, web export green. The strip itself only renders on the native camera — the web build shows the camera fallback — so the pure test is the check.
 
 **Files touched:** `lib/services/captureCoach.ts` (new), `components/capture/CaptureCoach.tsx` (new), `lib/stores/captureSettingsStore.ts`, `components/capture/CaptureSettingsSheet.tsx`, `app/quick-inspection.tsx`.
+
+---
+
+### [2026-09-03] #74 — Estimator: the property from above with the roof drawn on, and a saved estimate that opens as itself
+
+**Prompts:**
+> "i asked previously to have some sort of map imagery in the estimator feature so that the user can see the overhead of their property with an overlay of their roof. and improve the estimator feature and the ui."
+> "when user presses a saved estimate, it goes to the page where you can start a new estimation. it needs to show the property information and the estimate"
+
+**The saved-estimate bug was structural.** There was no detail route at all: the Home tile pushed `/estimator`, the wizard, from step 0. `SavedEstimate` also kept only the totals — nothing about the roof that produced them.
+
+**Built.**
+- `RoofOverheadView` — Google satellite imagery (the map abstraction's `mapType="satellite"`, which is the Google tile layer in Expo Go and PROVIDER_GOOGLE in native builds) with one coloured rectangle per measured roof face, from the same aerial measurement the squares come from. The rectangles are the imagery's own per-face `boundingBox` (now carried through `solar.ts` → `PropertyIntel` → `SavedEstimate.measurement`), so what the roofer sees IS what was counted. Colour by compass direction from theme tokens; a legend of faces with squares and pitch; "Aerial · N roof faces drawn" badge; honest "no frame" for a face without a box and a no-imagery state. Non-interactive — a picture of the measurement, not a map to wander. Framing geometry (`lib/services/roofOverhead.ts`) is pure and unit-tested (union of frames, floor delta for shed-sized footprints).
+- `app/estimate/[id].tsx` — the saved estimate as a page: address, the overhead, squares / faces / imagery year, the stale-imagery notice, the low–mid–high with material and scope, and Convert to job / Re-estimate (prefilled wizard) / Delete. Honest "isn't here any more" state. The Home tile opens it; Save in the wizard lands on it.
+- The wizard: the measured card is now the hero (overhead + numbers), the Result step shows the overhead above the price, Save persists the measurement only when squares came from imagery (a manual count has no property to draw — Drift #5), and "Re-estimate" from a saved estimate prefills the address, coordinates and material via the existing prefill store.
+- The job screen's Property card gets the same overhead under its numbers.
+
+**Honest limits.** The overlay is per-face bounding boxes, not a traced roof outline — the Solar `dataLayers` mask GeoTIFF is the path to a true outline and stays in BACKLOG. The satellite view renders only on the native map; the web build shows the map fallback with the legend beneath.
+
+**Verified headless:** the saved-estimate page renders every section from a seeded estimate via the Home tile (client-side route `/estimate/est_1`); zero page errors. Typecheck, lint, web export green. (Delete's confirm is a multi-button `Alert`, which react-native-web does not render — native only, like every other confirm in the app.)
+
+**Files touched:** `components/RoofOverheadView.tsx` (new), `lib/services/roofOverhead.ts` (new), `app/estimate/[id].tsx` (new), `app/estimator.tsx`, `app/(tabs)/index.tsx`, `components/PropertyIntelCard.tsx`, `lib/services/{solar,propertyIntel}.ts`, `lib/models/types.ts`.

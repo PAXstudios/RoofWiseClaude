@@ -16,6 +16,7 @@ import { IconChip } from '@/components/ui/IconChip';
 import { AddressAutocomplete, type ResolvedLocation } from '@/components/AddressAutocomplete';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useEstimateStore } from '@/lib/stores/estimateStore';
+import { RoofOverheadView } from '@/components/RoofOverheadView';
 import { useToastStore } from '@/lib/stores/toastStore';
 import {
   colors,
@@ -88,10 +89,19 @@ export default function CostEstimatorScreen() {
   const saveEstimate = useEstimateStore((s) => s.save);
   const toast = useToastStore((s) => s.show);
   const [step, setStep] = useState<Step>(0);
-  const [draft, setDraft] = useState<Draft>({
-    address: '',
-    material: 'architectural_asphalt',
-    scope: 'full_replacement',
+  // "Re-estimate" from a saved estimate lands here with the address already
+  // known — the prefill is consumed once so the next fresh open starts empty.
+  const consumePrefill = useWizardPrefillStore((s) => s.consume);
+  const [draft, setDraft] = useState<Draft>(() => {
+    const raw = consumePrefill();
+    const p = raw?.source === 'estimate' ? raw : null;
+    return {
+      address: p?.address ?? '',
+      lat: p?.addressLat,
+      lng: p?.addressLng,
+      material: p?.material ?? 'architectural_asphalt',
+      scope: 'full_replacement',
+    };
   });
   const [measuring, setMeasuring] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -246,10 +256,18 @@ export default function CostEstimatorScreen() {
                   <IconChip name="layers-outline" tone="green" />
                   <Text style={styles.cardTitle}>{draft.measurement.totalSquares.toFixed(1)} squares</Text>
                   <Text style={styles.cardSub}>
-                    {draft.measurement.slopes.length} slopes measured
+                    {draft.measurement.slopes.length} roof faces measured
                     {'  ·  Imagery '}{draft.measurement.imageryDate}
                     {'  ·  Quality '}{draft.measurement.imageryQuality}
                   </Text>
+                  {/* The property from above with each measured face drawn on —
+                      what the number IS, not a picture beside it. */}
+                  <RoofOverheadView
+                    planes={draft.measurement.slopes}
+                    bounds={draft.measurement.bounds}
+                    center={draft.measurement.center}
+                    height={220}
+                  />
                   {imageryIsStale(draft.measurement.imageryDate) && (
                     <View style={styles.warnBanner}>
                       <Ionicons name="time-outline" size={16} color={colors.warn} />
@@ -332,6 +350,15 @@ export default function CostEstimatorScreen() {
 
           {step === 3 && estimate && (
             <View style={{ gap: spacing.lg }}>
+              {draft.measurement && (
+                <RoofOverheadView
+                  planes={draft.measurement.slopes}
+                  bounds={draft.measurement.bounds}
+                  center={draft.measurement.center}
+                  height={200}
+                  legend={false}
+                />
+              )}
               <View style={styles.priceCard}>
                 <Text style={styles.priceLabel}>Estimated cost range</Text>
                 <Text style={styles.priceMid}>${estimate.totalMid.toLocaleString()}</Text>
@@ -356,7 +383,7 @@ export default function CostEstimatorScreen() {
                 <Pressable
                   style={[styles.secondarySaveBtn, { flex: 1 }]}
                   onPress={() => {
-                    saveEstimate({
+                    const saved = saveEstimate({
                       address: draft.address,
                       lat: draft.lat,
                       lng: draft.lng,
@@ -366,8 +393,28 @@ export default function CostEstimatorScreen() {
                       totalLow: estimate.totalLow,
                       totalMid: estimate.totalMid,
                       totalHigh: estimate.totalHigh,
+                      // Only when the squares came from the imagery — a manual
+                      // count has no property to draw (Drift #5).
+                      measurement:
+                        draft.measurement && draft.manualSquares == null
+                          ? {
+                              imageryDate: draft.measurement.imageryDate,
+                              imageryQuality: draft.measurement.imageryQuality,
+                              center: draft.measurement.center,
+                              bounds: draft.measurement.bounds,
+                              planes: draft.measurement.slopes.map((sl) => ({
+                                orientation: sl.orientation,
+                                pitchDegrees: sl.pitchDegrees,
+                                pitchRatio: sl.pitchRatio,
+                                squares: sl.squares,
+                                azimuthDegrees: sl.azimuthDegrees,
+                                bounds: sl.bounds,
+                              })),
+                            }
+                          : undefined,
                     });
                     toast({ tone: 'success', title: 'Estimate saved' });
+                    router.replace({ pathname: '/estimate/[id]', params: { id: saved.id } } as any);
                   }}
                 >
                   <Ionicons name="bookmark-outline" size={18} color={colors.navy} />
