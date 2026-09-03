@@ -2,25 +2,36 @@ import { Platform, ViewStyle } from 'react-native';
 
 // RoofWise brand palette — single source of truth. No raw hex anywhere else.
 //
-// BRAND v2 (2026): royal blue + burnt orange. Onboarding runs on true black
-// with glass surfaces (iOS-style translucency); the app proper runs on white.
-// The legacy `navy` / `orange` / `cream` names are kept and REPOINTED at the
-// new palette so every existing screen rebrands without touching 40 files.
-// New work should prefer the explicit names (`royal`, `burnt`, `ink`, …).
+// BRAND 1A "Field Standard" (2026-09-03) — docs/DESIGN_1A.md is the full
+// contract (mesh gradient formula, per-screen mapping, what NOT to change).
+// Royal blue + a magenta mesh transition + warmed burnt orange, on a warm
+// paper ground instead of the old cool light-gray. The legacy `navy` /
+// `orange` / `cream` names are kept and REPOINTED at the new palette so every
+// existing screen rebrands without touching 40 files. New work should prefer
+// the explicit names (`royal`, `burnt`, `ink`, …).
 
 export const brand = {
   // Royal blue — primary identity. Saturated enough to read on black,
   // dark enough to pass contrast on white.
-  royal: '#2B4EF5',
+  royal: '#1235B8',
+  royalBright: '#2447E8',     // brighter blue — mesh 50% stop, wind-LSR dots
   royalDeep: '#1B31A8',
-  royalInk: '#0E1330',        // near-black with a blue bias, for text/dark surfaces
-  royalSoft: '#E4E9FE',       // tint for light surfaces
+  royalInk: '#0B1A5C',        // deep navy anchor — mesh 0/40%, dark surfaces, ink text
+  royalSoft: '#EBEDF7',       // tint for light surfaces
+
+  // Magenta — the mesh gradient's transition stop between blue and orange
+  // (62–82%). The mock varies the exact hue by screen (deep/warm/violet);
+  // this is the house value — MeshBackground's variants pick their own stop
+  // where the mock departs from it (docs/DESIGN_1A.md §2).
+  magenta: '#8A3A73',
 
   // Burnt orange — accent + primary CTA. Deliberately burnt, not neon,
   // so it reads as a considered pair to the blue rather than a warning.
-  burnt: '#D9541E',
-  burntDeep: '#A63C12',
+  burnt: '#E8631A',
+  burntDeep: '#C1490E',
+  burntLight: '#FF8A3D',      // light highlight — active tab icon, glow accents
   burntSoft: '#FBE7DD',
+  amber: '#FFC43D',           // caution/moderate — granule loss, moderate score badge
 
   // Dark scale (onboarding). True black for OLED depth, iOS-style.
   black: '#000000',
@@ -66,23 +77,28 @@ export const colors = {
   slate: '#5A6180',
 
   // iOS grouped ground — white cards sit on this so content reads as content
-  // even when compact. Keeps the house blue bias.
-  bg: '#F6F6FA',
+  // even when compact. 1A: a warm PAPER ground (not cool gray) — cards stay
+  // pure white so the paper still reads as a ground, not a tint on the cards.
+  bg: '#F2F0E7',
   surface: '#FFFFFF',
-  // Neutrals carry a slight blue bias so they read as chosen, not defaulted.
-  surfaceMuted: '#F5F6FA',
-  border: '#E6E8F0',
-  borderStrong: '#CFD3E2',
+  // Neutrals carry a slight warm/paper bias so they read as chosen, not defaulted.
+  surfaceMuted: '#EDEBE0',
+  border: '#DDDED1',
+  borderStrong: '#C7C8B8',
 
-  // iOS chrome fills — ink at low alpha so they sit on any light surface.
-  hairline: 'rgba(14,19,48,0.10)',      // separators, bar borders
+  // Chrome fills — ink at low alpha so they sit on any light surface.
+  hairline: 'rgba(11,26,92,0.10)',      // separators, bar borders
   barFill: 'rgba(255,255,255,0.92)',    // tab/nav bars (rgba stands in for blur)
-  fillQuiet: 'rgba(14,19,48,0.05)',     // grey-fill secondary buttons, segmented tracks
+  fillQuiet: 'rgba(11,26,92,0.05)',     // grey-fill secondary buttons, segmented tracks
 
-  text: '#0E1330',
-  textMuted: '#5A6180',
-  textSubtle: '#8A90A8',
+  text: '#0B1A5C',
+  textMuted: '#546078',
+  textSubtle: '#8A8F9A',
   textInverse: '#FFFFFF',
+  // The mesh hero's "white" — a warm paper tint, never pure #FFFFFF over a
+  // coloured gradient (docs/DESIGN_1A.md §1). Use for text/icons over
+  // MeshBackground where `textInverse` would read as an off-brand pure white.
+  onMesh: '#F2F0E7',
 
   accent: brand.burnt,
   accentSoft: brand.burntSoft,
@@ -173,12 +189,28 @@ export const gradients = {
   tileKnock: [brand.burnt, brand.burntDeep] as const,
   tileEstimate: ['#1E9E62', '#0F6B43'] as const,
   tileMileage: ['#6D48D8', '#5230A0'] as const,
+
+  // ── 1A mesh gradient presets ──────────────────────────────────────────
+  // docs/DESIGN_1A.md §2. Named variants, not a per-screen literal. Angles
+  // live on <MeshBackground> (components/ui/MeshBackground.tsx) since RN's
+  // LinearGradient takes start/end points, not a CSS angle — these arrays
+  // are the colour ramp only.
+  /** Onboarding / sign-in / splash — the full 5-stop ramp, warmest. */
+  meshHero: [brand.royalInk, brand.royalBright, brand.magenta, brand.burnt] as const,
+  /** Home hero — 3-stop short form ending in burnt. */
+  meshHome: [brand.royalInk, brand.royal, brand.magenta, brand.burnt] as const,
+  /** Damage report / Lead detail — bluer cut, no orange stop. */
+  meshCool: [brand.royal, brand.royalBright, '#6B3BC4'] as const,
+  /** Pipeline board header — cooler still, violet-leaning, no orange. */
+  meshNight: [brand.royalInk, brand.royal, '#7A2E9E'] as const,
+  /** Storm map background — desaturated, no orange (pins carry the colour). */
+  meshMap: ['#101c3f', brand.royalInk, '#182a6b'] as const,
 } satisfies Record<string, GradientStops>;
 
 export const radii = {
   sm: 8,
   md: 12,
-  card: 16,
+  card: 18,   // 1A: bumped from 16 — docs/DESIGN_1A.md §4
   lg: 20,
   xl: 24,
   pill: 999,
@@ -224,6 +256,41 @@ export const fontWeight = {
   medium: '500' as const,
   semibold: '600' as const,
   bold: '700' as const,
+};
+
+// 1A type system — docs/DESIGN_1A.md §3. `archivo` loads as named-weight
+// families (Google Font, `useFonts` in app/_layout.tsx — must be ready
+// before first paint); `mono` is a system-font stack, zero install cost.
+// Screens set `fontFamily: fontFamily.archivo.bold` etc alongside the
+// existing `fontWeight` tokens (RN needs the family name AND the numeric
+// weight lines up for platforms that only honor one of the two).
+export const fontFamily = {
+  archivo: {
+    regular: 'Archivo_400Regular',
+    medium: 'Archivo_500Medium',
+    semibold: 'Archivo_600SemiBold',
+    bold: 'Archivo_700Bold',
+    extrabold: 'Archivo_800ExtraBold',
+  },
+  mono: Platform.select({
+    ios: 'Menlo',
+    android: 'monospace',
+    default: 'ui-monospace, Menlo, monospace',
+  }) as string,
+};
+
+/**
+ * The mock's recurring "STEP 01 · CAPTURE" / "REVENUE YTD" / "RW-2841"
+ * convention: uppercase monospace, wide tracking, small. Spread this into a
+ * Text style rather than hand-rolling font/letterSpacing per screen.
+ * Colour is the caller's (an inverse tone on a mesh hero, `textMuted` on paper).
+ */
+export const dataLabel = {
+  fontFamily: fontFamily.mono,
+  fontSize: fontSize.caption,
+  fontWeight: fontWeight.semibold,
+  letterSpacing: 1.1,
+  textTransform: 'uppercase' as const,
 };
 
 // Glove-friendly touch targets, per spec.
@@ -375,6 +442,8 @@ export const theme = {
   spacing,
   fontSize,
   fontWeight,
+  fontFamily,
+  dataLabel,
   touchTarget,
   shadows,
   breakpoints,

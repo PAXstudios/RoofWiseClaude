@@ -12,6 +12,7 @@
     "lint": "expo lint"
   },
   "dependencies": {
+    "@expo-google-fonts/archivo": "^0.4.2",
     "@expo/metro-runtime": "~57.0.15",
     "@expo/vector-icons": "^15.0.3",
     "@opentelemetry/api": "^1.9.1",

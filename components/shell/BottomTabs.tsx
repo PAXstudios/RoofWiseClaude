@@ -10,11 +10,12 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { mobileBottomItems, type TabBarProps } from './navItems';
-import { colors, fontSize, fontWeight, motion, spacing, touchTarget } from '@/theme/tokens';
+import { brand, fontFamily, fontSize, motion, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
-// Edge-to-edge iOS tab bar — barFill ground, hairline top border, no chrome
-// beyond that. The bar handles its own bottom inset (SafeAreaView is
-// position-aware, so it adds nothing when a parent already applied it).
+// The floating pill tab bar — docs/DESIGN_1A.md §4. Off the bottom edge with
+// side margins (not edge-to-edge), full-pill radius, the active tab wearing
+// a soft burnt chip behind icon+label. Same tabPress/navigation contract as
+// before this reskin — only the paint changed.
 //
 // Rendered by expo-router's <Tabs tabBar={...}> in app/(tabs)/_layout.tsx, so
 // it receives the navigator's live `state` (which tab is focused) and
@@ -27,7 +28,7 @@ import { colors, fontSize, fontWeight, motion, spacing, touchTarget } from '@/th
 export function BottomTabs({ state, descriptors, navigation }: TabBarProps) {
   return (
     <SafeAreaView edges={['bottom']} style={styles.wrap} pointerEvents="box-none">
-      <View style={styles.bar}>
+      <View style={[styles.bar, shadows.float]}>
         {mobileBottomItems.map((it) => {
           const routeIndex = state.routes.findIndex((r) => r.name === it.name);
           // Defensive: a nav item whose route file is missing renders nothing
@@ -108,39 +109,57 @@ function TabButton({
       accessibilityState={{ selected: active }}
       accessibilityLabel={label}
     >
-      <Animated.View style={iconStyle}>
-        <Ionicons
-          name={(active ? activeIcon : icon) as any}
-          size={24}
-          color={active ? colors.accent : colors.textMuted}
-        />
-      </Animated.View>
-      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+      <View style={[styles.tabChip, active && styles.tabChipActive]}>
+        <Animated.View style={iconStyle}>
+          <Ionicons
+            name={(active ? activeIcon : icon) as any}
+            size={22}
+            color={active ? brand.burntLight : 'rgba(242,240,231,0.6)'}
+          />
+        </Animated.View>
+        <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    backgroundColor: colors.barFill,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.hairline,
-  },
+  wrap: { backgroundColor: 'transparent' },
   bar: {
     flexDirection: 'row',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    minHeight: 66,
+    borderRadius: radii.pill,
+    backgroundColor: brand.royalInk,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
   },
   tab: {
     flex: 1,
     minHeight: touchTarget.standard,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
     paddingVertical: spacing.xs,
   },
-  tabLabel: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.medium,
-    color: colors.textMuted,
+  tabChip: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: 9,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.pill,
   },
-  tabLabelActive: { color: colors.accent },
+  tabChipActive: {
+    backgroundColor: 'rgba(232,99,26,0.18)',
+  },
+  tabLabel: {
+    fontFamily: fontFamily.archivo.medium,
+    fontSize: fontSize.caption,
+    color: 'rgba(242,240,231,0.6)',
+  },
+  tabLabelActive: {
+    fontFamily: fontFamily.archivo.bold,
+    color: brand.burntLight,
+  },
 });

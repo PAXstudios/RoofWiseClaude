@@ -1,9 +1,18 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Stack, useRootNavigationState, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
+import * as SplashScreen from 'expo-splash-screen';
+import {
+  useFonts,
+  Archivo_400Regular,
+  Archivo_500Medium,
+  Archivo_600SemiBold,
+  Archivo_700Bold,
+  Archivo_800ExtraBold,
+} from '@expo-google-fonts/archivo';
 import { colors } from '@/theme/tokens';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { useBackgroundJobs } from '@/lib/services/lifecycleHooks';
@@ -26,10 +35,29 @@ installDiagnostics();
 // so such a throw is recorded to Diagnostics instead of killing the app.
 installUiRuntimeGuard();
 
+// Archivo (docs/DESIGN_1A.md §3) is load-bearing to the whole identity — the
+// splash screen stays up until it's ready rather than letting the system
+// font flash for a frame. Idempotent; a second call is a no-op.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
   const router = useRouter();
   useBackgroundJobs();
+  const [fontsReady, fontError] = useFonts({
+    Archivo_400Regular,
+    Archivo_500Medium,
+    Archivo_600SemiBold,
+    Archivo_700Bold,
+    Archivo_800ExtraBold,
+  });
+  // A font-load failure (offline first launch, corrupt cache) must never
+  // brick the app — fall through to the system font rather than hang on
+  // the splash screen forever.
+  const ready = fontsReady || !!fontError;
+  const onLayout = useCallback(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
   // The pipeline automation engine's daily ticks (idle-7d, follow-up-due) —
   // the event-driven rules fire from the stores themselves; this drives the
   // time-based ones. Mounted once, at the root.
@@ -97,8 +125,13 @@ export default function RootLayout() {
     return () => sub.remove();
   }, [navReady, router]);
 
+  // Every hook above must run every render (rules-of-hooks) — only the paint
+  // waits on the fonts. Returning null here keeps `SplashScreen` up instead
+  // of flashing an unstyled frame.
+  if (!ready) return null;
+
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }} onLayout={onLayout}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
         {/* Wraps the navigator, not the app root, so the crash screen still
