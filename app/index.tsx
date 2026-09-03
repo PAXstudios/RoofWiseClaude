@@ -6,6 +6,11 @@ import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 import { env } from '@/lib/env';
 import { colors } from '@/theme/tokens';
 
+// Not a destination screen — a redirect-only route (auth/onboarding gate).
+// It renders for a frame at most before <Redirect> fires, so it isn't part
+// of the 1A reskin's visual surface; `colors.bg`/`colors.accent` already
+// resolve to the 1A palette (paper ground / burnt) with no change needed.
+
 /**
  * True once the persisted onboarding flag has been read back from storage.
  * The store's default is `completed: false`, so rendering the redirect before

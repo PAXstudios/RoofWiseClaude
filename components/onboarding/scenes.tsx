@@ -5,6 +5,14 @@
 // return a verdict → you leave with a packet. The motion is the explanation,
 // so every scene restarts when it becomes active and holds still when it
 // isn't (no animation runs off-screen).
+//
+// 1A "Field Standard" (docs/DESIGN_1A.md): these now sit over the mesh hero
+// (app/onboarding.tsx's <MeshBackground variant="hero" />) rather than a
+// near-flat black ground, so the one glass card here (VerdictScene) uses the
+// over-ART "smoke" pair instead of flat `glass.fill`. Small uppercase
+// technical readouts — the material label, the finding tags, the certified
+// stamps — pick up the system's monospace `dataLabel` convention (§3/§5:
+// "STEP 01 · CAPTURE", "78 SEVERE").
 
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -20,7 +28,17 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { brand, colors, fontSize, fontWeight, glass, motion, radii, spacing } from '@/theme/tokens';
+import {
+  brand,
+  colors,
+  fontFamily,
+  fontSize,
+  fontWeight,
+  glass,
+  motion,
+  radii,
+  spacing,
+} from '@/theme/tokens';
 import { HAAG_THRESHOLDS } from '@/lib/services/haagThresholds';
 
 const STAGE = 260;
@@ -403,28 +421,40 @@ const styles = StyleSheet.create({
   },
   detectionTagText: {
     color: colors.textInverse,
+    fontFamily: fontFamily.mono,
     fontSize: 9,
     fontWeight: fontWeight.bold,
-    letterSpacing: 0.4,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
 
-  // Verdict
+  // Verdict — smoke fill/border (the over-ART glass pair) rather than flat
+  // `glass.fill`, since this card now sits on the coloured mesh, not a
+  // near-black ground; content stays `textInverse` per that pair's own
+  // contract (a dark smoke panel carries inverse text, docs/DESIGN_1A.md).
   verdictCard: {
     width: '92%',
     borderRadius: radii.lg,
     padding: spacing.lg,
-    backgroundColor: glass.fill,
+    backgroundColor: glass.smokeFill,
     borderWidth: 1,
-    borderColor: glass.border,
+    borderColor: glass.smokeBorder,
     gap: spacing.sm,
   },
   verdictLabel: {
     color: colors.textInverse,
+    fontFamily: fontFamily.mono,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
     letterSpacing: 1,
+    textTransform: 'uppercase',
   },
-  verdictRule: { color: 'rgba(255,255,255,0.6)', fontSize: fontSize.caption },
+  verdictRule: {
+    color: colors.textInverse,
+    opacity: 0.62,
+    fontFamily: fontFamily.mono,
+    fontSize: fontSize.caption,
+  },
   gaugeTrack: {
     height: 14,
     borderRadius: 7,
@@ -448,8 +478,18 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   gaugeLegend: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
-  gaugeCount: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
-  gaugeThresholdLabel: { color: 'rgba(255,255,255,0.5)', fontSize: fontSize.caption },
+  gaugeCount: {
+    color: colors.textInverse,
+    fontFamily: fontFamily.mono,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+  },
+  gaugeThresholdLabel: {
+    color: colors.textInverse,
+    opacity: 0.5,
+    fontFamily: fontFamily.mono,
+    fontSize: fontSize.caption,
+  },
   stamp: {
     position: 'absolute',
     bottom: 18,
@@ -462,9 +502,11 @@ const styles = StyleSheet.create({
   },
   stampText: {
     color: colors.success,
+    fontFamily: fontFamily.mono,
     fontWeight: fontWeight.bold,
     fontSize: fontSize.bodyMd,
     letterSpacing: 1.4,
+    textTransform: 'uppercase',
   },
 
   // Packet
@@ -496,7 +538,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
-  sheetStampText: { color: colors.success, fontSize: 8, fontWeight: fontWeight.bold, letterSpacing: 0.8 },
+  sheetStampText: {
+    color: colors.success,
+    fontFamily: fontFamily.mono,
+    fontSize: 8,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
 });
 
 export const SCENE_STAGE = STAGE;

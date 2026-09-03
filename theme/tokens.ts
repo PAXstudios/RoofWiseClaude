@@ -256,6 +256,13 @@ export const fontWeight = {
   medium: '500' as const,
   semibold: '600' as const,
   bold: '700' as const,
+  // 1A: pairs with fontFamily.archivo.extrabold (Archivo_800ExtraBold) — the
+  // onboarding/sign-in hero headline weight. Appended rather than backfilled
+  // everywhere; docs/DESIGN_1A.md §3 calls for `fontFamily` set ALONGSIDE a
+  // matching `fontWeight` token (RN needs both — the numeric weight is what
+  // a platform falls back to if it can't resolve the named font family), and
+  // 800 had no numeric home until now.
+  extrabold: '800' as const,
 };
 
 // 1A type system — docs/DESIGN_1A.md §3. `archivo` loads as named-weight

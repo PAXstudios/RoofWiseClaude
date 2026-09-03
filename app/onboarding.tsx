@@ -1,9 +1,12 @@
 // Onboarding — the product loop, told in four animated beats.
 //
-// Design intent: black ground, brand-lit aurora, glass foreground. Every
-// scene animates one real step of the RoofWise loop so a contractor
-// understands what they bought before they ever sign in. Skip is always
-// available and always lands on auth — onboarding never traps anyone.
+// Design intent (1A "Field Standard", docs/DESIGN_1A.md §2/§6): the full
+// 5-stop meshHero ramp (ink → royalBright → magenta → burnt, the warmest
+// variant in the system) behind glass foreground — replaces the old flat
+// black + Aurora-orb hero. Every scene animates one real step of the
+// RoofWise loop so a contractor understands what they bought before they
+// ever sign in. Skip is always available and always lands on auth —
+// onboarding never traps anyone.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -32,7 +35,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Aurora } from '@/components/glass/Aurora';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import {
   PacketScene,
   ScanScene,
@@ -44,11 +47,14 @@ import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 import {
   brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
   motion,
   radii,
+  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
@@ -64,28 +70,28 @@ type Scene = {
 const SCENES: Scene[] = [
   {
     key: 'storm',
-    eyebrow: 'Storm intelligence',
+    eyebrow: 'Step 01 · Storm intel',
     title: 'Know the\nminute it hits',
     body: 'RoofWise watches NOAA for hail and wind across your service area, then shows you exactly which properties sit under the swath.',
     Illustration: StormScene,
   },
   {
     key: 'scan',
-    eyebrow: 'AI inspection',
+    eyebrow: 'Step 02 · AI inspection',
     title: 'Walk it once.\nMiss nothing.',
     body: 'Point the camera. AI reads every shingle across all 13 damage categories and marks each finding with a severity and a confidence score.',
     Illustration: ScanScene,
   },
   {
     key: 'verdict',
-    eyebrow: 'HAAG protocol',
+    eyebrow: 'Step 03 · HAAG protocol',
     title: 'Thresholds,\nnot opinions',
     body: 'Findings are measured against the material-specific Haag criteria your carrier already uses — so the verdict is the standard, not your word against theirs.',
     Illustration: VerdictScene,
   },
   {
     key: 'packet',
-    eyebrow: 'Claim packet',
+    eyebrow: 'Step 04 · Claim packet',
     title: 'Evidence they\ncan’t wave away',
     body: 'Leave the driveway with a certified report: annotated photos, storm verification, thresholds met, and signatures. Ready for the adjuster.',
     Illustration: PacketScene,
@@ -130,7 +136,10 @@ export default function Onboarding() {
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
-      <Aurora />
+      {/* The system's one signature background — full 5-stop ramp, warmest
+          variant in the app (docs/DESIGN_1A.md §2, "Onboarding 1 / Sign-in"
+          row). Replaces the old flat-black + Aurora-orb hero. */}
+      <MeshBackground variant="hero" />
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <View style={styles.topBar}>
@@ -202,8 +211,8 @@ export default function Onboarding() {
 
 /**
  * Slow ambient drift on the scene art — a few points of translate on the
- * ambient loop, out of phase with the Aurora orbs behind it, so the hero
- * reads as parallax depth rather than a static cutout.
+ * ambient loop, so the hero reads as parallax depth over the mesh rather
+ * than a static cutout.
  */
 function AmbientDrift({ children }: { children: React.ReactNode }) {
   const t = useSharedValue(0);
@@ -288,11 +297,20 @@ function Dot({ active }: { active: boolean }) {
     opacity: o.value,
     transform: [{ scale: s.value }],
   }));
-  return <Animated.View style={[styles.dot, style]} />;
+  // Colour is a plain (non-animated) style keyed off the `active` prop —
+  // the width/opacity/scale spring already carries the motion, the colour
+  // just needs to be correct on the render where `active` flips.
+  return (
+    <Animated.View
+      style={[styles.dot, { backgroundColor: active ? brand.burntLight : colors.onMesh }, style]}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: brand.black },
+  // Dark edge under the mesh (offscreen safe-area slivers, a slow grain
+  // load) — matches the ramp's own 0% stop rather than pure black.
+  root: { flex: 1, backgroundColor: brand.royalInk },
   safe: { flex: 1 },
 
   topBar: {
@@ -312,24 +330,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandName: {
-    color: colors.textInverse,
-    fontSize: fontSize.bodyLg,
+    color: colors.onMesh,
+    fontFamily: fontFamily.archivo.bold,
     fontWeight: fontWeight.bold,
+    fontSize: fontSize.bodyLg,
     letterSpacing: -0.3,
   },
+  // Smoke fill/border — the over-ART glass pair (docs/DESIGN_1A.md, see
+  // GlassCard's `onArt`) — reads over every part of the ramp, unlike the
+  // flat `glass.fillLow` tuned for a solid black ground.
   skip: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
     justifyContent: 'center',
     borderRadius: radii.pill,
-    backgroundColor: glass.fillLow,
+    backgroundColor: glass.smokeFill,
     borderWidth: 1,
-    borderColor: glass.border,
+    borderColor: glass.smokeBorder,
   },
   skipText: {
-    color: 'rgba(255,255,255,0.82)',
-    fontSize: fontSize.bodyMd,
+    color: colors.textInverse,
+    opacity: 0.85,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
+    fontSize: fontSize.bodyMd,
   },
 
   // Illustration takes the free space at the top and centers within it; the
@@ -343,30 +367,47 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.xl,
   },
+  // The "STEP 01 · CAPTURE" convention (docs/DESIGN_1A.md §3/§5). dataLabel's
+  // own doc note: on a mesh hero, use an inverse (light) tone rather than a
+  // brand hue — the copy block sits low on the ramp, near its magenta/burnt
+  // tail, where `brand.burnt` text would nearly disappear into the ground.
   eyebrow: {
-    color: brand.burnt,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    letterSpacing: 1.6,
-    textTransform: 'uppercase',
+    ...dataLabel,
+    color: colors.onMesh,
+    opacity: 0.85,
   },
+  // fontSize.display (34) kept rather than the mock's 44px ceiling — these
+  // titles are hand-wrapped to exactly two lines per scene; 44px risks a
+  // third wrap on a 390px-wide phone. A one-off +4 nudge over `display`
+  // (docs §3: "extend display upward... via a one-off style, not a new
+  // token") gives the hero more presence than the in-app default without
+  // breaking that two-line rhythm.
   title: {
-    color: colors.textInverse,
-    fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
-    letterSpacing: -1,
-    lineHeight: 38,
+    color: colors.onMesh,
+    fontFamily: fontFamily.archivo.extrabold,
+    fontWeight: fontWeight.extrabold,
+    fontSize: fontSize.display + 4,
+    letterSpacing: -1.2,
+    lineHeight: 42,
   },
   body: {
-    color: 'rgba(255,255,255,0.66)',
+    color: colors.onMesh,
+    opacity: 0.78,
+    fontFamily: fontFamily.archivo.regular,
+    fontWeight: fontWeight.regular,
     fontSize: fontSize.bodyLg,
     lineHeight: 25,
   },
 
   footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.md },
   dots: { flexDirection: 'row', gap: spacing.sm, alignSelf: 'center' },
-  dot: { height: 7, borderRadius: 4, backgroundColor: colors.textInverse },
+  // backgroundColor is set per-instance in <Dot> (active → burntLight,
+  // inactive → onMesh) — this base only carries shape.
+  dot: { height: 7, borderRadius: 4 },
 
+  // touchTarget.sticky (88) kept per Drift #1 / docs §4 — the mock's 54-60px
+  // in-flow buttons don't apply to the one true sticky bottom CTA. The
+  // brand-tinted `shadows.hero` is the "coloured shadow" §6 calls for.
   cta: {
     height: touchTarget.sticky,
     borderRadius: radii.pill,
@@ -375,18 +416,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
+    ...shadows.hero,
   },
   ctaPressed: { backgroundColor: brand.burntDeep, transform: [{ scale: 0.985 }] },
   ctaText: {
     color: colors.textInverse,
-    fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.bold,
     fontWeight: fontWeight.bold,
+    fontSize: fontSize.bodyLg,
     letterSpacing: -0.2,
   },
   secondary: { alignSelf: 'center', minHeight: touchTarget.standard, justifyContent: 'center' },
   secondaryText: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: fontSize.bodyMd,
+    color: colors.onMesh,
+    opacity: 0.6,
+    fontFamily: fontFamily.archivo.medium,
     fontWeight: fontWeight.medium,
+    fontSize: fontSize.bodyMd,
   },
 });

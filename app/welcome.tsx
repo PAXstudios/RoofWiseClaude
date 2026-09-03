@@ -1,7 +1,9 @@
 // Auth — the terminus of onboarding.
 //
-// Same black-and-glass world as the onboarding scenes so the handoff is
-// seamless; the app itself then opens on white. Three ways in (Apple,
+// Same mesh-and-glass world as the onboarding scenes so the handoff is
+// seamless (1A "Field Standard", docs/DESIGN_1A.md §2 — the "Onboarding 1 /
+// Sign-in" row shares onboarding's exact 115°/full-ramp `hero` variant);
+// the app itself then opens on the paper ground. Three ways in (Apple,
 // Google, email) and a name is required on sign-up: it goes on every HAAG
 // report and proposal this inspector produces, so we ask once, here.
 
@@ -29,7 +31,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { Aurora } from '@/components/glass/Aurora';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { AppleSignInButton } from '@/components/AppleSignInButton';
 import { useAuthStore } from '@/lib/auth/authStore';
@@ -38,6 +40,7 @@ import { env } from '@/lib/env';
 import {
   brand,
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
@@ -138,14 +141,14 @@ export default function Welcome() {
   return (
     <View style={styles.root}>
       {/* Fade rather than slide on the way in from onboarding and on the way
-          out into the app — a hard slide-cut is what makes a dark/glass
+          out into the app — a hard slide-cut is what makes a dark/mesh
           screen and a light one read as two different products; a fade lets
-          the aurora glow dissolve instead of getting yanked offscreen. Auth
+          the mesh glow dissolve instead of getting yanked offscreen. Auth
           logic and provider buttons are unchanged — this is presentation
           only, scoped to this screen's own transition. */}
       <Stack.Screen options={{ headerShown: false, animation: 'fade' }} />
       <StatusBar style="light" />
-      <Aurora />
+      <MeshBackground variant="hero" />
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
@@ -179,7 +182,7 @@ export default function Welcome() {
                   tint — the segmented control is the first thing a returning
                   user's thumb touches, so it is the one control on this
                   screen worth the literal onboarding surface. */}
-              <GlassCard level="base" radius={radii.control + 2} style={styles.segment}>
+              <GlassCard level="base" onArt radius={radii.control + 2} style={styles.segment}>
                 {segThumbW > 0 && (
                   <Animated.View
                     style={[styles.segmentThumb, { width: segThumbW }, segThumbStyle]}
@@ -286,7 +289,8 @@ export default function Welcome() {
                       <Ionicons
                         name={c.ok ? 'checkmark-circle' : 'ellipse-outline'}
                         size={15}
-                        color={c.ok ? colors.success : 'rgba(255,255,255,0.35)'}
+                        color={c.ok ? colors.success : colors.onMesh}
+                        style={c.ok ? undefined : styles.checkIconMuted}
                       />
                       <Text style={[styles.checkText, c.ok && styles.checkTextOk]}>{c.label}</Text>
                     </View>
@@ -332,7 +336,7 @@ export default function Welcome() {
                   accessibilityLabel="Explore the app without an account"
                 >
                   <Text style={styles.exploreText}>Explore without an account</Text>
-                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.55)" />
+                  <Ionicons name="chevron-forward" size={16} color={colors.onMesh} style={styles.exploreIcon} />
                 </Pressable>
               </Animated.View>
             )}
@@ -372,7 +376,8 @@ function Field({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: brand.black },
+  // Dark edge under the mesh — matches the ramp's own 0% stop.
+  root: { flex: 1, backgroundColor: brand.royalInk },
   safe: { flex: 1 },
   flex: { flex: 1 },
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.lg },
@@ -387,14 +392,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.sm,
   },
+  // Same one-off +4 hero size as app/onboarding.tsx's title — the two
+  // screens share the mesh's exact 115° ramp (docs §2), so they share its
+  // type scale too.
   title: {
-    color: colors.textInverse,
-    fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
-    letterSpacing: -1,
-    lineHeight: 38,
+    color: colors.onMesh,
+    fontFamily: fontFamily.archivo.extrabold,
+    fontWeight: fontWeight.extrabold,
+    fontSize: fontSize.display + 4,
+    letterSpacing: -1.2,
+    lineHeight: 42,
   },
-  subtitle: { color: 'rgba(255,255,255,0.6)', fontSize: fontSize.bodyMd, lineHeight: 21 },
+  subtitle: {
+    color: colors.onMesh,
+    opacity: 0.75,
+    fontFamily: fontFamily.archivo.regular,
+    fontSize: fontSize.bodyMd,
+    lineHeight: 21,
+  },
 
   // Background/border/radius now come from the wrapping GlassCard; this
   // style only positions the two segment items inside it.
@@ -419,19 +434,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: fontSize.bodyMd,
+    color: colors.textInverse,
+    opacity: 0.6,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
+    fontSize: fontSize.bodyMd,
   },
-  segmentTextActive: { color: colors.textInverse },
+  segmentTextActive: { color: colors.textInverse, opacity: 1 },
 
   providers: { gap: spacing.sm },
+  // Smoke fill/border — the over-ART glass pair (GlassCard's `onArt`,
+  // docs/DESIGN_1A.md) — holds contrast over every part of the ramp, unlike
+  // `glass.fill` alone which is tuned for a flat ground.
   provider: {
     minHeight: touchTarget.preferred,
     borderRadius: radii.pill,
-    backgroundColor: glass.fill,
+    backgroundColor: glass.smokeFill,
     borderWidth: 1,
-    borderColor: glass.border,
+    borderColor: glass.smokeBorder,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -439,13 +459,19 @@ const styles = StyleSheet.create({
   },
   providerText: {
     color: colors.textInverse,
-    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
+    fontSize: fontSize.bodyMd,
   },
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   divider: { flex: 1, height: 1, backgroundColor: glass.border },
-  dividerText: { color: 'rgba(255,255,255,0.42)', fontSize: fontSize.bodySm },
+  dividerText: {
+    color: colors.onMesh,
+    opacity: 0.5,
+    fontFamily: fontFamily.archivo.regular,
+    fontSize: fontSize.bodySm,
+  },
 
   form: { gap: spacing.md },
   field: {
@@ -455,23 +481,32 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.preferred,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.lg,
-    backgroundColor: glass.fillLow,
+    backgroundColor: glass.smokeFill,
     borderWidth: 1,
-    borderColor: glass.border,
+    borderColor: glass.smokeBorder,
   },
   fieldFocused: { borderColor: brand.royal, backgroundColor: glass.fill },
   input: {
     flex: 1,
     color: colors.textInverse,
+    fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodyLg,
     paddingVertical: spacing.md,
   },
 
   checks: { gap: 6, paddingHorizontal: spacing.xs },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  checkText: { color: 'rgba(255,255,255,0.5)', fontSize: fontSize.bodySm },
-  checkTextOk: { color: 'rgba(255,255,255,0.85)' },
+  checkText: {
+    color: colors.onMesh,
+    opacity: 0.55,
+    fontFamily: fontFamily.archivo.regular,
+    fontSize: fontSize.bodySm,
+  },
+  checkTextOk: { color: colors.onMesh, opacity: 0.95 },
+  checkIconMuted: { opacity: 0.4 },
 
+  // touchTarget.sticky (88) kept per Drift #1 / docs §4. shadows.hero is the
+  // "coloured shadow" §6 calls for on the sticky pill CTA.
   cta: {
     height: touchTarget.sticky,
     borderRadius: radii.pill,
@@ -481,13 +516,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     marginTop: spacing.xs,
+    ...shadows.hero,
   },
   ctaPressed: { backgroundColor: brand.burntDeep, transform: [{ scale: 0.985 }] },
   ctaDisabled: { backgroundColor: 'rgba(255,255,255,0.12)' },
-  ctaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  ctaText: {
+    color: colors.textInverse,
+    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.bold,
+    fontSize: fontSize.bodyLg,
+  },
 
   link: { alignSelf: 'center', minHeight: touchTarget.standard, justifyContent: 'center' },
-  linkText: { color: 'rgba(255,255,255,0.6)', fontSize: fontSize.bodyMd },
+  linkText: {
+    color: colors.onMesh,
+    opacity: 0.65,
+    fontFamily: fontFamily.archivo.medium,
+    fontSize: fontSize.bodyMd,
+  },
 
   explore: {
     flexDirection: 'row',
@@ -497,13 +543,18 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.standard,
   },
   exploreText: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: fontSize.bodyMd,
+    color: colors.onMesh,
+    opacity: 0.6,
+    fontFamily: fontFamily.archivo.medium,
     fontWeight: fontWeight.medium,
+    fontSize: fontSize.bodyMd,
   },
+  exploreIcon: { opacity: 0.6 },
 
   legal: {
-    color: 'rgba(255,255,255,0.32)',
+    color: colors.onMesh,
+    opacity: 0.4,
+    fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.caption,
     textAlign: 'center',
     lineHeight: 16,
