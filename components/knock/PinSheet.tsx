@@ -111,6 +111,8 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
   const [outcome, setOutcome] = useState<KnockOutcome | null>(null);
   const [notes, setNotes] = useState('');
   const [followUp, setFollowUp] = useState<FollowUpChoice>({ kind: 'none' });
+  /** The date the knock came in with — offered as "Keep …" beside the cadence chips. */
+  const [keepIso, setKeepIso] = useState<string | null>(null);
   const [comeBackWhen, setComeBackWhen] = useState<ComeBackWhen | null>(null);
   const [damageNoted, setDamageNoted] = useState<boolean | null>(null);
   const [contactName, setContactName] = useState('');
@@ -131,6 +133,7 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
     setOutcome(fresh ? null : (source?.outcome ?? null));
     setNotes(fresh ? '' : (source?.notes ?? ''));
     setFollowUp(!fresh && source?.followUpAt ? { kind: 'keep', iso: source.followUpAt } : { kind: 'none' });
+    setKeepIso(!fresh && source?.followUpAt ? source.followUpAt : null);
     setComeBackWhen(!fresh ? (source?.comeBackWhen ?? null) : null);
     setDamageNoted(!fresh && source?.damageNoted !== undefined ? source.damageNoted : null);
     setContactName(source?.contactName ?? '');
@@ -196,6 +199,7 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
     setOutcome(source?.outcome ?? null);
     setNotes(source?.notes ?? '');
     setFollowUp(source?.followUpAt ? { kind: 'keep', iso: source.followUpAt } : { kind: 'none' });
+    setKeepIso(source?.followUpAt ?? null);
     setContactName(source?.contactName ?? '');
     setContactPhone(source?.contactPhone ?? '');
     if (source?.propertyRecord) setRecord(source.propertyRecord);
@@ -284,7 +288,7 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title={title} accessibilityLabel={title}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.kav}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.body}
@@ -370,7 +374,7 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
             <View style={styles.recordCard}>
               {photo ? <Image source={{ uri: photo }} style={styles.recordPhoto} contentFit="cover" transition={150} /> : null}
               <View style={styles.fill}>
-                {badge ? <Pill label={badge.label} tone={badge.tone === 'neutral' ? 'neutral' : badge.tone} size="sm" /> : null}
+                {badge ? <Pill label={badge.label} tone={badge.tone} size="sm" /> : null}
                 {facts ? <Text style={styles.recordFacts}>{facts}</Text> : null}
                 {badge ? <Text style={styles.recordHint}>{badge.hint}</Text> : null}
                 {badge && record.listingAgent?.phone ? (
@@ -404,7 +408,7 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
               <Text style={styles.noteText}>
                 {!isApillowConfigured
                   ? 'Property records are not set up on this build.'
-                  : record && record.status !== 'found'
+                  : record
                     ? (record.reason ?? 'No record for this address.')
                     : !addressReal
                       ? 'Needs a street address first.'
@@ -481,16 +485,18 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>{meta.id === 'appointment' ? 'Inspection day' : 'Follow up'}</Text>
               <View style={styles.rowWrap}>
-                {followUp.kind === 'keep' ? (
+                {keepIso ? (
                   <PressableScale
                     pressedScale={0.96}
-                    style={[styles.pick, styles.pickActive]}
-                    onPress={() => {}}
+                    style={[styles.pick, followUp.kind === 'keep' && styles.pickActive]}
+                    onPress={() => setFollowUp({ kind: 'keep', iso: keepIso })}
                     accessibilityRole="button"
-                    accessibilityLabel={`Keep ${formatWhen(followUp.iso)}`}
-                    accessibilityState={{ selected: true }}
+                    accessibilityLabel={`Keep ${formatWhen(keepIso)}`}
+                    accessibilityState={{ selected: followUp.kind === 'keep' }}
                   >
-                    <Text style={[styles.pickText, styles.pickTextActive]}>Keep {formatWhen(followUp.iso)}</Text>
+                    <Text style={[styles.pickText, followUp.kind === 'keep' && styles.pickTextActive]}>
+                      Keep {formatWhen(keepIso)}
+                    </Text>
                   </PressableScale>
                 ) : null}
                 {FOLLOW_UP_DAYS.map((d) => {
@@ -698,7 +704,8 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
 }
 
 const styles = StyleSheet.create({
-  fill: { flexShrink: 1, flex: 1 },
+  kav: { flexShrink: 1 },
+  fill: { flex: 1 },
   scroll: { flexGrow: 0 },
   body: { gap: spacing.lg, paddingBottom: spacing.md },
   field: { gap: spacing.sm },

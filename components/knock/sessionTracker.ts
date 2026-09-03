@@ -95,6 +95,11 @@ function onFix(loc: Location.LocationObject): void {
       // screen) gets its trip the moment the phone knows where it is.
       const trip = ms.start({ lat: sample.lat, lng: sample.lng, purpose: KNOCK_TRIP_PURPOSE });
       ks.setMileageTrip(trip.id, true);
+    } else if (!session.mileageTripId && ms.active) {
+      // A trip the roofer started by hand meanwhile is the same walk — ride
+      // it, but leave it running when the route wraps.
+      ks.setMileageTrip(ms.active.id, false);
+      ms.recordSample(sample);
     } else if (ms.active && ms.active.id === session.mileageTripId) {
       ms.recordSample(sample);
     }

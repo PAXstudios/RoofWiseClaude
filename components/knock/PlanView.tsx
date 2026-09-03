@@ -20,6 +20,7 @@ import { IconChip } from '@/components/ui/IconChip';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion/FadeSlideIn';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+import { startRoute } from '@/components/knock/sessionTracker';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
@@ -40,7 +41,7 @@ import { fetchNearbyHomes, recordCardUrl, recordFactsLine } from '@/lib/services
 import { haversineMilesBetween } from '@/lib/services/stormWhere';
 import { KNOCK_ROUTE_RADIUS_MILES } from '@/lib/services/stormWatch';
 import { isApillowConfigured } from '@/lib/env';
-import type { PropertyRecord } from '@/lib/models/types';
+import type { KnockRouteTarget, PropertyRecord } from '@/lib/models/types';
 import { formatRelative } from '@/lib/format/date';
 import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
@@ -62,6 +63,7 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
   const archive = useKnockSessionStore((s) => s.archive);
   const startSession = useKnockSessionStore((s) => s.start);
   const setRouteTarget = useKnockSessionStore((s) => s.setRouteTarget);
+  const setRouteStops = useKnockSessionStore((s) => s.setRouteStops);
   const setAreaStatus = useKnockFinderStore((s) => s.setAreaStatus);
   const toast = useToastStore((s) => s.show);
 
@@ -96,22 +98,55 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
       },
     } as any);
 
-  const routeTo = (target: { lat: number; lng: number; label: string }, silent = false) => {
-    const t = { ...target, radiusMiles: KNOCK_ROUTE_RADIUS_MILES };
-    if (activeSession) setRouteTarget(t);
-    else startSession(undefined, t);
-    if (!silent) {
-      toast({ tone: 'success', title: 'Added to your knock route', body: `${t.label} · ${KNOCK_ROUTE_RADIUS_MILES} mi canvass radius` });
-      router.push('/door-knocking');
-    }
+  const toTarget = (a: ScoredArea): KnockRouteTarget => ({
+    lat: a.lat,
+    lng: a.lng,
+    label: a.name ?? a.storm.town ?? 'Storm area',
+    radiusMiles: KNOCK_ROUTE_RADIUS_MILES,
+  });
+
+  // Start a route the proper way — permission → GPS watcher → mileage trip →
+  // session (sessionTracker.startRoute). When location is refused the
+  // session is still created with the plan on it, so nothing the roofer
+  // chose is lost: Knock mode shows the permission card and the tracker
+  // starts the trip on the first fix once it is granted.
+  const beginRoute = async (opts: { routeTarget?: KnockRouteTarget; routeStops?: KnockRouteTarget[] }) => {
+    const r = await startRoute(opts);
+    if (r.ok) return true;
+    startSession(undefined, opts.routeTarget ?? opts.routeStops?.[0], { routeStops: opts.routeStops });
+    toast({ tone: 'warn', title: 'Location is off', body: 'The route is set. Turn location on in Knock mode to place pins and count miles.' });
+    return false;
   };
 
-  const startDay = (day: TripDay) => {
+  const routeTo = async (target: { lat: number; lng: number; label: string }) => {
+    const t = { ...target, radiusMiles: KNOCK_ROUTE_RADIUS_MILES };
+    if (activeSession) {
+      setRouteTarget(t);
+      toast({ tone: 'success', title: 'Added to your knock route', body: `${t.label} · ${KNOCK_ROUTE_RADIUS_MILES} mi canvass radius` });
+    } else if (await beginRoute({ routeTarget: t })) {
+      toast({ tone: 'success', title: 'Knock route started', body: `${t.label} · ${KNOCK_ROUTE_RADIUS_MILES} mi canvass radius` });
+    }
+    router.push('/door-knocking');
+  };
+
+  // The whole day rides the session as ordered stops — Knock mode draws a
+  // ring per stop, accents the current one and steps through them with
+  // "Next stop". A route already running takes the stops in place.
+  const startDay = async (day: TripDay) => {
     const first = day.stops[0];
     if (!first) return;
-    routeTo({ lat: first.area.lat, lng: first.area.lng, label: first.area.name ?? first.area.storm.town ?? 'Storm area' }, true);
+    const stops = day.stops.map((s) => toTarget(s.area));
+    let ok = true;
+    if (activeSession) setRouteStops(stops);
+    else ok = await beginRoute({ routeStops: stops });
     for (const s of day.stops) if (!plan.areaStatus[s.area.key]) setAreaStatus(plan.id, s.area.key, 'scheduled');
-    toast({ tone: 'success', title: `Day ${day.day} started`, body: `${day.stops.length} stop${day.stops.length === 1 ? '' : 's'} · first: ${first.area.name ?? first.area.storm.town ?? 'storm area'}` });
+    if (ok) {
+      toast({
+        tone: 'success',
+        title: `Day ${day.day} started`,
+        body: `${stops.length} stop${stops.length === 1 ? '' : 's'} on your route · first: ${stops[0].label}`,
+      });
+    }
     router.push('/door-knocking');
   };
 
@@ -165,8 +200,8 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
             onStatus={(st) => setAreaStatus(plan.id, a.key, st)}
             onMap={() => showOnMap(a)}
             onDirections={() => openDirections([{ lat: a.lat, lng: a.lng }])}
-            onRoute={() => routeTo({ lat: a.lat, lng: a.lng, label: a.name ?? a.storm.town ?? 'Storm area' })}
-            onRouteHome={(h, label) => routeTo({ lat: h.lat ?? a.lat, lng: h.lng ?? a.lng, label })}
+            onRoute={() => void routeTo({ lat: a.lat, lng: a.lng, label: a.name ?? a.storm.town ?? 'Storm area' })}
+            onRouteHome={(h, label) => void routeTo({ lat: h.lat ?? a.lat, lng: h.lng ?? a.lng, label })}
           />
         </FadeSlideIn>
       ))}
@@ -175,7 +210,7 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
       {result.brief?.planNarrative ? <Text style={styles.narrative}>{result.brief.planNarrative}</Text> : null}
       {result.plan.days.map((d, i) => (
         <FadeSlideIn key={d.day} index={result.areas.length + 1 + i}>
-          <DayCard day={d} onStart={() => startDay(d)} onDirections={() => openDirections(d.stops.map((s) => ({ lat: s.area.lat, lng: s.area.lng })))} />
+          <DayCard day={d} onStart={() => void startDay(d)} onDirections={() => openDirections(d.stops.map((s) => ({ lat: s.area.lat, lng: s.area.lng })))} />
         </FadeSlideIn>
       ))}
       {result.plan.unplanned.length > 0 ? (

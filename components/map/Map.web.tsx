@@ -42,6 +42,8 @@ export type MapProps = {
   region?: Region;
   onMapReady?: () => void;
   onLongPress?: (coord: MapCoordinate) => void;
+  /** A plain click on the map (marker clicks never reach this). */
+  onPress?: (coord: MapCoordinate) => void;
   /**
    * Web only: top-anchor the no-map fallback panel this many points from the
    * top instead of centering it. Tab roots pass this so the panel sits right
@@ -150,7 +152,7 @@ function cssFill(color?: string): { color?: string; opacity?: number } {
 const hasWebKey = env.GOOGLE_MAPS_WEB_KEY.length > 0;
 
 export const Map = forwardRef(function Map(
-  { style, initialRegion, region, onMapReady, onLongPress, fallbackTopOffset, children }: MapProps,
+  { style, initialRegion, region, onMapReady, onLongPress, onPress, fallbackTopOffset, children }: MapProps,
   ref: Ref<unknown>,
 ) {
   // Tab roots anchor the fallback under their chip rows; sub-screens center.
@@ -165,6 +167,8 @@ export const Map = forwardRef(function Map(
   // Keep latest callbacks without tearing the map down.
   const onLongPressRef = useRef(onLongPress);
   onLongPressRef.current = onLongPress;
+  const onPressRef = useRef(onPress);
+  onPressRef.current = onPress;
   const onMapReadyRef = useRef(onMapReady);
   onMapReadyRef.current = onMapReady;
 
@@ -204,6 +208,16 @@ export const Map = forwardRef(function Map(
         mapObj.addListener('contextmenu', (e: any) => {
           if (e?.latLng) {
             onLongPressRef.current?.({
+              latitude: e.latLng.lat(),
+              longitude: e.latLng.lng(),
+            });
+          }
+        });
+        // A plain click — the door-knocking pin drop. Marker clicks are
+        // their own listeners and never bubble to the map's 'click'.
+        mapObj.addListener('click', (e: any) => {
+          if (e?.latLng) {
+            onPressRef.current?.({
               latitude: e.latLng.lat(),
               longitude: e.latLng.lng(),
             });

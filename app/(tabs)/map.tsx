@@ -74,6 +74,7 @@ import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+import { KnockPinMarker } from '@/components/knock/KnockPinMarker';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import {
@@ -743,6 +744,7 @@ export default function MapScreen() {
     ];
     return knocks;
   }, [archive, active]);
+  const activeKnockIds = useMemo(() => new Set((active?.knocks ?? []).map((k) => k.id)), [active]);
 
   // Storm-matched lead cluster for the live alert — "3 leads within 1.4 mi of
   // the Apr 18 hail core". Rebuilt from the leads Storm Watch stamped, so it
@@ -899,20 +901,17 @@ export default function MapScreen() {
                 />
               );
             })}
+          {/* Every knocked house in its outcome colour + glyph — the same disc
+              Knock mode draws, so the two maps never disagree. Earlier
+              routes' pins are muted; a tap opens Knock mode, where the pin's
+              sheet lives (history, follow-up, lead). */}
           {filter === 'knocks' &&
             knockPins.map((k) => (
-              <MapPin
+              <KnockPinMarker
                 key={k.id}
-                coordinate={{ latitude: k.lat, longitude: k.lng }}
-                title={k.outcome.replace(/_/g, ' ')}
-                description={new Date(k.createdAt).toLocaleString()}
-                tone={
-                  k.outcome === 'interested' || k.outcome === 'inspection_scheduled'
-                    ? 'success'
-                    : k.outcome === 'not_interested'
-                    ? 'danger'
-                    : 'cream'
-                }
+                knock={k}
+                muted={!activeKnockIds.has(k.id)}
+                onPress={() => router.push('/door-knocking')}
               />
             ))}
         </Map>

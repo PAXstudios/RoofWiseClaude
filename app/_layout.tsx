@@ -11,6 +11,8 @@ import { ToastHost } from '@/components/ToastHost';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { install as installDiagnostics, DiagnosticsGate } from '@/lib/services/diagnostics';
 import { installUiRuntimeGuard } from '@/lib/services/uiRuntimeGuard';
+import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+import { startWatching as resumeKnockTracking } from '@/components/knock/sessionTracker';
 
 // Module-level, not inside RootLayout: the global JS-error / promise-rejection
 // / console.error hooks must exist BEFORE the root layout's first render, or a
@@ -43,6 +45,21 @@ export default function RootLayout() {
       unsubscribe?.();
     };
   }, [initialize]);
+
+  // A knock route left running (the roofer closed the app mid-street) gets
+  // its GPS watcher back on the next launch, so miles and the walked path
+  // resume before Knock mode is even opened. Waits for the persisted session
+  // to hydrate; does nothing when no route is active (no location prompt).
+  useEffect(() => {
+    const resume = () => {
+      if (useKnockSessionStore.getState().activeSession) resumeKnockTracking().catch(() => {});
+    };
+    if (useKnockSessionStore.persist.hasHydrated()) {
+      resume();
+      return;
+    }
+    return useKnockSessionStore.persist.onFinishHydration(resume);
+  }, []);
 
   // Deep-link from notification taps. Routes Storm Watch alerts to the
   // alert detail sheet, a lead follow-up reminder to that lead, and the
