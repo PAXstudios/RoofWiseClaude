@@ -410,11 +410,21 @@ function StormDetailCard({ event, onClose }: { event: StormEvent; onClose: () =>
 export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
-  const { focus, filter: filterParam, lat: latParam, lng: lngParam } = useLocalSearchParams<{
+  const {
+    focus,
+    filter: filterParam,
+    lat: latParam,
+    lng: lngParam,
+    ring: ringParam,
+    ringLabel: ringLabelParam,
+  } = useLocalSearchParams<{
     focus?: string;
     filter?: string;
     lat?: string;
     lng?: string;
+    /** Canvass radius in miles to draw around `lat,lng` (the knock finder). */
+    ring?: string;
+    ringLabel?: string;
   }>();
   const inspections = useInspectionStore((s) => s.inspections);
   const leads = useLeadStore((s) => s.leads);
@@ -542,17 +552,24 @@ export default function MapScreen() {
       router.setParams({ filter: '' });
     }
   }, [filterParam, router]);
-  // `?lat&lng` — a storm alert's core, the weather page's "storms near here":
-  // land the camera on the point. Consumed once applied.
+  // `?lat&lng` — a storm alert's core, the weather page's "storms near here",
+  // a knock-finder area: land the camera on the point. With `?ring` (miles)
+  // the area's canvass ring stays drawn, labelled, until the filter changes.
+  // Consumed once applied.
+  const [focusRing, setFocusRing] = useState<{ lat: number; lng: number; radiusMiles: number; label: string } | null>(null);
   useEffect(() => {
     const lat = Number(latParam);
     const lng = Number(lngParam);
     if (latParam && lngParam && isValidLatLon(lat, lng)) {
       // jumpTo is declared below; the effect runs after render so it exists.
       jumpToRef.current?.(lat, lng);
-      router.setParams({ lat: '', lng: '' });
+      const radiusMiles = Number(ringParam);
+      if (ringParam && Number.isFinite(radiusMiles) && radiusMiles > 0) {
+        setFocusRing({ lat, lng, radiusMiles, label: ringLabelParam || 'Knock area' });
+      }
+      router.setParams({ lat: '', lng: '', ring: '', ringLabel: '' });
     }
-  }, [latParam, lngParam, router]);
+  }, [latParam, lngParam, ringParam, ringLabelParam, router]);
   const jumpToRef = useRef<((lat: number, lon: number) => void) | null>(null);
 
   // Height of the floating stat bar / cluster card so the Google attribution
@@ -820,6 +837,26 @@ export default function MapScreen() {
                 fillColor={glass.lightFill}
               />
             ))}
+          {/* The knock finder's chosen area: its 3-mi canvass ring and a
+              labelled pin whose callout goes back to the plan. */}
+          {focusRing && (
+            <>
+              <MapCircle
+                center={{ latitude: focusRing.lat, longitude: focusRing.lng }}
+                radius={focusRing.radiusMiles * 1609.34}
+                strokeColor={colors.accent}
+                strokeWidth={3}
+                fillColor={colors.accentSoft}
+              />
+              <MapPin
+                coordinate={{ latitude: focusRing.lat, longitude: focusRing.lng }}
+                title={focusRing.label}
+                description={`${focusRing.radiusMiles} mi canvass radius · tap for the plan`}
+                tone="orange"
+                onCalloutPress={() => router.push('/knock-finder')}
+              />
+            </>
+          )}
           {filter === 'storms' && overlaysOn && (
             <StormOverlay
               selection={selection}

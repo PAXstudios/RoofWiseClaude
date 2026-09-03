@@ -121,8 +121,18 @@ export default function KnockFinderScreen() {
     }
   }, [activeSession, archive, base, cacheHousing, cachedHousing, inspections, running, setResult]);
 
+  // Storm Tracer lands on the cell and draws its canvass ring, labelled.
   const showOnMap = (a: ScoredArea) =>
-    router.push({ pathname: '/(tabs)/map', params: { filter: 'storms', lat: String(a.lat), lng: String(a.lng) } } as any);
+    router.push({
+      pathname: '/(tabs)/map',
+      params: {
+        filter: 'storms',
+        lat: String(a.lat),
+        lng: String(a.lng),
+        ring: String(KNOCK_ROUTE_RADIUS_MILES),
+        ringLabel: `${a.name ?? a.storm.town ?? 'Storm area'} · Knock ${a.knockScore}`,
+      },
+    } as any);
 
   const routeTo = (a: ScoredArea, silent = false) => {
     const target = {

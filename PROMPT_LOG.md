@@ -2825,3 +2825,13 @@ The screenshot was the OLD bundle ("Map" title, 1–4 yr chips) — #71 has not 
 **Verified:** 30 engine assertions; live IEM pull + ranking + plan from Node; typecheck + lint green on every file here. **Not verified:** the sheet scroll on a device (web re-export pending at the time of writing); Gemini brief and ACS path (no keys here).
 
 **Files touched:** `lib/services/knockOpportunities.ts`, `docs/KNOCK_OPPORTUNITIES.md`, `components/ui/BottomSheet.tsx`, `PROMPT_LOG.md`.
+
+### [2026-09-03] #83 — Finder ↔ map: the chosen area's canvass ring on Storm Tracer; a Plan-tab row
+
+**Prompt:** (continuation of #81 — "It should be integrated with the map.")
+
+"Storm Tracer" from an area card now lands the camera on the cell AND draws its 3-mile canvass ring with a labelled pin ("The Colony, TX · Knock 68 · 3 mi canvass radius · tap for the plan"); the callout returns to the finder. `?ring&ringLabel` ride the existing `?lat&lng` deep link and are consumed the same way. The Plan tab gets a "Where should I knock?" row above "Start door-knocking route" — the planning tab is where the question is asked. Headless walk: the Quick Actions tile is reachable now that the sheet scrolls (the click navigated to `/knock-finder` with the title rendered).
+
+**Verified:** typecheck + lint green on the three files. **Not verified:** the ring on a device (web has no native map).
+
+**Files touched:** `app/(tabs)/{map,plan}.tsx`, `app/knock-finder.tsx`, `BACKLOG.md`, `PROMPT_LOG.md`.
