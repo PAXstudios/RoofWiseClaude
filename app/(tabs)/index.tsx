@@ -478,7 +478,7 @@ export default function HomeScreen() {
 
       {/* Field tools — crafted cells, colour-chipped per tool. */}
       <Rise index={5} style={styles.utilityRow}>
-        <UtilityCta icon="thunderstorm-outline" tone="blue" title="Hail Tracer" sub="NOAA map" onPress={() => router.push('/hail-tracer')} />
+        <UtilityCta icon="thunderstorm-outline" tone="blue" title="Storm Tracer" sub="Hail + wind map" onPress={() => router.push({ pathname: '/(tabs)/map', params: { filter: 'storms' } } as any)} />
         <UtilityCta icon="calculator-outline" tone="green" title="Estimator" sub="Solar + cost" onPress={() => router.push('/estimator')} />
         <UtilityCta icon="car-outline" tone="purple" title="Mileage" sub="Tax log" onPress={() => router.push('/mileage')} />
       </Rise>
@@ -536,14 +536,14 @@ export default function HomeScreen() {
             <PressableScale
               style={styles.groupRow}
               accessibilityRole="button"
-              accessibilityLabel="Hail Tracer. See where hail actually fell, straight from NOAA radar."
-              onPress={() => router.push('/hail-tracer')}
+              accessibilityLabel="Storm Tracer. See where hail and wind actually hit, from NOAA storm reports."
+              onPress={() => router.push({ pathname: '/(tabs)/map', params: { filter: 'storms' } } as any)}
             >
               <IconChip name="thunderstorm-outline" tone="blue" size="md" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.groupTitle}>Hail Tracer</Text>
+                <Text style={styles.groupTitle}>Storm Tracer</Text>
                 <Text style={styles.groupSub}>
-                  See where hail actually fell, straight from NOAA radar
+                  See where hail and wind actually hit, from NOAA storm reports
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />

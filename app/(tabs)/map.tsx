@@ -13,9 +13,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   AppState,
+  Keyboard,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -33,25 +35,34 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { IconChip } from '@/components/ui/IconChip';
 import { magnitudeLabel, type StormEvent } from '@/lib/noaa';
+import { LocationField, type ResolvedLocation } from '@/components/LocationField';
 import { list as listDiagnostics } from '@/lib/services/diagnostics';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
+import {
+  browsedEvents,
+  emptyBrowseState,
+  ensureBrowsed,
+  type StormBrowseState,
+} from '@/lib/services/stormBrowse';
+import {
+  applyStormControls,
+  DEFAULT_RANGE,
+  MAGNITUDE_OPTIONS,
+  RANGE_LABELS,
+  RANGE_LOOKBACK_YEARS,
+  RANGE_ORDER,
+  type Magnitude,
+  type Peril,
+  type Range,
+} from '@/lib/services/stormRange';
 import {
   isValidLatLon,
   isValidRegion,
   stormOverlayCountLine,
   type StormClusterCell,
 } from '@/lib/services/stormCluster';
-import {
-  fetchAddressStormHistory,
-  clampLookbackYears,
-  HISTORY_LOOKBACK_YEARS_DEFAULT,
-  HISTORY_LOOKBACK_YEARS_MAX,
-} from '@/lib/services/stormMatch';
-import {
-  leadsInStormCluster,
-  STORM_HISTORY_BROWSE_RADIUS_MILES,
-  type StormLeadCluster,
-} from '@/lib/services/stormWatch';
+import { fetchAddressStormHistory } from '@/lib/services/stormMatch';
+import { leadsInStormCluster, type StormLeadCluster } from '@/lib/services/stormWatch';
 import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
@@ -80,19 +91,19 @@ const FILTERS: { id: Filter; label: string; icon: keyof typeof Ionicons.glyphMap
   { id: 'knocks', label: 'Knocks', icon: 'walk-outline' },
 ];
 
-/**
- * Time Travel lookbacks (years). The service clamps to
- * HISTORY_LOOKBACK_YEARS_MAX = 4; 3 years (36 months, hail + wind) is the
- * default per the owner — affordable now that the fetch is the per-point IEM
- * service (~0.3 MB/yr at 50 mi) rather than a state-wide pull. This is the
- * history-*browsing* window — deliberately separate from the 2-year claim
- * corroboration cap (docs/HAAG_DECISION_ENGINE.md §6).
- */
-const LOOKBACK_OPTIONS = [1, 2, 3, HISTORY_LOOKBACK_YEARS_MAX] as const;
-const DEFAULT_LOOKBACK_YEARS = HISTORY_LOOKBACK_YEARS_DEFAULT;
-
 /** Viewport changes settle this long before the overlay re-selects. */
 const REGION_DEBOUNCE_MS = 250;
+
+/**
+ * The storm fetch follows the viewport: after a pan settles, the cache is
+ * asked to cover the new centre (lib/services/stormBrowse.ts decides whether
+ * that costs a request). A longer settle than the overlay's, so a roofer
+ * dragging across a county does not fire a request per stop.
+ */
+const BROWSE_SETTLE_MS = 700;
+
+/** How far a search / my-location jump zooms in: a neighbourhood. */
+const JUMP_REGION_DELTA = 0.08;
 
 /** Statewide-ish first view: the 50-mi browse ring fits on screen. */
 const INITIAL_REGION_DELTA = 2;
@@ -390,7 +401,7 @@ function StormDetailCard({ event, onClose }: { event: StormEvent; onClose: () =>
 export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
-  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const { focus, filter: filterParam } = useLocalSearchParams<{ focus?: string; filter?: string }>();
   const inspections = useInspectionStore((s) => s.inspections);
   const leads = useLeadStore((s) => s.leads);
   const archive = useKnockSessionStore((s) => s.archive);
@@ -401,11 +412,24 @@ export default function MapScreen() {
   const [filter, setFilter] = useState<Filter>(
     focus === FOCUS_STORM_LEADS ? 'leads' : 'storms',
   );
-  const [lookbackYears, setLookbackYears] = useState<number>(DEFAULT_LOOKBACK_YEARS);
-  const [events, setEvents] = useState<StormEvent[]>([]);
+  // Storm Tracer controls (the retired standalone tracer's, now here).
+  const [range, setRange] = useState<Range>(DEFAULT_RANGE);
+  const [peril, setPeril] = useState<Peril>('both');
+  const [magnitude, setMagnitude] = useState<Magnitude>('all');
+  const lookbackYears = RANGE_LOOKBACK_YEARS[range];
+  // Every storm loaded so far, by id, with the centres already covered — the
+  // map asks for the area it is looking at and never re-asks for one it has.
+  const [browse, setBrowse] = useState<StormBrowseState>(() => emptyBrowseState());
+  const browseRef = useRef(browse);
+  browseRef.current = browse;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<StormEvent | null>(null);
+  // Address search + my-location. The map was a viewport with no way to say
+  // where to look; these are the two ways a real map does.
+  const [searchText, setSearchText] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   // Safety mode. `null` = still reading the signal (overlays stay off until
   // the answer is in — the safe default costs one frame, not a crash).
@@ -492,44 +516,105 @@ export default function MapScreen() {
       router.setParams({ focus: '' });
     }
   }, [focus, router]);
+  // `?filter=storms` — the Home tile and the retired /hail-tracer route land
+  // here on the Storm Tracer filter. Consumed once applied, like `focus`.
+  useEffect(() => {
+    if (filterParam && FILTERS.some((f) => f.id === filterParam)) {
+      setFilter(filterParam as Filter);
+      router.setParams({ filter: '' });
+    }
+  }, [filterParam, router]);
 
   // Height of the floating stat bar / cluster card so the Google attribution
   // chip (Expo Go iOS) sits above it — Google requires the credit visible.
   const [statBarHeight, setStatBarHeight] = useState(0);
 
-  // Storm history runs through the shared, 4-year-clamped address lookback
-  // (stormMatch.fetchAddressStormHistory) instead of a raw NOAA call: same
-  // published validation floors as every other storm surface, and an explicit
-  // "unavailable" result rather than a silent empty map (Drift #5).
+  // Storm history FOLLOWS THE VIEWPORT. Both maps used to fetch once around
+  // the saved service area and never again — pan sixty miles to a property
+  // and there was nothing to draw there ("the storm data does not populate").
+  // Now the settled region's centre is the query; the browse cache decides
+  // whether that costs a request (already-covered centres cost nothing) and
+  // merges results so a return pan keeps everything. Still the shared,
+  // 4-year-clamped, validation-floored history service (Drift #5: an
+  // unreachable service says so, never a silent empty map).
+  const browseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const browseSeq = useRef(0);
   useEffect(() => {
     if (filter !== 'storms') return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetchAddressStormHistory({
-      lat: center.lat,
-      lng: center.lon,
-      state: serviceState,
-      lookbackYears,
-      radiusMiles: STORM_HISTORY_BROWSE_RADIUS_MILES,
-    })
-      .then((res) => {
-        if (cancelled) return;
-        if (res.status === 'ok') {
-          setEvents(res.events);
-        } else {
-          setEvents([]);
-          setError('Storm history not available right now.');
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setEvents([]);
-        setError('Storm history not available right now.');
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
-  }, [filter, serviceState, lookbackYears, center.lat, center.lon]);
+    if (browseTimer.current) clearTimeout(browseTimer.current);
+    browseTimer.current = setTimeout(() => {
+      browseTimer.current = null;
+      const seq = ++browseSeq.current;
+      const target = { lat: region.latitude, lon: region.longitude, stateCode: serviceState, lookbackYears };
+      setError(null);
+      ensureBrowsed(browseRef.current, target, fetchAddressStormHistory)
+        .then((out) => {
+          if (seq !== browseSeq.current) return;
+          if (out.kind === 'unavailable') {
+            setError('Storm history not available right now.');
+          } else if (out.kind === 'fetched') {
+            setBrowse(out.state);
+          }
+        })
+        .catch(() => {
+          if (seq === browseSeq.current) setError('Storm history not available right now.');
+        })
+        .finally(() => {
+          if (seq === browseSeq.current) setLoading(false);
+        });
+      setLoading(true);
+    }, BROWSE_SETTLE_MS);
+    return () => {
+      if (browseTimer.current) clearTimeout(browseTimer.current);
+    };
+  }, [filter, serviceState, lookbackYears, region.latitude, region.longitude]);
+
+  // What the controls leave: range crop, peril, magnitude — one place, so the
+  // pins, the swaths and the count line always agree.
+  const events = useMemo(
+    () => applyStormControls(browsedEvents(browse), { range, peril, magnitude }),
+    [browse, range, peril, magnitude],
+  );
+
+  /** Jump the camera. Search and my-location both land here. */
+  const jumpTo = useCallback((lat: number, lon: number) => {
+    const next = regionForLatLon(lat, lon, JUMP_REGION_DELTA);
+    if (!isValidRegion(next)) return;
+    mapRef.current?.animateToRegion(next, 450);
+    // The settled-region callback fires after the animation; set it now too
+    // so the fetch starts without waiting on the camera.
+    setRegion(next);
+  }, []);
+
+  const onSearchResolved = useCallback(
+    (loc: ResolvedLocation) => {
+      Keyboard.dismiss();
+      setSearchOpen(false);
+      if (isValidLatLon(loc.lat, loc.lng)) jumpTo(loc.lat, loc.lng);
+    },
+    [jumpTo],
+  );
+
+  const goToMyLocation = useCallback(async () => {
+    if (locating) return;
+    setLocating(true);
+    try {
+      let perm = await Location.getForegroundPermissionsAsync();
+      if (perm.status !== 'granted' && perm.canAskAgain) {
+        perm = await Location.requestForegroundPermissionsAsync();
+      }
+      if (perm.status !== 'granted') {
+        setError('Location access is off — turn it on in Settings to use My location.');
+        return;
+      }
+      const fix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      jumpTo(fix.coords.latitude, fix.coords.longitude);
+    } catch {
+      setError("Couldn't get a location fix. Try again outside.");
+    } finally {
+      setLocating(false);
+    }
+  }, [jumpTo, locating]);
 
   // Everything native receives for storms comes out of here — sanitised,
   // banded by zoom, capped. Empty (but honest about totals) while overlays
@@ -614,7 +699,15 @@ export default function MapScreen() {
     return <View style={styles.root} />;
   }
 
-  const countWindow = `past ${lookbackYears} yr within ${STORM_HISTORY_BROWSE_RADIUS_MILES} mi`;
+  // Honest about coverage: how many 50-mi areas have been fetched so far, or
+  // that none has (an error and "still loading" are different facts).
+  const countWindow =
+    `${RANGE_LABELS[range].toLowerCase()} · ` +
+    (browse.areas.length > 0
+      ? `${browse.areas.length} area${browse.areas.length === 1 ? '' : 's'} loaded`
+      : error
+        ? 'no area loaded'
+        : 'loading area');
 
   return (
     <View style={styles.root}>
@@ -622,7 +715,7 @@ export default function MapScreen() {
           accent action — everything else over the map goes quiet. */}
       <Rise index={0} static={safetyMode}>
         <ScreenHeader
-          title="Map"
+          title={filter === 'storms' ? 'Storm Tracer' : 'Map'}
           right={
             <PressableScale
               style={styles.knockBtn}
@@ -760,22 +853,114 @@ export default function MapScreen() {
                 ))}
               </ScrollView>
 
+              {/* Where to look: an address, or where the phone is. A map that
+                  cannot be pointed somewhere is a picture. */}
+              <View style={styles.searchRow}>
+                {searchOpen ? (
+                  <View style={styles.searchField}>
+                    <LocationField
+                      value={searchText}
+                      onChangeText={setSearchText}
+                      onResolved={onSearchResolved}
+                      placeholder="Address, city, or ZIP"
+                      biasLat={region.latitude}
+                      biasLng={region.longitude}
+                      useMyLocation={false}
+                      autoFocus
+                      returnKeyType="search"
+                    />
+                  </View>
+                ) : (
+                  <PressableScale
+                    style={styles.searchBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Search an address"
+                    onPress={() => setSearchOpen(true)}
+                  >
+                    <Ionicons name="search" size={18} color={colors.text} />
+                    <Text style={styles.searchBtnText} numberOfLines={1}>
+                      {searchText ? searchText : 'Search an address'}
+                    </Text>
+                  </PressableScale>
+                )}
+                <PressableScale
+                  style={styles.roundBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Go to my location"
+                  onPress={goToMyLocation}
+                >
+                  {locating ? (
+                    <ActivityIndicator color={colors.text} />
+                  ) : (
+                    <Ionicons name="locate" size={20} color={colors.text} />
+                  )}
+                </PressableScale>
+                {searchOpen && (
+                  <PressableScale
+                    style={styles.roundBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close search"
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setSearchOpen(false);
+                    }}
+                  >
+                    <Ionicons name="close" size={20} color={colors.text} />
+                  </PressableScale>
+                )}
+              </View>
+
               {filter === 'storms' && (
                 <View style={styles.controlBarSecond}>
+                  {/* Range — the tracer's Time Travel. */}
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     style={styles.chipScroll}
                     contentContainerStyle={styles.chipScrollContent}
                   >
-                    {LOOKBACK_OPTIONS.map((years) => (
+                    {RANGE_ORDER.map((r) => (
                       <GlassChip
-                        key={years}
-                        active={lookbackYears === years}
+                        key={r}
+                        active={range === r}
                         icon="time-outline"
-                        label={`${years} yr`}
-                        accessibilityLabel={`Past ${years} year${years === 1 ? '' : 's'}`}
-                        onPress={() => setLookbackYears(clampLookbackYears(years))}
+                        label={RANGE_LABELS[r]}
+                        accessibilityLabel={RANGE_LABELS[r]}
+                        onPress={() => setRange(r)}
+                      />
+                    ))}
+                  </ScrollView>
+                  {/* Peril + magnitude + overlays. */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.chipScroll}
+                    contentContainerStyle={styles.chipScrollContent}
+                  >
+                    {(
+                      [
+                        { id: 'hail', label: 'Hail', icon: 'snow-outline' },
+                        { id: 'wind', label: 'Wind', icon: 'flag-outline' },
+                        { id: 'both', label: 'Both', icon: 'thunderstorm-outline' },
+                      ] as const
+                    ).map((p) => (
+                      <GlassChip
+                        key={p.id}
+                        active={peril === p.id}
+                        icon={p.icon}
+                        label={p.label}
+                        accessibilityLabel={`Show ${p.label.toLowerCase()} reports`}
+                        onPress={() => setPeril(p.id)}
+                      />
+                    ))}
+                    {MAGNITUDE_OPTIONS.map((m) => (
+                      <GlassChip
+                        key={m.id}
+                        active={magnitude === m.id}
+                        icon="speedometer-outline"
+                        label={m.label}
+                        accessibilityLabel={m.label}
+                        onPress={() => setMagnitude(m.id)}
                       />
                     ))}
                     {/* Overlays toggle — the reversible half of safety mode,
@@ -914,6 +1099,35 @@ const styles = StyleSheet.create({
     ...shadows.float,
   },
   controlBar: { paddingVertical: spacing.xs },
+  // Search + my-location row inside the glass bar. The search pill and the
+  // round buttons are all ≥56pt (Drift #1).
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  searchField: { flex: 1 },
+  searchBtn: {
+    flex: 1,
+    minHeight: touchTarget.standard,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+  },
+  searchBtnText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.textMuted },
+  roundBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   controlBarSecond: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,

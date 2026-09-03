@@ -202,6 +202,32 @@ export function isValidRegion(r: RegionLike | null | undefined): r is RegionLike
   );
 }
 
+/**
+ * Snap a viewport to a coarse grid so a small pan yields the SAME region.
+ *
+ * The overlay's child set (pins, circles) is selected from the region. On the
+ * owner's device (Expo Go, Apple Maps, Fabric) adding and removing native
+ * annotations WHILE a pan gesture is in flight is the crash: every settled
+ * region was a new one, so every pan changed the children. Quantising the
+ * centre to a quarter of the span, and the span to its zoom band, means the
+ * children only change when the map has genuinely moved a screen-quarter or
+ * crossed a zoom band — and `eventInRegion`'s 15% pad keeps the edges covered
+ * in between.
+ */
+export function quantizeRegion(region: RegionLike | null | undefined): RegionLike | null {
+  if (!isValidRegion(region)) return null;
+  const stepLat = region.latitudeDelta / 4;
+  const stepLon = region.longitudeDelta / 4;
+  // Span snaps to powers of two of a base, so zooming re-selects in steps.
+  const snapSpan = (d: number) => 2 ** Math.round(Math.log2(Math.max(d, 1e-4)));
+  return {
+    latitude: Math.round(region.latitude / stepLat) * stepLat,
+    longitude: Math.round(region.longitude / stepLon) * stepLon,
+    latitudeDelta: snapSpan(region.latitudeDelta),
+    longitudeDelta: snapSpan(region.longitudeDelta),
+  };
+}
+
 export function zoomBandForRegion(region: RegionLike | null | undefined): ZoomBand {
   if (!isValidRegion(region)) return 'far';
   const span = Math.max(region.longitudeDelta, region.latitudeDelta);

@@ -410,6 +410,11 @@ function formatDays(days: number): string {
 
 // -----------------------------------------------------------------------------
 
+/** Great-circle distance in MILES. Exported for the storm browse cache. */
+export function haversineMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  return haversine(lat1, lng1, lat2, lng2);
+}
+
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 3958.8;
   const toRad = (d: number) => (d * Math.PI) / 180;

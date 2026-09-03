@@ -32,6 +32,7 @@ import {
   selectStormOverlay,
   stormCircleRadiusMeters,
   stormTone,
+  quantizeRegion,
   zoomBandForRegion,
   type StormClusterCell,
   type StormOverlaySelection,
@@ -181,12 +182,20 @@ export function useStormOverlaySelection(
     }
   }, [sanitized]);
 
+  // Quantised: a pan inside a screen-quarter reuses the previous selection,
+  // so native children do not churn mid-gesture (the crash on the owner's
+  // device). Memo on the snapped key, not the raw region object.
+  const snapped = useMemo(() => quantizeRegion(region), [region]);
+  const snapKey = snapped
+    ? `${snapped.latitude}:${snapped.longitude}:${snapped.latitudeDelta}:${snapped.longitudeDelta}`
+    : 'none';
   return useMemo(() => {
     if (!enabled) {
-      return { ...EMPTY, band: zoomBandForRegion(region), totalEvents: sanitized.events.length };
+      return { ...EMPTY, band: zoomBandForRegion(snapped), totalEvents: sanitized.events.length };
     }
-    return selectStormOverlay(sanitized.events, region);
-  }, [sanitized, region, enabled]);
+    return selectStormOverlay(sanitized.events, snapped);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sanitized, snapKey, enabled]);
 }
 
 function eventA11yLabel(e: StormEvent): string {

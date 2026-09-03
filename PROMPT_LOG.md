@@ -2604,3 +2604,25 @@ There was no exit. Once a pass started, the primary button became a spinner, "Re
 **Not yet:** the optional step-by-step capture coach (slopes → gutters/downspouts → siding → skylight/chimney flashing → vents → AC) — second half of this task.
 
 **Files touched:** `lib/services/deviceMotion.ts`, `components/CameraHUD.tsx`, `components/capture/SlopePickerSheet.tsx` (new), `app/quick-inspection.tsx`, `app/job/[id].tsx`.
+
+---
+
+### [2026-09-03] #71 — One map, "Storm Tracer": storms follow the viewport, address + my-location search, pan-stable overlays, the duplicate retired
+
+**Prompts:**
+> "the map should be able to function like a real map. right now a user cant put in their current location or an address (i am speaking of both the noaa map and the map that features the leads). also i feel like these should be the same and i feel like the noaa hail tracer map is better than the storms and leads map. i like the ui in the noaa hailtracer map. also change it from hailtracer to 'Storm tracer'"
+> "the maps crash anytime i move the location on the map, and the storm data does not populate and neither does the overlay."
+
+**Why the data never populated — structural, not network.** Both maps fetched storm history ONCE, around a fixed centre (the saved service area, else the state centre), and never again. Pan sixty miles to a property and there was nothing to draw there. The IEM per-point endpoint itself is fine (verified live: the app's `begints`/`endts` params filter correctly; `sdate`/`edate` and `sts`/`ets` are silently ignored by that endpoint and return every report since 2006 — noted so nobody "fixes" the params later).
+
+**Why it crashed on pan — the evidence-backed reading.** Every settled region was a new region, and the near-band overlay selection is viewport-filtered, so every pan added and removed native circles/pins — on Expo Go + Apple Maps + Fabric that mid-gesture annotation churn is the documented crash class. (No device log was available; the #63 worklet trap has not named a worklet, which also points away from Reanimated.)
+
+**Built.**
+- `lib/services/stormBrowse.ts` (pure, unit-tested): the viewport centre is the query; results merge into a cache keyed by event id; a centre inside an already-fetched 50-mi area (minus a 30-mi refetch margin) costs no request; a longer lookback re-fetches, a shorter one is covered; an unavailable result never discards what is loaded.
+- `quantizeRegion()` in `stormCluster.ts`: overlay selection snaps the centre to a screen-quarter and the span to a power of two, so a pan inside a quarter keeps the identical native child set; `eventInRegion`'s 15% pad covers the edges in between. Unit-tested (5% pan stable, 37% pan changes, NaN → null).
+- The Map tab IS Storm Tracer now: the tracer's controls (range 7d→4yr, hail/wind/both, magnitude, legend) moved in via the new pure `lib/services/stormRange.ts`; header reads "Storm Tracer" on the storms filter and "Map" otherwise; the leads/jobs/knocks filters stay. A search pill (`LocationField`, Places-backed, biased to the viewport) and a "my location" button (`expo-location`, permission-honest) both `animateToRegion` and start the fetch immediately. Storm fetch settles 700 ms after a pan. The count line states coverage honestly ("2 areas loaded" / "no area loaded" under an error).
+- `app/hail-tracer.tsx` is a `Redirect` to `/(tabs)/map?filter=storms`; Home's two entry points read "Storm Tracer" and route there. 825 lines of duplicate screen retired.
+
+**Verified headless (web):** Storm Tracer header + every control renders; the search pill opens a field (a `textarea` — the TextInput is multiline) that accepts an address; Leads chip flips the header to "Map"; `/hail-tracer` lands on `/map?filter=storms` with the Storm Tracer header; Home no longer says "Hail Tracer"; zero page errors. The storm fetch is blocked in the headless browser, so the map shows its honest "not available" state there. **The pan-crash fix is inferred from the architecture, not yet confirmed on the owner's device** — flagged in BACKLOG.
+
+**Files touched:** `app/(tabs)/map.tsx`, `app/hail-tracer.tsx`, `app/(tabs)/index.tsx`, `components/map/StormOverlay.tsx`, `lib/services/{stormBrowse,stormRange}.ts` (new), `lib/services/{stormCluster,stormMatch}.ts`.
