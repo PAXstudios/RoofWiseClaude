@@ -49,7 +49,7 @@ import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { transcribeAudio } from '@/lib/services/transcribeAudio';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { isGeminiConfigured } from '@/lib/env';
-import { thresholdFor } from '@/lib/services/haagThresholds';
+import { carrierBarsRead, thresholdFor } from '@/lib/services/haagThresholds';
 import {
   CLAIM_VIABILITY_LABELS,
   ROOFWISE_RECOMMENDATION_LABELS,
@@ -1257,6 +1257,14 @@ function SlopeBlock({
           <Text style={styles.testSquareLine}>
             {slope.hailCount} hit{slope.hailCount === 1 ? '' : 's'} documented across{' '}
             {slope.photoPaths.length} photo{slope.photoPaths.length === 1 ? '' : 's'} on this slope.
+          </Text>
+        )}
+        {/* Both carrier bars, every time (owner): the 8 most carriers use and
+            the 10 some require — so the roofer knows how hard the conversation
+            will be before filing. */}
+        {hitsPerSquare != null && hitsPerSquare > 0 && threshold.hitsPerTestSquare > 0 && (
+          <Text style={[styles.testSquareLine, carrierBarsRead(inspection.material, hitsPerSquare).meetsStandard ? styles.functionalYes : undefined]}>
+            {carrierBarsRead(inspection.material, hitsPerSquare).line}
           </Text>
         )}
         {/* What the photos themselves document — a different number from the

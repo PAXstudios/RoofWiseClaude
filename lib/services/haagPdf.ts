@@ -56,7 +56,7 @@ import {
   isMeasured,
   totalSquares as totalSquaresFor,
 } from './propertyIntel';
-import { evaluateMaterialThreshold, thresholdFor } from './haagThresholds';
+import { evaluateMaterialThreshold, thresholdFor, carrierBarsRead } from './haagThresholds';
 import {
   CONFIDENCE_BOUNDS,
   TIER_LABEL,
@@ -903,12 +903,20 @@ function insuranceSupplement(
       const fired =
         evalRes.triggeredRules.length > 0
           ? `<ul class="cite-list">${evalRes.triggeredRules.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`
-          : `<p class="cite">No §2 replacement rule fired on this slope's recorded hail count (${slope.hailCount} per test square). Governing standard: ${esc(threshold.rule)}</p>`;
+          : `<p class="cite">No §2 replacement rule fired on this slope's recorded hail count. Governing standard: ${esc(threshold.rule)}</p>`;
+      // Both carrier bars, every slope (owner): where the rate sits against
+      // the 8 most carriers use and the 10 some require.
+      // Same per-square figure this block already evaluates §2 against.
+      const rate = slope.hailCount;
+      const barsLine =
+        rate > 0 && threshold.hitsPerTestSquare > 0
+          ? `<p class="cite">${esc(carrierBarsRead(ins.material, rate).line)}</p>`
+          : '';
       const notes =
         evalRes.notes.length > 0
           ? `<ul class="cite-list">${evalRes.notes.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`
           : '';
-      return `<h3>Slope ${i + 1} · ${esc(slope.orientation)}</h3>${fired}${notes}`;
+      return `<h3>Slope ${i + 1} · ${esc(slope.orientation)}</h3>${fired}${barsLine}${notes}`;
     })
     .join('');
   const findingCitationRows = ins.slopes.flatMap((slope, si) =>

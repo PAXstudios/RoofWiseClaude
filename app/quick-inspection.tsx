@@ -261,6 +261,8 @@ function QuickInspectionNative() {
   const [cameraReady, setCameraReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [livePausedReason, setLivePausedReason] = useState<string | null>(null);
+  // Live shingle count / coverage from the last live frame, for the HUD line.
+  const [liveStats, setLiveStats] = useState<{ shingleCount?: number; coverageFraction?: number; pixelsPerInch: number | null } | null>(null);
   // The bottom dock grew several rows; the HUD's bottom-left stack tracks its
   // measured height instead of a constant that drifts every layout change.
   const [dockHeight, setDockHeight] = useState(0);
@@ -993,6 +995,9 @@ function QuickInspectionNative() {
           reducedMotion={reducedMotion}
           labelTop={chromeTop}
           onError={onLiveError}
+          // The 10x10 guide only makes sense when the shot IS a test square.
+          guide={captureMode === 'square_10x10'}
+          onFrameStats={setLiveStats}
         />
         {guides && (
           <LevelGuide
@@ -1046,6 +1051,7 @@ function QuickInspectionNative() {
             <Text style={styles.topPillText} numberOfLines={1}>
               {slopeMode === 'auto' ? (compassSlope ? 'auto' : 'not set') : 'pinned'}
               {photos.length > 0 ? ` · ${photos.length} photo${photos.length === 1 ? '' : 's'}` : ''}
+              {liveOverlay && liveStats?.shingleCount != null ? ` · ~${liveStats.shingleCount} shingles` : ''}
             </Text>
             <Ionicons name="chevron-down" size={14} color={colors.textInverse} />
           </Pressable>

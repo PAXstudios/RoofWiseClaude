@@ -2724,3 +2724,22 @@ The screenshot was the OLD bundle ("Map" title, 1–4 yr chips) — #71 has not 
 **Fixed — a tall control stack over the map.** The four-row legend is now behind a `Legend` chip, collapsed by default: the chips already carry hail-blue / wind-orange, and a roofer in gloves wants the map, not a key to it.
 
 **Files touched:** `lib/services/stormSwath.ts`, `components/map/StormOverlay.tsx`, `app/(tabs)/map.tsx`.
+
+---
+
+### [2026-09-03] #77 — Storm alerts that say where and hand the roofer a route; a live 10×10 guide from the model's own scale; every count against both carrier bars
+
+**Prompts:**
+> "When there is a storm within a 50 mile radius notify the roofer if it is a hail storm or a serious damaging windstorm. Give them guidance on where the storm occurred and work out a way for them to add the area to their door knocking route."
+> "The app's AR has to be able to 1. Measure a square, identify individual shingles and live damage (and damage type) and have an overlay for each. If this isn't possible for damage let me know… identify a full square with an overlay and allow the user to take a picture of the square then analyze the damage and number of shingles."
+> "keep the trigger, but state every count against both bars"
+
+**Storm alerts (G).** Radius 25 → **50 mi** (`AREA_ALERT_RADIUS_MILES`). Alerts now carry **where it hit** — the strongest report's coordinates and town, distance and compass bearing from the service-area centroid, report count — and a **severity**: `damaging` at hail ≥ 1 in (the NWS severe criterion) or gusts ≥ 70 mph (`DAMAGING_WIND_MPH`, documented), else `watch`. The push body reads as guidance: *"2.00" hail near Frisco, 11 mi NW of Plano, TX · 3 properties in range · Tap to add the area to your knock route."* The alert screen gains a **Where it hit** card (town, distance/bearing, reports, what damaging hail or wind means for asphalt) and two actions: **Start knock route here / Add area to my knock route** — a `KnockRouteTarget` (core + 3-mi canvass radius) on the session (new, or re-aiming the active one) — and **See it in Storm Tracer**, which lands the map on the core via a new `?lat&lng` param (also closes the weather page's "storms near here" deep-link gap). Door-knocking frames its map on the target, draws the canvass circle, and says "aimed at Frisco storm core" in the header. `lib/services/stormWhere.ts` is pure and tested (Frisco is 11 mi NW of Plano; no centroid → town only, never an invented distance).
+
+**Live camera (H) — what is honest today.** Live damage boxes with type already existed (Gemini on a reduced frame every ~3 s). Added on that path: a **10×10 test-square guide** drawn at 120 in × the model's own `pixels_per_inch` (calibrated on the 12"×36" shingle), mapped through the same cover-rect as the boxes, with **course lines every ~5.6 in** and a live **shingle count**; the tag reads *"10×10 test square · est. from shingle scale"*, turns amber with *"back up to fit"* when the square exceeds the frame, and the guide draws only in test-square capture mode. The live addendum now asks the model for scale, count and coverage on every frame. **What it is not, said plainly:** a measurement. The guide is an estimate from shingle geometry; true measurement and markers anchored to the roof as you move are ARKit/LiDAR — the native build behind the Apple Developer standing trigger. Per-shingle outlines live at 3-s cadence are not reliable and were not attempted; the count is.
+
+**Both bars (I).** `carrierBarsRead()` in `haagThresholds.ts`: *"9 hits per square — meets the 8-hit standard most carriers use; 1 short of the 10 some require."* Printed on the job's slope block, the photo report's test-square read, and the HAAG PDF's per-slope citation. The trigger stays ≥ 8.
+
+**Verified:** typecheck, lint, web export green; 7 where/bearing assertions; the both-bars sentence across 6.9 / 8 / 9 / 10 / 12; headless: the alert screen renders Where it hit, Start knock route creates a session aimed at the core (`routeTarget` persisted, 3-mi radius), door-knocking opens framed on it, zero page errors. The live guide renders only on the native camera. **Still not on the phone** — no EAS login in this container.
+
+**Files touched:** `lib/services/{stormWatch,stormWhere,haagThresholds,gemini,haagPdf}.ts`, `lib/stores/{stormAlertStore,knockSessionStore}.ts`, `lib/models/types.ts`, `app/storm-alert/[id].tsx`, `app/door-knocking.tsx`, `app/(tabs)/map.tsx`, `app/quick-inspection.tsx`, `app/photo-report.tsx`, `app/job/[id].tsx`, `components/capture/LiveOverlay.tsx`.

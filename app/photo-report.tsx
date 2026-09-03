@@ -42,7 +42,7 @@ import {
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { analyzeSlope, getPhotoAnalysisState } from '@/lib/services/analyzeSlope';
-import { thresholdFor } from '@/lib/services/haagThresholds';
+import { carrierBarsRead, thresholdFor } from '@/lib/services/haagThresholds';
 import { isGeminiConfigured } from '@/lib/env';
 import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
@@ -300,6 +300,9 @@ export default function PhotoReportScreen() {
                     : `${hailHere} hail hit${hailHere === 1 ? '' : 's'} in this test square. ${threshold.rule}`
                   : `${hailHere} hit${hailHere === 1 ? '' : 's'} on this shingle. Close-ups document individual bruises and mat fractures; they are not counted toward the per-square threshold.`}
               </Text>
+              {isSquare && hailHere > 0 && threshold.hitsPerTestSquare > 0 && (
+                <Text style={styles.cardFoot}>{carrierBarsRead(inspection.material, hailHere).line}</Text>
+              )}
               {state?.squareCoverage && (
                 <Text style={styles.cardFoot}>
                   {state.squareCoverage.visible ? 'Chalk square visible · ' : 'No chalk lines seen · '}

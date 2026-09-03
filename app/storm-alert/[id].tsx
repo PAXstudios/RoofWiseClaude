@@ -6,6 +6,9 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+import { useToastStore } from '@/lib/stores/toastStore';
+import { AREA_ALERT_RADIUS_MILES, KNOCK_ROUTE_RADIUS_MILES } from '@/lib/services/stormWatch';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { IconChip } from '@/components/ui/IconChip';
@@ -26,6 +29,10 @@ export default function StormAlertDetail() {
   const dismiss = useStormAlertStore((s) => s.dismiss);
   const markActedOn = useStormAlertStore((s) => s.markActedOn);
   const inspections = useInspectionStore((s) => s.inspections);
+  const activeSession = useKnockSessionStore((s) => s.activeSession);
+  const startSession = useKnockSessionStore((s) => s.start);
+  const setRouteTarget = useKnockSessionStore((s) => s.setRouteTarget);
+  const toast = useToastStore((s) => s.show);
 
   const inAreaInspections = useMemo(() => {
     if (!alert) return [];
@@ -62,10 +69,44 @@ export default function StormAlertDetail() {
     router.back();
   };
 
+  const hasCore = typeof alert.coreLat === 'number' && typeof alert.coreLng === 'number';
+
   const onAct = () => {
     markActedOn(alert.id);
     // dismissTo, not replace: replace stacked a second tab shell (NAV-3).
-    router.dismissTo('/(tabs)/map');
+    // With a core, land Storm Tracer ON it rather than at the service area.
+    router.dismissTo(
+      hasCore
+        ? ({ pathname: '/(tabs)/map', params: { filter: 'storms', lat: String(alert.coreLat), lng: String(alert.coreLng) } } as any)
+        : '/(tabs)/map',
+    );
+  };
+
+  /**
+   * "Add the area to my knock route": aim the active session at the storm
+   * core (or start one aimed there), then open door-knocking framed on it.
+   */
+  const onAddToRoute = () => {
+    if (!hasCore) {
+      router.push('/door-knocking');
+      return;
+    }
+    const target = {
+      lat: alert.coreLat as number,
+      lng: alert.coreLng as number,
+      radiusMiles: KNOCK_ROUTE_RADIUS_MILES,
+      label: alert.coreCity ? `${alert.coreCity} storm core` : `${alert.areaLabel} storm core`,
+      stormAlertId: alert.id,
+    };
+    if (activeSession) setRouteTarget(target);
+    else startSession(alert.id, target);
+    markActedOn(alert.id);
+    toast({
+      tone: 'success',
+      title: 'Added to your knock route',
+      body: `${target.label} · ${KNOCK_ROUTE_RADIUS_MILES} mi canvass radius`,
+    });
+    router.push('/door-knocking');
   };
 
   return (
@@ -109,6 +150,37 @@ export default function StormAlertDetail() {
           <Stat label="In range" value={String(alert.propertyCount)} />
         </View>
 
+        {/* WHERE it hit — the guidance the roofer acts on. Absent fields stay
+            absent (older alerts) rather than reading as a guess. */}
+        <SectionHeader title="Where it hit" />
+        <RichCard
+          icon="navigate-outline"
+          iconTone={alert.severity === 'damaging' ? 'orange' : 'blue'}
+          title={
+            alert.coreCity
+              ? `Near ${alert.coreCity}`
+              : hasCore
+                ? 'Strongest report located'
+                : 'Location not recorded for this alert'
+          }
+          subtitle={
+            alert.distanceMiles != null && alert.bearing
+              ? `${alert.distanceMiles.toFixed(0)} mi ${alert.bearing} of ${alert.areaLabel}` +
+                (alert.reportCount ? ` · ${alert.reportCount} report${alert.reportCount === 1 ? '' : 's'}` : '')
+              : alert.reportCount
+                ? `${alert.reportCount} qualifying report${alert.reportCount === 1 ? '' : 's'} within ${AREA_ALERT_RADIUS_MILES} mi`
+                : undefined
+          }
+        >
+          <Text style={styles.rowSub}>
+            {alert.severity === 'damaging'
+              ? alert.eventKind === 'wind'
+                ? 'Damaging wind — expect lifted tabs and shingle loss across the neighbourhood, not just exposed roofs.'
+                : 'Damaging hail — at or above the 1 in NWS severe criterion. Expect functional hits on asphalt.'
+              : 'Validated storm below the damaging floor — worth a look, not a sprint.'}
+          </Text>
+        </RichCard>
+
         <SectionHeader title="Your properties in the impacted area" />
         {inAreaInspections.length === 0 ? (
           <RichCard>
@@ -138,14 +210,16 @@ export default function StormAlertDetail() {
           </RichCard>
         )}
 
-        <Pressable style={styles.primaryBtn} onPress={onAct}>
-          <Ionicons name="map" size={20} color={colors.textInverse} />
-          <Text style={styles.primaryBtnText}>Open Map</Text>
+        <Pressable style={styles.primaryBtn} onPress={onAddToRoute} accessibilityRole="button">
+          <Ionicons name="walk-outline" size={20} color={colors.textInverse} />
+          <Text style={styles.primaryBtnText}>
+            {activeSession ? 'Add area to my knock route' : 'Start knock route here'}
+          </Text>
         </Pressable>
 
-        <Pressable style={styles.secondaryBtn} onPress={() => router.push('/door-knocking')}>
-          <Ionicons name="walk-outline" size={20} color={colors.navy} />
-          <Text style={styles.secondaryBtnText}>Start knocking route</Text>
+        <Pressable style={styles.secondaryBtn} onPress={onAct} accessibilityRole="button">
+          <Ionicons name="map" size={20} color={colors.navy} />
+          <Text style={styles.secondaryBtnText}>{hasCore ? 'See it in Storm Tracer' : 'Open Map'}</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

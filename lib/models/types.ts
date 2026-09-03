@@ -995,6 +995,8 @@ export type KnockSession = {
   startedAt: string;
   endedAt?: string;
   routeStormAlertId?: string;
+  /** Where this session is aimed — set when started from a storm alert or the map. */
+  routeTarget?: KnockRouteTarget;
   knocks: Knock[];
 };
 
@@ -1021,6 +1023,37 @@ export type StormAlert = {
   status: StormAlertStatus;
   hailSizeInches?: number;
   windSpeedMph?: number;
+  /**
+   * WHERE it hit — the strongest report's location, so the alert can say
+   * "near Frisco, 14 mi NE" and hand the door-knocking route a target.
+   * Absent on alerts raised before this existed.
+   */
+  coreLat?: number;
+  coreLng?: number;
+  /** Town of the strongest report, when the report named one. */
+  coreCity?: string;
+  /** Miles and compass bearing from the service-area centroid to the core. */
+  distanceMiles?: number;
+  bearing?: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW';
+  /** How many qualifying reports fed this alert. */
+  reportCount?: number;
+  /**
+   * 'damaging' = hail at or above the NWS severe criterion (1 in) or a gust at
+   * or above the damaging-wind floor; 'watch' = validated but smaller. The
+   * notification title reads differently for each.
+   */
+  severity?: 'watch' | 'damaging';
+};
+
+/** Where a door-knocking session is aimed — a storm core, or a hand-picked spot. */
+export type KnockRouteTarget = {
+  lat: number;
+  lng: number;
+  /** Radius to canvass around the point, in miles. */
+  radiusMiles: number;
+  label: string;
+  /** The alert that suggested it, when one did. */
+  stormAlertId?: string;
 };
 
 // -----------------------------------------------------------------------------

@@ -86,7 +86,17 @@ type LiveFrame = {
   noRoof: boolean;
   model: string;
   latencyMs: number;
+  /** Model's pixels-per-inch at the roof plane for THIS frame, if it found a ruler. */
+  pixelsPerInch: number | null;
+  /** Whole shingles the model counted in frame, if it could. */
+  shingleCount?: number;
+  /** Fraction of one 10x10 square the frame shows, per the model. */
+  coverage?: { visible: boolean; fraction: number; confidence: number };
 };
+
+/** A 10x10 ft test square is 120 in on a side; an exposed course is ~5.6 in. */
+const SQUARE_SIDE_IN = 120;
+const COURSE_IN = 5.6;
 
 type Props = {
   enabled: boolean;
@@ -108,6 +118,14 @@ type Props = {
   labelTop: number;
   /** Fired once per failure; the screen turns the setting OFF (kill switch). */
   onError: (reason: string) => void;
+  /**
+   * Draw the 10x10 test-square guide and the shingle-course grid, sized from
+   * the model's pixels-per-inch. An ESTIMATE from shingle geometry, labelled as
+   * one — not a measurement. Real measurement is ARKit/LiDAR (native build).
+   */
+  guide?: boolean;
+  /** Live shingle count + coverage, for the screen's HUD. */
+  onFrameStats?: (stats: { shingleCount?: number; coverageFraction?: number; pixelsPerInch: number | null }) => void;
 };
 
 function useAppActive(): boolean {
@@ -132,7 +150,11 @@ export function LiveOverlay({
   reducedMotion,
   labelTop,
   onError,
+  guide = false,
+  onFrameStats,
 }: Props) {
+  const onFrameStatsRef = useRef(onFrameStats);
+  onFrameStatsRef.current = onFrameStats;
   const appActive = useAppActive();
   const setLastLiveModel = useCaptureSettingsStore((s) => s.setLastLiveModel);
   const lastLiveModel = useCaptureSettingsStore((s) => s.lastLiveModel);
@@ -227,6 +249,7 @@ export function LiveOverlay({
         if (cancelled) return;
 
         const model = r.modelUsed ?? getActiveGeminiModel();
+        const pixelsPerInch = r.shingleScaleEstimate?.pixelsPerInch ?? null;
         setFrame({
           markers: r.markers,
           imageW: small.width,
@@ -234,6 +257,14 @@ export function LiveOverlay({
           noRoof: r.noRoofDetected,
           model,
           latencyMs: r.latencyMs ?? Date.now() - t0,
+          pixelsPerInch,
+          shingleCount: r.shingleCount,
+          coverage: r.squareCoverage,
+        });
+        onFrameStatsRef.current?.({
+          shingleCount: r.shingleCount,
+          coverageFraction: r.squareCoverage?.fraction,
+          pixelsPerInch,
         });
         setLastLiveModel(model);
         schedule(Math.max(MIN_GAP_MS, LIVE_INTERVAL_MS - (Date.now() - startedAt)));
@@ -285,8 +316,48 @@ export function LiveOverlay({
 
   const rect = frame && size.width > 0 ? coverRect(size, frame.imageW, frame.imageH) : null;
 
+  // The 10x10 guide: 120 in at the frame's pixels-per-inch, in FRAME pixels,
+  // mapped through the same cover rect as the boxes. Centred; clamped so a
+  // close-up (where 120 in would exceed the frame) shows the guide's edge
+  // running off-screen rather than nothing — the roofer backs up until it fits.
+  const guideRect = (() => {
+    if (!guide || !rect || !frame || frame.noRoof || !frame.pixelsPerInch) return null;
+    const ppiScreen = frame.pixelsPerInch * (rect.width / frame.imageW);
+    const side = SQUARE_SIDE_IN * ppiScreen;
+    const course = COURSE_IN * ppiScreen;
+    const left = rect.left + rect.width / 2 - side / 2;
+    const top = rect.top + rect.height / 2 - side / 2;
+    const fits = side <= Math.min(rect.width, rect.height);
+    return { left, top, side, course, fits };
+  })();
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout}>
+      {guideRect && (
+        <View
+          style={[
+            styles.guide,
+            { left: guideRect.left, top: guideRect.top, width: guideRect.side, height: guideRect.side },
+            !guideRect.fits && styles.guideOverflow,
+          ]}
+        >
+          {/* Course lines every ~5.6 in — the shingle rows the count rides on. */}
+          {guideRect.course >= 6 &&
+            Array.from({ length: Math.floor(guideRect.side / guideRect.course) - 1 }, (_, i) => (
+              <View
+                key={i}
+                style={[styles.courseLine, { top: (i + 1) * guideRect.course }]}
+              />
+            ))}
+          <View style={styles.guideTag}>
+            <Text style={styles.guideTagText}>
+              10×10 test square · est. from shingle scale
+              {frame?.shingleCount != null ? ` · ~${frame.shingleCount} shingles in frame` : ''}
+              {!guideRect.fits ? ' · back up to fit' : ''}
+            </Text>
+          </View>
+        </View>
+      )}
       {rect &&
         frame?.markers.map((m) => {
           if (!m.box) return null;
@@ -420,6 +491,34 @@ function LiveDot({ active, reducedMotion }: { active: boolean; reducedMotion?: b
 }
 
 const styles = StyleSheet.create({
+  // The guide is a dashed outline — a chalk line, not a box the model drew.
+  guide: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: colors.textInverse,
+    borderRadius: 4,
+    overflow: 'visible',
+  },
+  guideOverflow: { borderColor: colors.warn },
+  courseLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.textInverse,
+    opacity: 0.55,
+  },
+  guideTag: {
+    position: 'absolute',
+    left: 0,
+    bottom: -26,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  guideTagText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
   labelWrap: {
     position: 'absolute',
     left: spacing.xl,

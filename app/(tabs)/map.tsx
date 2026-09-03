@@ -406,7 +406,12 @@ function StormDetailCard({ event, onClose }: { event: StormEvent; onClose: () =>
 export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
-  const { focus, filter: filterParam } = useLocalSearchParams<{ focus?: string; filter?: string }>();
+  const { focus, filter: filterParam, lat: latParam, lng: lngParam } = useLocalSearchParams<{
+    focus?: string;
+    filter?: string;
+    lat?: string;
+    lng?: string;
+  }>();
   const inspections = useInspectionStore((s) => s.inspections);
   const leads = useLeadStore((s) => s.leads);
   const archive = useKnockSessionStore((s) => s.archive);
@@ -533,6 +538,18 @@ export default function MapScreen() {
       router.setParams({ filter: '' });
     }
   }, [filterParam, router]);
+  // `?lat&lng` — a storm alert's core, the weather page's "storms near here":
+  // land the camera on the point. Consumed once applied.
+  useEffect(() => {
+    const lat = Number(latParam);
+    const lng = Number(lngParam);
+    if (latParam && lngParam && isValidLatLon(lat, lng)) {
+      // jumpTo is declared below; the effect runs after render so it exists.
+      jumpToRef.current?.(lat, lng);
+      router.setParams({ lat: '', lng: '' });
+    }
+  }, [latParam, lngParam, router]);
+  const jumpToRef = useRef<((lat: number, lon: number) => void) | null>(null);
 
   // Height of the floating stat bar / cluster card so the Google attribution
   // chip (Expo Go iOS) sits above it — Google requires the credit visible.
@@ -594,6 +611,8 @@ export default function MapScreen() {
     // so the fetch starts without waiting on the camera.
     setRegion(next);
   }, []);
+
+  jumpToRef.current = jumpTo;
 
   const onSearchResolved = useCallback(
     (loc: ResolvedLocation) => {

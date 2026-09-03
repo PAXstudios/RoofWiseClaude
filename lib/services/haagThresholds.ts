@@ -430,3 +430,52 @@ export function evaluateMaterialThreshold(
 
   return { met: triggeredRules.length > 0, triggeredRules, notes };
 }
+
+// -----------------------------------------------------------------------------
+// Carrier bars — "state every count against both bars" (owner, 2026-09-03)
+// -----------------------------------------------------------------------------
+//
+// The app's trigger is the carrier STANDARD (8 or more functional hits per
+// 100 sq ft test square). Some carriers ask for 10, and several want the
+// count on at least two slopes. A roofer should know how hard the conversation
+// will be BEFORE filing, so every per-square count is stated against both the
+// standard bar and the strict bar — never just "meets threshold".
+
+/** The strict end of the carrier range, for report language only. */
+export const CARRIER_STRICT_HITS_PER_SQUARE = 10;
+
+export type CarrierBarsRead = {
+  /** ≥ the material's own rule (8 for asphalt). */
+  meetsStandard: boolean;
+  /** ≥ the strict 10-per-square some carriers require. */
+  meetsStrict: boolean;
+  /** One sentence for a card or a report row. */
+  line: string;
+};
+
+/**
+ * One line that says where a per-square count sits against BOTH bars.
+ * Only meaningful for hit-counted materials (asphalt, wood); percent-based
+ * rules (metal, tile, membrane) return their §2 sentence instead.
+ */
+export function carrierBarsRead(material: RoofMaterial, hitsPerSquare: number): CarrierBarsRead {
+  const t = HAAG_THRESHOLDS[material];
+  const std = t.hitsPerTestSquare;
+  if (std <= 0) {
+    return { meetsStandard: false, meetsStrict: false, line: t.rule };
+  }
+  const meetsStandard = hitsPerSquare >= std;
+  const meetsStrict = hitsPerSquare >= CARRIER_STRICT_HITS_PER_SQUARE;
+  const n = roundRate(hitsPerSquare);
+  let line: string;
+  if (meetsStrict) {
+    line = `${n} hits per square — meets the ${std}-hit standard most carriers use AND the ${CARRIER_STRICT_HITS_PER_SQUARE} some require.`;
+  } else if (meetsStandard) {
+    const short = CARRIER_STRICT_HITS_PER_SQUARE - hitsPerSquare;
+    line = `${n} hits per square — meets the ${std}-hit standard most carriers use; ${roundRate(short)} short of the ${CARRIER_STRICT_HITS_PER_SQUARE} some require.`;
+  } else {
+    const short = std - hitsPerSquare;
+    line = `${n} hits per square — ${roundRate(short)} short of the ${std}-hit standard most carriers use (some require ${CARRIER_STRICT_HITS_PER_SQUARE}).`;
+  }
+  return { meetsStandard, meetsStrict, line };
+}

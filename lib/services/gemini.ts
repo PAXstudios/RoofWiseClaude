@@ -579,7 +579,7 @@ export type AnalyzeOptions = {
 
 /** Extra user-turn text for a live frame. Same schema, less output. */
 const LIVE_FRAME_ADDENDUM =
-  '\n\nLIVE VIEWFINDER FRAME: this is a reduced-resolution preview grab that is shown for a few seconds and then discarded — it is not the inspection photo. Apply STEP 0 and STEP 1 exactly as above, then return the same JSON schema with "detections" populated for every visible damage instance and "findings" as an empty array. Do not lower your evidence bar: a box you would not draw on a full-resolution photo must not be drawn here either.';
+  '\n\nLIVE VIEWFINDER FRAME: this is a reduced-resolution preview grab that is shown for a few seconds and then discarded — it is not the inspection photo. Apply STEP 0 and STEP 1 exactly as above, then return the same JSON schema with "detections" populated for every visible damage instance and "findings" as an empty array. Always fill "shingle_scale_estimate", "shingle_count" and "test_square_coverage" — the viewfinder draws a 10x10 test-square guide from your pixels_per_inch and shows the shingle count live, so a null scale hides the guide. Do not lower your evidence bar: a box you would not draw on a full-resolution photo must not be drawn here either.';
 
 /**
  * The exact generateContent body `analyzePhoto` sends. Exported so the

@@ -12,13 +12,9 @@ function newId(): string {
 type StormAlertStoreState = {
   alerts: StormAlert[];
 
-  inject: (input: {
-    eventKind: StormKind;
-    areaLabel: string;
-    propertyCount: number;
-    hailSizeInches?: number;
-    windSpeedMph?: number;
-  }) => StormAlert;
+  inject: (
+    input: Omit<StormAlert, 'id' | 'firedAt' | 'status'>,
+  ) => StormAlert;
   dismiss: (id: string) => void;
   markActedOn: (id: string) => void;
   clear: () => void;
@@ -31,14 +27,13 @@ export const useStormAlertStore = create<StormAlertStoreState>()(
       alerts: [],
 
       inject: (input) => {
+        // Everything the scan knows rides the alert — where it hit, how
+        // strong, how many reports — so the detail screen and the knock route
+        // read the same facts the notification did.
         const alert: StormAlert = {
+          ...input,
           id: newId(),
           firedAt: new Date().toISOString(),
-          eventKind: input.eventKind,
-          areaLabel: input.areaLabel,
-          propertyCount: input.propertyCount,
-          hailSizeInches: input.hailSizeInches,
-          windSpeedMph: input.windSpeedMph,
           status: 'new',
         };
         set((s) => ({ alerts: [alert, ...s.alerts] }));

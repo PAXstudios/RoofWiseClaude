@@ -19,6 +19,7 @@ import { useInspectionStore } from '../stores/inspectionStore';
 import { useLeadStore } from '../stores/leadStore';
 import { sendLocalNotification } from './pushNotifications';
 import { qualifiesForValidation, MATCH_RADIUS_MILES } from './stormMatch';
+import { describeWhere } from './stormWhere';
 import type { Lead, StormAlert } from '../models/types';
 
 // Real-time alert scan window. Unrelated to the 4-year storm-history lookback
@@ -51,7 +52,22 @@ export const LEAD_CLUSTER_RADIUS_MILES = MATCH_RADIUS_MILES;
  * `LEAD_CLUSTER_RADIUS_MILES`: an alert means "a storm hit your market", a
  * cluster means "these specific addresses sit under the core".
  */
-export const AREA_ALERT_RADIUS_MILES = 25;
+// Owner directive 2026-09-03: "When there is a storm within a 50 mile radius
+// notify the roofer." Was 25. A roofer drives an hour for a hail street.
+export const AREA_ALERT_RADIUS_MILES = 50;
+
+/**
+ * "Damaging" floors for the alert title. Hail: the NWS severe criterion, 1 in.
+ * Wind: 70 mph — above the 58 mph validation floor, the gust speed at which
+ * shingle loss and lifted tabs become common across a neighbourhood rather
+ * than on one exposed roof. Below these an alert still fires (validated
+ * storm), but reads as a watch, not a damaging event.
+ */
+export const DAMAGING_HAIL_INCHES = 1.0;
+export const DAMAGING_WIND_MPH = 70;
+
+/** How far around a storm core a knock route canvasses by default. */
+export const KNOCK_ROUTE_RADIUS_MILES = 3;
 
 /**
  * Map / canvassing browse radius (miles) around the resolved service center.
@@ -307,19 +323,32 @@ export async function checkStormWatch(): Promise<StormWatchResult> {
     const dedupKey = `${kind}|${area.label}|${dayOf(new Date().toISOString())}`;
     if (existingKeys.has(dedupKey)) continue;
 
+    // WHERE: the strongest report is the core. Distance + bearing from the
+    // area's centroid give the roofer "14 mi NE" before they open the map.
+    const core = pickStormCore(qualifying);
+    const where = describeWhere(core, area);
+    const severity: StormAlert['severity'] =
+      hailMax >= DAMAGING_HAIL_INCHES || windMax >= DAMAGING_WIND_MPH ? 'damaging' : 'watch';
+
     const alert = useStormAlertStore.getState().inject({
       eventKind: kind,
       areaLabel: area.label,
       propertyCount,
       hailSizeInches: hailMax || undefined,
       windSpeedMph: windMax ? Math.round(windMax) : undefined,
+      coreLat: core?.lat,
+      coreLng: core?.lon,
+      coreCity: core?.city || undefined,
+      distanceMiles: where?.distanceMiles,
+      bearing: where?.bearing,
+      reportCount: qualifying.length,
+      severity,
     });
     newAlerts.push(alert);
 
     // --- Storm-matched lead clustering. Stamping every match with the alert's
     // firedAt is what lets `leadsInStormCluster()` rebuild this cluster from
     // persisted leads on the next app launch.
-    const core = pickStormCore(qualifying);
     const cluster = core
       ? stampLeadCluster(core, {
           alertId: alert.id,
@@ -330,10 +359,15 @@ export async function checkStormWatch(): Promise<StormWatchResult> {
     if (cluster) clusters.push(cluster);
 
     sendLocalNotification({
-      title: alertTitle(kind, hailMax),
+      title: alertTitle(kind, hailMax, windMax),
+      // Where first, then what it means for the book: "2.00\" hail near
+      // Frisco, 14 mi NE of Plano, TX · 3 properties in range · 2 leads in
+      // the core". Guidance the roofer can act on from the lock screen.
       body:
-        `${area.label} · ${propertyCount} propert${propertyCount === 1 ? 'y' : 'ies'} in range` +
-        (cluster ? ` · ${cluster.headline}` : ''),
+        `${magnitudeLine(hailMax, windMax)}${where ? ` near ${where.label}` : ''}` +
+        ` · ${propertyCount} propert${propertyCount === 1 ? 'y' : 'ies'} in range` +
+        (cluster ? ` · ${cluster.headline}` : '') +
+        ' · Tap to add the area to your knock route.',
       data: { kind: 'storm_alert', alertId: alert.id },
     }).catch(() => {});
   }
@@ -374,7 +408,14 @@ function scopeToArea(events: StormEvent[], area: { centroidLat?: number; centroi
   return events.filter((e) => haversine(lat, lng, e.lat, e.lon) <= AREA_ALERT_RADIUS_MILES);
 }
 
-function alertTitle(kind: StormAlert['eventKind'], hailMax: number): string {
+function magnitudeLine(hailMax: number, windMax: number): string {
+  const parts: string[] = [];
+  if (hailMax > 0) parts.push(`${hailMax.toFixed(2)}" hail`);
+  if (windMax > 0) parts.push(`${Math.round(windMax)} mph wind`);
+  return parts.join(' + ') || 'Storm reported';
+}
+
+function alertTitle(kind: StormAlert['eventKind'], hailMax: number, windMax = 0): string {
   // Any qualifying wind is severe by definition (the floor IS the NWS severe
   // criterion), so wind/mixed titles stay "Severe". Hail earns "Severe" only
   // at SEVERE_HAIL_INCHES and above; validated smaller hail gets a plain alert.

@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import type MapView from 'react-native-maps';
-import { Map, MapPin, regionForLatLon } from '@/components/map/Map';
+import { Map, MapPin, regionForLatLon, MapCircle } from '@/components/map/Map';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
@@ -184,9 +184,15 @@ export default function DoorKnockingScreen() {
     };
   }, [activeSession, now]);
 
-  const initialRegion = position
-    ? regionForLatLon(position.latitude, position.longitude, 0.01)
-    : regionForLatLon(33.0198, -96.6989, 0.05);
+  // Aimed at a storm core? Frame the TARGET, not the phone: the whole point of
+  // "add the area to my route" is to look at where the hail fell before
+  // driving there. The canvass radius is drawn so the roofer sees the edge.
+  const target = activeSession?.routeTarget;
+  const initialRegion = target
+    ? regionForLatLon(target.lat, target.lng, Math.max(0.02, target.radiusMiles / 30))
+    : position
+      ? regionForLatLon(position.latitude, position.longitude, 0.01)
+      : regionForLatLon(33.0198, -96.6989, 0.05);
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -200,6 +206,7 @@ export default function DoorKnockingScreen() {
           {stats ? (
             <Text style={styles.statsLine}>
               {stats.total} knocks · {stats.pct}% interested · {stats.elapsedMin}m
+              {target ? ` · aimed at ${target.label}` : ''}
             </Text>
           ) : (
             <Text style={styles.statsLine}>Tap "Start route" to begin</Text>
@@ -209,6 +216,15 @@ export default function DoorKnockingScreen() {
 
       <View style={styles.mapWrap}>
         <Map ref={mapRef} initialRegion={initialRegion}>
+          {target && (
+            <MapCircle
+              center={{ latitude: target.lat, longitude: target.lng }}
+              radius={target.radiusMiles * 1609.34}
+              strokeColor={colors.stormHail}
+              strokeWidth={2}
+              fillColor={colors.stormHailFill}
+            />
+          )}
           {activeSession?.knocks.map((k) => {
             const tone = OUTCOMES.find((o) => o.id === k.outcome)?.tone ?? 'info';
             return (

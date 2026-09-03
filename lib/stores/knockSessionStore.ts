@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Knock, KnockOutcome, KnockSession } from '../models/types';
+import type { Knock, KnockOutcome, KnockSession, KnockRouteTarget } from '../models/types';
 
 let counter = 0;
 
@@ -13,7 +13,9 @@ type KnockSessionState = {
   activeSession: KnockSession | null;
   archive: KnockSession[];
 
-  start: (routeStormAlertId?: string) => KnockSession;
+  start: (routeStormAlertId?: string, routeTarget?: KnockRouteTarget) => KnockSession;
+  /** Aim (or re-aim) the active session — "add this storm area to my route". */
+  setRouteTarget: (target: KnockRouteTarget) => void;
   end: () => KnockSession | null;
   logKnock: (input: {
     lat: number;
@@ -32,16 +34,30 @@ export const useKnockSessionStore = create<KnockSessionState>()(
       activeSession: null,
       archive: [],
 
-      start: (routeStormAlertId) => {
+      start: (routeStormAlertId, routeTarget) => {
         const session: KnockSession = {
           id: newId('ks'),
           startedAt: new Date().toISOString(),
           routeStormAlertId,
+          routeTarget,
           knocks: [],
         };
         set({ activeSession: session });
         return session;
       },
+
+      setRouteTarget: (target) =>
+        set((s) =>
+          s.activeSession
+            ? {
+                activeSession: {
+                  ...s.activeSession,
+                  routeTarget: target,
+                  routeStormAlertId: target.stormAlertId ?? s.activeSession.routeStormAlertId,
+                },
+              }
+            : s,
+        ),
 
       end: () => {
         const active = get().activeSession;
