@@ -13,6 +13,16 @@
 
 import type { RoofMaterial } from '../models/types';
 
+/**
+ * Hits-per-square is a computed RATE (total hits / test squares), so it is
+ * rarely a whole number. Reports and rule citations are read by adjusters —
+ * print 6.9, never 6.888888888888889.
+ */
+function roundRate(n: number | undefined): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '0';
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
 // -----------------------------------------------------------------------------
 // Structured, spec-exact material rules (§2)
 // -----------------------------------------------------------------------------
@@ -300,7 +310,7 @@ export function evaluateMaterialThreshold(
       const label = rule.family === 'three_tab' ? '3-tab asphalt' : 'laminate/architectural asphalt';
       if (obs.hailHitsPerSquare != null && obs.hailHitsPerSquare > rule.hailHitsPerSquareExclusive) {
         triggeredRules.push(
-          `${obs.hailHitsPerSquare} hail hits per 100 sq ft test square exceeds the ${label} ` +
+          `${roundRate(obs.hailHitsPerSquare)} hail hits per 100 sq ft test square exceeds the ${label} ` +
             `threshold of more than ${rule.hailHitsPerSquareExclusive} (HAAG §2).`,
         );
       }

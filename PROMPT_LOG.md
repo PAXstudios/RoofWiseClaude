@@ -2479,3 +2479,21 @@ Recorded as a second **⚡ STANDING TRIGGER** at the top of `BACKLOG.md` "Now", 
 **Still open (degraded, not broken):** the weather page's "storms near here" deep-links `/(tabs)/map?focus=point&lat&lng`, but the map only handles `focus=storm-leads` — the tap opens the map at its default centre for now. Backlogged.
 
 **Files touched:** `app/_layout.tsx`, `app/estimator.tsx`, `app/new-job.tsx`, `app/new-lead.tsx`, `app/(tabs)/map.tsx`, `app/weather.tsx` + `components/weather/*`, `components/LocationField.tsx`, `components/map/StormOverlay.tsx`, `lib/services/{weatherForecast,nwsAlerts,stormCluster,uiRuntimeGuard}.ts`, `lib/stores/weatherLocationsStore.ts`, `PROMPT_LOG.md`, `BACKLOG.md`.
+
+---
+
+### [2026-09-03] #65 — The per-square unit bug: the engine was fed slope TOTALS as "hits per test square"
+
+**Prompt:** owner asked whether the HAAG report instructions and the damage-score methodology were ever provided, after screenshots showed a claim packet reading "No Functional Damage" beside 62 SEVERE hail hits and a "27 of 100 — Wear consistent with age" score.
+
+**Answer to the question.** The HAAG report methodology IS present and authoritative (`docs/HAAG_DECISION_ENGINE.md`). The damage-score **bands and direction** were given (Kanban PRD: 1–100 INVERTED, 1–30 red / 61–100 green) but the **formula never was** — `damageScore()` carried invented weights (its own comment admits "never in any source document") running in the WRONG direction, which is why 27 (deep red) printed the green-band label. New methodology written and committed: `docs/DAMAGE_SCORE.md` — score DERIVED from the §4 recommendation (band) plus five rule-cited severity components, every deduction citing its HAAG rule, confidence separate from the number, researched against HAAG's published test-square method and carrier norms (IBHS 8/sq, Allstate 10) with the doc's stricter §2 thresholds as authority.
+
+**The bug, found by reproduction not by reading.** `engineInputFromInspection` passed `hail_hits_per_square: s.squareHitCount ?? s.hailCount`. Both are slope **TOTALS** across every photo (recounted by the store's `withRecount`), but §2's threshold is a **RATE** — hits in ONE 100 sq ft test square. A repro of the screenshot case (3-tab, 9 test-square photos, 62 markers) fed the engine **62** as "hits per square" and printed into the report: *"62 hail hits per 100 sq ft test square exceeds the 3-tab threshold of more than 5"* — arithmetically false in front of an adjuster, and it over-called damage on any slope with more photos than hits-per-photo.
+
+**Fix:** new `hailHitsPerSquare(slope)` divides the total by the number of test squares actually shot (photos with no recorded mode count as squares, matching `withRecount`'s bucketing default; single-shingle close-ups excluded from both numerator and denominator per §2). Verified: 62/9 → **6.9/sq → PARTIAL_REPLACEMENT** (§4's 4–7 band — previously FULL_REPLACEMENT). Range check: 1.0/sq → REPAIR, 6.9 → PARTIAL, 10.0 → FULL, 0.4 → REPAIR. Rule citations and the tree's justifications now round the rate for display (6.9, not 6.888888888888889).
+
+**Note on the screenshot's "No Functional Damage":** the repro produced FULL_REPLACEMENT, not that label, so the packet's headline comes from a different path than the engine recommendation — still open, tracked in BACKLOG. The unit bug is fixed and verified independently of it.
+
+**Process:** three attempts to run this as a workflow died on the recurring infrastructure fault (permission handler stripping subagent tool parameters → StructuredOutput unusable; agents correctly refused to fabricate results, repo untouched). Completed in the main thread instead.
+
+**Files touched:** `lib/services/decisionEngine.ts`, `lib/services/haagThresholds.ts`, `docs/DAMAGE_SCORE.md`, `PROMPT_LOG.md`, `BACKLOG.md`.

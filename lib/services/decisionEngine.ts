@@ -322,7 +322,8 @@ function evaluateSlopeInput(
   const th = evaluateMaterialThreshold(material, slopeObservation(s));
   const observed = slopeHasObservedDamage(s);
   const threshold = thresholdFor(material);
-  const summary = `Observed: ${hail} hail hits/square, ${creased} creased, ${missing} missing.`;
+  const hailText = Number.isInteger(hail) ? String(hail) : hail.toFixed(1);
+  const summary = `Observed: ${hailText} hail hits/square, ${creased} creased, ${missing} missing.`;
 
   let action: SlopeRecommendedAction;
   let justification: string;
@@ -348,12 +349,12 @@ function evaluateSlopeInput(
   } else if (hail >= 8) {
     action = 'Full Replacement';
     justification =
-      `${hail} hail hits per square meets the decision-tree full-replacement trigger ` +
+      `${hailText} hail hits per square meets the decision-tree full-replacement trigger ` +
       `(hail_hits_per_square >= 8, HAAG §4). ${summary}`;
   } else if (hail >= 4) {
     action = 'Partial Replacement';
     justification =
-      `${hail} hail hits per square falls in the 4–7 partial-replacement band (HAAG §4), ` +
+      `${hailText} hail hits per square falls in the 4–7 partial-replacement band (HAAG §4), ` +
       `below the material replacement threshold — ${threshold.rule} ${summary}`;
   } else if (creased >= 3 || missing >= 2) {
     action = 'Partial Replacement';
@@ -941,6 +942,39 @@ export function legacyObservation(material: RoofMaterial, slope: Slope): Thresho
  * forecast is unavailable: `evaluateSafety({})` rates USE_CAUTION purely from
  * missing inputs, which would launder "we don't know" into a rating.
  */
+/**
+ * HAAG §2's threshold is hits per ONE 100 sq ft test square — a RATE, not a total.
+ *
+ * `squareHitCount` / `hailCount` are slope TOTALS (every hail marker across every
+ * photo, recounted by the store's `withRecount`). Feeding a total straight in made
+ * the engine read a 9-photo slope carrying 62 hits as "62 hits per test square",
+ * which both over-called damage (any slope with more photos than hits-per-photo
+ * crossed the threshold) and printed an arithmetically false sentence into the
+ * report: "62 hail hits per 100 sq ft test square". The true value there is 62/9 ≈ 6.9.
+ *
+ * Divide by the number of test squares actually shot. Photos with no recorded
+ * capture mode count as squares, matching `withRecount`'s bucketing default, so
+ * inspections captured before mode tagging behave as they did. Single-shingle
+ * close-ups are excluded from BOTH numerator and denominator (§2: several bruises
+ * on one shingle are not several hits in a square).
+ */
+function hailHitsPerSquare(s: Slope): number {
+  const total = s.squareHitCount ?? s.hailCount ?? 0;
+  if (total <= 0) return 0;
+
+  const meta = s.photoMeta;
+  const squares =
+    meta && meta.length > 0
+      ? meta.filter((m) => (m.captureMode ?? 'square_10x10') === 'square_10x10').length
+      : // No per-photo metadata (pre-tagging inspection): every photo is a square.
+        s.photoPaths.length;
+
+  // A slope with hits but no countable square still reports the raw total rather
+  // than dividing by zero — over-stating is caught by review, inventing is not.
+  if (squares < 1) return total;
+  return total / squares;
+}
+
 export function engineInputFromInspection(
   inspection: Inspection,
   asOfIso?: string,
@@ -989,7 +1023,7 @@ export function engineInputFromInspection(
         // fallback for inspections captured before mode tagging existed.
         // Never sum the two — a single-shingle close-up is several bruises on
         // ONE shingle, not several hits in a square (HAAG §2).
-        hail_hits_per_square: s.squareHitCount ?? s.hailCount,
+        hail_hits_per_square: hailHitsPerSquare(s),
         wind_creased_count: s.windLiftCount,
         missing_shingles: s.missingCount,
         // §1 authoritative flag, mapped from the legacy `functional` boolean.
