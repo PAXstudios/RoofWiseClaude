@@ -17,3 +17,6 @@ yarn-error.*
 .env.local
 ios/
 android/
+
+# Design canvas: keep the artboard sources, not the 2.5MB seeded editor payload
+.design/roofwise-app-screens.html

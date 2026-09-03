@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #ff6a13; } a:hover { color: #d4520a; }
+    .ic-s { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: {{bg}}; color: {{ink}}; overflow: hidden;">
+
+  <div style="padding: 56px 20px 0; color: #fff; background: radial-gradient(80% 70% at 92% 4%, {{accent}} 0%, transparent 48%), linear-gradient(150deg, #101317, #23272c);">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
+      <span style="margin-left: auto; font-size: 11px; font-weight: 700; padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,0.16);">INSPECTED</span>
+    </div>
+    <div style="font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-top: 14px;">1420 Oak Street</div>
+    <div style="font-size: 13px; opacity: 0.78; margin-top: 2px;">Frisco, TX &middot; RW-2026-0142 &middot; 12 days in stage</div>
+    <div style="display: flex; gap: 6px; margin-top: 18px;">
+      <span style="flex-grow: 1; text-align: center; font-size: 13px; font-weight: 600; padding: 12px 0; border-bottom: 2px solid #fff;">Overview</span>
+      <span style="flex-grow: 1; text-align: center; font-size: 13px; font-weight: 600; padding: 12px 0; opacity: 0.6; border-bottom: 2px solid transparent;">Measure</span>
+      <span style="flex-grow: 1; text-align: center; font-size: 13px; font-weight: 600; padding: 12px 0; opacity: 0.6; border-bottom: 2px solid transparent;">Photos</span>
+      <span style="flex-grow: 1; text-align: center; font-size: 13px; font-weight: 600; padding: 12px 0; opacity: 0.6; border-bottom: 2px solid transparent;">Proposal</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 14px; padding: 16px;">
+
+    <div style="height: 132px; border-radius: 18px; background: linear-gradient(150deg, #6b7684, #454e5b 70%, #333b46); position: relative; overflow: hidden;">
+      <span style="position: absolute; left: 12px; bottom: 12px; font-size: 11px; font-weight: 700; color: #fff; background: rgba(0,0,0,0.45); padding: 6px 10px; border-radius: 999px;">Zillow &middot; built 2004 &middot; 2,410 sq ft</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+      <div style="background: {{surface}}; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px;">
+        <div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: {{accent}};">24.8</div>
+        <div style="font-size: 11px; opacity: 0.5; font-weight: 600; margin-top: 2px;">SQUARES</div>
+      </div>
+      <div style="background: {{surface}}; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px;">
+        <div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: {{accent}};">18</div>
+        <div style="font-size: 11px; opacity: 0.5; font-weight: 600; margin-top: 2px;">PHOTOS</div>
+      </div>
+      <div style="background: {{surface}}; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px;">
+        <div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: {{accent}};">HIGH</div>
+        <div style="font-size: 11px; opacity: 0.5; font-weight: 600; margin-top: 2px;">VIABILITY</div>
+      </div>
+    </div>
+
+    <div style="background: {{surface}}; border: 1px solid rgba(255,255,255,0.07); border-radius: 18px; padding: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 15px; font-weight: 700;">HAAG verdict</span>
+        <span style="margin-left: auto; font-size: 11px; font-weight: 700; color: #fff; background: {{accent}}; padding: 6px 10px; border-radius: 999px;">FULL REPLACEMENT</span>
+      </div>
+      <p style="font-size: 13px; opacity: 0.72; margin: 10px 0 0; line-height: 1.45;">11 functional hail hits per test square on the north and west slopes &mdash; past the 8-hit carrier bar. Mat is brittle; repairs would cause further damage.</p>
+      <div style="display: flex; gap: 18px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.07);">
+        <div><div style="font-size: 11px; opacity: 0.5; font-weight: 600;">CARRIER</div><div style="font-size: 13px; font-weight: 600; margin-top: 2px;">State Farm</div></div>
+        <div><div style="font-size: 11px; opacity: 0.5; font-weight: 600;">CLAIM</div><div style="font-size: 13px; font-weight: 600; margin-top: 2px;">SF-4471903</div></div>
+        <div><div style="font-size: 11px; opacity: 0.5; font-weight: 600;">DATE OF LOSS</div><div style="font-size: 13px; font-weight: 600; margin-top: 2px;">Jun 14</div></div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 16px; background: {{surface}}; border: 1px solid rgba(255,255,255,0.07);">
+      <span style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,106,19,0.16); color: {{accent}}; display: flex; align-items: center; justify-content: center;">
+        <svg class="ic-s" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>
+      </span>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 15px; font-weight: 600;">HAAG claim packet</div>
+        <div style="font-size: 11px; opacity: 0.55;">Ready &middot; 18 photos, 6 slopes</div>
+      </div>
+      <svg class="ic-s" style="opacity: 0.4;" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+    </div>
+
+    <div style="height: 88px; border-radius: 20px; background: linear-gradient(150deg, {{accent}}, #d4520a); color: #fff; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: auto; margin-bottom: 8px;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>Build proposal
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#ff6a13","options":["#ff6a13","#c87d3f","#f58426","#1b5f52"]},"bg":{"editor":"color","default":"#14171b"},"surface":{"editor":"color","default":"#1e2227"},"ink":{"editor":"color","default":"#ededea"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#ff6a13',
+      bg: this.props.bg ?? '#14171b',
+      surface: this.props.surface ?? '#1e2227',
+      ink: this.props.ink ?? '#ededea',
+    };
+  }
+}
+</script>
+</body>
+</html>

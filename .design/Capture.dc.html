@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #ff6a13; } a:hover { color: #d4520a; }
+    .ic-s { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: linear-gradient(168deg, #6a7280, #444b57 52%, #272d36); color: #fff;">
+
+  <!-- shingle texture -->
+  <div style="position: absolute; inset: 0; background: repeating-linear-gradient(94deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 11px), repeating-linear-gradient(4deg, rgba(0,0,0,0.10) 0 3px, transparent 3px 26px);"></div>
+
+  <!-- 10x10 test square guide -->
+  <div style="position: absolute; left: 58px; top: 268px; width: 274px; height: 214px; border: 3px solid {{accent}}; border-radius: 10px; box-shadow: 0 0 0 2000px rgba(0,0,0,0.20);">
+    <span style="position: absolute; top: -14px; left: 12px; font-size: 11px; font-weight: 700; color: #fff; background: {{accent}}; padding: 5px 10px; border-radius: 999px; letter-spacing: 0.04em;">10 &times; 10 TEST SQUARE</span>
+  </div>
+
+  <!-- detected hits -->
+  <div style="position: absolute; left: 96px; top: 316px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid {{accent}}; background: rgba(255,106,19,0.28);"></div>
+  <div style="position: absolute; left: 168px; top: 352px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid {{accent}}; background: rgba(255,106,19,0.28);"></div>
+  <div style="position: absolute; left: 246px; top: 322px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid {{accent}}; background: rgba(255,106,19,0.28);"></div>
+  <div style="position: absolute; left: 128px; top: 412px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid {{accent}}; background: rgba(255,106,19,0.28);"></div>
+  <div style="position: absolute; left: 214px; top: 428px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid {{accent}}; background: rgba(255,106,19,0.28);"></div>
+  <div style="position: absolute; left: 286px; top: 396px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid {{accent}}; background: rgba(255,106,19,0.28);"></div>
+  <div style="position: absolute; left: 190px; top: 288px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid {{accent}}; background: rgba(255,106,19,0.28);"></div>
+
+  <!-- top chrome -->
+  <div style="position: absolute; top: 56px; left: 16px; right: 16px; display: flex; align-items: center; gap: 12px;">
+    <div style="width: 44px; height: 44px; border-radius: 14px; background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
+    </div>
+    <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 11px 16px; font-size: 13px; font-weight: 700;">
+      North slope &middot; 7 hits
+    </div>
+  </div>
+
+  <!-- tuck-away tool rail -->
+  <div style="position: absolute; right: 16px; top: 130px; display: flex; flex-direction: column; gap: 10px;">
+    <div style="width: 48px; height: 48px; border-radius: 15px; background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+    </div>
+    <div style="width: 48px; height: 48px; border-radius: 15px; background: linear-gradient(150deg, {{accent}}, #d4520a); display: flex; align-items: center; justify-content: center;">
+      <svg class="ic-s" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg>
+    </div>
+    <div style="width: 48px; height: 48px; border-radius: 15px; background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+    </div>
+    <div style="width: 48px; height: 48px; border-radius: 15px; background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center;">
+      <svg class="ic-s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+    </div>
+  </div>
+
+  <!-- live count -->
+  <div style="position: absolute; left: 16px; bottom: 178px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.16); border-radius: 16px; padding: 12px 16px;">
+    <div style="font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1;">7<span style="font-size: 15px; font-weight: 500; opacity: 0.65;"> / square</span></div>
+    <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; font-weight: 600;">CARRIER BAR: 8 &middot; ONE SHORT</div>
+  </div>
+
+  <!-- dock -->
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 28px 34px; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(transparent, rgba(0,0,0,0.6));">
+    <div style="width: 56px; height: 56px; border-radius: 16px; background: linear-gradient(140deg, #7f8a9c, #55606e); border: 2px solid rgba(255,255,255,0.65); position: relative;">
+      <span style="position: absolute; top: -7px; right: -7px; min-width: 22px; height: 22px; border-radius: 11px; background: {{accent}}; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;">18</span>
+    </div>
+    <div style="width: 88px; height: 88px; border-radius: 50%; border: 4px solid #fff; display: flex; align-items: center; justify-content: center;">
+      <span style="width: 70px; height: 70px; border-radius: 50%; background: #fff; display: block;"></span>
+    </div>
+    <div style="width: 56px; height: 56px; border-radius: 16px; background: linear-gradient(150deg, {{accent}}, #d4520a); display: flex; align-items: center; justify-content: center;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#ff6a13","options":["#ff6a13","#c87d3f","#f58426","#1b5f52"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#ff6a13' };
+  }
+}
+</script>
+</body>
+</html>

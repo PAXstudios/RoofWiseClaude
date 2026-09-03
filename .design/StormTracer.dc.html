@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #ff6a13; } a:hover { color: #d4520a; }
+    .ic-s { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: {{bg}}; color: {{ink}}; overflow: hidden;">
+
+  <!-- Map surface -->
+  <div style="position: relative; flex-grow: 1; overflow: hidden; background: linear-gradient(160deg, #262c31, #1a1f24 60%, #2b3138);">
+    <div style="position: absolute; inset: 0; background: repeating-linear-gradient(58deg, rgba(255,255,255,0.045) 0 1px, transparent 1px 34px), repeating-linear-gradient(-32deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 42px);"></div>
+
+    <!-- hail swath -->
+    <div style="position: absolute; left: 46px; top: 150px; width: 250px; height: 190px; border-radius: 50%; background: radial-gradient(circle at 45% 40%, rgba(255,106,19,0.30), rgba(255,106,19,0.10) 58%, transparent 75%);"></div>
+
+    <!-- canvass ring on a saved area -->
+    <div style="position: absolute; left: 118px; top: 232px; width: 150px; height: 150px; border-radius: 50%; border: 2px dashed rgba(255,140,70,0.75); background: rgba(255,106,19,0.10);"></div>
+
+    <!-- storm report pins; two selected -->
+    <div style="position: absolute; left: 152px; top: 196px; width: 18px; height: 18px; border-radius: 50%; background: #8b939c; border: 2px solid #fff;"></div>
+    <div style="position: absolute; left: 232px; top: 218px; width: 18px; height: 18px; border-radius: 50%; background: #8b939c; border: 2px solid #fff;"></div>
+    <div style="position: absolute; left: 186px; top: 288px; width: 26px; height: 26px; border-radius: 50%; background: {{accent}}; border: 3px solid #fff; box-shadow: 0 0 0 7px rgba(255,106,19,0.28); display: flex; align-items: center; justify-content: center;">
+      <svg style="width: 13px; height: 13px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg>
+    </div>
+    <div style="position: absolute; left: 122px; top: 322px; width: 26px; height: 26px; border-radius: 50%; background: {{accent}}; border: 3px solid #fff; box-shadow: 0 0 0 7px rgba(255,106,19,0.28); display: flex; align-items: center; justify-content: center;">
+      <svg style="width: 13px; height: 13px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg>
+    </div>
+
+    <!-- top chrome: summary chip + control rail -->
+    <div style="position: absolute; top: 56px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start;">
+      <div style="display: inline-flex; align-items: center; gap: 8px; background: {{surface}}; color: {{ink}}; border-radius: 999px; padding: 11px 16px; font-size: 13px; font-weight: 600; border: 1px solid rgba(255,255,255,0.08);">
+        <span style="width: 9px; height: 9px; border-radius: 3px; background: {{accent}};"></span>Storms &middot; 36 mo &middot; Hail
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="width: 48px; height: 48px; border-radius: 15px; background: {{surface}}; color: {{ink}}; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.08);">
+          <svg class="ic-s" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        </div>
+        <div style="width: 48px; height: 48px; border-radius: 15px; background: {{surface}}; color: {{ink}}; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.08);">
+          <svg class="ic-s" viewBox="0 0 24 24"><path d="M12 21s7-6.3 7-12a7 7 0 1 0-14 0c0 5.7 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        </div>
+        <div style="width: 48px; height: 48px; border-radius: 15px; background: linear-gradient(150deg, {{accent}}, #d4520a); color: #fff; display: flex; align-items: center; justify-content: center;">
+          <svg class="ic-s" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg>
+        </div>
+        <div style="width: 48px; height: 48px; border-radius: 15px; background: {{surface}}; color: {{ink}}; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.08);">
+          <svg class="ic-s" viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- selection bar -->
+    <div style="position: absolute; left: 16px; right: 16px; bottom: 214px; display: flex; align-items: center; gap: 10px; background: rgba(10,12,16,0.94); color: #fff; border-radius: 18px; padding: 12px 14px; border: 1px solid rgba(255,255,255,0.10);">
+      <span style="flex-grow: 1; font-size: 15px; font-weight: 700;">2 areas selected</span>
+      <span style="font-size: 13px; font-weight: 700; padding: 10px 14px; border-radius: 999px; background: rgba(255,255,255,0.14);">Save</span>
+      <span style="font-size: 13px; font-weight: 700; padding: 10px 14px; border-radius: 999px; background: linear-gradient(150deg, {{accent}}, #d4520a);">Start route</span>
+    </div>
+
+    <!-- bottom drawer -->
+    <div style="position: absolute; left: 0; right: 0; bottom: 0; background: {{surface}}; border-radius: 24px 24px 0 0; padding: 12px 20px 20px; border-top: 1px solid rgba(255,255,255,0.08);">
+      <div style="width: 44px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.16); margin: 0 auto 16px;"></div>
+      <div style="display: flex; gap: 22px; margin-bottom: 16px;">
+        <div><div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">2.5&Prime;</div><div style="font-size: 11px; opacity: 0.5; font-weight: 600;">MAX HAIL</div></div>
+        <div><div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">640</div><div style="font-size: 11px; opacity: 0.5; font-weight: 600;">REPORTS</div></div>
+        <div><div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">18</div><div style="font-size: 11px; opacity: 0.5; font-weight: 600;">LEADS NEAR</div></div>
+      </div>
+      <div style="height: 56px; border-radius: 18px; background: linear-gradient(150deg, {{accent}}, #d4520a); color: #fff; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <svg class="ic-s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>Knock mode
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; justify-content: space-around; padding: 12px 0 26px; background: {{surface}}; border-top: 1px solid rgba(255,255,255,0.07);">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.45;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg>Home
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.45;">
+      <svg class="ic-s" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/></svg>Pipeline
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: {{accent}};">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>Map
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.45;">
+      <svg class="ic-s" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M8 3v4M16 3v4"/></svg>Plan
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.45;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M5 4h11a2 2 0 0 1 2 2v14H7a2 2 0 0 0-2 2z"/><path d="M5 4v16"/></svg>Train
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#ff6a13","options":["#ff6a13","#c87d3f","#f58426","#1b5f52"]},"bg":{"editor":"color","default":"#14171b"},"surface":{"editor":"color","default":"#1e2227"},"ink":{"editor":"color","default":"#ededea"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#ff6a13',
+      bg: this.props.bg ?? '#14171b',
+      surface: this.props.surface ?? '#1e2227',
+      ink: this.props.ink ?? '#ededea',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #1b5f52; } a:hover { color: #0e3d34; }
+    .ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    .ic-s { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: {{bg}}; color: {{ink}}; overflow: hidden;">
+
+  <!-- Hero: copper + patina on a green-black ground -->
+  <div style="padding: 56px 20px 20px; color: #fff; background: radial-gradient(95% 82% at 88% 6%, {{accent}} 0%, transparent 55%), radial-gradient(72% 62% at 4% 96%, {{copper}} 0%, transparent 52%), linear-gradient(150deg, #10221e, #1b3b33);">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M3 12 12 4l9 8"/><path d="M5 11v8h14v-8"/></svg>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 11px; opacity: 0.78; font-weight: 500;">Good morning</div>
+        <div style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em;">Dave</div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center; position: relative;">
+          <svg class="ic-s" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          <span style="position: absolute; top: 11px; right: 11px; width: 7px; height: 7px; border-radius: 50%; background: {{copper}};"></span>
+        </div>
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;">
+          <svg class="ic-s" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: flex-end; gap: 4px; margin-top: 24px;">
+      <span style="font-size: 60px; font-weight: 200; line-height: 0.9; letter-spacing: -0.04em;">73</span>
+      <span style="font-size: 22px; font-weight: 300; margin-bottom: 8px; opacity: 0.8;">&deg;</span>
+      <div style="margin-left: auto; text-align: right;">
+        <div style="font-size: 15px; font-weight: 600;">Partly Cloudy</div>
+        <div style="font-size: 11px; opacity: 0.78;">Plano, TX</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 16px; margin-top: 16px; font-size: 11px; opacity: 0.85;">
+      <span>H:88&deg; L:64&deg;</span><span>Wind 12 mph</span><span>UV 6</span>
+    </div>
+
+    <div style="display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 9px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.18);">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #7fc4a8;"></span>Roofing conditions: Good
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px;">
+
+    <div style="display: flex; gap: 12px;">
+      <div style="flex-grow: 1; flex-basis: 0; min-height: 124px; border-radius: 20px; padding: 16px; color: #fff; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(150deg, {{copper}}, #a25f2a);">
+        <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center;">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg>
+        </div>
+        <div>
+          <div style="font-size: 17px; font-weight: 700; line-height: 1.12; letter-spacing: -0.01em;">Quick<br>Inspection</div>
+          <div style="font-size: 11px; opacity: 0.88; margin-top: 3px;">Camera &rarr; AI &rarr; Packet</div>
+        </div>
+      </div>
+      <div style="flex-grow: 1; flex-basis: 0; min-height: 124px; border-radius: 20px; padding: 16px; color: #fff; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(150deg, {{accent}}, #0e3d34);">
+        <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center;">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div>
+          <div style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em;">New Job</div>
+          <div style="font-size: 11px; opacity: 0.85; margin-top: 3px;">Customer &middot; insurance</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+      <div style="min-height: 92px; border-radius: 16px; padding: 14px; color: #fff; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(150deg, {{accent}}, #0e3d34);">
+        <svg class="ic-s" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+        <div><div style="font-size: 15px; font-weight: 700;">Storm Tracer</div><div style="font-size: 11px; opacity: 0.85;">Where it hit</div></div>
+      </div>
+      <div style="min-height: 92px; border-radius: 16px; padding: 14px; color: #fff; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(150deg, {{copper}}, #a25f2a);">
+        <svg class="ic-s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>
+        <div><div style="font-size: 15px; font-weight: 700;">Knock Planner</div><div style="font-size: 11px; opacity: 0.88;">Best streets</div></div>
+      </div>
+      <div style="min-height: 92px; border-radius: 16px; padding: 14px; color: #fff; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(150deg, #2e8b77, {{accent}});">
+        <svg class="ic-s" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2"/></svg>
+        <div><div style="font-size: 15px; font-weight: 700;">Estimator</div><div style="font-size: 11px; opacity: 0.85;">Price a roof</div></div>
+      </div>
+      <div style="min-height: 92px; border-radius: 16px; padding: 14px; color: #fff; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(150deg, #d99a5c, {{copper}});">
+        <svg class="ic-s" viewBox="0 0 24 24"><path d="M5 13 6.5 8h11L19 13"/><path d="M4 13h16v5H4z"/><circle cx="7.5" cy="18" r="1.4"/><circle cx="16.5" cy="18" r="1.4"/></svg>
+        <div><div style="font-size: 15px; font-weight: 700;">Mileage</div><div style="font-size: 11px; opacity: 0.88;">Track drives</div></div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px;">
+      <span style="font-size: 17px; font-weight: 700; letter-spacing: -0.01em;">Recent</span>
+      <span style="font-size: 13px; font-weight: 600; color: {{accent}};">See all</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 16px; background: {{surface}}; border: 1px solid rgba(31,42,38,0.10);">
+      <div style="width: 52px; height: 52px; border-radius: 12px; background: linear-gradient(140deg, #c3cbc2, #96a396); flex-shrink: 0;"></div>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 15px; font-weight: 600;">1420 Oak Street</div>
+        <div style="font-size: 11px; opacity: 0.55;">Frisco, TX &middot; Inspected</div>
+      </div>
+      <span style="font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 999px; background: #dcece6; color: {{accent}};">REVIEW</span>
+    </div>
+  </div>
+
+  <div style="display: flex; justify-content: space-around; padding: 12px 0 26px; background: {{surface}}; border-top: 1px solid rgba(31,42,38,0.10);">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: {{accent}};">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg>Home
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.42;">
+      <svg class="ic-s" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/></svg>Pipeline
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.42;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>Map
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.42;">
+      <svg class="ic-s" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M8 3v4M16 3v4"/></svg>Plan
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; opacity: 0.42;">
+      <svg class="ic-s" viewBox="0 0 24 24"><path d="M5 4h11a2 2 0 0 1 2 2v14H7a2 2 0 0 0-2 2z"/><path d="M5 4v16"/></svg>Train
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#1b5f52","options":["#1b5f52","#2e8b77","#c87d3f","#ff6a13"]},"copper":{"editor":"color","default":"#c87d3f","options":["#c87d3f","#d99a5c","#a25f2a","#ff6a13"]},"bg":{"editor":"color","default":"#f4f1ea"},"surface":{"editor":"color","default":"#fffdf8"},"ink":{"editor":"color","default":"#1f2a26"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#1b5f52',
+      copper: this.props.copper ?? '#c87d3f',
+      bg: this.props.bg ?? '#f4f1ea',
+      surface: this.props.surface ?? '#fffdf8',
+      ink: this.props.ink ?? '#1f2a26',
+    };
+  }
+}
+</script>
+</body>
+</html>
