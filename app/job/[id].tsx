@@ -530,6 +530,49 @@ export default function JobDetail() {
     );
   };
 
+  const runLongReport = async () => {
+    try {
+      setGeneratingLong(true);
+      // Freeze first, then render from the frozen record. The Long Report
+      // resolves the stored engine result itself and builds its own per-slope
+      // cost rows (`perSlopeFromEngine`) — passing a live evaluation here
+      // would put the old re-derive-at-render behaviour back.
+      const finalized = await finalizeWithSnapshot();
+      const { uri } = await generateLongReport({ inspection: finalized });
+      logActivity({
+        kind: 'pdf_generated',
+        inspectionId: inspection.id,
+        message: `Generated Long Report for ${inspection.reportId}`,
+      });
+      await Share.share({ url: uri, message: `RoofWise Long Report ${inspection.reportId}` });
+    } catch (e) {
+      Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setGeneratingLong(false);
+    }
+  };
+
+  // Same §3 brittleness gate as the HAAG packet (audit: the Long Report used
+  // to bypass it). The report prints the gap as a callout either way.
+  const onGenerateLongReport = () => {
+    if (missing.any) {
+      setDetailsSheet(true);
+      return;
+    }
+    if (!brittlenessGap) {
+      void runLongReport();
+      return;
+    }
+    Alert.alert(
+      'Claim evidence is incomplete',
+      `${brittlenessGap}\n\nThe Long Report discloses the gap either way — the adjuster will see it.`,
+      [
+        { text: 'Record now', style: 'cancel', onPress: jumpToClaimEvidence },
+        { text: 'Generate anyway', onPress: () => void runLongReport() },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -1158,32 +1201,7 @@ export default function JobDetail() {
           style={[styles.quietCta, (generatingLong || missing.any) && { opacity: 0.5 }]}
           disabled={generatingLong || missing.any}
           accessibilityState={{ disabled: generatingLong || missing.any }}
-          onPress={async () => {
-            if (missing.any) {
-              setDetailsSheet(true);
-              return;
-            }
-            try {
-              setGeneratingLong(true);
-              // Freeze first, then render from the frozen record. The Long
-              // Report resolves the stored engine result itself and builds its
-              // own per-slope cost rows (`perSlopeFromEngine`) — passing a
-              // live evaluation here would put the old re-derive-at-render
-              // behaviour back.
-              const finalized = await finalizeWithSnapshot();
-              const { uri } = await generateLongReport({ inspection: finalized });
-              logActivity({
-                kind: 'pdf_generated',
-                inspectionId: inspection.id,
-                message: `Generated Long Report for ${inspection.reportId}`,
-              });
-              await Share.share({ url: uri, message: `RoofWise Long Report ${inspection.reportId}` });
-            } catch (e) {
-              Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
-            } finally {
-              setGeneratingLong(false);
-            }
-          }}
+          onPress={onGenerateLongReport}
         >
           <Ionicons name="reader-outline" size={20} color={colors.text} />
           <Text style={styles.quietCtaText}>
