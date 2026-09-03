@@ -1,14 +1,12 @@
 import { PressableScale } from '@/components/PressableScale';
-import { formatDate, formatDateShort, formatRelative } from '@/lib/format/date';
-import { useRef, useState } from 'react';
+import { formatDateShort, formatRelative, isValidDate } from '@/lib/format/date';
+import { useState } from 'react';
 import {
-  ScrollView,
   View,
   Text,
   StyleSheet,
   Alert,
   Share,
-  TextInput,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,13 +16,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
-import { useProposalStore } from '@/lib/stores/proposalStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { useTaskStore } from '@/lib/stores/taskStore';
+import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
-import { QuickActions } from '@/components/pipeline/QuickActions';
 import { FOLLOW_UP_OPTIONS, FollowUpSheet } from '@/components/pipeline/FollowUpSheet';
-import { LinkedLeadCard } from '@/components/pipeline/LinkedLeadCard';
-import { findLinkedLead, nextStageFor } from '@/components/pipeline/chain';
+import { findLinkedLead, daysInStage } from '@/components/pipeline/chain';
+import { JOB_STATUS_META } from '@/components/pipeline/JobPipelineCard';
 import * as ImagePicker from 'expo-image-picker';
 import { generateHaagReport } from '@/lib/services/haagPdf';
 import { generateLongReport } from '@/lib/services/longReport';
@@ -41,32 +39,19 @@ import {
 } from '@/lib/services/analysisQueue';
 import { useCaptureSettingsStore } from '@/lib/stores/captureSettingsStore';
 import { DEFAULT_CAPTURE_MODE, defaultAreaTagForSlope } from '@/lib/services/captureSession';
-import { SignaturePad } from '@/components/SignaturePad';
-import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
-import { DamageScoreBar } from '@/components/DamageScoreBar';
-import { DamageScoreCard } from '@/components/DamageScoreCard';
-import { PropertyIntelCard } from '@/components/PropertyIntelCard';
-import { DamageDetailSection, summarizeInspection } from '@/components/DamageDetailSection';
-import { documentedCoverage, documentedSummary } from '@/lib/services/documentedSquares';
-import { deriveFunctional } from '@/lib/services/functionalDamage';
+import { summarizeInspection } from '@/components/DamageDetailSection';
 import { describeMissingDetails, missingJobDetails } from '@/lib/services/placeholderDetails';
 import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
 import { CoverPhotoSheet } from '@/components/sheets/CoverPhotoSheet';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
-import { totalSquares as intelTotalSquares } from '@/lib/services/propertyIntel';
-import { coverPhotoUri, recordFactsLine, recordRoofLine, recordStatusBadge, roofAgePrefill, roofSizePlausibility } from '@/lib/services/propertyRecord';
-import { openMail, openPhone } from '@/components/pipeline/contact';
+import { coverPhotoUri, roofAgePrefill } from '@/lib/services/propertyRecord';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
-import { damageScoreFromEngine } from '@/lib/services/damageScore';
-import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { transcribeAudio } from '@/lib/services/transcribeAudio';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { isGeminiConfigured } from '@/lib/env';
-import { carrierBarsRead, thresholdFor } from '@/lib/services/haagThresholds';
 import {
   CLAIM_VIABILITY_LABELS,
   ROOFWISE_RECOMMENDATION_LABELS,
-  SAFETY_RATING_LABELS,
   type ClaimViabilityBand,
   type RoofwiseRecommendation,
 } from '@/lib/services/decisionEngine';
@@ -76,24 +61,22 @@ import {
   storedEngineFreshness,
 } from '@/lib/services/storedEngine';
 import { getSafetyForecast } from '@/lib/services/weather';
+import { jobAmount, useEstimateForJob, useProposalsForJob } from '@/lib/services/proposals';
 import {
   CAUSE_OF_LOSS_LABELS,
-  COLLATERAL_ZONES,
-  COLLATERAL_ZONE_LABELS,
-  DAMAGE_CATEGORY_LABELS,
-  INSURANCE_CARRIER_LABELS,
+  LEAD_STAGE_LABELS,
+  LEAD_STAGE_ORDER,
   POLICY_TYPE_LABELS,
   ROOF_MATERIAL_LABELS,
-  type BrittlenessResult,
+  leadStageColumn,
+  type CollateralZone,
   type Inspection,
-  type Slope,
+  type InspectionStatus,
+  type LeadStage,
   type SlopeOrientation,
-  type SlopeVerdict,
 } from '@/lib/models/types';
-import { RichCard } from '@/components/ui/RichCard';
-import { SectionHeader } from '@/components/ui/SectionHeader';
-import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { Pill, type PillTone } from '@/components/ui/Pill';
+import type { ChipTone } from '@/components/ui/IconChip';
 import {
   brand,
   colors,
@@ -105,81 +88,63 @@ import {
   spacing,
   touchTarget,
 } from '@/theme/tokens';
+import { JOB_TAB_DEFS, JobTabs, type JobTabKey } from '@/components/job/JobTabs';
+import { StageSheet, type StageRow } from '@/components/job/StageSheet';
+import { OverviewTab, type NextAction } from '@/components/job/OverviewTab';
+import { MeasureTab } from '@/components/job/MeasureTab';
+import { PhotosTab } from '@/components/job/PhotosTab';
+import { ProposalTab } from '@/components/job/ProposalTab';
+import { TasksTab } from '@/components/job/TasksTab';
 
-/**
- * Roof-system subtitle. Fields absent on an older persisted inspection are
- * DROPPED, never interpolated — a card reading "undefined · 12 yr · undefined"
- * is worse than one reading "12 yr".
- */
-function roofSystemLine(ins: Inspection): string {
-  const age =
-    ins.ageSource === 'year_built'
-      ? `≤${ins.ageYears} yr (from build year)`
-      : ins.ageSource === 'listing'
-        ? `${ins.ageYears} yr (listing)`
-        : ins.ageSource === 'listing_new_roof'
-          ? `${ins.ageYears} yr (new roof per listing)`
-          : `${ins.ageYears} yr`;
-  return [ins.geometry, age, ins.condition]
-    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+/** Every tab renders — components/pipeline/TasksCard.tsx landed during this
+ *  integration, so Tasks is no longer conditionally omitted (see
+ *  components/job/TasksTab.tsx's header comment). */
+const VISIBLE_TABS = JOB_TAB_DEFS;
+
+function isJobTabKey(v: unknown): v is JobTabKey {
+  return typeof v === 'string' && VISIBLE_TABS.some((t) => t.key === v);
+}
+
+/** Days the job has sat with no linked lead — same read as chain.ts's
+ *  `daysInStage`, over the job's own status timestamp instead of a lead's. */
+function jobDaysInStage(ins: Pick<Inspection, 'statusChangedAt' | 'createdAt'>, now: number = Date.now()): number | null {
+  const raw = ins.statusChangedAt ?? ins.createdAt;
+  if (!isValidDate(raw)) return null;
+  const ms = now - new Date(raw).getTime();
+  return ms < 0 ? null : Math.floor(ms / 86400000);
+}
+
+const LEAD_STAGE_LATE = new Set<LeadStage>(['signed', 'install_scheduled', 'in_progress', 'completed', 'invoiced', 'paid']);
+
+/** The hero pill's tone, by how far along the ladder a lead has moved. */
+function leadStagePillTone(stage: LeadStage): PillTone {
+  if (stage === 'lost') return 'danger';
+  if (LEAD_STAGE_LATE.has(stage)) return 'success';
+  if (stage === 'estimate_sent' || stage === 'proposal_sent') return 'warn';
+  return 'info';
+}
+
+/** Same read, for the StageSheet rows' IconChip (a different, 5-value tone family). */
+function leadStageChipTone(stage: LeadStage): ChipTone {
+  if (stage === 'lost') return 'quiet';
+  if (LEAD_STAGE_LATE.has(stage)) return 'green';
+  if (stage === 'estimate_sent' || stage === 'proposal_sent') return 'orange';
+  return 'blue';
+}
+
+/** "Architectural Asphalt · 2-story" — material always known; stories only
+ *  when the Zillow record has one. "Access" is not modeled anywhere in
+ *  RoofWise yet, so it is never invented here (Drift #5). */
+function propertyOneLiner(ins: Inspection): string {
+  const stories = ins.propertyRecord?.status === 'found' ? ins.propertyRecord.stories : undefined;
+  return [ROOF_MATERIAL_LABELS[ins.material], stories ? `${stories}-story` : undefined]
+    .filter((s): s is string => Boolean(s))
     .join(' · ');
 }
 
-/** Rates are read by adjusters — print 6.9, never 6.888888888888889. */
-function fmtRate(n: number): string {
-  if (!Number.isFinite(n)) return '0';
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
-
-const COLLATERAL_ITEMS = [
-  { key: 'brittleness_observed', label: 'Brittleness observed on test shingles' },
-  { key: 'mat_exposed', label: 'Mat exposure visible on damaged slopes' },
-  { key: 'multi_layer', label: 'Multi-layer roof system (2+ layers)' },
-  { key: 'metal_collateral', label: 'Collateral damage on metal (vents, flashing, AC)' },
-  { key: 'window_screens', label: 'Hail damage on window screens / siding' },
-  { key: 'gutters_dented', label: 'Dents in gutters or downspouts' },
-];
-
-/** Claim-viability band → the Pill tone that carries it on the photo hero. */
-const BAND_PILL_TONE: Record<ClaimViabilityBand, PillTone> = {
-  HIGH: 'success',
-  MEDIUM: 'warn',
-  LOW: 'danger',
-};
-
-/** Roofwise recommendation → icon chip colour/glyph for the HAAG verdict card. */
-const RECOMMENDATION_TONE: Record<RoofwiseRecommendation, ChipTone> = {
-  FULL_REPLACEMENT: 'orange',
-  PARTIAL_REPLACEMENT: 'orange',
-  REPAIR: 'green',
-  NO_STORM_DAMAGE: 'quiet',
-};
-const RECOMMENDATION_ICON: Record<RoofwiseRecommendation, IoniconName> = {
-  FULL_REPLACEMENT: 'hammer-outline',
-  PARTIAL_REPLACEMENT: 'construct-outline',
-  REPAIR: 'checkmark-done-outline',
-  NO_STORM_DAMAGE: 'close-circle-outline',
-};
-
-/** Per-slope verdict → Pill tone + label. Same semantics the old hand-rolled
- * VerdictPill used (accent/warn/info/neutral), just spoken through the
- * shared `Pill` primitive instead of a bespoke badge. */
-const SLOPE_VERDICT_PILL_TONE: Record<SlopeVerdict, PillTone> = {
-  full_replace: 'accent',
-  partial_replace: 'warn',
-  verify_with_inspector: 'info',
-  repair: 'neutral',
-};
-const SLOPE_VERDICT_LABEL: Record<SlopeVerdict, string> = {
-  full_replace: 'Full replace',
-  partial_replace: 'Partial',
-  verify_with_inspector: 'Verify',
-  repair: 'Repair',
-};
-
 export default function JobDetail() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
   const inspection = useInspectionStore((s) => s.inspections.find((i) => i.id === id));
   const remove = useInspectionStore((s) => s.remove);
   const setStatus = useInspectionStore((s) => s.setStatus);
@@ -196,36 +161,39 @@ export default function JobDetail() {
   const setCoverPhoto = useInspectionStore((s) => s.setCoverPhoto);
   const lookupRecord = usePropertyRecordStore((s) => s.lookup);
   const [coverSheet, setCoverSheet] = useState(false);
-  const [recordBusy, setRecordBusy] = useState(false);
   const addAudioNote = useInspectionStore((s) => s.addAudioNote);
   const removeAudioNote = useInspectionStore((s) => s.removeAudioNote);
   const setAudioNoteLabel = useInspectionStore((s) => s.setAudioNoteLabel);
   const toast = useToastStore((s) => s.show);
   const logActivity = useActivityStore((s) => s.log);
-  const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const attachRawPhotos = useInspectionStore((s) => s.attachRawPhotos);
   const multiSelectImport = useCaptureSettingsStore((s) => s.multiSelectImport);
-  // The lead behind this job — the other half of the Lead → Job chain. Read
-  // here so the customer action row and the status toggle can move it.
+  // The lead behind this job — the other half of the Lead → Job chain.
   const leads = useLeadStore((s) => s.leads);
   const setLeadStage = useLeadStore((s) => s.setStage);
   const setLeadFollowUp = useLeadStore((s) => s.setFollowUp);
   const [followUpSheet, setFollowUpSheet] = useState(false);
-  // The customer / address / roof-system editor. A standalone Quick
-  // Inspection lands here as "Quick inspection / Address pending"; this is
-  // where it gets corrected.
+  const [stageSheet, setStageSheet] = useState(false);
   const [detailsSheet, setDetailsSheet] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingLong, setGeneratingLong] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<LibraryImportProgress | null>(null);
-  // Library import asks WHICH slope first — it used to file everything under
-  // the last slope (South on an empty job), silently.
   const [importSlopePicker, setImportSlopePicker] = useState(false);
-  // "Record now" on the finalize gate has to land the roofer on the card that
-  // fixes the problem, not just dismiss a dialog.
-  const scrollRef = useRef<ScrollView>(null);
-  const evidenceCardY = useRef(0);
+
+  // Deep-link `?tab=` on first mount only — a per-mount instance then keeps
+  // whatever tab the roofer is on across a back-navigation return, per the
+  // wave brief's "component state only, not persisted".
+  const [tab, setTab] = useState<JobTabKey>(() => (isJobTabKey(tabParam) ? tabParam : 'overview'));
+
+  // findLinkedLead needs a real Inspection; guarded here (not below) because
+  // every hook that reads it must itself be called before the `!inspection`
+  // return — same reason `proposalsForJob` / `estimateForThisJob` /
+  // `taskCounts` sit up here rather than by the rest of their kin below.
+  const linkedLead = inspection ? findLinkedLead(inspection, leads) : undefined;
+  const proposalsForJob = useProposalsForJob(inspection?.id);
+  const estimateForThisJob = useEstimateForJob(inspection);
+  const taskCounts = useTaskStore((s) => s.counts([linkedLead?.id, inspection?.id]));
 
   if (!inspection) {
     return (
@@ -242,39 +210,24 @@ export default function JobDetail() {
     );
   }
 
-  // The same read path the reports use: the STORED engine result when it still
-  // speaks for the current inputs, otherwise a fresh evaluation. Reading it
-  // here is what keeps this screen and the generated PDF from ever showing two
-  // different determinations for one roof.
-  //
-  // `honorFreeze: false`: this screen describes the roof as it stands right
-  // now. When the report was signed and the inputs changed afterwards, the
-  // frozen snapshot is a pre-edit determination — restating it here would hide
-  // the edit. The banner below says the signed packet is behind; regenerating
-  // re-freezes the two together.
+  // The same read path the reports use — see the long comment this used to
+  // carry in the single-scroll job page; unchanged.
   const { haag, decision } = resolveEngineResult(inspection, Date.now(), { honorFreeze: false });
   const engineFreshness = storedEngineFreshness(inspection);
   const isClaim = inspection.kind === 'insurance_claim';
 
-  // A verdict needs evidence. With zero analyzed photos the engine still
-  // returns a band and a recommendation (it evaluates whatever it is given),
-  // and rendering "Medium · Repair" on a job nobody has photographed is a
-  // synthesized determination (Drift #5). Every verdict slot below reads this
-  // and shows "Not assessed" until at least one photo has been analyzed —
-  // the same rule DamageScoreCard already enforces for the score.
   const analyzedPhotos = summarizeInspection(inspection).analyzedPhotos;
   const hasEvidence = analyzedPhotos > 0;
-
-  // Placeholder customer / address (a standalone Quick Inspection, or a job
-  // whose details were never filled). The packet and the proposal CTAs stay
-  // off until both are real — "Address pending" must never reach a carrier.
   const missing = missingJobDetails(inspection);
 
-  // Explicit link only (`inspection.leadId` / `lead.inspectionId`) — never a
-  // name match, which could hang another customer's follow-ups on this roof.
-  const linkedLead = findLinkedLead(inspection, leads);
+  const totalPhotos = inspection.slopes.reduce((a, sl) => a + sl.photoPaths.length, 0);
+  const pendingHere = pendingPhotoCount(deriveAnalysisProgress([inspection]));
 
-  /** Follow-ups live on the lead; a job with no lead has nowhere to keep one. */
+  // ── Money chain for the hero + At-a-Glance (hooks live above the
+  // `!inspection` return; this just combines their already-read values) ────
+  const amount = jobAmount({ proposals: proposalsForJob, estimate: estimateForThisJob, lead: linkedLead });
+  const openTaskCount = taskCounts.total - taskCounts.done;
+
   const onPickFollowUp = (when: Date | null) => {
     setFollowUpSheet(false);
     if (!linkedLead) return;
@@ -284,39 +237,14 @@ export default function JobDetail() {
       return;
     }
     setLeadFollowUp(linkedLead.id, when.toISOString());
-    scheduleFollowUpReminder({
-      leadId: linkedLead.id,
-      customerName: linkedLead.customerName,
-      date: when,
-    }).catch(() => {});
+    scheduleFollowUpReminder({ leadId: linkedLead.id, customerName: linkedLead.customerName, date: when }).catch(() => {});
     toast({ tone: 'success', title: 'Follow-up set', body: formatDateShort(when) });
   };
 
-  // The hero's photo: the inspector's pick, else the Zillow listing photo,
-  // else the first captured photo (lib/services/propertyRecord.ts). Never
-  // stock imagery: nothing yet means the gradient placeholder, not a
-  // synthesized house.
   const heroPhoto = coverPhotoUri(inspection);
-  const totalPhotos = inspection.slopes.reduce((a, sl) => a + sl.photoPaths.length, 0);
-  const totalFindings = inspection.slopes.reduce(
-    (a, sl) => a + (sl.aiFindings ?? []).filter((f) => f.detected).length,
-    0,
-  );
-  // Live analysis backlog for THIS job — drives the header status button and
-  // is the same real per-photo count the Processing view reads.
-  const pendingHere = pendingPhotoCount(deriveAnalysisProgress([inspection]));
 
-  const openCapture = () =>
-    router.push({ pathname: '/quick-inspection', params: { jobId: inspection.id } });
+  const openCapture = () => router.push({ pathname: '/quick-inspection', params: { jobId: inspection.id } });
 
-  /**
-   * Import existing photos from the library straight into this job. Each asset
-   * rides the shared `importFromLibrary` service (same pipeline + multi-select
-   * story as the capture screen), attaches to the slope the inspector picks in
-   * the sheet — never a guessed one — then the whole slope is queued for
-   * background analysis — so imported photos flow through the exact same
-   * analysis queue as captured ones and land back here with per-photo state.
-   */
   const runJobLibraryImport = () => {
     if (importing) return;
     setImportSlopePicker(true);
@@ -333,11 +261,7 @@ export default function JobDetail() {
         multiSelect: multiSelectImport,
         onProgress: setImportProgress,
         onPhoto: (uri) => {
-          // Throwing marks THIS asset failed in the service and the batch
-          // continues — a single bad write never loses the rest.
-          attachRawPhotos(inspection.id, [
-            { uri, slope: targetSlope, areaTag, captureMode: DEFAULT_CAPTURE_MODE },
-          ]);
+          attachRawPhotos(inspection.id, [{ uri, slope: targetSlope, areaTag, captureMode: DEFAULT_CAPTURE_MODE }]);
         },
       });
 
@@ -352,21 +276,14 @@ export default function JobDetail() {
       }
 
       if (result.imported > 0) {
-        const slope = useInspectionStore
-          .getState()
-          .getById(inspection.id)
-          ?.slopes.find((s) => s.orientation === targetSlope);
+        const slope = useInspectionStore.getState().getById(inspection.id)?.slopes.find((s) => s.orientation === targetSlope);
         logActivity({
           kind: 'photo_captured',
           inspectionId: inspection.id,
           message: `Imported ${result.imported} photo${result.imported === 1 ? '' : 's'} from library`,
         });
         if (slope && isGeminiConfigured) {
-          queueSlopeAnalysis({
-            inspectionId: inspection.id,
-            slopeId: slope.id,
-            slopeLabel: slope.orientation,
-          });
+          queueSlopeAnalysis({ inspectionId: inspection.id, slopeId: slope.id, slopeLabel: slope.orientation });
           toast({
             tone: 'success',
             title: `Imported ${result.imported} photo${result.imported === 1 ? '' : 's'}`,
@@ -376,9 +293,7 @@ export default function JobDetail() {
           toast({
             tone: isGeminiConfigured ? 'success' : 'warn',
             title: `Imported ${result.imported} photo${result.imported === 1 ? '' : 's'}`,
-            body: isGeminiConfigured
-              ? undefined
-              : 'AI not connected — photos saved without analysis.',
+            body: isGeminiConfigured ? undefined : 'AI not connected — photos saved without analysis.',
           });
         }
       }
@@ -388,15 +303,10 @@ export default function JobDetail() {
         const first = result.failures[0].reason;
         Alert.alert(
           result.imported > 0 ? `Imported ${result.imported}, skipped ${n}` : "Couldn't read that photo",
-          isUnreadableAssetError(first)
-            ? `${first} Try different photos, or run on a real iPhone.`
-            : first,
+          isUnreadableAssetError(first) ? `${first} Try different photos, or run on a real iPhone.` : first,
         );
       } else if (result.reachedLimit && result.imported > 0) {
-        Alert.alert(
-          'Import paused',
-          `Added ${result.imported} photos. Tap Import again to keep going.`,
-        );
+        Alert.alert('Import paused', `Added ${result.imported} photos. Tap Import again to keep going.`);
       }
     } catch (e) {
       Alert.alert('Import failed', e instanceof Error ? e.message : 'Unknown error');
@@ -406,15 +316,9 @@ export default function JobDetail() {
     }
   };
 
-  // Pre-formatted insurance body lines — computed once so the RichCard below
-  // can pass `null` (no body at all) rather than an array of `false`s when
-  // there is nothing real to show.
   const insurancePolicyLine =
     inspection.policyNumber || inspection.claimNumber
-      ? [
-          inspection.policyNumber && `Policy ${inspection.policyNumber}`,
-          inspection.claimNumber && `Claim ${inspection.claimNumber}`,
-        ]
+      ? [inspection.policyNumber && `Policy ${inspection.policyNumber}`, inspection.claimNumber && `Claim ${inspection.claimNumber}`]
           .filter(Boolean)
           .join('  ·  ')
       : null;
@@ -423,8 +327,6 @@ export default function JobDetail() {
         inspection.causeOfLoss && CAUSE_OF_LOSS_LABELS[inspection.causeOfLoss],
         inspection.policyType && POLICY_TYPE_LABELS[inspection.policyType],
         inspection.deductible != null && `$${inspection.deductible.toLocaleString()} deductible`,
-        // Formatted, never raw: the stored value is an ISO timestamp and a
-        // raw one reads as broken on a claim screen.
         inspection.dateOfLoss && `DOL ${formatDateShort(inspection.dateOfLoss)}`,
       ]
         .filter(Boolean)
@@ -432,28 +334,20 @@ export default function JobDetail() {
     : null;
 
   const onDelete = () => {
-    Alert.alert(
-      'Delete job?',
-      `${inspection.reportId} will be permanently removed.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => {
+    Alert.alert('Delete job?', `${inspection.reportId} will be permanently removed.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
           remove(inspection.id);
-          // dismissTo, not replace: replace stacked a second tab shell (NAV-3).
           router.dismissTo('/(tabs)');
-        } },
-      ],
-    );
+        },
+      },
+    ]);
   };
 
   // ---------- Finalize gate (insurance claims) ----------
-  //
-  // The brittleness protocol is the §3 repairability gate: with no result the
-  // gate cannot be evaluated at all, and with a result but no photograph it
-  // rests on the inspector's word alone (§VII-C requires the process be
-  // photographed). Both gaps are DISCLOSED in the generated report, so this is
-  // informative friction and never a hard block — a roofer standing next to an
-  // adjuster may need the packet now and record the test after.
   const proto = inspection.brittlenessProtocol;
   const brittlenessGap: string | null = !isClaim
     ? null
@@ -463,69 +357,35 @@ export default function JobDetail() {
         ? `Brittleness test recorded as ${proto.result}, but no photo evidence is attached. The field protocol requires a photo of the test process.`
         : null;
 
-  const jumpToClaimEvidence = () =>
-    scrollRef.current?.scrollTo({
-      y: Math.max(0, evidenceCardY.current - spacing.xl),
-      animated: true,
-    });
-
-  /**
-   * Freeze the determination the report is about to be signed with, and hand
-   * back the inspection the report should render from.
-   *
-   * Order matters: the snapshot is taken and stored BEFORE the PDF renders, so
-   * the document restates exactly the determination that was frozen. Snapshot
-   * after rendering and a report generated with no prior snapshot would print
-   * one determination while the store froze another.
-   *
-   * The §7 safety rating needs a real forecast, and the engine is pure, so the
-   * fetch happens at this call site. `getSafetyForecast()` returns null when
-   * the service is unreachable or location was never granted; that is passed
-   * through as `undefined` so the engine records honest uncertainty rather
-   * than a rating computed from absent inputs.
-   */
   const finalizeWithSnapshot = async (): Promise<Inspection> => {
     const at = new Date().toISOString();
     try {
-      const coord =
-        inspection.lat != null && inspection.lng != null
-          ? { lat: inspection.lat, lng: inspection.lng }
-          : undefined;
+      const coord = inspection.lat != null && inspection.lng != null ? { lat: inspection.lat, lng: inspection.lng } : undefined;
       const forecast = (await getSafetyForecast(coord)) ?? undefined;
       const { payload } = snapshotEngineResult(inspection, at, forecast);
-      // `force`: this IS the deliberate re-finalize path, so it is allowed to
-      // replace a previously frozen snapshot — and it re-stamps
-      // `reportFinalizedAt` below, so the record and the document stay in step.
       setStoredEngineResult(inspection.id, payload, at, { force: true });
     } catch {
-      // A missed snapshot is recoverable — the report falls back to evaluating
-      // the same engine at render time.
+      // A missed snapshot is recoverable — the report falls back to evaluating the same engine at render time.
     }
     setReportFinalizedAt(inspection.id, at);
-    // Re-read: `inspection` is this render's snapshot and does not carry the
-    // fields just written.
-    return (
-      useInspectionStore.getState().inspections.find((i) => i.id === inspection.id) ?? inspection
-    );
+    return useInspectionStore.getState().inspections.find((i) => i.id === inspection.id) ?? inspection;
   };
 
+  // Both raw generators self-gate on `missing.any` (the belt-and-braces the
+  // disabled CTA already carries) and otherwise generate unconditionally —
+  // the brittleness-gap Alert (with its "Record now" → scroll-to-evidence)
+  // now lives in OverviewTab, the one place that owns the scroll ref the
+  // jump needs. See OverviewTab's `onGenerateHaagPress` / `onGenerateLongPress`.
   const runHaagReport = async () => {
-    // Belt and braces with the disabled CTA: nothing generates a packet that
-    // names "Quick inspection" at "Address pending".
     if (missing.any) {
       setDetailsSheet(true);
       return;
     }
     try {
       setGenerating(true);
-      // Freeze first, then render from the frozen record.
       const finalized = await finalizeWithSnapshot();
       const { uri } = await generateHaagReport(finalized);
-      logActivity({
-        kind: 'pdf_generated',
-        inspectionId: inspection.id,
-        message: `Generated HAAG report for ${inspection.reportId}`,
-      });
+      logActivity({ kind: 'pdf_generated', inspectionId: inspection.id, message: `Generated HAAG report for ${inspection.reportId}` });
       await Share.share({ url: uri, message: `RoofWise HAAG report ${inspection.reportId}` });
     } catch (e) {
       Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
@@ -534,35 +394,16 @@ export default function JobDetail() {
     }
   };
 
-  const onGenerateHaagReport = () => {
-    if (!brittlenessGap) {
-      void runHaagReport();
+  const runLongReport = async () => {
+    if (missing.any) {
+      setDetailsSheet(true);
       return;
     }
-    Alert.alert(
-      'Claim evidence is incomplete',
-      `${brittlenessGap}\n\nThe report discloses the gap either way — the adjuster will see it.`,
-      [
-        { text: 'Record now', style: 'cancel', onPress: jumpToClaimEvidence },
-        { text: 'Generate anyway', onPress: () => void runHaagReport() },
-      ],
-    );
-  };
-
-  const runLongReport = async () => {
     try {
       setGeneratingLong(true);
-      // Freeze first, then render from the frozen record. The Long Report
-      // resolves the stored engine result itself and builds its own per-slope
-      // cost rows (`perSlopeFromEngine`) — passing a live evaluation here
-      // would put the old re-derive-at-render behaviour back.
       const finalized = await finalizeWithSnapshot();
       const { uri } = await generateLongReport({ inspection: finalized });
-      logActivity({
-        kind: 'pdf_generated',
-        inspectionId: inspection.id,
-        message: `Generated Long Report for ${inspection.reportId}`,
-      });
+      logActivity({ kind: 'pdf_generated', inspectionId: inspection.id, message: `Generated Long Report for ${inspection.reportId}` });
       await Share.share({ url: uri, message: `RoofWise Long Report ${inspection.reportId}` });
     } catch (e) {
       Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
@@ -571,25 +412,128 @@ export default function JobDetail() {
     }
   };
 
-  // Same §3 brittleness gate as the HAAG packet (audit: the Long Report used
-  // to bypass it). The report prints the gap as a callout either way.
-  const onGenerateLongReport = () => {
-    if (missing.any) {
-      setDetailsSheet(true);
+  // ---------- Claim-evidence photo pickers (shared by zones + brittleness) ----------
+  const onPickZonePhoto = (zone: CollateralZone) => {
+    void pickEvidencePhoto((uri) => {
+      const current = useInspectionStore.getState().getById(inspection.id)?.collateralEvidence?.[zone];
+      setCollateralZone(inspection.id, zone, { photoIds: [...(current?.photoIds ?? []), uri], checked: true });
+    });
+  };
+  const onPickBrittlenessPhoto = () => {
+    if (!inspection.brittlenessProtocol) {
+      Alert.alert('Pick a result first', 'Record the test result (Pass / Fail / Borderline), then attach the photo of the test process.');
       return;
     }
-    if (!brittlenessGap) {
-      void runLongReport();
+    void pickEvidencePhoto((uri) => {
+      const current = useInspectionStore.getState().getById(inspection.id)?.brittlenessProtocol;
+      if (!current) return;
+      setBrittlenessProtocol(inspection.id, { ...current, photoIds: [...current.photoIds, uri] });
+    });
+  };
+
+  // ---------- Stage sheet (the hero pill) ----------
+  const stageRows: StageRow[] = linkedLead
+    ? [
+        ...LEAD_STAGE_ORDER.map(
+          (s): StageRow => ({ key: s, label: LEAD_STAGE_LABELS[s], icon: 'flag-outline', tone: leadStageChipTone(s) }),
+        ),
+        { key: 'lost', label: LEAD_STAGE_LABELS.lost, icon: 'close-circle-outline', tone: 'quiet' },
+      ]
+    : (['lead', 'scheduled', 'in_progress', 'complete'] as InspectionStatus[]).map(
+        (s): StageRow => ({ key: s, label: JOB_STATUS_META[s].label, icon: JOB_STATUS_META[s].icon, tone: JOB_STATUS_META[s].chipTone }),
+      );
+  const currentStageKey = linkedLead ? leadStageColumn(linkedLead.stage) : inspection.status;
+  const stagePillLabel = linkedLead ? LEAD_STAGE_LABELS[leadStageColumn(linkedLead.stage)] : JOB_STATUS_META[inspection.status].label;
+  const stagePillTone: PillTone = linkedLead ? leadStagePillTone(leadStageColumn(linkedLead.stage)) : JOB_STATUS_META[inspection.status].pillTone;
+
+  const onPickStage = (key: string) => {
+    if (linkedLead) {
+      const stage = key as LeadStage;
+      setLeadStage(linkedLead.id, stage);
+      logActivity({
+        kind: 'stage_changed',
+        inspectionId: inspection.id,
+        leadId: linkedLead.id,
+        message: `Moved ${linkedLead.customerName} to ${LEAD_STAGE_LABELS[stage]}`,
+      });
+      // Keep the job's own completion state honest too — a pipeline stage at
+      // or past "Inspection Complete" means the inspection itself is done,
+      // the same fact "Mark complete" used to record by hand.
+      if (stage !== 'lost') {
+        const idx = LEAD_STAGE_ORDER.indexOf(leadStageColumn(stage));
+        const inspectedIdx = LEAD_STAGE_ORDER.indexOf('inspected');
+        setStatus(inspection.id, idx >= inspectedIdx ? 'complete' : 'in_progress');
+      }
+    } else {
+      const status = key as InspectionStatus;
+      setStatus(inspection.id, status);
+      logActivity({
+        kind: status === 'complete' ? 'inspection_completed' : 'job_created',
+        inspectionId: inspection.id,
+        message: status === 'complete' ? `Marked ${inspection.reportId} complete` : `Set ${inspection.reportId} to ${JOB_STATUS_META[status].label}`,
+      });
+    }
+  };
+
+  // ---------- Hero meta strip ----------
+  const heroUpdatedAt = linkedLead ? (linkedLead.updatedAt ?? linkedLead.stageChangedAt ?? linkedLead.createdAt) : (inspection.statusChangedAt ?? inspection.createdAt);
+  const updatedLabel = isValidDate(heroUpdatedAt) ? `Updated ${formatRelative(heroUpdatedAt)}` : undefined;
+  const stageDays = linkedLead ? daysInStage(linkedLead) : jobDaysInStage(inspection);
+  const daysLabel = stageDays != null ? `${stageDays}d in stage` : undefined;
+
+  // ---------- Next action (Overview) ----------
+  const nextAction: NextAction | null = missing.any
+    ? { icon: 'person-add-outline', tone: 'orange', title: 'Add customer & address', sub: 'Reports and the proposal are off until these are real', onPress: () => setDetailsSheet(true) }
+    : totalPhotos === 0
+      ? { icon: 'camera', tone: 'blue', title: 'Capture photos', sub: 'Take photos to analyze this roof', onPress: () => setTab('photos') }
+      : pendingHere > 0
+        ? { icon: 'hourglass-outline', tone: 'blue', title: 'Analysis in progress', sub: `${pendingHere} photo${pendingHere === 1 ? '' : 's'} analyzing`, onPress: () => setTab('photos') }
+        : !hasEvidence
+          ? { icon: 'analytics-outline', tone: 'blue', title: 'Analyze captured photos', sub: 'Get a verdict for this roof', onPress: () => setTab('photos') }
+          : proposalsForJob.length === 0
+            ? { icon: 'document-attach-outline', tone: 'orange', title: 'Build a proposal', sub: 'Turn the assessment into a price', onPress: () => setTab('proposal') }
+            : proposalsForJob[0].status === 'draft'
+              ? { icon: 'send-outline', tone: 'orange', title: 'Send the proposal', sub: `$${proposalsForJob[0].total.toLocaleString()} — ready to go out`, onPress: () => setTab('proposal') }
+              : proposalsForJob[0].status === 'sent' || proposalsForJob[0].status === 'viewed'
+                ? { icon: 'alarm-outline', tone: 'blue', title: 'Follow up on the proposal', sub: `Sent — ${LEAD_STAGE_LABELS[currentStageKeyForFollowUp(linkedLead)]}`, onPress: linkedLead ? () => setFollowUpSheet(true) : () => setTab('proposal') }
+                : null;
+
+  const onOpenTab = (t: JobTabKey) => setTab(t);
+
+  const onEstimateThisRoof = () => {
+    useWizardPrefillStore.getState().set({
+      source: 'estimate',
+      address: inspection.address,
+      addressLat: inspection.lat,
+      addressLng: inspection.lng,
+      material: inspection.material,
+    });
+    router.push('/estimator');
+  };
+
+  const onOpenPitchGauge = () => router.push({ pathname: '/pitch-gauge', params: { inspectionId: inspection.id } });
+
+  const onBuildProposal = () => router.push(`/proposal/${inspection.id}` as any);
+  const onEditProposal = (proposalId: string) => router.push(`/proposal/${inspection.id}?proposalId=${encodeURIComponent(proposalId)}` as any);
+
+  // Genuinely async (not a fire-and-forget wrapper): VoiceNoteRecorder awaits
+  // this to drive its own per-note spinner, so a sync wrapper that returned
+  // immediately would clear that spinner before the transcription actually
+  // finished.
+  const onTranscribeAudioNote = async (noteId: string) => {
+    if (!isGeminiConfigured) {
+      toast({ tone: 'warn', title: 'AI not connected', body: "AI analysis isn't set up on this build — ask your admin." });
       return;
     }
-    Alert.alert(
-      'Claim evidence is incomplete',
-      `${brittlenessGap}\n\nThe Long Report discloses the gap either way — the adjuster will see it.`,
-      [
-        { text: 'Record now', style: 'cancel', onPress: jumpToClaimEvidence },
-        { text: 'Generate anyway', onPress: () => void runLongReport() },
-      ],
-    );
+    const note = (inspection.audioNotes ?? []).find((n) => n.id === noteId);
+    if (!note) return;
+    try {
+      const text = await transcribeAudio(note.uri);
+      setAudioNoteLabel(inspection.id, noteId, text || 'Transcription unavailable');
+      toast({ tone: 'success', title: 'Note transcribed' });
+    } catch (e) {
+      toast({ tone: 'danger', title: 'Transcription failed', body: e instanceof Error ? e.message.slice(0, 80) : undefined });
+    }
   };
 
   return (
@@ -599,61 +543,10 @@ export default function JobDetail() {
         <PressableScale onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </PressableScale>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.reportId}>{inspection.reportId}</Text>
-          <Text style={styles.customer}>{inspection.customerName}</Text>
-        </View>
-        <PressableScale
-          onPress={() => {
-            const next =
-              inspection.status === 'complete'
-                ? 'in_progress'
-                : inspection.status === 'in_progress'
-                ? 'complete'
-                : 'in_progress';
-            setStatus(inspection.id, next);
-            logActivity({
-              kind: next === 'complete' ? 'inspection_completed' : 'job_created',
-              inspectionId: inspection.id,
-              leadId: linkedLead?.id,
-              message:
-                next === 'complete'
-                  ? `Marked ${inspection.reportId} complete`
-                  : `Reopened ${inspection.reportId}`,
-            });
-            // A completed inspection moves its lead to "Inspection Complete"
-            // — forward only, so a lead already past it stays where it is.
-            if (next === 'complete' && linkedLead) {
-              const stage = nextStageFor(linkedLead, 'inspection_complete');
-              if (stage) setLeadStage(linkedLead.id, stage);
-            }
-          }}
-          hitSlop={10}
-          style={[
-            styles.statusToggle,
-            inspection.status === 'complete' && styles.statusToggleComplete,
-          ]}
-        >
-          <Ionicons
-            name={
-              inspection.status === 'complete'
-                ? 'checkmark-circle'
-                : 'ellipse-outline'
-            }
-            size={18}
-            color={
-              inspection.status === 'complete' ? colors.textInverse : colors.text
-            }
-          />
-          <Text
-            style={[
-              styles.statusToggleText,
-              inspection.status === 'complete' && { color: colors.textInverse },
-            ]}
-          >
-            {inspection.status === 'complete' ? 'Complete' : 'Mark complete'}
-          </Text>
-        </PressableScale>
+        <Text style={styles.headerReportId} numberOfLines={1}>
+          {inspection.reportId}
+        </Text>
+        <View style={{ flex: 1 }} />
         {pendingHere > 0 && (
           <PressableScale
             onPress={() => router.push('/processing')}
@@ -670,704 +563,235 @@ export default function JobDetail() {
         </PressableScale>
       </View>
 
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll}>
-        {/* A placeholder job announces itself before anything else on the
-            page: the hero below would otherwise present "Address pending" as
-            the property. One tap opens the editor. */}
-        {missing.any && (
-          <PressableScale
-            style={styles.missingBanner}
-            onPress={() => setDetailsSheet(true)}
-            accessibilityRole="button"
-            accessibilityLabel={`${describeMissingDetails(missing)}. This job still has placeholder details. Tap to add them.`}
-          >
-            <Ionicons name="person-add-outline" size={22} color={colors.warn} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.missingTitle}>{describeMissingDetails(missing)}</Text>
-              <Text style={styles.missingBody}>
-                This job still has placeholder details. Reports and the proposal are off until the
-                customer and address are real.
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.warn} />
-          </PressableScale>
-        )}
-
-        {/* The screen's cinematic moment: the job's own photo, the address,
-            the claim-viability call, and the verdict — a document a carrier
-            respects, not a settings row. */}
-        <JobHero
-          photoUri={heroPhoto}
-          onChangePhoto={() => setCoverSheet(true)}
-          reportId={inspection.reportId}
-          address={missing.address ? 'Address not set' : inspection.address}
-          band={hasEvidence ? haag.claim_viability : undefined}
-          recommendation={hasEvidence ? haag.roofwise_recommendation : undefined}
-        />
-
-        {/* Customer action row — the phone and email were already on the
-            record; this surfaces them. Call / Text / Email / Directions open
-            the OS; "Follow-up" books on the linked lead and is absent when
-            there is no lead to book on (no dead buttons). */}
-        <QuickActions
-          name={inspection.customerName}
-          phone={inspection.customerPhone}
-          email={inspection.customerEmail}
-          address={inspection.address}
-          coords={{ lat: inspection.lat, lng: inspection.lng }}
-          onBook={linkedLead ? () => setFollowUpSheet(true) : undefined}
-          bookLabel="Follow-up"
-          onContacted={
-            linkedLead && linkedLead.stage === 'new'
-              ? () => setLeadStage(linkedLead.id, 'contacted')
-              : undefined
-          }
-        />
-
-        {/* The lead this job came from — stage and next follow-up, tap → lead. */}
-        {linkedLead && <LinkedLeadCard lead={linkedLead} />}
-
-        {/* The owner's ask: from inside a job, take photos to analyse — a big,
-            unmissable primary. Opens capture linked to THIS job so every photo
-            attaches here and flows through the analysis queue. */}
+      {missing.any && (
         <PressableScale
-          style={styles.captureCta}
-          onPress={openCapture}
+          style={styles.missingBanner}
+          onPress={() => setDetailsSheet(true)}
           accessibilityRole="button"
-          accessibilityLabel="Take photos to analyse for this job"
+          accessibilityLabel={`${describeMissingDetails(missing)}. This job still has placeholder details. Tap to add them.`}
         >
-          <Ionicons name="camera" size={24} color={colors.textInverse} />
-          <Text style={styles.captureCtaText}>Take photos to analyse</Text>
-        </PressableScale>
-
-        <PressableScale
-          style={[styles.importCta, importing && { opacity: 0.6 }]}
-          disabled={importing}
-          onPress={runJobLibraryImport}
-          accessibilityRole="button"
-          accessibilityLabel="Import photos from library for this job"
-        >
-          {importing ? (
-            <ActivityIndicator size="small" color={colors.text} />
-          ) : (
-            <Ionicons name="images-outline" size={22} color={colors.text} />
-          )}
-          <Text style={styles.importCtaText}>
-            {importing
-              ? importProgress
-                ? importProgress.phase === 'multi'
-                  ? `Importing ${importProgress.done} of ${importProgress.total}…`
-                  : `Imported ${importProgress.done}…`
-                : 'Opening library…'
-              : 'Import from library'}
-          </Text>
-        </PressableScale>
-
-        {pendingHere > 0 && (
-          <View style={styles.pendingStrip}>
-            <AnalysisQueueChip inspectionId={inspection.id} />
-          </View>
-        )}
-
-        <SectionHeader title="Property" style={styles.sectionSpacing} />
-
-        {/* What the app worked out on its own. Every per-square number on this
-            screen — HAAG §5 repair cost, the estimate, the proposal — is priced
-            against this measurement, so it leads the section. */}
-        <PropertyIntelCard
-          inspection={inspection}
-          onMeasured={(intel) => setPropertyIntel(inspection.id, intel)}
-        />
-
-        {/* What the listing world knows (Zillow via APIllow): the house photo,
-            year built, size, last sale. Roof age is PREFILLED from it only
-            when the inspector has not entered one, and the card says so. */}
-        <PropertyRecordCard
-          inspection={inspection}
-          busy={recordBusy}
-          onLookup={async (force) => {
-            if (missing.address) {
-              setDetailsSheet(true);
-              return;
-            }
-            setRecordBusy(true);
-            try {
-              const rec = await lookupRecord(inspection.address, { force });
-              setPropertyRecord(inspection.id, rec);
-              toast(
-                rec.status === 'found'
-                  ? { tone: 'success', title: 'Property record found', body: recordFactsLine(rec) }
-                  : { tone: 'warn', title: 'No property record', body: rec.reason },
-              );
-            } finally {
-              setRecordBusy(false);
-            }
-          }}
-        />
-
-        {/* Customer, address, and roof system — editable. Placeholders read as
-            what they are ("not set"), never as a name or a street. */}
-        <RichCard
-          icon="person-outline"
-          iconTone="blue"
-          title={missing.name ? 'Customer not set' : inspection.customerName}
-          subtitle={missing.address ? 'Address not set' : inspection.address}
-          action={{ label: 'Edit', onPress: () => setDetailsSheet(true), icon: 'create-outline' }}
-          contentStyle={styles.bodyRows}
-          accessibilityLabel="Customer and property details"
-        >
-          {(inspection.customerPhone || inspection.customerEmail) && (
-            <Text style={styles.cardSub}>
-              {[inspection.customerPhone, inspection.customerEmail].filter(Boolean).join('  ·  ')}
-            </Text>
-          )}
-          <View style={styles.roofLine}>
-            <Ionicons name="layers-outline" size={15} color={colors.textMuted} />
-            <Text style={styles.cardSub}>
-              {ROOF_MATERIAL_LABELS[inspection.material]}
-              {roofSystemLine(inspection) ? ` · ${roofSystemLine(inspection)}` : ''}
+          <Ionicons name="person-add-outline" size={22} color={colors.warn} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.missingTitle}>{describeMissingDetails(missing)}</Text>
+            <Text style={styles.missingBody}>
+              This job still has placeholder details. Reports and the proposal are off until the customer and
+              address are real.
             </Text>
           </View>
-        </RichCard>
-
-        {(inspection.carrier || isClaim) && (
-          <RichCard
-            icon="shield-outline"
-            iconTone="purple"
-            title={inspection.carrier ? INSURANCE_CARRIER_LABELS[inspection.carrier] : 'Insurance'}
-            headerTrailing={isClaim ? <Pill label="Insurance Claim" tone="accent" size="sm" /> : undefined}
-            contentStyle={styles.bodyRows}
-          >
-            {insurancePolicyLine || claimDetailLine ? (
-              <>
-                {insurancePolicyLine && <Text style={styles.cardSub}>{insurancePolicyLine}</Text>}
-                {claimDetailLine && <Text style={styles.cardSub}>{claimDetailLine}</Text>}
-              </>
-            ) : null}
-          </RichCard>
-        )}
-
-        {inspection.event && (
-          <RichCard
-            icon="thunderstorm"
-            iconTone="orange"
-            title={
-              inspection.event.kind === 'hail'
-                ? `${inspection.event.hailSizeInches?.toFixed(2) ?? ''}" hail`
-                : `${inspection.event.windSpeedMph ?? ''} mph wind`
-            }
-            subtitle={`${formatDate(inspection.event.date, 'Date unavailable')}${
-              inspection.event.distanceMiles ? ` · ${inspection.event.distanceMiles.toFixed(1)} mi away` : ''
-            } · ${inspection.event.source}${
-              inspection.event.noaaEventId ? ` · ${inspection.event.noaaEventId}` : ''
-            }`}
-          />
-        )}
-
-        <SectionHeader title="Assessment" style={styles.sectionSpacing} />
-
-        {/* Condition severity (0-100, 100 = sound) derived from the SAME engine
-            result the verdict below cites - passing `haag` rather than letting
-            the score re-run the engine is what keeps the two in agreement on a
-            frozen packet. */}
-        <DamageScoreCard result={damageScoreFromEngine(inspection, haag)} />
-
-        <DamageScoreBar
-          band={hasEvidence ? haag.claim_viability : undefined}
-          stats={[
-            { label: 'Slopes', value: String(inspection.slopes.length) },
-            { label: 'Photos', value: String(totalPhotos) },
-            { label: 'Findings', value: String(totalFindings) },
-          ]}
-        />
-
-        <SectionHeader title="Damage detail" style={styles.sectionSpacing} />
-
-        {/* Everything the PDF says, readable here: every category found, on
-            which slopes, tap → the photo. */}
-        <DamageDetailSection inspection={inspection} />
-
-        <RichCard
-          icon={hasEvidence ? RECOMMENDATION_ICON[haag.roofwise_recommendation] : 'help-circle-outline'}
-          iconTone={hasEvidence ? RECOMMENDATION_TONE[haag.roofwise_recommendation] : 'quiet'}
-          title="HAAG Verdict"
-          subtitle={
-            hasEvidence
-              ? ROOFWISE_RECOMMENDATION_LABELS[haag.roofwise_recommendation]
-              : 'Not assessed — analyze photos'
-          }
-        >
-          <Text style={styles.cardSub}>
-            {hasEvidence
-              ? decision.roofVerdictReasoning
-              : 'No analyzed photos yet — a verdict with no evidence behind it would be invented. Capture and analyze photos to get one.'}
-          </Text>
-          <View style={styles.safetyRow}>
-            <Ionicons name="shield-outline" size={15} color={colors.textMuted} />
-            <Text style={styles.safetyText}>
-              Roofer safety: {SAFETY_RATING_LABELS[haag.roofer_safety_rating]}
-            </Text>
-          </View>
-        </RichCard>
-
-        <RichCard
-          onPress={() =>
-            router.push({ pathname: '/quick-inspection', params: { jobId: inspection.id } })
-          }
-          icon="scan-outline"
-          iconTone="blue"
-          title="Start Quick Inspection"
-          subtitle="Capture more photos for this job"
-          chevron
-        />
-
-        <SectionHeader title="Roof Slopes" style={styles.sectionSpacing} />
-
-        {inspection.slopes.length === 0 ? (
-          <View style={styles.placeholderBox}>
-            <IconChip name="camera-outline" tone="quiet" size="md" />
-            <Text style={styles.placeholderText}>
-              No slopes captured yet. Tap Start Quick Inspection to take photos.
-            </Text>
-          </View>
-        ) : (
-          inspection.slopes.map((slope) => {
-            const result = decision.perSlope.find((r) => r.slopeId === slope.id);
-            return (
-              <SlopeBlock
-                key={slope.id}
-                inspection={inspection}
-                slope={slope}
-                verdict={result?.verdict ?? 'repair'}
-                reasoning={result?.reasoning ?? ''}
-                confidenceAvg={result?.confidenceAvg ?? 0}
-                // The rate the ENGINE used, not a second derivation — the test
-                // square line must state the same number the verdict cites.
-                hitsPerSquare={
-                  haag.slope_evaluations.find((e) => e.slope === slope.id)?.hail_hits_per_square
-                }
-              />
-            );
-          })
-        )}
-
-        {/* A proposal names the customer and the property on its cover; with
-            placeholders it opens the editor instead of a document that says
-            "Quick inspection". */}
-        <RichCard
-          onPress={() =>
-            missing.any
-              ? setDetailsSheet(true)
-              : router.push(`/proposal/${inspection.id}` as any)
-          }
-          icon="document-attach-outline"
-          iconTone={missing.any ? 'quiet' : proposal ? 'green' : 'blue'}
-          title={proposal ? `Proposal · $${proposal.total.toLocaleString()}` : 'Generate proposal'}
-          subtitle={
-            missing.any
-              ? `${describeMissingDetails(missing)} first — the proposal names them`
-              : proposal
-                ? `${proposal.status} · ${proposal.lineItems.length} line items`
-                : 'From Decision Engine + Solar squares + regional pricing'
-          }
-          chevron
-        />
-
-        <SectionHeader title="Collateral" style={styles.sectionSpacing} />
-
-        <RichCard icon="checkbox-outline" iconTone="blue" title="Collateral Checklist" contentStyle={styles.bodyRows}>
-          {COLLATERAL_ITEMS.map((item) => {
-            // `?? {}`: inspections persisted before this field existed (and
-            // records round-tripped through sync) arrive without it, and a
-            // bare index here took the whole job screen down.
-            const checked = !!(inspection.collateralChecklist ?? {})[item.key];
-            return (
-              <PressableScale
-                key={item.key}
-                style={styles.collateralRow}
-                onPress={() => setCollateralItem(inspection.id, item.key, !checked)}
-              >
-                <Ionicons
-                  name={checked ? 'checkbox' : 'square-outline'}
-                  size={22}
-                  color={checked ? colors.success : colors.textSubtle}
-                />
-                <Text style={[styles.collateralLabel, checked && styles.collateralChecked]}>
-                  {item.label}
-                </Text>
-              </PressableScale>
-            );
-          })}
-        </RichCard>
-
-        {isClaim && (
-          <View
-            onLayout={(e) => {
-              evidenceCardY.current = e.nativeEvent.layout.y;
-            }}
-          >
-            <RichCard
-              icon="shield-checkmark-outline"
-              iconTone="purple"
-              title="Claim Evidence"
-              contentStyle={styles.bodyRows}
-            >
-              {COLLATERAL_ZONES.map((zone) => {
-                const item = inspection.collateralEvidence?.[zone] ?? { checked: false, photoIds: [] };
-                return (
-                  <View key={zone} style={styles.zoneRow}>
-                    <PressableScale
-                      style={[styles.collateralRow, { flex: 1 }]}
-                      onPress={() =>
-                        setCollateralZone(inspection.id, zone, { checked: !item.checked })
-                      }
-                    >
-                      <Ionicons
-                        name={item.checked ? 'checkbox' : 'square-outline'}
-                        size={22}
-                        color={item.checked ? colors.success : colors.textSubtle}
-                      />
-                      <Text style={styles.collateralLabel}>{COLLATERAL_ZONE_LABELS[zone]}</Text>
-                    </PressableScale>
-                    <PressableScale
-                      style={styles.zonePhotoBtn}
-                      accessibilityLabel={`Add photo for ${COLLATERAL_ZONE_LABELS[zone]}`}
-                      onPress={() =>
-                        void pickEvidencePhoto((uri) => {
-                          // Re-read: the picker is async and the record may have
-                          // changed while the camera was open.
-                          const current = useInspectionStore
-                            .getState()
-                            .getById(inspection.id)?.collateralEvidence?.[zone];
-                          setCollateralZone(inspection.id, zone, {
-                            photoIds: [...(current?.photoIds ?? []), uri],
-                            // A photographed zone is a checked zone — a clean
-                            // photo still proves the zone was worked.
-                            checked: true,
-                          });
-                        })
-                      }
-                    >
-                      <Ionicons name="camera-outline" size={20} color={colors.text} />
-                      {item.photoIds.length > 0 && (
-                        <Text style={styles.zonePhotoCount}>{item.photoIds.length}</Text>
-                      )}
-                    </PressableScale>
-                  </View>
-                );
-              })}
-
-              <Text style={[styles.cardLabel, { marginTop: spacing.md }]}>Brittleness test</Text>
-              <Text style={styles.cardSub}>
-                Lift shingle corners in an undamaged area and photograph the test — the photo is
-                required evidence on an insurance report.
-              </Text>
-              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-                {(['PASS', 'FAIL', 'BORDERLINE'] as BrittlenessResult[]).map((r) => {
-                  const active = inspection.brittlenessProtocol?.result === r;
-                  return (
-                    <PressableScale
-                      key={r}
-                      style={[styles.britChip, active && styles.britChipActive]}
-                      onPress={() =>
-                        setBrittlenessProtocol(inspection.id, {
-                          result: r,
-                          photoIds: inspection.brittlenessProtocol?.photoIds ?? [],
-                          notes: inspection.brittlenessProtocol?.notes,
-                        })
-                      }
-                    >
-                      <Text style={[styles.britChipText, active && styles.britChipTextActive]}>
-                        {r === 'PASS' ? 'Pass' : r === 'FAIL' ? 'Fail' : 'Borderline'}
-                      </Text>
-                    </PressableScale>
-                  );
-                })}
-              </View>
-              <PressableScale
-                style={styles.analyzeBtn}
-                onPress={() => {
-                  if (!inspection.brittlenessProtocol) {
-                    Alert.alert(
-                      'Pick a result first',
-                      'Record the test result (Pass / Fail / Borderline), then attach the photo of the test process.',
-                    );
-                    return;
-                  }
-                  void pickEvidencePhoto((uri) => {
-                    const current = useInspectionStore
-                      .getState()
-                      .getById(inspection.id)?.brittlenessProtocol;
-                    if (!current) return;
-                    setBrittlenessProtocol(inspection.id, {
-                      ...current,
-                      photoIds: [...current.photoIds, uri],
-                    });
-                  });
-                }}
-              >
-                <Ionicons name="camera-outline" size={18} color={colors.text} />
-                <Text style={styles.analyzeBtnText}>
-                  Add test photo
-                  {(inspection.brittlenessProtocol?.photoIds.length ?? 0) > 0
-                    ? ` (${inspection.brittlenessProtocol?.photoIds.length})`
-                    : ''}
-                </Text>
-              </PressableScale>
-              {inspection.brittlenessProtocol &&
-                inspection.brittlenessProtocol.photoIds.length === 0 && (
-                  <Text style={styles.evidenceWarn}>
-                    Photo of the test process is still required before this result can go to a
-                    carrier.
-                  </Text>
-                )}
-            </RichCard>
-          </View>
-        )}
-
-        <SectionHeader title="Documentation" style={styles.sectionSpacing} />
-
-        <RichCard icon="create-outline" iconTone="blue" title="Notes">
-          <TextInput
-            value={inspection.notes ?? ''}
-            onChangeText={(t) => setNotes(inspection.id, t)}
-            placeholder="Anything the AI shouldn't miss?"
-            placeholderTextColor={colors.textSubtle}
-            style={styles.notesInput}
-            multiline
-            textAlignVertical="top"
-          />
-        </RichCard>
-
-        <VoiceNoteRecorder
-          notes={inspection.audioNotes ?? []}
-          onRecorded={(note) => addAudioNote(inspection.id, note)}
-          onRemove={(noteId) => removeAudioNote(inspection.id, noteId)}
-          onTranscribe={async (noteId) => {
-            if (!isGeminiConfigured) {
-              toast({
-                tone: 'warn',
-                title: 'AI not connected',
-                body: "AI analysis isn't set up on this build — ask your admin.",
-              });
-              return;
-            }
-            const note = (inspection.audioNotes ?? []).find((n) => n.id === noteId);
-            if (!note) return;
-            try {
-              const text = await transcribeAudio(note.uri);
-              setAudioNoteLabel(inspection.id, noteId, text || 'Transcription unavailable');
-              toast({ tone: 'success', title: 'Note transcribed' });
-            } catch (e) {
-              toast({
-                tone: 'danger',
-                title: 'Transcription failed',
-                body: e instanceof Error ? e.message.slice(0, 80) : undefined,
-              });
-            }
-          }}
-        />
-
-        <RichCard
-          icon="finger-print-outline"
-          iconTone="purple"
-          title="Inspector Signature"
-          subtitle="Sign below to seal the HAAG report."
-        >
-          <View style={{ alignItems: 'center', marginTop: spacing.md }}>
-            <SignaturePad
-              onChange={(svg, meta) => {
-                // A knuckle-brush is not a seal: only a signature's worth of
-                // ink is recorded (the pad reports, this screen decides).
-                if (svg && meta.meaningful) setInspectorSignature(inspection.id, svg);
-              }}
-            />
-          </View>
-          {inspection.inspectorSignatureSvg && (
-            <View style={styles.signedBadge}>
-              <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-              <Text style={styles.signedBadgeText}>Signed</Text>
-            </View>
-          )}
-        </RichCard>
-
-        {/* THE one orange moment on this screen: generate the report / claim
-            packet. Everything else on the page is quiet by comparison. */}
-        <PressableScale
-          style={[styles.reportCtaShadow, (generating || missing.any) && styles.reportCtaDisabled]}
-          disabled={generating || missing.any}
-          onPress={onGenerateHaagReport}
-          accessibilityRole="button"
-          accessibilityLabel={isClaim ? 'Generate HAAG claim packet PDF' : 'Generate HAAG report PDF'}
-          accessibilityState={{ disabled: generating || missing.any }}
-        >
-          <View style={styles.reportCtaClip}>
-            <LinearGradient
-              colors={gradients.accent}
-              style={StyleSheet.absoluteFill}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            />
-            <View style={styles.reportCtaContent}>
-              <Ionicons name="document-text-outline" size={20} color={colors.textInverse} />
-              <Text style={styles.reportCtaText}>
-                {generating
-                  ? 'Generating…'
-                  : isClaim
-                    ? 'Generate HAAG claim packet (PDF)'
-                    : 'Generate HAAG report (PDF)'}
-              </Text>
-            </View>
-          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.warn} />
         </PressableScale>
-        {missing.any && (
-          <Text style={styles.gateHint}>
-            {describeMissingDetails(missing)} before generating — a packet cannot go to a carrier
-            with placeholder details.
-          </Text>
-        )}
-        {isClaim && brittlenessGap && (
-          <Text style={styles.gateHint}>
-            Brittleness evidence is incomplete — the packet will disclose it.
-          </Text>
-        )}
-        {inspection.reportFinalizedAt && (
-          <Text style={styles.finalizedHint}>
-            Report last finalized {formatRelative(inspection.reportFinalizedAt)}
-          </Text>
-        )}
-        {engineFreshness.staleFrozen && (
-          <Text style={styles.gateHint}>
-            This job changed since that report was finalized. The determination above is
-            current; the signed PDF is not — regenerate it before sending.
-          </Text>
-        )}
+      )}
 
-        <PressableScale
-          style={[styles.quietCta, (generatingLong || missing.any) && { opacity: 0.5 }]}
-          disabled={generatingLong || missing.any}
-          accessibilityState={{ disabled: generatingLong || missing.any }}
-          onPress={onGenerateLongReport}
-        >
-          <Ionicons name="reader-outline" size={20} color={colors.text} />
-          <Text style={styles.quietCtaText}>
-            {generatingLong ? 'Generating…' : 'Generate Long Report (PDF)'}
-          </Text>
-        </PressableScale>
-      </ScrollView>
-    {linkedLead && (
-      <FollowUpSheet
-        visible={followUpSheet}
-        title="Set follow-up"
-        subtitle={linkedLead.customerName}
-        options={FOLLOW_UP_OPTIONS}
-        clearLabel={linkedLead.followUpAt ? 'Clear follow-up' : undefined}
-        onPick={onPickFollowUp}
-        onClose={() => setFollowUpSheet(false)}
+      <CompactHero
+        photoUri={heroPhoto}
+        onChangePhoto={() => setCoverSheet(true)}
+        reportId={inspection.reportId}
+        customerName={missing.name ? 'Customer not set' : inspection.customerName}
+        address={missing.address ? 'Address not set' : inspection.address}
+        oneLiner={propertyOneLiner(inspection)}
+        band={hasEvidence ? haag.claim_viability : undefined}
+        recommendation={hasEvidence ? haag.roofwise_recommendation : undefined}
+        stageLabel={stagePillLabel}
+        stageTone={stagePillTone}
+        onOpenStage={() => setStageSheet(true)}
+        updatedLabel={updatedLabel}
+        daysLabel={daysLabel}
+        amount={amount}
       />
-    )}
-    <SlopePickerSheet
-      visible={importSlopePicker}
-      title="Import to which slope?"
-      reason="Photos are filed per slope — the per-slope hit count is what the HAAG threshold reads."
-      photoCounts={Object.fromEntries(inspection.slopes.map((sl) => [sl.orientation, sl.photoPaths.length]))}
-      onSelect={(sl) => {
-        runJobLibraryImportFor(sl).catch(() => {});
-      }}
-      onCancel={() => setImportSlopePicker(false)}
-    />
-    <CustomerDetailsSheet
-      visible={detailsSheet}
-      onClose={() => setDetailsSheet(false)}
-      title={missing.any ? 'Who is this job for?' : 'Edit customer & property'}
-      subtitle={
-        missing.any
-          ? 'This job was saved from a quick capture. Name the customer and the property so the packet can go out.'
-          : inspection.reportId
-      }
-      initial={{
-        customerName: inspection.customerName,
-        customerPhone: inspection.customerPhone,
-        customerEmail: inspection.customerEmail,
-        address: inspection.address,
-        lat: inspection.lat,
-        lng: inspection.lng,
-        material: inspection.material,
-        condition: inspection.condition,
-        ageYears: inspection.ageYears,
-      }}
-      roof
-      ageHint={roofAgePrefill(inspection.propertyRecord, new Date().getFullYear())}
-      onSave={(d) => {
-        const addressChanged = d.address.trim() !== inspection.address.trim();
-        updateDetails(inspection.id, {
-          customerName: d.customerName,
-          customerPhone: d.customerPhone,
-          customerEmail: d.customerEmail,
-          address: d.address,
-          lat: d.lat,
-          lng: d.lng,
-          ...(d.material ? { material: d.material } : {}),
-          ...(d.condition ? { condition: d.condition } : {}),
-          // The inspector's number, with its provenance — it beats any prefill.
-          // A number taken from the record's chip keeps the record's source.
-          ...(d.ageYears != null && d.ageYears !== inspection.ageYears ? { ageYears: d.ageYears, ageSource: d.ageSource ?? ('inspector' as const) } : {}),
-        });
-        setDetailsSheet(false);
-        toast({ tone: 'success', title: 'Details saved', body: d.customerName });
-        // A new address is a new house: fetch its record (cache-first).
-        if (addressChanged && d.address.trim().length >= 8) {
-          void lookupRecord(d.address).then((rec) => setPropertyRecord(inspection.id, rec));
+
+      <JobTabs
+        tabs={VISIBLE_TABS.map((t) =>
+          t.key === 'photos'
+            ? { ...t, badge: totalPhotos }
+            : t.key === 'proposal'
+              ? { ...t, badge: proposalsForJob.length }
+              : t.key === 'tasks'
+                ? { ...t, badge: openTaskCount }
+                : t,
+        )}
+        active={tab}
+        onChange={onOpenTab}
+        style={styles.tabsBar}
+      />
+
+      <View style={styles.tabBody}>
+        {tab === 'overview' && (
+          <OverviewTab
+            inspection={inspection}
+            haag={haag}
+            decision={decision}
+            hasEvidence={hasEvidence}
+            missing={missing}
+            linkedLead={linkedLead}
+            glance={{ measurements: inspection.slopes.length, photos: totalPhotos, proposals: proposalsForJob.length, latestTotal: amount }}
+            nextAction={nextAction}
+            insurancePolicyLine={insurancePolicyLine}
+            claimDetailLine={claimDetailLine}
+            brittlenessGap={brittlenessGap}
+            generating={generating}
+            generatingLong={generatingLong}
+            engineFreshnessStale={engineFreshness.staleFrozen}
+            onOpenTab={onOpenTab}
+            onEditDetails={() => setDetailsSheet(true)}
+            onBook={linkedLead ? () => setFollowUpSheet(true) : undefined}
+            onContacted={linkedLead && linkedLead.stage === 'new' ? () => setLeadStage(linkedLead.id, 'contacted') : undefined}
+            onSetNotes={(t) => setNotes(inspection.id, t)}
+            onSetCollateralItem={(key, value) => setCollateralItem(inspection.id, key, value)}
+            onSetCollateralZone={(zone, patch) => setCollateralZone(inspection.id, zone, patch)}
+            onSetBrittlenessProtocol={(protocol) => setBrittlenessProtocol(inspection.id, protocol)}
+            onPickZonePhoto={onPickZonePhoto}
+            onPickBrittlenessPhoto={onPickBrittlenessPhoto}
+            onAddAudioNote={(note) => addAudioNote(inspection.id, note)}
+            onRemoveAudioNote={(noteId) => removeAudioNote(inspection.id, noteId)}
+            onTranscribeAudioNote={onTranscribeAudioNote}
+            onSignInspector={(svg) => setInspectorSignature(inspection.id, svg)}
+            onGenerateHaagReport={() => void runHaagReport()}
+            onGenerateLongReport={() => void runLongReport()}
+          />
+        )}
+        {tab === 'measure' && (
+          <MeasureTab
+            inspection={inspection}
+            onMeasured={(intel) => setPropertyIntel(inspection.id, intel)}
+            onEstimateThisRoof={onEstimateThisRoof}
+            onOpenPitchGauge={onOpenPitchGauge}
+          />
+        )}
+        {tab === 'photos' && (
+          <PhotosTab
+            inspection={inspection}
+            decision={decision}
+            haag={haag}
+            pendingHere={pendingHere}
+            importing={importing}
+            importProgress={importProgress}
+            onOpenCapture={openCapture}
+            onImportFromLibrary={runJobLibraryImport}
+          />
+        )}
+        {tab === 'proposal' && (
+          <ProposalTab inspection={inspection} linkedLead={linkedLead} onBuildProposal={onBuildProposal} onEditProposal={onEditProposal} />
+        )}
+        {tab === 'tasks' && <TasksTab inspection={inspection} linkedLead={linkedLead} />}
+      </View>
+
+      {linkedLead && (
+        <FollowUpSheet
+          visible={followUpSheet}
+          title="Set follow-up"
+          subtitle={linkedLead.customerName}
+          options={FOLLOW_UP_OPTIONS}
+          clearLabel={linkedLead.followUpAt ? 'Clear follow-up' : undefined}
+          onPick={onPickFollowUp}
+          onClose={() => setFollowUpSheet(false)}
+        />
+      )}
+      <StageSheet
+        visible={stageSheet}
+        onClose={() => setStageSheet(false)}
+        title="Move to…"
+        subtitle={linkedLead ? linkedLead.customerName : inspection.reportId}
+        rows={stageRows}
+        current={currentStageKey}
+        onPick={onPickStage}
+      />
+      <SlopePickerSheet
+        visible={importSlopePicker}
+        title="Import to which slope?"
+        reason="Photos are filed per slope — the per-slope hit count is what the HAAG threshold reads."
+        photoCounts={Object.fromEntries(inspection.slopes.map((sl) => [sl.orientation, sl.photoPaths.length]))}
+        onSelect={(sl) => {
+          runJobLibraryImportFor(sl).catch(() => {});
+        }}
+        onCancel={() => setImportSlopePicker(false)}
+      />
+      <CustomerDetailsSheet
+        visible={detailsSheet}
+        onClose={() => setDetailsSheet(false)}
+        title={missing.any ? 'Who is this job for?' : 'Edit customer & property'}
+        subtitle={
+          missing.any
+            ? 'This job was saved from a quick capture. Name the customer and the property so the packet can go out.'
+            : inspection.reportId
         }
-      }}
-    />
-    <CoverPhotoSheet
-      visible={coverSheet}
-      inspection={inspection}
-      onClose={() => setCoverSheet(false)}
-      onChoose={(cover) => {
-        setCoverPhoto(inspection.id, cover);
-        toast({ tone: 'success', title: cover ? 'Job photo updated' : 'Back to the automatic photo' });
-      }}
-    />
+        initial={{
+          customerName: inspection.customerName,
+          customerPhone: inspection.customerPhone,
+          customerEmail: inspection.customerEmail,
+          address: inspection.address,
+          lat: inspection.lat,
+          lng: inspection.lng,
+          material: inspection.material,
+          condition: inspection.condition,
+          ageYears: inspection.ageYears,
+        }}
+        roof
+        ageHint={roofAgePrefill(inspection.propertyRecord, new Date().getFullYear())}
+        onSave={(d) => {
+          const addressChanged = d.address.trim() !== inspection.address.trim();
+          updateDetails(inspection.id, {
+            customerName: d.customerName,
+            customerPhone: d.customerPhone,
+            customerEmail: d.customerEmail,
+            address: d.address,
+            lat: d.lat,
+            lng: d.lng,
+            ...(d.material ? { material: d.material } : {}),
+            ...(d.condition ? { condition: d.condition } : {}),
+            ...(d.ageYears != null && d.ageYears !== inspection.ageYears ? { ageYears: d.ageYears, ageSource: d.ageSource ?? ('inspector' as const) } : {}),
+          });
+          setDetailsSheet(false);
+          toast({ tone: 'success', title: 'Details saved', body: d.customerName });
+          if (addressChanged && d.address.trim().length >= 8) {
+            void lookupRecord(d.address).then((rec) => setPropertyRecord(inspection.id, rec));
+          }
+        }}
+      />
+      <CoverPhotoSheet
+        visible={coverSheet}
+        inspection={inspection}
+        onClose={() => setCoverSheet(false)}
+        onChoose={(cover) => {
+          setCoverPhoto(inspection.id, cover);
+          toast({ tone: 'success', title: cover ? 'Job photo updated' : 'Back to the automatic photo' });
+        }}
+      />
     </SafeAreaView>
   );
 }
 
+/** The follow-up sheet's subtitle line reads the lead's own column label —
+ *  falls back to 'estimate_sent' when there is no lead (never reachable in
+ *  practice, since the nextAction branch that uses this only fires with a
+ *  proposal, and a job with no lead still gets the label for its own sake). */
+function currentStageKeyForFollowUp(lead: { stage: LeadStage } | undefined): LeadStage {
+  return lead ? leadStageColumn(lead.stage) : 'estimate_sent';
+}
+
 /**
- * Camera-first evidence capture with library fallback — same single-select +
- * Compatible-representation rationale as new-job.tsx / quick-inspection.tsx.
- *
- * Claim-evidence photos (collateral zones, brittleness protocol) go through
- * `prepareCapturedPhoto` exactly like slope photos do: they land in the same
- * carrier packet and are persisted the same way, and the un-piped path stored
- * full-resolution HEIC/JPEG originals — the payloads the capture ladder exists
- * to keep from OOM-crashing Expo Go.
+ * Camera-first evidence capture with library fallback — same rationale as
+ * new-job.tsx / quick-inspection.tsx. Claim-evidence photos (collateral
+ * zones, brittleness protocol) go through `prepareCapturedPhoto` exactly
+ * like slope photos do.
  */
 async function pickEvidencePhoto(onPicked: (uri: string) => void) {
   try {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (perm.granted) {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      });
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images });
       if (result.canceled || result.assets.length === 0) return;
       onPicked(await prepareCapturedPhoto(result.assets[0].uri));
       return;
     }
     const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!lib.granted) {
-      Alert.alert(
-        'Camera access needed',
-        'Enable Camera or Photos access in Settings to attach test photos.',
-      );
+      Alert.alert('Camera access needed', 'Enable Camera or Photos access in Settings to attach test photos.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: false,
-      preferredAssetRepresentationMode:
-        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (result.canceled || result.assets.length === 0) return;
     onPicked(await prepareCapturedPhoto(result.assets[0].uri));
@@ -1376,422 +800,134 @@ async function pickEvidencePhoto(onPicked: (uri: string) => void) {
   }
 }
 
-const HERO_HEIGHT = 300;
+const HERO_PHOTO_SIZE = 76;
 
 /**
- * The job screen's one cinematic moment: the real primary inspection photo
- * (first captured photo across any slope), scrimmed for legibility, carrying
- * the address, the §6 claim-viability call, and the roofwise verdict.
- *
- * No photo yet → a crafted gradient ground with the roof glyph, never stock
- * imagery (Drift #5 extends to imagery: nothing here is synthesized).
+ * The job page's compact hero: cover photo, customer + address, a one-line
+ * property summary, the stage pill (tap → StageSheet), when it was last
+ * updated, how long it has sat in that stage, and the job's amount by the
+ * signed → sent → estimate → lead precedence (`lib/services/proposals.ts`
+ * `jobAmount`). Replaces the old JobHero's big cinematic photo — the full
+ * claim-viability verdict now lives in the Overview tab's HAAG Verdict card;
+ * this keeps only a small band pill so the hero stays scannable.
  */
-/**
- * The Zillow record card. Every line is attributed; a missing record says
- * why; the button is the only way a lookup is spent (free tier: 50/month).
- */
-function PropertyRecordCard({
-  inspection,
-  busy,
-  onLookup,
-}: {
-  inspection: Inspection;
-  busy: boolean;
-  onLookup: (force: boolean) => void;
-}) {
-  const rec = inspection.propertyRecord;
-  const facts = recordFactsLine(rec);
-  const nowYear = new Date().getFullYear();
-  const prefill = roofAgePrefill(rec, nowYear);
-  const roofLine = recordRoofLine(rec, nowYear);
-  const badge = recordStatusBadge(rec);
-  const fit = roofSizePlausibility(rec, intelTotalSquares(inspection) ?? undefined);
-  if (!rec || rec.status === 'not_configured') {
-    return (
-      <RichCard
-        icon="business-outline"
-        iconTone="quiet"
-        title="Property record"
-        subtitle={rec?.status === 'not_configured' ? rec.reason : 'Not looked up yet'}
-        action={rec?.status === 'not_configured' ? undefined : { label: busy ? 'Looking up…' : 'Look up', onPress: () => onLookup(false), icon: 'search-outline' }}
-      />
-    );
-  }
-  return (
-    <RichCard
-      icon="business-outline"
-      iconTone={rec.status === 'found' ? 'green' : 'orange'}
-      title={rec.status === 'found' ? 'Property record (Zillow)' : 'Property record'}
-      subtitle={rec.status === 'found' ? facts ?? rec.streetAddress : rec.reason}
-      action={{ label: busy ? 'Refreshing…' : 'Refresh', onPress: () => onLookup(true), icon: 'refresh-outline' }}
-      headerTrailing={badge ? <Pill label={badge.label} tone={badge.tone} size="sm" /> : undefined}
-    >
-      {rec.status === 'found' ? (
-        <View style={{ gap: spacing.xs }}>
-          {badge ? <Text style={styles.recordHint}>{badge.hint}</Text> : null}
-          {fit ? <Text style={[styles.recordHint, !fit.ok && { color: colors.warn }]}>{fit.note}</Text> : null}
-          {rec.listingAgent ? (
-            <View style={styles.agentRow}>
-              <Text style={styles.recordLine}>
-                Listing agent: {rec.listingAgent.name ?? 'on file'}{rec.listingAgent.company ? ` · ${rec.listingAgent.company}` : ''}
-              </Text>
-              <View style={styles.agentBtns}>
-                {rec.listingAgent.phone ? (
-                  <PressableScale style={styles.agentBtn} onPress={() => openPhone(rec.listingAgent!.phone!)} accessibilityRole="button" accessibilityLabel="Call the listing agent">
-                    <Ionicons name="call-outline" size={18} color={colors.text} />
-                    <Text style={styles.agentBtnText}>Call agent</Text>
-                  </PressableScale>
-                ) : null}
-                {rec.listingAgent.email ? (
-                  <PressableScale style={styles.agentBtn} onPress={() => openMail(rec.listingAgent!.email!)} accessibilityRole="button" accessibilityLabel="Email the listing agent">
-                    <Ionicons name="mail-outline" size={18} color={colors.text} />
-                    <Text style={styles.agentBtnText}>Email agent</Text>
-                  </PressableScale>
-                ) : null}
-              </View>
-            </View>
-          ) : null}
-          {rec.lotSizeSqFt ? <Text style={styles.recordLine}>Lot {Math.round(rec.lotSizeSqFt).toLocaleString()} sq ft{rec.propertyType ? ` · ${rec.propertyType.replace(/_/g, ' ').toLowerCase()}` : ''}</Text> : null}
-          {rec.zestimate ? <Text style={styles.recordLine}>Zestimate ${rec.zestimate.toLocaleString()}{rec.lastSoldPrice ? ` · last sold $${rec.lastSoldPrice.toLocaleString()}` : ''}</Text> : null}
-          {roofLine ? <Text style={styles.recordLine}>{roofLine}</Text> : null}
-          {rec.roofHints?.length ? <Text style={styles.recordHint}>Listing on the roof: "{rec.roofHints[0].text}"</Text> : null}
-          {prefill ? (
-            <Text style={styles.recordHint}>
-              {inspection.ageSource === 'inspector' || (inspection.ageYears > 0 && !inspection.ageSource)
-                ? `Zillow suggests ${prefill.ageYears} yr; the inspector's ${inspection.ageYears} yr stands.`
-                : prefill.note}
-            </Text>
-          ) : null}
-          <Text style={styles.recordFoot}>No permit or roof-repair records exist in this data — age from a build year is an upper bound.</Text>
-        </View>
-      ) : null}
-    </RichCard>
-  );
-}
-
-function JobHero({
+function CompactHero({
   photoUri,
   onChangePhoto,
   reportId,
+  customerName,
   address,
+  oneLiner,
   band,
   recommendation,
+  stageLabel,
+  stageTone,
+  onOpenStage,
+  updatedLabel,
+  daysLabel,
+  amount,
 }: {
   photoUri?: string;
-  /** Opens the cover-photo sheet. */
-  onChangePhoto?: () => void;
+  onChangePhoto: () => void;
   reportId: string;
+  customerName: string;
   address: string;
-  /** Absent until at least one photo has been analyzed — renders "Not assessed". */
+  oneLiner: string;
   band?: ClaimViabilityBand;
   recommendation?: RoofwiseRecommendation;
+  stageLabel: string;
+  stageTone: PillTone;
+  onOpenStage: () => void;
+  updatedLabel?: string;
+  daysLabel?: string;
+  amount: { value: number } | null;
 }) {
   return (
-    <View style={[styles.heroShell, shadows.hero]}>
-      <View style={styles.heroCard}>
-        {photoUri ? (
-          <Image
-            source={{ uri: photoUri }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            transition={200}
-          />
-        ) : (
-          <LinearGradient
-            colors={gradients.clearDay}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          >
-            <View style={styles.heroPlaceholder}>
-              <Ionicons name="home-outline" size={72} color={colors.textInverse} style={styles.heroPlaceholderIcon} />
-            </View>
-          </LinearGradient>
-        )}
-        <LinearGradient
-          colors={gradients.scrim}
-          start={{ x: 0, y: 0.15 }}
-          end={{ x: 0, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        {onChangePhoto ? (
-          <PressableScale
-            style={styles.heroPhotoBtn}
-            onPress={onChangePhoto}
-            accessibilityRole="button"
-            accessibilityLabel="Change the job photo"
-          >
-            <Ionicons name="camera-outline" size={22} color={colors.textInverse} />
-          </PressableScale>
-        ) : null}
-        <View style={styles.heroContent}>
-          <Text style={styles.heroEyebrow}>{reportId}</Text>
-          <Text style={styles.heroAddress} numberOfLines={2}>
+    <View style={[styles.heroCard, shadows.card]}>
+      <View style={styles.heroTopRow}>
+        <PressableScale style={styles.heroPhotoWrap} onPress={onChangePhoto} accessibilityRole="button" accessibilityLabel="Change the job photo">
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+          ) : (
+            <LinearGradient colors={gradients.clearDay} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <View style={styles.heroPhotoPlaceholder}>
+                <Ionicons name="home-outline" size={28} color={colors.textInverse} style={{ opacity: 0.5 }} />
+              </View>
+            </LinearGradient>
+          )}
+          <View style={styles.heroPhotoBadge}>
+            <Ionicons name="camera-outline" size={12} color={colors.textInverse} />
+          </View>
+        </PressableScale>
+
+        <View style={styles.heroInfo}>
+          <Text style={styles.heroEyebrow} numberOfLines={1}>
+            {reportId}
+          </Text>
+          <Text style={styles.heroCustomer} numberOfLines={1}>
+            {customerName}
+          </Text>
+          <Text style={styles.heroAddress} numberOfLines={1}>
             {address}
           </Text>
-          <View style={styles.heroBadgeRow}>
-            {band && recommendation ? (
-              <>
-                <Pill
-                  label={CLAIM_VIABILITY_LABELS[band]}
-                  tone={BAND_PILL_TONE[band]}
-                  solid
-                  size="md"
-                  icon="shield-checkmark"
-                />
-                <Text style={styles.heroVerdict} numberOfLines={1}>
-                  {ROOFWISE_RECOMMENDATION_LABELS[recommendation]}
-                </Text>
-              </>
-            ) : (
-              <>
-                <Pill label="Not assessed" tone="neutral" solid size="md" icon="help-circle-outline" />
-                <Text style={styles.heroVerdict} numberOfLines={1}>
-                  Analyze photos for a verdict
-                </Text>
-              </>
-            )}
-          </View>
+          {(oneLiner || (band && recommendation)) && (
+            <Text style={styles.heroOneLiner} numberOfLines={1}>
+              {[oneLiner, band && recommendation ? ROOFWISE_RECOMMENDATION_LABELS[recommendation] : undefined]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          )}
         </View>
+
+        {band ? <Pill label={CLAIM_VIABILITY_LABELS[band]} tone={band === 'HIGH' ? 'success' : band === 'MEDIUM' ? 'warn' : 'danger'} size="sm" /> : null}
+      </View>
+
+      <View style={styles.heroFooter}>
+        <PressableScale
+          style={styles.stagePillBtn}
+          onPress={onOpenStage}
+          accessibilityRole="button"
+          accessibilityLabel={`Stage: ${stageLabel}. Tap to change.`}
+        >
+          <Pill label={stageLabel} tone={stageTone} size="sm" />
+          <Ionicons name="chevron-down" size={13} color={colors.textSubtle} />
+        </PressableScale>
+        <Text style={styles.heroMeta} numberOfLines={1}>
+          {[updatedLabel, daysLabel].filter(Boolean).join(' · ')}
+        </Text>
+        {amount ? (
+          <Text style={styles.heroAmount} numberOfLines={1}>
+            ${amount.value.toLocaleString()}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
 }
 
-function SlopeBlock({
-  inspection,
-  slope,
-  verdict,
-  reasoning,
-  confidenceAvg,
-  hitsPerSquare,
-}: {
-  inspection: Inspection;
-  slope: Slope;
-  verdict: SlopeVerdict;
-  reasoning: string;
-  confidenceAvg: number;
-  /** The engine's `hail_hits_per_square` for this slope — a RATE, not a total. */
-  hitsPerSquare?: number;
-}) {
-  const router = useRouter();
-  const detected = (slope.aiFindings ?? []).filter((f) => f.detected);
-  const threshold = thresholdFor(inspection.material);
-  const coverage = documentedCoverage(slope);
-  const functionalInfo = deriveFunctional(slope);
-  // Same "analyzed" read summarizeInspection uses: an explicit done state, or
-  // the legacy analyzed-index list. A slope with none has no verdict to show.
-  const legacyAnalyzed = new Set(slope.analyzedPhotoIndices ?? []);
-  const analyzedHere = slope.photoPaths.filter((uri, i) => {
-    const st = slope.photoAnalysis?.[uri];
-    return st?.status === 'done' || (!st && legacyAnalyzed.has(i));
-  }).length;
-
-  return (
-    <RichCard
-      icon="home-outline"
-      iconTone="blue"
-      title={`Slope ${slope.orientation}`}
-      headerTrailing={
-        analyzedHere > 0 ? (
-          <Pill label={SLOPE_VERDICT_LABEL[verdict]} tone={SLOPE_VERDICT_PILL_TONE[verdict]} size="sm" />
-        ) : (
-          <Pill label="Not assessed" tone="neutral" size="sm" />
-        )
-      }
-    >
-      <PressableScale
-        style={styles.analyzeBtn}
-        onPress={() =>
-          router.push({
-            pathname: '/analyze',
-            params: { inspectionId: inspection.id, slopeId: slope.id },
-          })
-        }
-      >
-        <Ionicons name="analytics-outline" size={18} color={colors.text} />
-        <Text style={styles.analyzeBtnText}>Analyze photos</Text>
-      </PressableScale>
-
-      {slope.photoPaths.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            {slope.photoPaths.map((uri, i) => (
-              <PressableScale
-                key={i}
-                // The per-photo REPORT first (what's in this photo); it links
-                // on to the marker editor. Reading before editing.
-                onPress={() =>
-                  router.push({
-                    pathname: '/photo-report',
-                    params: { inspectionId: inspection.id, slopeId: slope.id, photoIndex: String(i) },
-                  })
-                }
-              >
-                <View style={styles.photoTile}>
-                  {/* backgroundColor on the wrapper is the loading state: a
-                      neutral tile shows until the real photo fades in. */}
-                  <Image
-                    source={{ uri }}
-                    style={StyleSheet.absoluteFill}
-                    contentFit="cover"
-                    transition={150}
-                  />
-                </View>
-                <View style={styles.editBadge}>
-                  <Ionicons name="create-outline" size={12} color={colors.textInverse} />
-                </View>
-              </PressableScale>
-            ))}
-          </View>
-        </ScrollView>
-      )}
-
-      {/* HAAG §2 is a RATE — hits per ONE 100 sq ft test square. Printing the
-          slope TOTAL against a per-square threshold ("62 hits observed ·
-          threshold 6+ per square") is the same unit error that made the engine
-          over-call damage: the more photos an inspector took, the worse it
-          read. Lead with the rate the engine used; keep the total as context. */}
-      <View style={styles.testSquare}>
-        <Text style={styles.testSquareLabel}>HAAG test square</Text>
-        <Text style={styles.testSquareLine}>
-          {hitsPerSquare != null
-            ? `${fmtRate(hitsPerSquare)} hits per 10×10' square`
-            : `${slope.hailCount} hits observed`}
-          {' · threshold '}
-          {threshold.hitsPerTestSquare === 0
-            ? '(penetration / crack)'
-            : `${threshold.hitsPerTestSquare}+ per 10×10' square`}
-        </Text>
-        {hitsPerSquare != null && (
-          <Text style={styles.testSquareLine}>
-            {slope.hailCount} hit{slope.hailCount === 1 ? '' : 's'} documented across{' '}
-            {slope.photoPaths.length} photo{slope.photoPaths.length === 1 ? '' : 's'} on this slope.
-          </Text>
-        )}
-        {/* Both carrier bars, every time (owner): the 8 most carriers use and
-            the 10 some require — so the roofer knows how hard the conversation
-            will be before filing. */}
-        {hitsPerSquare != null && hitsPerSquare > 0 && threshold.hitsPerTestSquare > 0 && (
-          <Text style={[styles.testSquareLine, carrierBarsRead(inspection.material, hitsPerSquare).meetsStandard ? styles.functionalYes : undefined]}>
-            {carrierBarsRead(inspection.material, hitsPerSquare).line}
-          </Text>
-        )}
-        {/* What the photos themselves document — a different number from the
-            aerial figure and never confused with it. */}
-        {coverage.photos > 0 && (
-          <Text style={styles.testSquareLine}>{documentedSummary(coverage)}</Text>
-        )}
-        {/* §1: the functional determination and WHY, derived from evidence. */}
-        <Text style={[styles.testSquareLine, functionalInfo.functional ? styles.functionalYes : undefined]}>
-          {functionalInfo.functional ? 'Functional damage: yes — ' : 'Functional damage: not established — '}
-          {functionalInfo.reason}
-        </Text>
-        <Text style={styles.testSquareRule}>{threshold.rule}</Text>
-      </View>
-
-      {detected.length > 0 && (
-        <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
-          {detected.map((f) => (
-            <Text key={f.label} style={styles.cardSub}>
-              • {DAMAGE_CATEGORY_LABELS[f.label]} × {f.count} ({f.confidence}%)
-            </Text>
-          ))}
-        </View>
-      )}
-
-      {analyzedHere > 0 ? (
-        reasoning ? (
-          <Text style={styles.reasoning}>
-            {reasoning}
-            {confidenceAvg > 0 ? ` (avg confidence ${Math.round(confidenceAvg)}%)` : ''}
-          </Text>
-        ) : null
-      ) : (
-        <Text style={styles.reasoning}>
-          Not assessed — analyze photos on this slope to get a per-slope verdict.
-        </Text>
-      )}
-    </RichCard>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  // Sub-screen inline bar: plain chevron, 17/semibold, hairline underline.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    gap: spacing.md,
+    gap: spacing.sm,
     backgroundColor: colors.barFill,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },
-  headerBtn: {
-    width: touchTarget.small,
-    height: touchTarget.small,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reportId: { fontSize: fontSize.caption, color: colors.textSubtle, fontWeight: fontWeight.semibold },
-  customer: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
-  statusToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.md,
-    minHeight: touchTarget.small,
-    borderRadius: radii.button,
-    backgroundColor: colors.fillQuiet,
-  },
-  statusToggleComplete: { backgroundColor: colors.success },
-  statusToggleText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
+  headerBtn: { width: touchTarget.small, height: touchTarget.small, alignItems: 'center', justifyContent: 'center' },
+  headerReportId: { fontSize: fontSize.bodySm, color: colors.textSubtle, fontWeight: fontWeight.semibold },
 
-  scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
-
-  sectionSpacing: { marginBottom: spacing.sm },
-
-  // Prominent capture entry from a job — the owner must never lose "take
-  // photos to analyse". Brand-blue so it's distinct from the one orange
-  // report CTA further down. 64pt primary (Drift #1).
-  captureCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    height: touchTarget.preferred,
-    borderRadius: radii.button,
-    backgroundColor: colors.brand,
-    ...shadows.raised,
-  },
-  captureCtaText: {
-    color: colors.textInverse,
-    fontSize: fontSize.bodyLg,
-    fontWeight: fontWeight.semibold,
-  },
-  importCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    height: touchTarget.preferred,
-    borderRadius: radii.button,
-    backgroundColor: colors.fillQuiet,
-  },
-  importCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
-  pendingStrip: { marginTop: spacing.xs },
-
-  // Placeholder-details banner — warn-toned, ≥56pt, sits above the hero so
-  // it is the first thing on the page (Drift #5: a placeholder is stated).
   missingBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     minHeight: touchTarget.standard,
     padding: spacing.md,
+    margin: spacing.lg,
+    marginBottom: 0,
     borderRadius: radii.card,
     backgroundColor: colors.warnSoft,
     borderWidth: StyleSheet.hairlineWidth,
@@ -1799,275 +935,58 @@ const styles = StyleSheet.create({
   },
   missingTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
   missingBody: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginTop: 2 },
-  roofLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
 
-  // ── Hero ──────────────────────────────────────────────────────────────
-  recordLine: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  agentRow: { gap: spacing.xs, marginTop: spacing.xs },
-  agentBtns: { flexDirection: 'row', gap: spacing.sm },
-  agentBtn: { flex: 1, minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
-  agentBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  recordHint: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
-  recordFoot: { fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 16 },
-  heroShell: { borderRadius: radii.xl },
+  // ── Compact hero ──────────────────────────────────────────────────────────
   heroCard: {
-    height: HERO_HEIGHT,
-    borderRadius: radii.xl,
-    overflow: 'hidden',
-    // Painted under the gradient/photo so the card is never briefly
-    // transparent while the image loads.
-    backgroundColor: brand.royalInk,
-  },
-  heroPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  // 56pt glass button, top-right of the hero (Drift #1).
-  heroPhotoBtn: {
-    position: 'absolute',
-    top: spacing.md,
-    right: spacing.md,
-    width: touchTarget.standard,
-    height: touchTarget.standard,
-    borderRadius: touchTarget.standard / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.overlay,
-  },
-  heroPlaceholderIcon: { opacity: 0.4 },
-  heroContent: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  heroEyebrow: {
-    color: colors.textInverse,
-    opacity: 0.72,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  heroAddress: {
-    color: colors.textInverse,
-    fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
-    letterSpacing: -0.3,
-    lineHeight: 28,
-  },
-  heroBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-    flexWrap: 'wrap',
-  },
-  heroVerdict: {
-    color: colors.textInverse,
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    opacity: 0.92,
-    flexShrink: 1,
-  },
-
-  // Uniform child spacing inside a multi-row RichCard body — mirrors the old
-  // flat `card` style's `gap: spacing.xs`, which used to space every direct
-  // child (label, rows, footnotes) the same way.
-  bodyRows: { gap: spacing.xs },
-
-  cardLabel: {
-    fontSize: fontSize.bodySm,
-    color: colors.textSubtle,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  cardSub: { fontSize: fontSize.bodyMd, color: colors.textMuted },
-
-  safetyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
-  safetyText: { fontSize: fontSize.bodySm, color: colors.textMuted },
-
-  // Honest, compact empty module — real state, thin icon, no tinted circle.
-  placeholderBox: {
+    margin: spacing.lg,
+    marginBottom: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
-    padding: spacing.lg,
-    alignItems: 'center',
-    gap: spacing.sm,
-    ...shadows.card,
-  },
-  placeholderText: { color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },
-
-  // THE one orange moment on this screen: generate the report/claim packet.
-  // Shadow lives on the outer (unclipped) layer so the brand-tinted lift
-  // isn't clipped by the gradient's rounded corners.
-  reportCtaShadow: { borderRadius: radii.button, ...shadows.raised, marginTop: spacing.sm },
-  reportCtaDisabled: { opacity: 0.5 },
-  reportCtaClip: { height: touchTarget.preferred, borderRadius: radii.button, overflow: 'hidden' },
-  reportCtaContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  reportCtaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
-
-  quietCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    height: touchTarget.preferred,
-    borderRadius: radii.button,
-    backgroundColor: colors.fillQuiet,
-    marginTop: spacing.sm,
-  },
-  quietCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
-
-  signedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    alignSelf: 'flex-start',
-    backgroundColor: colors.successSoft,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
-    marginTop: spacing.sm,
-  },
-  signedBadgeText: { color: colors.success, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
-
-  britChip: {
-    flex: 1,
-    minHeight: touchTarget.standard,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.control,
-    backgroundColor: colors.fillQuiet,
-  },
-  britChipActive: { backgroundColor: colors.brand },
-  britChipText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
-  britChipTextActive: { color: colors.textInverse },
-  evidenceWarn: {
-    fontSize: fontSize.bodySm,
-    color: colors.danger,
-    marginTop: spacing.sm,
-  },
-
-  collateralRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    // Drift #1: gloved-roofer persona — interactive rows meet the 56pt minimum.
-    minHeight: touchTarget.standard,
-  },
-  zoneRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  zonePhotoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    minWidth: touchTarget.standard,
-    height: touchTarget.standard,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.control,
-    backgroundColor: colors.fillQuiet,
-  },
-  zonePhotoCount: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.bold,
-    color: colors.text,
-    fontVariant: ['tabular-nums'],
-  },
-  gateHint: {
-    fontSize: fontSize.bodySm,
-    color: colors.warn,
-    fontWeight: fontWeight.medium,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-  finalizedHint: {
-    fontSize: fontSize.bodySm,
-    color: colors.textSubtle,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-  collateralLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
-  collateralChecked: { textDecorationLine: 'line-through', color: colors.textMuted },
-
-  notesInput: {
-    minHeight: 96,
-    fontSize: fontSize.bodyMd,
-    color: colors.text,
     padding: spacing.md,
-    backgroundColor: colors.fillQuiet,
-    borderRadius: radii.control,
-    marginTop: spacing.sm,
+    gap: spacing.sm,
   },
-
-  // The wrapper carries the loading-state ground colour + clip; expo-image
-  // fades the real photo in over it via `transition`.
-  photoTile: {
-    width: 140,
-    height: 100,
+  heroTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  heroPhotoWrap: {
+    width: HERO_PHOTO_SIZE,
+    height: HERO_PHOTO_SIZE,
     borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
     overflow: 'hidden',
-    backgroundColor: colors.fillQuiet,
+    backgroundColor: brand.royalInk,
   },
-  editBadge: {
+  heroPhotoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  heroPhotoBadge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: colors.scrim,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    right: 4,
+    bottom: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.scrim,
   },
+  heroInfo: { flex: 1, gap: 1 },
+  heroEyebrow: { fontSize: fontSize.caption, color: colors.textSubtle, fontWeight: fontWeight.bold, letterSpacing: 0.6, textTransform: 'uppercase' },
+  heroCustomer: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, letterSpacing: -0.2 },
+  heroAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  heroOneLiner: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 1 },
 
-  testSquare: {
-    backgroundColor: colors.fillQuiet,
-    borderRadius: radii.control,
-    padding: spacing.md,
-    gap: 2,
-    marginTop: spacing.md,
-  },
-  testSquareLabel: {
-    fontSize: fontSize.caption,
-    color: colors.textSubtle,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  testSquareLine: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
-  functionalYes: { color: colors.danger, fontWeight: fontWeight.semibold },
-  testSquareRule: { fontSize: fontSize.bodySm, color: colors.textMuted },
-
-  analyzeBtn: {
+  heroFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: spacing.sm,
-    height: touchTarget.standard,
-    borderRadius: radii.button,
-    backgroundColor: colors.fillQuiet,
-    marginTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+    paddingTop: spacing.sm,
   },
-  analyzeBtnText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  stagePillBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: touchTarget.small },
+  heroMeta: { flex: 1, fontSize: fontSize.caption, color: colors.textSubtle },
+  heroAmount: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
 
-  reasoning: {
-    fontSize: fontSize.bodySm,
-    color: colors.textMuted,
-    fontStyle: 'italic',
-    marginTop: spacing.sm,
-  },
+  tabsBar: { marginHorizontal: spacing.lg, marginBottom: spacing.sm },
+  tabBody: { flex: 1 },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
   emptyTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.text },

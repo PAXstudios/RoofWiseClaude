@@ -12,19 +12,31 @@ export type GeneratedProposalPdf = {
   proposal: Proposal;
 };
 
+export type ProposalPdfOptions = {
+  /**
+   * Diagonal text repeated across every page ("DRAFT") plus a banner on the
+   * cover saying the document is not for signature. Use it for a preview of
+   * an unsent draft; never on the PDF a homeowner signs.
+   */
+  watermark?: string;
+};
+
 export async function generateProposalPdf(
   proposal: Proposal,
   inspection: Inspection,
+  options: ProposalPdfOptions = {},
 ): Promise<GeneratedProposalPdf> {
-  const html = renderHtml(proposal, inspection);
+  const html = renderProposalHtml(proposal, inspection, options);
   const { uri } = await Print.printToFileAsync({ html, base64: false });
   return { uri, proposal };
 }
 
-function renderHtml(p: Proposal, ins: Inspection): string {
+/** Exported for tests — the HTML the PDF is printed from. */
+export function renderProposalHtml(p: Proposal, ins: Inspection, options: ProposalPdfOptions = {}): string {
   const generatedAt = formatDateTime(new Date());
   const carrier = ins.carrier ? INSURANCE_CARRIER_LABELS[ins.carrier] : '—';
   const inspector = useInspectorProfileStore.getState().profile;
+  const watermark = options.watermark?.trim();
 
   return `<!DOCTYPE html>
 <html>
@@ -68,10 +80,17 @@ function renderHtml(p: Proposal, ins: Inspection): string {
   .sig-box { border-top: 1px solid #0C183C; padding-top: 8px; font-size: 11px; color: #546078; }
 
   .footer { text-align: center; color: #546078; font-size: 10px; padding: 24px 0; border-top: 1px solid #E0E0D6; margin-top: 40px; }
+
+  /* Watermark: position: fixed repeats on every printed page in WebKit, which
+     is what expo-print renders with — one element, every page. */
+  .watermark { position: fixed; top: 38%; left: 0; right: 0; text-align: center; font-size: 118px; font-weight: 800; letter-spacing: 14px; color: rgba(217,84,30,0.13); transform: rotate(-28deg); pointer-events: none; z-index: 9; text-transform: uppercase; }
+  .watermark-banner { background: #FBE7DD; color: #A63C12; font-weight: 700; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; padding: 10px 14px; border-radius: 10px; margin: 0 0 16px; }
 </style>
 </head>
 <body>
+${watermark ? `<div class="watermark" aria-hidden="true">${esc(watermark)}</div>` : ''}
 <div class="page">
+  ${watermark ? `<div class="watermark-banner">${esc(watermark)} — preview only, not for signature</div>` : ''}
   <div class="cover">
     <div class="brand"><div class="mark"><span>RW</span></div><div class="name">RoofWise</div></div>
     ${companyCoverLine(inspector.company)}

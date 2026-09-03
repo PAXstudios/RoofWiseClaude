@@ -55,12 +55,21 @@ function useProposalsHydrated(): boolean {
 
 export default function ProposalView() {
   const router = useRouter();
-  const { jobId } = useLocalSearchParams<{ jobId: string }>();
+  // `proposalId` is additive (Wave M, job-page tabs): the Proposal tab's
+  // Saved Proposals list can carry several proposals per job now, and its
+  // per-card "Edit" needs to open the SPECIFIC one that was tapped rather
+  // than always `getByJob`'s newest. Omitted (the "Build proposal" CTA, and
+  // every entry point from before this wave), this screen behaves exactly
+  // as it always has — newest-for-the-job, auto-creating a draft when none
+  // exists yet.
+  const { jobId, proposalId } = useLocalSearchParams<{ jobId: string; proposalId?: string }>();
   const inspection = useInspectionStore((s) =>
     s.inspections.find((i) => i.id === jobId),
   );
   const hydrated = useProposalsHydrated();
-  const existing = useProposalStore((s) => s.getByJob(jobId));
+  const existing = useProposalStore((s) =>
+    proposalId ? s.proposals.find((p) => p.id === proposalId) : s.getByJob(jobId),
+  );
   const upsert = useProposalStore((s) => s.upsert);
   const create = useProposalStore((s) => s.create);
   const setStatus = useProposalStore((s) => s.setStatus);
