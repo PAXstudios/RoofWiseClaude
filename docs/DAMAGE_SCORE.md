@@ -26,16 +26,48 @@ The authoritative outputs remain `roofwise_recommendation` (§4) and `claim_viab
 (§6 HIGH/MEDIUM/LOW). The RDS exists to communicate severity at a glance and to sort/filter
 pipeline cards.
 
-### Research basis
+### Research basis (owner confirmed no formula was ever provided — this is researched, not invented)
+
+**The 0–100 condition index is an established engineering convention, not a RoofWise idea.**
+The US Army Corps of Engineers (ERDC-CERL) Condition Index family — Pavement (PCI,
+ASTM D6433), Building (BCI), and Roof (RCI) — all use **0–100 where 100 is "free from
+observable distress"**, and the roofing industry uses the same scale, where **70–100 means
+the asset retains good remaining life and is worth investing in**. Anchoring to that
+convention means the number is legible to anyone who has seen a facility condition report.
+
+**HAAG's own damage definition is a service-life argument**, which is what makes a condition
+score defensible rather than decorative: HAAG counts granule loss that exposes bitumen as
+damage precisely **"due to the potential loss of remaining service life"** (haagglobal.com).
+Damage is scored because it costs life, so a remaining-condition scale is the natural
+expression of a HAAG finding.
+
+Also load-bearing:
 - **HAAG test square** = 100 sq ft (10×10), ≥1 per roof direction; slopes assessed
   separately (haagglobal.com, Test Square Method).
 - **HAAG protocol** includes comparative analysis of other surfaces (collateral) to
   establish hailfall, recency, size, hardness, directionality.
+- **HAAG thresholds derive from decades of controlled impact testing** (the UL 2218
+  impact-resistance lineage) — they are empirical, which is why the score must key off them
+  rather than off invented weights.
+- **Age drives repairability, not damage**: roofs <10 yrs repair cleanly; 15–25 yrs commonly
+  fail matching and brittleness; >25 yrs are often replacement cases. This enters the score
+  through the §3 repairability gates, never as a hidden deduction (see "Age" below).
 - **Carrier norms** cluster at 6–10 functional hits/square (IBHS 8; Allstate 10) — context
   only. `docs/HAAG_DECISION_ENGINE.md` §2 thresholds (3-tab **>5**, architectural **>8**)
   are the authority and are stricter.
 - **§1**: `functional_damage_present` / `cosmetic_only` are authoritative booleans —
   the score MUST consume them, never re-derive them from counts.
+
+### Age: deliberately NOT a silent deduction
+
+A condition index would normally decay with age. This one does not, and the reason matters:
+the score exists to communicate **storm-damage severity for a claim**. If a 25-year-old
+undamaged roof scored 40 on age alone, the app would imply a claim where HAAG requires wear
+and tear to be **ruled out** (§1). Age therefore enters only where HAAG itself puts it —
+through the §3 repairability gates (brittleness, matching/discontinued) — and is surfaced as
+a labelled context line ("Roof age 22 yrs — brittleness likely; test before repair"), never
+as points quietly removed. State this in the UI so nobody mistakes the score for a
+whole-life condition index.
 
 ---
 
