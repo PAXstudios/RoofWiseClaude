@@ -11,6 +11,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
@@ -50,6 +51,13 @@ export default function LeadDetail() {
   const remove = useLeadStore((s) => s.remove);
   const setPrefill = useWizardPrefillStore((s) => s.set);
   const toast = useToastStore((s) => s.show);
+  // The job this lead already became, when it is on this device. A link to
+  // a job that was deleted (or lives only on another device) reads as none —
+  // the CTA then offers a fresh conversion rather than a dead button.
+  const linkedId = lead?.inspectionId;
+  const linkedInspection = useInspectionStore((s) =>
+    linkedId ? s.inspections.find((i) => i.id === linkedId) : undefined,
+  );
 
   if (!lead) {
     return (
@@ -111,6 +119,10 @@ export default function LeadDetail() {
     });
   };
 
+  // Hands the lead to the New Job wizard. The wizard's save() links BOTH
+  // ends — `Inspection.leadId` on create and `Lead.inspectionId` via
+  // `leadStore.linkInspection` — because the inspection id does not exist
+  // until then.
   const onConvert = () => {
     setPrefill({
       source: 'lead',
@@ -158,6 +170,15 @@ export default function LeadDetail() {
       tone: 'orange',
       label: 'Storm match',
       value: formatStormMatch(lead.lastStormMatch),
+    });
+  }
+  if (linkedInspection) {
+    detailRows.push({
+      key: 'inspection',
+      icon: 'clipboard-outline',
+      tone: 'orange',
+      label: 'Inspection',
+      value: `${linkedInspection.reportId} · ${linkedInspection.status.replace(/_/g, ' ')}`,
     });
   }
 
@@ -277,13 +298,18 @@ export default function LeadDetail() {
           </View>
         </FadeSlideIn>
 
-        {/* The one accent-gradient moment on this screen. */}
+        {/* The one accent-gradient moment on this screen. Once the lead has
+            become a job, the primary action is that job — not a second one. */}
         <FadeSlideIn index={4}>
           <PressableScale
             style={styles.primaryBtn}
-            onPress={onConvert}
+            onPress={
+              linkedInspection
+                ? () => router.push(`/job/${linkedInspection.id}` as any)
+                : onConvert
+            }
             accessibilityRole="button"
-            accessibilityLabel="Convert to inspection"
+            accessibilityLabel={linkedInspection ? 'Open inspection' : 'Convert to inspection'}
           >
             <View style={styles.primaryBtnClip}>
               <LinearGradient
@@ -292,10 +318,28 @@ export default function LeadDetail() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               />
-              <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
-              <Text style={styles.primaryBtnText}>Convert to inspection</Text>
+              <Ionicons
+                name={linkedInspection ? 'clipboard-outline' : 'arrow-forward'}
+                size={20}
+                color={colors.textInverse}
+              />
+              <Text style={styles.primaryBtnText}>
+                {linkedInspection
+                  ? `Open inspection ${linkedInspection.reportId}`
+                  : 'Convert to inspection'}
+              </Text>
             </View>
           </PressableScale>
+          {linkedInspection && (
+            <PressableScale
+              style={styles.secondaryBtn}
+              onPress={onConvert}
+              accessibilityRole="button"
+              accessibilityLabel="Start another inspection from this lead"
+            >
+              <Text style={styles.secondaryBtnText}>Start another inspection</Text>
+            </PressableScale>
+          )}
         </FadeSlideIn>
       </ScrollView>
     </SafeAreaView>
@@ -472,6 +516,17 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+  },
+  secondaryBtn: {
+    minHeight: touchTarget.standard,
+    marginTop: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: {
+    color: colors.textMuted,
+    fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
   },
 

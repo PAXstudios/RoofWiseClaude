@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -20,7 +20,12 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
+import { damageScoreFromEngine, type DamageScoreResult } from '@/lib/services/damageScore';
+import { resolveEngineResult } from '@/lib/services/storedEngine';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Aurora } from '@/components/glass/Aurora';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -29,9 +34,15 @@ import { FadeSlideIn } from '@/components/motion';
 import { IconChip, CHIP_TONES, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import { ProgressBar, type ProgressTone } from '@/components/ui/ProgressBar';
-import { isValidDate } from '@/lib/format/date';
-import type { Lead, LeadStage } from '@/lib/models/types';
+import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
+import { QuickActions } from '@/components/pipeline/QuickActions';
+import { FOLLOW_UP_OPTIONS, FollowUpSheet } from '@/components/pipeline/FollowUpSheet';
+import { JOB_STATUS_META, JobPipelineCard } from '@/components/pipeline/JobPipelineCard';
+import { daysInStage, findLinkedLead } from '@/components/pipeline/chain';
+import { formatDateShort } from '@/lib/format/date';
+import type { Inspection, InspectionStatus, InsuranceCarrier, Lead, LeadStage } from '@/lib/models/types';
 import {
+  INSURANCE_CARRIER_LABELS,
   LEAD_STAGE_LABELS,
   LEAD_STAGE_ORDER,
   leadStageColumn,
@@ -64,7 +75,20 @@ const STAGES: { id: LeadStage | 'all'; label: string }[] = [
   })),
 ];
 
-type ViewMode = 'list' | 'pipeline';
+/** Which object the tab is showing. Jobs are pipeline cards too — the home the audit said they never had. */
+type Segment = 'leads' | 'jobs';
+/** How the Leads segment lays its leads out. */
+type ViewMode = 'list' | 'board';
+
+const SEGMENT_OPTIONS = [
+  { id: 'leads', label: 'Leads' },
+  { id: 'jobs', label: 'Jobs' },
+] as const;
+
+const VIEW_OPTIONS = [
+  { id: 'list', label: 'List' },
+  { id: 'board', label: 'Board' },
+] as const;
 
 /**
  * Board columns, in order. `LEAD_STAGE_ORDER` is the 11 live pipeline stages
@@ -78,10 +102,21 @@ const EMPTY_COLUMN: Lead[] = [];
 
 export default function LeadsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ segment?: string; at?: string }>();
   const leads = useLeadStore((s) => s.leads);
+  const inspections = useInspectionStore((s) => s.inspections);
   const setStageOnLead = useLeadStore((s) => s.setStage);
+  const [segment, setSegment] = useState<Segment>(params.segment === 'jobs' ? 'jobs' : 'leads');
   const [stage, setStage] = useState<(typeof STAGES)[number]['id']>('all');
   const [view, setView] = useState<ViewMode>('list');
+
+  // Deep link from Plan / Home: `?segment=jobs` lands on the Jobs segment.
+  // `at` is a nonce so a second push with the same segment still fires —
+  // tab params persist, and a bare `segment` dependency would go stale after
+  // the roofer flipped back to Leads by hand.
+  useEffect(() => {
+    if (params.segment === 'jobs' || params.segment === 'leads') setSegment(params.segment);
+  }, [params.segment, params.at]);
 
   // Compared through `leadStageColumn` for the same reason the board buckets
   // that way: a lead persisted under the legacy `proposal_sent` spelling has
@@ -108,35 +143,57 @@ export default function LeadsScreen() {
     setView(next);
   };
 
+  const switchSegment = (next: Segment) => {
+    if (next === segment) return;
+    Haptics.selectionAsync().catch(() => {});
+    setSegment(next);
+  };
+
+  const openJobs = inspections.filter((i) => i.status !== 'complete').length;
+
   return (
     <View style={styles.root}>
       <ScreenHeader
-        title="Leads"
-        subtitle={`${leads.length} total`}
+        title={segment === 'jobs' ? 'Jobs' : 'Leads'}
+        subtitle={
+          segment === 'jobs'
+            ? `${inspections.length} total · ${openJobs} open`
+            : `${leads.length} total`
+        }
         right={
-          <PressableScale
-            style={styles.fab}
-            pressedScale={0.92}
-            onPress={() => router.push('/new-lead')}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Add lead"
-          >
-            <Ionicons name="add" size={26} color={colors.textInverse} />
-          </PressableScale>
+          <View style={styles.headerActions}>
+            <SettingsAffordance />
+            <PressableScale
+              style={styles.fab}
+              pressedScale={0.92}
+              onPress={() => router.push(segment === 'jobs' ? '/new-job' : '/new-lead')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={segment === 'jobs' ? 'New job' : 'Add lead'}
+            >
+              <Ionicons name="add" size={26} color={colors.textInverse} />
+            </PressableScale>
+          </View>
         }
       />
 
-      {/* Always mounted, including at zero. Gating the header on
-          `leads.length > 0` meant the screen's designated cinematic moment
-          was missing in exactly the state a new user opens it in, leaving a
-          grey void under the filter chips. Real zeros in the branded frame
-          are honest AND give the screen a top. */}
-      <PipelineSummary leads={leads} />
+      {/* Leads | Jobs — the pipeline's two objects, one tab. */}
+      <Segmented options={SEGMENT_OPTIONS} value={segment} onChange={switchSegment} />
 
-      <ViewSegmented value={view} onChange={switchView} />
+      {segment === 'jobs' ? (
+        <JobsPipeline inspections={inspections} leads={leads} />
+      ) : (
+        <>
+          {/* Always mounted, including at zero. Gating the header on
+              `leads.length > 0` meant the screen's designated cinematic moment
+              was missing in exactly the state a new user opens it in, leaving a
+              grey void under the filter chips. Real zeros in the branded frame
+              are honest AND give the screen a top. */}
+          <PipelineSummary leads={leads} />
 
-      {view === 'list' ? (
+          <Segmented options={VIEW_OPTIONS} value={view} onChange={switchView} />
+
+          {view === 'list' ? (
         <>
           <ScrollView
             horizontal
@@ -258,6 +315,314 @@ export default function LeadsScreen() {
       ) : (
         <PipelineBoard leads={leads} onMove={setStageOnLead} />
       )}
+        </>
+      )}
+    </View>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Book — the follow-up sheet any card can open
+// -----------------------------------------------------------------------------
+
+/**
+ * One follow-up flow for every card on this tab. Writes `followUpAt` through
+ * the lead store, schedules the local reminder the lead screen schedules,
+ * and says what it did. `null` clears.
+ */
+function useBookFollowUp() {
+  const setFollowUp = useLeadStore((s) => s.setFollowUp);
+  const toast = useToastStore((s) => s.show);
+  const [target, setTarget] = useState<Lead | null>(null);
+
+  const commit = useCallback(
+    (lead: Lead, when: Date | null) => {
+      setTarget(null);
+      if (!when) {
+        setFollowUp(lead.id, undefined);
+        toast({ tone: 'info', title: 'Follow-up cleared', body: lead.customerName });
+        return;
+      }
+      setFollowUp(lead.id, when.toISOString());
+      scheduleFollowUpReminder({ leadId: lead.id, customerName: lead.customerName, date: when }).catch(
+        () => {},
+      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      toast({
+        tone: 'success',
+        title: 'Follow-up set',
+        body: `${formatDateShort(when)} · ${lead.customerName}`,
+      });
+    },
+    [setFollowUp, toast],
+  );
+
+  return { target, open: setTarget, close: () => setTarget(null), commit };
+}
+
+// -----------------------------------------------------------------------------
+// Jobs segment — every inspection as a pipeline card
+// -----------------------------------------------------------------------------
+
+type JobStageFilter = 'all' | InspectionStatus;
+type JobSort = 'newest' | 'followup' | 'score';
+
+const JOB_STAGE_CHIPS: { id: JobStageFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  ...(['in_progress', 'scheduled', 'complete', 'lead'] as InspectionStatus[]).map((id) => ({
+    id,
+    label: JOB_STATUS_META[id].label,
+  })),
+];
+
+const SORT_CYCLE: JobSort[] = ['newest', 'followup', 'score'];
+const SORT_LABEL: Record<JobSort, string> = {
+  newest: 'Newest',
+  followup: 'Follow-up due',
+  score: 'Most damage',
+};
+
+/** Parse-safe epoch — unparseable dates sort to the bottom rather than throwing the order. */
+function epoch(iso: string | undefined): number {
+  const t = iso ? Date.parse(iso) : NaN;
+  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+}
+
+function JobsPipeline({ inspections, leads }: { inspections: Inspection[]; leads: Lead[] }) {
+  const router = useRouter();
+  const events = useActivityStore((s) => s.events);
+  const setStageOnLead = useLeadStore((s) => s.setStage);
+  const book = useBookFollowUp();
+  const [stage, setStage] = useState<JobStageFilter>('all');
+  const [carrier, setCarrier] = useState<InsuranceCarrier | 'all'>('all');
+  const [withFollowUp, setWithFollowUp] = useState(false);
+  const [sort, setSort] = useState<JobSort>('newest');
+
+  // The lead behind each job, by explicit link only (see `findLinkedLead`).
+  const leadByJob = useMemo(() => {
+    const map = new Map<string, Lead>();
+    for (const ins of inspections) {
+      const lead = findLinkedLead(ins, leads);
+      if (lead) map.set(ins.id, lead);
+    }
+    return map;
+  }, [inspections, leads]);
+
+  // Newest event per job. The feed is stored newest-first, so the first hit wins.
+  const lastActivityByJob = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const evt of events) {
+      if (evt.inspectionId && !map.has(evt.inspectionId)) map.set(evt.inspectionId, evt.createdAt);
+    }
+    return map;
+  }, [events]);
+
+  // Same read path as the job screen: the stored determination when it still
+  // speaks for the current inputs, `honorFreeze: false` because a list
+  // describes jobs as they stand.
+  const scoreByJob = useMemo(() => {
+    const map = new Map<string, DamageScoreResult>();
+    const now = Date.now();
+    for (const ins of inspections) {
+      const { haag } = resolveEngineResult(ins, now, { honorFreeze: false });
+      map.set(ins.id, damageScoreFromEngine(ins, haag));
+    }
+    return map;
+  }, [inspections]);
+
+  // Only carriers that actually appear on a job get a chip (Drift #5).
+  const carriers = useMemo(() => {
+    const seen = new Set<InsuranceCarrier>();
+    for (const ins of inspections) if (ins.carrier) seen.add(ins.carrier);
+    return [...seen];
+  }, [inspections]);
+
+  const stageCounts = useMemo(() => {
+    const map = new Map<InspectionStatus, number>();
+    for (const ins of inspections) map.set(ins.status, (map.get(ins.status) ?? 0) + 1);
+    return map;
+  }, [inspections]);
+
+  const filtered = useMemo(() => {
+    let out = inspections;
+    if (stage !== 'all') out = out.filter((i) => i.status === stage);
+    if (carrier !== 'all') out = out.filter((i) => i.carrier === carrier);
+    if (withFollowUp) out = out.filter((i) => Boolean(leadByJob.get(i.id)?.followUpAt));
+    const sorted = [...out];
+    if (sort === 'newest') {
+      sorted.sort((a, b) => epoch(b.createdAt) - epoch(a.createdAt));
+    } else if (sort === 'followup') {
+      // Soonest follow-up first; jobs with none sink.
+      sorted.sort(
+        (a, b) => epoch(leadByJob.get(a.id)?.followUpAt) - epoch(leadByJob.get(b.id)?.followUpAt),
+      );
+    } else {
+      // 100 = sound, so the LOWEST score is the most damage — the job worth
+      // the most to a carrier conversation. Unassessed roofs sink.
+      const scoreOf = (ins: Inspection) => {
+        const s = scoreByJob.get(ins.id);
+        return s?.assessed ? s.score : Number.POSITIVE_INFINITY;
+      };
+      sorted.sort((a, b) => scoreOf(a) - scoreOf(b));
+    }
+    return sorted;
+  }, [inspections, stage, carrier, withFollowUp, sort, leadByJob, scoreByJob]);
+
+  const filtersActive = stage !== 'all' || carrier !== 'all' || withFollowUp;
+
+  const cycleSort = () => {
+    Haptics.selectionAsync().catch(() => {});
+    setSort((s) => SORT_CYCLE[(SORT_CYCLE.indexOf(s) + 1) % SORT_CYCLE.length]);
+  };
+
+  return (
+    <View style={styles.boardRoot}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
+        contentContainerStyle={styles.chipScrollContent}
+      >
+        {JOB_STAGE_CHIPS.map((s) => {
+          const active = stage === s.id;
+          const count = s.id === 'all' ? inspections.length : stageCounts.get(s.id) ?? 0;
+          return (
+            <PressableScale
+              key={s.id}
+              pressedScale={0.96}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => setStage(s.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`${s.label}, ${count} ${count === 1 ? 'job' : 'jobs'}`}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
+              <Text style={[styles.chipCount, active && styles.chipCountActive]}>{count}</Text>
+            </PressableScale>
+          );
+        })}
+      </ScrollView>
+
+      {/* Sort + the two secondary filters. Sort is a cycling chip rather
+          than a menu — one thumb, no precision. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
+        contentContainerStyle={styles.chipScrollContent}
+      >
+        <PressableScale
+          pressedScale={0.96}
+          style={styles.chip}
+          onPress={cycleSort}
+          accessibilityRole="button"
+          accessibilityLabel={`Sorted by ${SORT_LABEL[sort]}. Tap to change.`}
+        >
+          <Ionicons name="swap-vertical-outline" size={16} color={colors.text} />
+          <Text style={styles.chipText}>{SORT_LABEL[sort]}</Text>
+        </PressableScale>
+        <PressableScale
+          pressedScale={0.96}
+          style={[styles.chip, withFollowUp && styles.chipActive]}
+          onPress={() => setWithFollowUp((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ selected: withFollowUp }}
+          accessibilityLabel="Only jobs with a follow-up set"
+        >
+          <Ionicons
+            name="alarm-outline"
+            size={16}
+            color={withFollowUp ? colors.textInverse : colors.text}
+          />
+          <Text style={[styles.chipText, withFollowUp && styles.chipTextActive]}>Follow-up set</Text>
+        </PressableScale>
+        {carriers.map((c) => {
+          const active = carrier === c;
+          return (
+            <PressableScale
+              key={c}
+              pressedScale={0.96}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => setCarrier(active ? 'all' : c)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`Carrier ${INSURANCE_CARRIER_LABELS[c]}`}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                {INSURANCE_CARRIER_LABELS[c]}
+              </Text>
+            </PressableScale>
+          );
+        })}
+      </ScrollView>
+
+      <ScrollView contentContainerStyle={styles.content}>
+        {filtered.length === 0 ? (
+          <FadeSlideIn style={styles.empty}>
+            <Ionicons name="briefcase-outline" size={28} color={colors.textSubtle} />
+            <Text style={styles.emptyTitle}>
+              {inspections.length === 0 ? 'No jobs yet' : 'No jobs match these filters'}
+            </Text>
+            <Text style={styles.emptyBody}>
+              {inspections.length === 0
+                ? 'A job is created by New Job or by a Quick Inspection. Each one shows up here as a pipeline card.'
+                : 'Clear a filter to see the rest.'}
+            </Text>
+            {inspections.length === 0 ? (
+              <PressableScale
+                style={styles.emptyBtn}
+                onPress={() => router.push('/new-job')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.emptyBtnText}>Start a new job</Text>
+              </PressableScale>
+            ) : filtersActive ? (
+              <PressableScale
+                style={styles.emptyBtn}
+                onPress={() => {
+                  setStage('all');
+                  setCarrier('all');
+                  setWithFollowUp(false);
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.emptyBtnText}>Clear filters</Text>
+              </PressableScale>
+            ) : null}
+          </FadeSlideIn>
+        ) : (
+          filtered.map((ins, i) => {
+            const lead = leadByJob.get(ins.id);
+            return (
+              <FadeSlideIn key={ins.id} index={Math.min(i, 6)}>
+                <JobPipelineCard
+                  inspection={ins}
+                  lead={lead}
+                  lastActivityAt={lastActivityByJob.get(ins.id)}
+                  score={scoreByJob.get(ins.id)}
+                  onOpen={() => router.push(`/job/${ins.id}` as any)}
+                  onBook={lead ? () => book.open(lead) : undefined}
+                  onContacted={
+                    lead && lead.stage === 'new'
+                      ? () => setStageOnLead(lead.id, 'contacted')
+                      : undefined
+                  }
+                />
+              </FadeSlideIn>
+            );
+          })
+        )}
+      </ScrollView>
+
+      <FollowUpSheet
+        visible={book.target !== null}
+        title="Set follow-up"
+        subtitle={book.target?.customerName}
+        options={FOLLOW_UP_OPTIONS}
+        clearLabel={book.target?.followUpAt ? 'Clear follow-up' : undefined}
+        onPick={(when) => book.target && book.commit(book.target, when)}
+        onClose={book.close}
+      />
     </View>
   );
 }
@@ -447,24 +812,22 @@ function SummaryStat({
 // hitSlop so the effective target never shrinks.
 // -----------------------------------------------------------------------------
 
-const SEGMENTS: { id: ViewMode; label: string }[] = [
-  { id: 'list', label: 'List' },
-  { id: 'pipeline', label: 'Pipeline' },
-];
-
 /** iOS inset between the track edge and the thumb. */
 const TRACK_INSET = 2;
 
-function ViewSegmented({
+/** Generic over the option id so Leads|Jobs and List|Board share one control. */
+function Segmented<T extends string>({
+  options,
   value,
   onChange,
 }: {
-  value: ViewMode;
-  onChange: (v: ViewMode) => void;
+  options: readonly { id: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
 }) {
   const [trackWidth, setTrackWidth] = useState(0);
-  const index = value === 'list' ? 0 : 1;
-  const segmentWidth = Math.max(0, (trackWidth - TRACK_INSET * 2) / SEGMENTS.length);
+  const index = Math.max(0, options.findIndex((o) => o.id === value));
+  const segmentWidth = Math.max(0, (trackWidth - TRACK_INSET * 2) / options.length);
   const x = useSharedValue(0);
 
   useEffect(() => {
@@ -486,7 +849,7 @@ function ViewSegmented({
             style={[styles.segmentedThumb, { width: segmentWidth }, thumbStyle]}
           />
         )}
-        {SEGMENTS.map((s) => {
+        {options.map((s) => {
           const active = value === s.id;
           return (
             <Pressable
@@ -536,6 +899,7 @@ function PipelineBoard({
   const chipOffsets = useRef<(number | undefined)[]>([]);
   const [columnIndex, setColumnIndex] = useState(0);
   const [moveTarget, setMoveTarget] = useState<Lead | null>(null);
+  const book = useBookFollowUp();
 
   /**
    * Leads bucketed by board column. `leadStageColumn` folds the legacy
@@ -670,11 +1034,27 @@ function PipelineBoard({
                 totalLeads={leads.length}
                 onOpen={(id) => router.push(`/lead/${id}` as any)}
                 onRequestMove={setMoveTarget}
+                onBook={book.open}
+                // A call or text from the board is contact — the same
+                // new→contacted move the lead screen makes.
+                onContacted={(lead) => {
+                  if (lead.stage === 'new') onMove(lead.id, 'contacted');
+                }}
               />
             ) : null}
           </View>
         ))}
       </ScrollView>
+
+      <FollowUpSheet
+        visible={book.target !== null}
+        title="Set follow-up"
+        subtitle={book.target?.customerName}
+        options={FOLLOW_UP_OPTIONS}
+        clearLabel={book.target?.followUpAt ? 'Clear follow-up' : undefined}
+        onPick={(when) => book.target && book.commit(book.target, when)}
+        onClose={book.close}
+      />
 
       <Modal
         visible={moveTarget !== null}
@@ -760,12 +1140,16 @@ function ColumnPage({
   totalLeads,
   onOpen,
   onRequestMove,
+  onBook,
+  onContacted,
 }: {
   stage: LeadStage;
   columnLeads: Lead[];
   totalLeads: number;
   onOpen: (id: string) => void;
   onRequestMove: (lead: Lead) => void;
+  onBook: (lead: Lead) => void;
+  onContacted: (lead: Lead) => void;
 }) {
   const router = useRouter();
 
@@ -852,6 +1236,27 @@ function ColumnPage({
                 <Text style={styles.boardCardAddress} numberOfLines={2}>
                   {lead.address}
                 </Text>
+                {lead.followUpAt && (
+                  <Pill
+                    label={`Follow-up ${formatDateShort(lead.followUpAt)}`}
+                    tone={new Date(lead.followUpAt).getTime() <= Date.now() ? 'danger' : 'info'}
+                    size="sm"
+                    icon="alarm-outline"
+                    style={styles.boardCardFollowUp}
+                  />
+                )}
+                {/* One-tap contact from the board — Call / Text / Email /
+                    Directions / Book, each only when the lead has the field. */}
+                <QuickActions
+                  name={lead.customerName}
+                  phone={lead.customerPhone}
+                  email={lead.customerEmail}
+                  address={lead.address}
+                  coords={{ lat: lead.lat, lng: lead.lng }}
+                  onBook={() => onBook(lead)}
+                  onContacted={() => onContacted(lead)}
+                  style={styles.boardCardActions}
+                />
                 <PressableScale
                   pressedScale={0.96}
                   style={styles.moveBtn}
@@ -871,24 +1276,9 @@ function ColumnPage({
   );
 }
 
-/**
- * Whole days the lead has sat in its current stage.
- *
- * Precedence: `stageChangedAt` (the exact answer, written by `setStage`) →
- * `updatedAt` → `createdAt`. The fallbacks exist only for leads that predate
- * the `stageChangedAt` field; they over-report freshness, because any write
- * (a follow-up, a storm match) bumps `updatedAt`. Returns null when the
- * stored date is unparseable rather than guessing.
- */
-function daysInStage(lead: Lead): number | null {
-  // `stageChangedAt` is the exact answer; it is absent on leads that have not
-  // moved since the field was added, so fall back to last-touch, then created.
-  const raw = lead.stageChangedAt ?? lead.updatedAt ?? lead.createdAt;
-  if (!isValidDate(raw)) return null;
-  const ms = Date.now() - new Date(raw).getTime();
-  if (ms < 0) return null;
-  return Math.floor(ms / 86400000);
-}
+// `daysInStage` (stageChangedAt → updatedAt → createdAt, null when
+// unparseable) moved to `components/pipeline/chain.ts` so Plan's "Going
+// cold" and Home's Today module measure stage age exactly as the board does.
 
 function formatAge(lead: Lead): string {
   const d = daysInStage(lead);
@@ -926,6 +1316,9 @@ function stageAccent(stage: LeadStage): string {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+
+  // Settings affordance + FAB, 12pt apart (Drift #1 spacing between targets).
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
 
   // 56pt royal-ink FAB with a thin white plus — orange stays reserved for the
   // screen's real primary CTA.
@@ -1225,6 +1618,8 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
+  boardCardFollowUp: { marginTop: spacing.xs },
+  boardCardActions: { marginTop: spacing.sm },
   moveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1233,7 +1628,7 @@ const styles = StyleSheet.create({
     height: touchTarget.standard,
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
   },
   moveBtnText: {
     color: colors.text,

@@ -41,6 +41,18 @@ export function inspectorTrustWeight(): number {
   return TRUST_WEIGHTS[certified ? 'certified' : 'uncertified'];
 }
 
+/**
+ * Upload retry policy. A correction is the training signal the whole
+ * learning loop runs on, so a flaky network must never lose one — but
+ * neither may the app hammer a dead backend forever. A failed batch stays
+ * `pending` behind an exponential backoff (5 min, 10, 20 … capped at 6 h)
+ * and only becomes `failed` — terminal until a manual "Sync now" re-arms it
+ * — after MAX_SYNC_ATTEMPTS. Roughly fourteen hours of trying in total.
+ */
+export const MAX_SYNC_ATTEMPTS = 8;
+const SYNC_BACKOFF_BASE_MS = 5 * 60 * 1000;
+const SYNC_BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
+
 export type RecordCorrectionInput = {
   inspectionId: string;
   photoId: string;
@@ -76,14 +88,78 @@ type CorrectionsStoreState = {
     stars: ConfidenceStars,
     options?: { via?: CorrectionType },
   ) => void;
-  pending: () => Correction[];
+  /**
+   * Records due for upload: `pending`, and past their backoff window unless
+   * `ignoreBackoff` (a manual "Sync now") says to send them regardless.
+   */
+  pending: (opts?: { ignoreBackoff?: boolean }) => Correction[];
   markSyncing: (ids: string[]) => void;
   markSynced: (ids: string[]) => void;
-  markFailed: (ids: string[]) => void;
+  /**
+   * One failed attempt for each id: the record stays `pending` behind a
+   * backoff, or becomes `failed` once MAX_SYNC_ATTEMPTS is reached. `reason`
+   * is kept on the record in plain words either way.
+   */
+  markFailed: (ids: string[], reason?: string) => void;
+  /** Re-arm every terminal `failed` record — a deliberate retry. */
+  requeueFailed: () => void;
+  /**
+   * Put records stuck in `syncing` (a crash mid-upload) back to `pending`.
+   * Only the sync calls this, and only while it holds its own run guard, so
+   * nothing else can be mid-flight.
+   */
+  requeueStale: () => void;
   countByCategory: () => Record<DamageCategory, number>;
   totalCount: () => number;
   clear: () => void;
 };
+
+/** The persisted slice — the records only; every action is rebuilt on load. */
+type Persisted = { corrections: Correction[] };
+
+/**
+ * Bump whenever the persisted shape changes, and teach `migrate` the new
+ * field at the same time. zustand DROPS a stored blob whose version does not
+ * match and no migrate function handles it — for this store that would be
+ * every correction on the device, i.e. the whole local training signal.
+ */
+const PERSIST_VERSION = 1;
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
+
+function normalizeDetection(v: unknown): Correction['originalDetection'] {
+  const raw = isRecord(v) ? v : {};
+  return {
+    findings: Array.isArray(raw.findings) ? (raw.findings as InspectionFinding[]) : [],
+    markers: Array.isArray(raw.markers) ? (raw.markers as DamageMarker[]) : [],
+  };
+}
+
+/**
+ * Fill every field the current shape REQUIRES with its neutral default when
+ * a stored record predates it. Nothing recorded is rewritten; nothing is
+ * invented. Sync state resolves toward `pending`: a record caught mid-upload
+ * by a crash, or one with no state at all, costs at most one extra upload —
+ * the wrong direction (assuming it synced) would lose it.
+ */
+function migrateCorrections(persisted: unknown): Persisted {
+  const raw = isRecord(persisted) ? persisted : {};
+  const list = Array.isArray(raw.corrections) ? raw.corrections.filter(isRecord) : [];
+  return {
+    corrections: list.map((c) => ({
+      ...(c as unknown as Correction),
+      categoriesAffected: Array.isArray(c.categoriesAffected)
+        ? (c.categoriesAffected as DamageCategory[])
+        : [],
+      originalDetection: normalizeDetection(c.originalDetection),
+      correctedDetection: normalizeDetection(c.correctedDetection),
+      delta: isRecord(c.delta) ? c.delta : {},
+      syncStatus:
+        c.syncStatus === 'synced' || c.syncStatus === 'failed' ? c.syncStatus : 'pending',
+    })),
+  };
+}
 
 export const useCorrectionsStore = create<CorrectionsStoreState>()(
   persist(
@@ -128,7 +204,14 @@ export const useCorrectionsStore = create<CorrectionsStoreState>()(
           ),
         })),
 
-      pending: () => get().corrections.filter((c) => c.syncStatus === 'pending'),
+      pending: (opts) => {
+        const now = Date.now();
+        return get().corrections.filter((c) => {
+          if (c.syncStatus !== 'pending') return false;
+          if (opts?.ignoreBackoff || !c.nextSyncAt) return true;
+          return new Date(c.nextSyncAt).getTime() <= now;
+        });
+      },
 
       markSyncing: (ids) =>
         set((s) => ({
@@ -140,16 +223,68 @@ export const useCorrectionsStore = create<CorrectionsStoreState>()(
       markSynced: (ids) =>
         set((s) => ({
           corrections: s.corrections.map((c) =>
-            ids.includes(c.id) ? { ...c, syncStatus: 'synced' } : c,
+            ids.includes(c.id)
+              ? {
+                  ...c,
+                  syncStatus: 'synced',
+                  syncAttempts: undefined,
+                  nextSyncAt: undefined,
+                  syncError: undefined,
+                }
+              : c,
           ),
         })),
 
-      markFailed: (ids) =>
+      markFailed: (ids, reason) =>
+        set((s) => {
+          const now = Date.now();
+          return {
+            corrections: s.corrections.map((c) => {
+              if (!ids.includes(c.id)) return c;
+              const attempts = (c.syncAttempts ?? 0) + 1;
+              if (attempts >= MAX_SYNC_ATTEMPTS) {
+                return {
+                  ...c,
+                  syncStatus: 'failed',
+                  syncAttempts: attempts,
+                  syncError: reason,
+                  nextSyncAt: undefined,
+                };
+              }
+              const delay = Math.min(
+                SYNC_BACKOFF_MAX_MS,
+                SYNC_BACKOFF_BASE_MS * 2 ** (attempts - 1),
+              );
+              return {
+                ...c,
+                syncStatus: 'pending',
+                syncAttempts: attempts,
+                syncError: reason,
+                nextSyncAt: new Date(now + delay).toISOString(),
+              };
+            }),
+          };
+        }),
+
+      requeueFailed: () =>
         set((s) => ({
           corrections: s.corrections.map((c) =>
-            ids.includes(c.id) ? { ...c, syncStatus: 'failed' } : c,
+            c.syncStatus === 'failed'
+              ? { ...c, syncStatus: 'pending', syncAttempts: 0, nextSyncAt: undefined }
+              : c,
           ),
         })),
+
+      requeueStale: () =>
+        set((s) =>
+          s.corrections.some((c) => c.syncStatus === 'syncing')
+            ? {
+                corrections: s.corrections.map((c) =>
+                  c.syncStatus === 'syncing' ? { ...c, syncStatus: 'pending' } : c,
+                ),
+              }
+            : s,
+        ),
 
       countByCategory: () => {
         const out: Record<string, number> = {};
@@ -168,7 +303,9 @@ export const useCorrectionsStore = create<CorrectionsStoreState>()(
     {
       name: 'roofwise.corrections.v1',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ corrections: s.corrections }),
+      version: PERSIST_VERSION,
+      migrate: (persisted) => migrateCorrections(persisted),
+      partialize: (s): Persisted => ({ corrections: s.corrections }),
     },
   ),
 );

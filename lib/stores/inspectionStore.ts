@@ -18,6 +18,7 @@ import type {
   RoofCondition,
   InsuranceCarrier,
   PhotoMeta,
+  PhotoSyncState,
   Slope,
   SlopeOrientation,
   DamageMarker,
@@ -45,12 +46,20 @@ function newSlopeId(): string {
  * @param intel  the job's aerial measurement, when it has one — a slope
  *   created later (the inspector walks a new elevation) still gets its
  *   measured area, so area does not depend on capture order.
+ * @param pitch  the job's whole-roof Pitch Gauge reading, when one was taken
+ *   before this slope existed — same reasoning: the reading should not
+ *   depend on which slope happened to be shot first.
  */
-function makeSlope(orientation: SlopeOrientation, intel?: PropertyIntel): Slope {
+function makeSlope(
+  orientation: SlopeOrientation,
+  intel?: PropertyIntel,
+  pitch?: number,
+): Slope {
   const detected = squaresFacing(intel, orientation);
   return {
     id: newSlopeId(),
     orientation,
+    ...(pitch != null ? { pitchDegrees: pitch } : {}),
     areaSquares: 0,
     detectedAreaSquares: detected,
     damage: [],
@@ -69,6 +78,12 @@ function makeSlope(orientation: SlopeOrientation, intel?: PropertyIntel): Slope 
 
 function mintReportId(year: number, ordinal: number): string {
   return `RW-${year}-${String(ordinal).padStart(4, '0')}`;
+}
+
+/** Inverse of `mintReportId` — 0 for anything that is not an RW id. */
+function ordinalOf(reportId: unknown): number {
+  const m = typeof reportId === 'string' ? reportId.match(/-(\d{4})$/) : null;
+  return m ? parseInt(m[1], 10) : 0;
 }
 
 type CreateDraft = {
@@ -99,6 +114,11 @@ type CreateDraft = {
   collateralEvidence?: CollateralEvidence;
   brittlenessProtocol?: BrittlenessProtocol;
   codeComplianceNotes?: string;
+
+  /** The lead this job was converted from — the wizard links both ends. */
+  leadId?: string;
+  /** Whole-roof Pitch Gauge reading taken in the wizard (degrees). */
+  pitchDegrees?: number;
 };
 
 /** Claim detail fields editable after creation (job detail / edit flows). */
@@ -201,6 +221,29 @@ type InspectionStoreState = {
     localUri: string,
     remoteUrl: string,
   ) => void;
+  /**
+   * Record why a photo has not uploaded (or never will). `undefined` clears
+   * the entry — `setPhotoUpload` does that itself on success.
+   */
+  setPhotoSyncState: (
+    inspectionId: string,
+    slopeId: string,
+    localUri: string,
+    state: PhotoSyncState | undefined,
+  ) => void;
+  /**
+   * File a Pitch Gauge reading on one slope. Degrees, already clamped to
+   * 0–75 by the gauge; the slope's own reading always wins over the roof's.
+   */
+  setSlopePitch: (inspectionId: string, slopeId: string, degrees: number) => void;
+  /**
+   * File a Pitch Gauge reading for the whole roof: stored on the inspection,
+   * copied onto every slope that has NO pitch yet, and seeded onto slopes
+   * created afterwards. A slope with its own reading is left alone.
+   */
+  setRoofPitch: (inspectionId: string, degrees: number) => void;
+  /** Link (or unlink with `undefined`) the pipeline lead this job came from. */
+  setLeadId: (inspectionId: string, leadId: string | undefined) => void;
   setNotes: (id: string, notes: string) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
@@ -257,6 +300,16 @@ function withRecount(slope: Slope): Slope {
   };
 }
 
+/** `record` without `key`; `undefined` once nothing is left, so the field disappears. */
+function withoutKey<T>(
+  record: Record<string, T> | undefined,
+  key: string,
+): Record<string, T> | undefined {
+  if (!record || !(key in record)) return record;
+  const { [key]: _dropped, ...rest } = record;
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
 /** Appends per-photo capture metadata only when the capture carried some. */
 function appendPhotoMeta(
   slope: Slope,
@@ -268,6 +321,88 @@ function appendPhotoMeta(
     ...(slope.photoMeta ?? []),
     { photoIndex, areaTag: cap.areaTag, captureMode: cap.captureMode },
   ];
+}
+
+// -----------------------------------------------------------------------------
+// Persist versioning
+// -----------------------------------------------------------------------------
+
+/** The persisted slice — the records only; every action is rebuilt on load. */
+type Persisted = { inspections: Inspection[]; nextOrdinal: number };
+
+/**
+ * Bump whenever the persisted shape changes, and teach `migrateInspections`
+ * the new field at the same time. zustand DROPS a stored blob whose version
+ * does not match and no migrate function handles it — for this store that
+ * is every job on the device.
+ */
+const PERSIST_VERSION = 1;
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
+
+const finiteOr0 = (v: unknown): number =>
+  typeof v === 'number' && Number.isFinite(v) ? v : 0;
+
+/**
+ * Rehydration guard. Every field the current `Slope` shape REQUIRES is
+ * filled with the same neutral value `makeSlope()` starts from — empty
+ * arrays, zero counts, false — and nothing else is touched. It never invents
+ * a value the roofer did not record (no pitch, no area, no verdict).
+ */
+function normalizeSlope(raw: Record<string, unknown>): Slope {
+  return {
+    ...(raw as unknown as Slope),
+    orientation:
+      typeof raw.orientation === 'string' ? (raw.orientation as SlopeOrientation) : 'Unknown',
+    areaSquares: finiteOr0(raw.areaSquares),
+    damage: Array.isArray(raw.damage) ? (raw.damage as DamageMarker[]) : [],
+    hailCount: finiteOr0(raw.hailCount),
+    windLiftCount: finiteOr0(raw.windLiftCount),
+    wearCount: finiteOr0(raw.wearCount),
+    missingCount: finiteOr0(raw.missingCount),
+    bruisingCount: finiteOr0(raw.bruisingCount),
+    functional: raw.functional === true,
+    verifyWithInspector: raw.verifyWithInspector === true,
+    aiFindings: Array.isArray(raw.aiFindings) ? (raw.aiFindings as InspectionFinding[]) : [],
+    photoPaths: Array.isArray(raw.photoPaths)
+      ? raw.photoPaths.filter((p): p is string => typeof p === 'string')
+      : [],
+  };
+}
+
+/** Same guard for the `Inspection` shell; the defaults are `create()`'s. */
+function normalizeInspection(raw: Record<string, unknown>): Inspection {
+  return {
+    ...(raw as unknown as Inspection),
+    status: typeof raw.status === 'string' ? (raw.status as InspectionStatus) : 'in_progress',
+    customerName: typeof raw.customerName === 'string' ? raw.customerName : '',
+    address: typeof raw.address === 'string' ? raw.address : '',
+    brittlenessTest:
+      typeof raw.brittlenessTest === 'string'
+        ? (raw.brittlenessTest as BrittlenessTest)
+        : 'not_tested',
+    collateralChecklist: isRecord(raw.collateralChecklist)
+      ? (raw.collateralChecklist as Record<string, boolean>)
+      : {},
+    slopes: Array.isArray(raw.slopes) ? raw.slopes.filter(isRecord).map(normalizeSlope) : [],
+    verifyWithInspector: raw.verifyWithInspector === true,
+  };
+}
+
+/**
+ * Runs once, when a stored blob's version is older than PERSIST_VERSION.
+ * `nextOrdinal` is re-derived from the highest report id present when the
+ * stored counter is missing or behind it, so a migrated device can never
+ * mint a duplicate RW-YYYY-#### number.
+ */
+function migrateInspections(persisted: unknown): Persisted {
+  const raw = isRecord(persisted) ? persisted : {};
+  const list = Array.isArray(raw.inspections) ? raw.inspections.filter(isRecord) : [];
+  const inspections = list.map(normalizeInspection);
+  const highest = inspections.reduce((max, i) => Math.max(max, ordinalOf(i.reportId)), 0);
+  const stored = typeof raw.nextOrdinal === 'number' ? raw.nextOrdinal : 0;
+  return { inspections, nextOrdinal: Math.max(stored, highest + 1) };
 }
 
 export const useInspectionStore = create<InspectionStoreState>()(
@@ -322,6 +457,8 @@ export const useInspectionStore = create<InspectionStoreState>()(
             (d.kind === 'insurance_claim' ? emptyCollateralEvidence() : undefined),
           brittlenessProtocol: d.brittlenessProtocol,
           codeComplianceNotes: d.codeComplianceNotes,
+          leadId: d.leadId,
+          pitchDegrees: d.pitchDegrees,
         };
         set((s) => ({
           inspections: [inspection, ...s.inspections],
@@ -553,12 +690,16 @@ export const useInspectionStore = create<InspectionStoreState>()(
                       ? { ...m, photoIndex: m.photoIndex - 1 }
                       : m,
                   );
+                // Upload bookkeeping is keyed by URI, so nothing renumbers —
+                // but a dropped photo's pending/failed state goes with it.
+                const removedUri = sl.photoPaths[photoIndex];
                 return withRecount({
                   ...sl,
                   photoPaths,
                   damage,
                   analyzedPhotoIndices,
                   photoMeta,
+                  photoSync: withoutKey(sl.photoSync, removedUri),
                 });
               }),
             };
@@ -598,11 +739,66 @@ export const useInspectionStore = create<InspectionStoreState>()(
                   ? {
                       ...sl,
                       photoUploads: { ...(sl.photoUploads ?? {}), [localUri]: remoteUrl },
+                      // An upload that landed has nothing left to explain.
+                      photoSync: withoutKey(sl.photoSync, localUri),
                     }
                   : sl,
               ),
             };
           }),
+        })),
+
+      setPhotoSyncState: (inspectionId, slopeId, localUri, state) =>
+        set((s) => ({
+          inspections: s.inspections.map((ins) => {
+            if (ins.id !== inspectionId) return ins;
+            return {
+              ...ins,
+              slopes: ins.slopes.map((sl) => {
+                if (sl.id !== slopeId) return sl;
+                const photoSync = state
+                  ? { ...(sl.photoSync ?? {}), [localUri]: state }
+                  : withoutKey(sl.photoSync, localUri);
+                return { ...sl, photoSync };
+              }),
+            };
+          }),
+        })),
+
+      setSlopePitch: (inspectionId, slopeId, degrees) =>
+        set((s) => ({
+          inspections: s.inspections.map((ins) =>
+            ins.id !== inspectionId
+              ? ins
+              : {
+                  ...ins,
+                  slopes: ins.slopes.map((sl) =>
+                    sl.id === slopeId ? { ...sl, pitchDegrees: degrees } : sl,
+                  ),
+                },
+          ),
+        })),
+
+      setRoofPitch: (inspectionId, degrees) =>
+        set((s) => ({
+          inspections: s.inspections.map((ins) =>
+            ins.id !== inspectionId
+              ? ins
+              : {
+                  ...ins,
+                  pitchDegrees: degrees,
+                  slopes: ins.slopes.map((sl) =>
+                    sl.pitchDegrees == null ? { ...sl, pitchDegrees: degrees } : sl,
+                  ),
+                },
+          ),
+        })),
+
+      setLeadId: (inspectionId, leadId) =>
+        set((s) => ({
+          inspections: s.inspections.map((ins) =>
+            ins.id === inspectionId ? { ...ins, leadId } : ins,
+          ),
         })),
 
       getById: (id) => get().inspections.find((i) => i.id === id),
@@ -616,7 +812,7 @@ export const useInspectionStore = create<InspectionStoreState>()(
             for (const cap of captures) {
               let slope = slopes.find((sl) => sl.orientation === cap.slope);
               if (!slope) {
-                slope = makeSlope(cap.slope, ins.propertyIntel);
+                slope = makeSlope(cap.slope, ins.propertyIntel, ins.pitchDegrees);
                 slopes.push(slope);
               }
               const photoIndex = slope.photoPaths.length;
@@ -637,7 +833,7 @@ export const useInspectionStore = create<InspectionStoreState>()(
             for (const cap of captures) {
               let slope = slopes.find((sl) => sl.orientation === cap.slope);
               if (!slope) {
-                slope = makeSlope(cap.slope, ins.propertyIntel);
+                slope = makeSlope(cap.slope, ins.propertyIntel, ins.pitchDegrees);
                 slopes.push(slope);
               }
               const photoIndex = slope.photoPaths.length;
@@ -712,7 +908,9 @@ export const useInspectionStore = create<InspectionStoreState>()(
     {
       name: 'roofwise.inspections.v1',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ inspections: s.inspections, nextOrdinal: s.nextOrdinal }),
+      version: PERSIST_VERSION,
+      migrate: (persisted) => migrateInspections(persisted),
+      partialize: (s): Persisted => ({ inspections: s.inspections, nextOrdinal: s.nextOrdinal }),
     },
   ),
 );

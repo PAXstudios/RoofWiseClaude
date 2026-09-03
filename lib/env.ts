@@ -51,10 +51,10 @@ export const env = {
   GOOGLE_WEATHER_API_KEY: pick(process.env.EXPO_PUBLIC_GOOGLE_WEATHER_API_KEY, googleMapsKey),
 
   // App
-  CORRECTIONS_ENDPOINT: pick(
-    process.env.EXPO_PUBLIC_CORRECTIONS_ENDPOINT,
-    'https://roofwise-backend.vercel.app/api/v1/corrections/batch',
-  ),
+  // (Corrections used to POST to EXPO_PUBLIC_CORRECTIONS_ENDPOINT, a Vercel
+  // placeholder that never existed. They now upsert into Supabase
+  // `public.corrections` through lib/services/correctionsSync.ts; the var
+  // is gone on purpose — do not reintroduce a second write path.)
   NOAA_USER_AGENT: pick(process.env.EXPO_PUBLIC_NOAA_USER_AGENT, NOAA_USER_AGENT_FALLBACK),
 
   // Feature flags

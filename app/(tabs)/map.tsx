@@ -35,6 +35,7 @@ import {
   useStormSwaths,
 } from '@/components/map/StormOverlay';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
 import { PressableScale } from '@/components/PressableScale';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '@/components/glass/GlassCard';
@@ -745,17 +746,23 @@ export default function MapScreen() {
         <ScreenHeader
           title={filter === 'storms' ? 'Storm Tracer' : 'Map'}
           right={
-            <PressableScale
-              style={styles.knockBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Knock mode"
-              onPress={() => router.push('/door-knocking')}
-            >
-              <View style={styles.knockBtnFill}>
-                <Ionicons name="walk-outline" size={18} color={colors.textInverse} />
-                <Text style={styles.knockBtnText}>Knock mode</Text>
-              </View>
-            </PressableScale>
+            // Settings sits beside Knock mode so it is one tap from this
+            // root too (shared affordance on every tab); the knock button
+            // itself is untouched.
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              <SettingsAffordance />
+              <PressableScale
+                style={styles.knockBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Knock mode"
+                onPress={() => router.push('/door-knocking')}
+              >
+                <View style={styles.knockBtnFill}>
+                  <Ionicons name="walk-outline" size={18} color={colors.textInverse} />
+                  <Text style={styles.knockBtnText}>Knock mode</Text>
+                </View>
+              </PressableScale>
+            </View>
           }
         />
       </Rise>

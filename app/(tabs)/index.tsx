@@ -42,6 +42,8 @@ import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { PressableScale } from '@/components/PressableScale';
 import { AnimatedCounter } from '@/components/motion';
 import { AreaActivityCard } from '@/components/home/AreaActivityCard';
+import { TodayModule, useTodayAgenda } from '@/components/home/TodayModule';
+import { activityHref } from '@/components/home/activityRoute';
 import { Aurora } from '@/components/glass/Aurora';
 import { IconChip, CHIP_TONES, type ChipTone } from '@/components/ui/IconChip';
 import { StatCard } from '@/components/ui/StatCard';
@@ -140,6 +142,19 @@ export default function HomeScreen() {
   const leads = useLeadStore((s) => s.leads);
   const inspectorName = useInspectorProfileStore((s) => s.profile.fullName);
   const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
+  // Today's real next actions — same helper Plan reads, so the two agree.
+  const agenda = useTodayAgenda();
+
+  // Activity rows route to the record they describe and stay plain text when
+  // it no longer exists — never a button that opens "Job not found".
+  const activityRouteCtx = useMemo(
+    () => ({
+      hasInspection: (id: string) => inspections.some((i) => i.id === id),
+      hasLead: (id: string) => leads.some((l) => l.id === id),
+      proposalJobId: (id: string) => proposals.find((p) => p.id === id)?.jobId,
+    }),
+    [inspections, leads, proposals],
+  );
 
   // Flip the entrance gate after the first mount's children have scheduled
   // their animations (child effects run before this parent effect).
@@ -433,6 +448,18 @@ export default function HomeScreen() {
         </RichCard>
       </Rise>
 
+      {/* Today — the roofer's real next actions (today's inspections,
+          follow-ups due, leads going cold, the live route), each row landing
+          on its job or lead. It sits right under the hero CTAs ONLY when
+          there is something to do: on a quiet day it is absent entirely, so
+          the weather + map first-screenful the owner asked for is untouched
+          and no "nothing today" placeholder ever occupies the cockpit. */}
+      {agenda.hasItems && (
+        <Rise index={3}>
+          <TodayModule agenda={agenda} />
+        </Rise>
+      )}
+
       {/* Area Activity — the owner's second headline module, directly under
           the hero CTAs so weather and map are the two things the first screen
           is about. Always rendered: the card owns its own honest states (no
@@ -451,7 +478,8 @@ export default function HomeScreen() {
 
       {/* Stats — colour-chipped StatCards. Deltas are omitted: nothing in the
           stores yet tracks a true prior-period comparison, and inventing one
-          would be a mock (Drift #5). */}
+          would be a mock (Drift #5). Each card opens Reports — the business
+          dashboard used to be two levels deep behind Settings. */}
       <Rise index={4} style={styles.statsRow}>
         <StatCard
           icon="cash-outline"
@@ -459,6 +487,8 @@ export default function HomeScreen() {
           value={`$${formatShort(revenueYTD)}`}
           label="Revenue YTD"
           style={{ flex: 1 }}
+          onPress={() => router.push('/reports')}
+          accessibilityLabel={`Revenue year to date $${formatShort(revenueYTD)}. Open reports.`}
         />
         <StatCard
           icon="people-outline"
@@ -466,6 +496,8 @@ export default function HomeScreen() {
           value={String(openLeads)}
           label="Leads"
           style={{ flex: 1 }}
+          onPress={() => router.push('/reports')}
+          accessibilityLabel={`${openLeads} open leads. Open reports.`}
         />
         <StatCard
           icon="trending-up-outline"
@@ -473,6 +505,8 @@ export default function HomeScreen() {
           value={`$${formatShort(pipelineValue)}`}
           label="Pipeline"
           style={{ flex: 1 }}
+          onPress={() => router.push('/reports')}
+          accessibilityLabel={`Pipeline $${formatShort(pipelineValue)}. Open reports.`}
         />
       </Rise>
 
@@ -710,18 +744,39 @@ export default function HomeScreen() {
             style={styles.sectionHeaderSpacing}
           />
           <View style={styles.activityCard}>
-            {recentActivity.map((evt, i) => (
-              <View
-                key={evt.id}
-                style={[styles.activityRow, i > 0 && styles.activityRowBorder]}
-              >
-                <IconChip name={iconFor(evt.kind)} tone="quiet" size="sm" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.activityMsg}>{evt.message}</Text>
-                  <Text style={styles.activityTime}>{formatRelative(evt.createdAt)}</Text>
+            {recentActivity.map((evt, i) => {
+              const href = activityHref(evt, activityRouteCtx);
+              const body = (
+                <>
+                  <IconChip name={iconFor(evt.kind)} tone="quiet" size="sm" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.activityMsg}>{evt.message}</Text>
+                    <Text style={styles.activityTime}>{formatRelative(evt.createdAt)}</Text>
+                  </View>
+                  {href && <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />}
+                </>
+              );
+              // Pressable only when the record it names still exists.
+              return href ? (
+                <PressableScale
+                  key={evt.id}
+                  style={[
+                    styles.activityRow,
+                    styles.activityRowPressable,
+                    i > 0 && styles.activityRowBorder,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${evt.message}. Open.`}
+                  onPress={() => router.push(href as any)}
+                >
+                  {body}
+                </PressableScale>
+              ) : (
+                <View key={evt.id} style={[styles.activityRow, i > 0 && styles.activityRowBorder]}>
+                  {body}
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </View>
       )}
@@ -1145,6 +1200,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
   },
+  // A row that opens something takes the glove floor (Drift #1).
+  activityRowPressable: { minHeight: touchTarget.standard },
   activityMsg: { fontSize: fontSize.bodyMd, color: colors.text },
   activityTime: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
 

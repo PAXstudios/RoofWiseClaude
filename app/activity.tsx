@@ -4,8 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
+import { useProposalStore } from '@/lib/stores/proposalStore';
+import { PressableScale } from '@/components/PressableScale';
 import { RichCard } from '@/components/ui/RichCard';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { activityHref } from '@/components/home/activityRoute';
 import {
   colors,
   fontSize,
@@ -42,9 +47,23 @@ export default function ActivityScreen() {
   const router = useRouter();
   const events = useActivityStore((s) => s.events);
   const clear = useActivityStore((s) => s.clear);
+  const inspections = useInspectionStore((s) => s.inspections);
+  const leads = useLeadStore((s) => s.leads);
+  const proposals = useProposalStore((s) => s.proposals);
   const [filter, setFilter] = useState<FilterId>('all');
 
   const filtered = useMemo(() => events.filter((e) => matchesFilter(e.kind, filter)), [events, filter]);
+
+  // Rows route to the record they describe (job / proposal / lead) and stay
+  // plain text when that record is gone — a feed row is never a dead button.
+  const routeCtx = useMemo(
+    () => ({
+      hasInspection: (id: string) => inspections.some((i) => i.id === id),
+      hasLead: (id: string) => leads.some((l) => l.id === id),
+      proposalJobId: (id: string) => proposals.find((p) => p.id === id)?.jobId,
+    }),
+    [inspections, leads, proposals],
+  );
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -103,18 +122,34 @@ export default function ActivityScreen() {
           </RichCard>
         ) : (
           <RichCard padded={false}>
-            {filtered.map((evt, i) => (
-              <View
-                key={evt.id}
-                style={[styles.row, i > 0 && styles.rowBorder]}
-              >
-                <IconChip name={iconFor(evt.kind)} tone={toneFor(evt.kind)} size="sm" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.msg}>{evt.message}</Text>
-                  <Text style={styles.time}>{formatTime(evt.createdAt)}</Text>
+            {filtered.map((evt, i) => {
+              const href = activityHref(evt, routeCtx);
+              const body = (
+                <>
+                  <IconChip name={iconFor(evt.kind)} tone={toneFor(evt.kind)} size="sm" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.msg}>{evt.message}</Text>
+                    <Text style={styles.time}>{formatTime(evt.createdAt)}</Text>
+                  </View>
+                  {href && <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />}
+                </>
+              );
+              return href ? (
+                <PressableScale
+                  key={evt.id}
+                  style={[styles.row, styles.rowPressable, i > 0 && styles.rowBorder]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${evt.message}. Open.`}
+                  onPress={() => router.push(href as any)}
+                >
+                  {body}
+                </PressableScale>
+              ) : (
+                <View key={evt.id} style={[styles.row, i > 0 && styles.rowBorder]}>
+                  {body}
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </RichCard>
         )}
       </ScrollView>
@@ -214,6 +249,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
+  // A row that opens something is a target, so it takes the glove floor
+  // (Drift #1); the chevron carries the "this goes somewhere" cue.
+  rowPressable: { alignItems: 'center', minHeight: touchTarget.standard },
   msg: { fontSize: fontSize.bodyMd, color: colors.text },
   time: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
 

@@ -18,7 +18,10 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
 import { useProposalLinkStore } from '@/lib/stores/proposalLinkStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { PostSignatureActions } from '@/components/pipeline/PostSignatureActions';
+import { findLinkedLead, nextStageFor, type ChainEvent } from '@/components/pipeline/chain';
 import { generateProposalDraft } from '@/lib/services/proposalGenerator';
 import { generateProposalPdf } from '@/lib/services/proposalPdf';
 import { SignaturePad } from '@/components/SignaturePad';
@@ -46,6 +49,8 @@ export default function ProposalView() {
   const urlFor = useProposalLinkStore((s) => s.urlFor);
   const allLinks = useProposalLinkStore((s) => s.links);
   const logActivity = useActivityStore((s) => s.log);
+  const leads = useLeadStore((s) => s.leads);
+  const setLeadStage = useLeadStore((s) => s.setStage);
   const toast = useToastStore((s) => s.show);
   const [busy, setBusy] = useState(false);
 
@@ -85,6 +90,16 @@ export default function ProposalView() {
     );
   }
 
+  // Sent / signed move the LINKED LEAD on the board — forward only, and only
+  // when the job has a lead on record. A won proposal moves the pipeline with
+  // no double entry.
+  const advanceLead = (event: ChainEvent) => {
+    const lead = findLinkedLead(inspection, leads);
+    if (!lead) return;
+    const stage = nextStageFor(lead, event);
+    if (stage) setLeadStage(lead.id, stage);
+  };
+
   const onRegenerate = () => {
     Alert.alert(
       'Regenerate proposal?',
@@ -115,6 +130,7 @@ export default function ProposalView() {
         proposalId: proposal.id,
         message: `Sent proposal for ${inspection.reportId}`,
       });
+      advanceLead('proposal_sent');
       await Share.share({
         url: uri,
         message: `RoofWise proposal — ${inspection.customerName}`,
@@ -261,12 +277,25 @@ export default function ProposalView() {
           <SignaturePad
             onChange={(svg) => {
               if (svg) {
+                // `proposal` is this render's record: the first stroke that
+                // signs sees 'draft'/'sent', every later stroke sees 'signed',
+                // so the log line and the stage move fire exactly once.
+                const firstSignature = proposal.status !== 'signed';
                 upsert({
                   ...proposal,
                   homeownerSignatureSvg: svg,
                   status: 'signed',
                   signedAt: new Date().toISOString(),
                 });
+                if (firstSignature) {
+                  logActivity({
+                    kind: 'proposal_signed',
+                    inspectionId: inspection.id,
+                    proposalId: proposal.id,
+                    message: `${inspection.customerName} signed the proposal for ${inspection.reportId}`,
+                  });
+                  advanceLead('proposal_signed');
+                }
               }
             }}
           />
@@ -277,6 +306,10 @@ export default function ProposalView() {
             </View>
           )}
         </RichCard>
+
+        {/* The money chain must not end at "signed": schedule the install,
+            mark the deal won, set the next follow-up — each on the linked lead. */}
+        {proposal.status === 'signed' && <PostSignatureActions inspection={inspection} />}
 
         <Pressable style={styles.secondaryBtn} onPress={onRegenerate}>
           <Ionicons name="refresh-outline" size={18} color={colors.navy} />

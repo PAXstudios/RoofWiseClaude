@@ -8,7 +8,7 @@ import { checkStormWatch } from './stormWatch';
 import { syncCorrections } from './correctionsSync';
 import { syncLeads } from './leadSync';
 import { syncInspections, startInspectionWatcher } from './inspectionSync';
-import { syncInspectionPhotos } from './photoSync';
+import { runPhotoSync } from './photoSync';
 import { drainAnalysisQueue } from './analysisQueue';
 import { useServiceAreaStore } from '../stores/serviceAreaStore';
 import { useAuthStore } from '../auth/authStore';
@@ -17,12 +17,14 @@ const STORM_INTERVAL_MS = 30 * 60 * 1000;       // 30 minutes
 const CORRECTIONS_INTERVAL_MS = 5 * 60 * 1000;  // 5 minutes
 const LEADS_INTERVAL_MS = 5 * 60 * 1000;        // 5 minutes
 const INSPECTIONS_INTERVAL_MS = 5 * 60 * 1000;  // 5 minutes
+const PHOTOS_INTERVAL_MS = 2 * 60 * 1000;       // 2 minutes — uploads drain on their own clock
 
 export function useBackgroundJobs() {
   const lastStormScan = useRef(0);
   const lastSync = useRef(0);
   const lastLeadsSync = useRef(0);
   const lastInspectionsSync = useRef(0);
+  const lastPhotosSync = useRef(0);
 
   useEffect(() => {
     startInspectionWatcher();
@@ -53,9 +55,18 @@ export function useBackgroundJobs() {
           now - lastInspectionsSync.current > INSPECTIONS_INTERVAL_MS
         ) {
           lastInspectionsSync.current = now;
-          syncInspections()
-            .then(() => syncInspectionPhotos())
-            .catch(() => {});
+          syncInspections().catch(() => {});
+        }
+        // Photo uploads used to run only on the tail of an inspection sync,
+        // so a 40-photo job trickled up 8 per app-open. They drain on their
+        // own clock now — `runPhotoSync` is a no-op with nothing pending —
+        // and push the inspection payload themselves once URLs exist.
+        if (
+          useAuthStore.getState().session &&
+          now - lastPhotosSync.current > PHOTOS_INTERVAL_MS
+        ) {
+          lastPhotosSync.current = now;
+          runPhotoSync().catch(() => {});
         }
         // Resume any queued AI analysis the moment the app is usable again.
         drainAnalysisQueue().catch(() => {});

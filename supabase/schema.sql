@@ -43,6 +43,8 @@ create table if not exists public.leads (
   last_contact_at timestamptz,
   follow_up_at timestamptz,
   last_storm_match jsonb,
+  -- Lead ↔ job link (migration 20260903120100_leads_inspection_id.sql).
+  inspection_id text,
   stage_changed_at timestamptz,
   created_at timestamptz not null,
   updated_at timestamptz not null default now()
@@ -208,16 +210,15 @@ drop policy if exists "prompt_releases_read_active" on public.prompt_releases;
 create policy "prompt_releases_read_active" on public.prompt_releases
   for select using (active = true and auth.role() = 'authenticated');
 
--- updated_at maintenance for the sync tables
+-- updated_at on the sync tables is CLIENT-owned (migration
+-- 20260903120000_drop_touch_updated_at.sql): lib/services/leadSync.ts and
+-- inspectionSync.ts send the roofer's edit time and resolve conflicts on it.
+-- The old `*_touch` BEFORE UPDATE triggers overwrote it with now() and turned
+-- last-write-wins into last-syncer-wins. The function stays for future
+-- server-owned tables; the triggers must not come back.
 create or replace function public.touch_updated_at() returns trigger language plpgsql as $$
 begin new.updated_at = now(); return new; end $$;
-do $$
-declare t text;
-begin
-  foreach t in array array['inspections','leads'] loop
-    execute format('drop trigger if exists %I on public.%I', t || '_touch', t);
-    execute format('create trigger %I before update on public.%I for each row execute function public.touch_updated_at()', t || '_touch', t);
-  end loop;
-end $$;
+drop trigger if exists inspections_touch on public.inspections;
+drop trigger if exists leads_touch on public.leads;
 
 -- Done. Verify with:  select table_name from information_schema.tables where table_schema='public';

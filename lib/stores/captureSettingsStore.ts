@@ -40,21 +40,78 @@ type State = {
   setCoachStep: (jobId: string, stepId: string) => void;
 };
 
+/** The persisted slice — everything but the setters. */
+type Persisted = Pick<
+  State,
+  | 'liveOverlay'
+  | 'guides'
+  | 'arNotify'
+  | 'lastLiveModel'
+  | 'multiSelectImport'
+  | 'coachEnabled'
+  | 'coachStepByJob'
+>;
+
+/** One place for the defaults: the fresh-install state AND what a missing
+ *  field rehydrates to, so the two can never disagree. */
+const DEFAULTS: Persisted = {
+  liveOverlay: false,
+  guides: true,
+  arNotify: false,
+  lastLiveModel: null,
+  multiSelectImport: true,
+  coachEnabled: true,
+  coachStepByJob: {},
+};
+
+/**
+ * Bump whenever the persisted shape changes, and teach `migrate` the new
+ * field at the same time. zustand DROPS a stored blob whose version does not
+ * match and no migrate function handles it — for this store that would
+ * silently switch Live overlay / the coach back to defaults on every device.
+ */
+const PERSIST_VERSION = 1;
+
+function bool(v: unknown, fallback: boolean): boolean {
+  return typeof v === 'boolean' ? v : fallback;
+}
+
+/**
+ * Fill every field the current shape needs with its default when a stored
+ * blob predates it (or holds the wrong type). Nothing the roofer chose is
+ * changed — only what is missing is filled.
+ */
+function migrateCaptureSettings(persisted: unknown): Persisted {
+  const raw = (persisted && typeof persisted === 'object' ? persisted : {}) as Partial<
+    Record<keyof Persisted, unknown>
+  >;
+  const steps = raw.coachStepByJob;
+  const coachStepByJob: Record<string, string> = {};
+  if (steps && typeof steps === 'object' && !Array.isArray(steps)) {
+    for (const [jobId, stepId] of Object.entries(steps as Record<string, unknown>)) {
+      if (typeof stepId === 'string') coachStepByJob[jobId] = stepId;
+    }
+  }
+  return {
+    liveOverlay: bool(raw.liveOverlay, DEFAULTS.liveOverlay),
+    guides: bool(raw.guides, DEFAULTS.guides),
+    arNotify: bool(raw.arNotify, DEFAULTS.arNotify),
+    lastLiveModel: typeof raw.lastLiveModel === 'string' ? raw.lastLiveModel : null,
+    multiSelectImport: bool(raw.multiSelectImport, DEFAULTS.multiSelectImport),
+    coachEnabled: bool(raw.coachEnabled, DEFAULTS.coachEnabled),
+    coachStepByJob,
+  };
+}
+
 export const useCaptureSettingsStore = create<State>()(
   persist(
     (set) => ({
-      liveOverlay: false,
-      guides: true,
-      arNotify: false,
-      lastLiveModel: null,
-      multiSelectImport: true,
+      ...DEFAULTS,
       setLiveOverlay: (v) => set({ liveOverlay: v }),
       setGuides: (v) => set({ guides: v }),
       setArNotify: (v) => set({ arNotify: v }),
       setLastLiveModel: (model) => set({ lastLiveModel: model }),
       setMultiSelectImport: (v) => set({ multiSelectImport: v }),
-      coachEnabled: true,
-      coachStepByJob: {},
       setCoachEnabled: (v) => set({ coachEnabled: v }),
       setCoachStep: (jobId, stepId) =>
         set((s) => ({ coachStepByJob: { ...s.coachStepByJob, [jobId]: stepId } })),
@@ -62,7 +119,9 @@ export const useCaptureSettingsStore = create<State>()(
     {
       name: 'roofwise.captureSettings.v1',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({
+      version: PERSIST_VERSION,
+      migrate: (persisted) => migrateCaptureSettings(persisted),
+      partialize: (s): Persisted => ({
         liveOverlay: s.liveOverlay,
         guides: s.guides,
         arNotify: s.arNotify,

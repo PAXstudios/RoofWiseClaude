@@ -15,10 +15,14 @@ import { useProposalLinkStore } from '@/lib/stores/proposalLinkStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
+import { useActivityStore } from '@/lib/stores/activityStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { IconChip } from '@/components/ui/IconChip';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { SignaturePad } from '@/components/SignaturePad';
+import { PostSignatureActions } from '@/components/pipeline/PostSignatureActions';
+import { findLinkedLead, nextStageFor } from '@/components/pipeline/chain';
 import {
   colors,
   fontSize,
@@ -43,6 +47,9 @@ export default function HomeownerProposalView() {
     link ? s.inspections.find((i) => i.id === link.jobId) : undefined,
   );
   const inspector = useInspectorProfileStore((s) => s.profile);
+  const logActivity = useActivityStore((s) => s.log);
+  const leads = useLeadStore((s) => s.leads);
+  const setLeadStage = useLeadStore((s) => s.setStage);
   const toast = useToastStore((s) => s.show);
 
   useEffect(() => {
@@ -76,12 +83,30 @@ export default function HomeownerProposalView() {
 
   const onSign = (svg: string) => {
     if (!svg) return;
+    // The pad is only mounted while unsigned, so this is the first signature;
+    // the guard keeps a re-render mid-stroke from double-logging it.
+    const firstSignature = proposal.status !== 'signed';
     upsertProposal({
       ...proposal,
       homeownerSignatureSvg: svg,
       status: 'signed',
       signedAt: new Date().toISOString(),
     });
+    if (firstSignature) {
+      logActivity({
+        kind: 'proposal_signed',
+        inspectionId: inspection.id,
+        proposalId: proposal.id,
+        message: `${inspection.customerName} signed the proposal for ${inspection.reportId}`,
+      });
+      // A signed proposal moves the LINKED LEAD to Approved / Signed —
+      // forward only, and only when the job has a lead on record.
+      const lead = findLinkedLead(inspection, leads);
+      if (lead) {
+        const stage = nextStageFor(lead, 'proposal_signed');
+        if (stage) setLeadStage(lead.id, stage);
+      }
+    }
     toast({
       tone: 'success',
       title: 'Proposal signed',
@@ -170,15 +195,28 @@ export default function HomeownerProposalView() {
           )}
 
           {proposal.status === 'signed' ? (
-            <View style={styles.signedCard}>
-              <Ionicons name="checkmark-circle" size={28} color={colors.success} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.signedTitle}>Signed</Text>
-                <Text style={styles.signedBody}>
-                  Thanks — your contractor will reach out shortly.
-                </Text>
+            <>
+              <View style={styles.signedCard}>
+                <Ionicons name="checkmark-circle" size={28} color={colors.success} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.signedTitle}>Signed</Text>
+                  <Text style={styles.signedBody}>
+                    Thanks — your contractor will reach out shortly.
+                  </Text>
+                </View>
               </View>
-            </View>
+              {/* This page is signed on the roofer's own phone at the door
+                  ("Preview as homeowner"), so once the homeowner hands it
+                  back the contractor's next steps are right here — the chain
+                  must not end at the signature. Clearly labelled as theirs. */}
+              <View style={styles.contractorSpace}>
+                <PostSignatureActions
+                  inspection={inspection}
+                  title="Contractor next steps"
+                  subtitle="For your roofer — schedules the install and moves this job along"
+                />
+              </View>
+            </>
           ) : (
             <>
               <SectionHeader title="Sign to accept" style={styles.sectionSpace} />
@@ -283,6 +321,7 @@ const styles = StyleSheet.create({
   },
   signedTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.success },
   signedBody: { fontSize: fontSize.bodyMd, color: colors.navy, marginTop: 2 },
+  contractorSpace: { marginTop: spacing.lg },
 
   footer: { fontSize: fontSize.caption, color: colors.slate, textAlign: 'center', marginTop: spacing.lg },
 

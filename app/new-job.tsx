@@ -60,6 +60,7 @@ import {
   isStormCause,
 } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { researchProperty } from '@/lib/services/propertyIntel';
@@ -108,6 +109,8 @@ type Draft = {
   geometry: RoofGeometry | null;
   condition: RoofCondition | null;
   brittlenessTest: BrittlenessTest;
+  /** Whole-roof Pitch Gauge reading handed in through the prefill store. */
+  pitchDegrees?: number;
 
   // Insurance Claim mode
   kind: InspectionKind;
@@ -287,6 +290,11 @@ export default function NewJobWizard() {
   const logActivity = useActivityStore((s) => s.log);
   const toast = useToastStore((s) => s.show);
   const consumePrefill = useWizardPrefillStore((s) => s.consume);
+  const linkLeadInspection = useLeadStore((s) => s.linkInspection);
+  // The lead this job is being converted from (Lead → Convert). Kept out of
+  // `draft` so the dirty check and the review step never see it; save()
+  // links both ends with it.
+  const sourceLeadIdRef = useRef<string | undefined>(undefined);
   const [stepIndex, setStepIndex] = useState(0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [stormLookup, setStormLookup] = useState<StormLookup | null>(null);
@@ -311,8 +319,10 @@ export default function NewJobWizard() {
   useEffect(() => {
     const prefill = consumePrefill();
     if (!prefill) return;
+    if (prefill.source === 'lead' && prefill.sourceId) sourceLeadIdRef.current = prefill.sourceId;
     setDraft({
       ...EMPTY,
+      pitchDegrees: prefill.pitchDegrees,
       customerName: prefill.customerName ?? '',
       customerPhone: prefill.customerPhone ?? '',
       customerEmail: prefill.customerEmail ?? '',
@@ -336,6 +346,19 @@ export default function NewJobWizard() {
       });
     }
   }, [consumePrefill, toast]);
+
+  // The Pitch Gauge (`/pitch-gauge?target=wizard`) hands its reading back
+  // through the same store while this wizard is still mounted — the
+  // one-shot hydration above has already run by then, so watch for it.
+  const pendingPitch = useWizardPrefillStore((s) => s.prefill?.pitchDegrees);
+  useEffect(() => {
+    if (pendingPitch == null) return;
+    const prefill = consumePrefill();
+    if (prefill?.pitchDegrees == null) return;
+    const pitchDegrees = prefill.pitchDegrees;
+    setDraft((d) => ({ ...d, pitchDegrees }));
+    toast({ tone: 'success', title: `Pitch ${pitchDegrees}° added to the job` });
+  }, [pendingPitch, consumePrefill, toast]);
 
   // NOAA cross-check for the entered date of loss. Runs only once the
   // inspector has given us a real date and a geocoded address in a known
@@ -470,7 +493,11 @@ export default function NewJobWizard() {
             }
           : undefined,
       codeComplianceNotes: isClaim ? draft.codeComplianceNotes.trim() || undefined : undefined,
+      leadId: sourceLeadIdRef.current,
+      pitchDegrees: draft.pitchDegrees,
     });
+    // Lead → job: both ends of the link, in the same tick the job exists.
+    if (sourceLeadIdRef.current) linkLeadInspection(sourceLeadIdRef.current, ins.id);
     logActivity({
       kind: 'job_created',
       inspectionId: ins.id,
@@ -552,10 +579,13 @@ export default function NewJobWizard() {
       }
     }
 
-    Alert.alert('Job created', `Report ${ins.reportId} saved locally.`, [
-      // dismissTo, not replace: replace stacked a second tab shell (NAV-3).
-      { text: 'Done', onPress: () => router.dismissTo('/(tabs)') },
-    ]);
+    // Land on the job itself, not Home: the next thing the roofer does is
+    // photograph it. `replace` swaps this modal for the job screen (the NAV-3
+    // second-tab-shell trap was `replace` INTO the tabs group — a plain
+    // stack route is fine). The storm match and roof measurement above keep
+    // running and toast when they land.
+    toast({ tone: 'success', title: 'Job created', body: `Report ${ins.reportId} saved locally.` });
+    router.replace(`/job/${ins.id}` as any);
   };
 
   return (

@@ -582,6 +582,28 @@ export type PhotoAnalysisState = {
   };
 };
 
+/**
+ * Lifecycle of one photo's upload to Supabase Storage, keyed like
+ * `Slope.photoAnalysis` by the LOCAL PHOTO URI. Written by
+ * `lib/services/photoSync.ts`. A successful upload has no entry here — it
+ * lives in `Slope.photoUploads` — so this only ever records what is still
+ * waiting after a refusal, or what will never upload and why.
+ */
+export type PhotoSyncState = {
+  /**
+   * `failed` is terminal: the original is gone from this device, or the
+   * bucket refused the upload enough times that another retry is just
+   * battery. A `pending` entry is a photo that will be tried again.
+   */
+  status: 'pending' | 'failed';
+  /** Upload attempts so far — drives the retry cap. */
+  attempts: number;
+  /** Plain-language reason for the last failure. Always present on `failed`. */
+  reason?: string;
+  /** ISO timestamp of the last transition. */
+  at: string;
+};
+
 // -----------------------------------------------------------------------------
 // Slope + Inspection
 // -----------------------------------------------------------------------------
@@ -649,6 +671,11 @@ export type Slope = {
    * before this field existed. Optional — older inspections predate it.
    */
   photoAnalysis?: Record<string, PhotoAnalysisState>;
+  /**
+   * Per-photo upload state keyed by LOCAL PHOTO URI (same convention as
+   * `photoAnalysis`). Absent for photos that uploaded or were never tried.
+   */
+  photoSync?: Record<string, PhotoSyncState>;
 };
 
 export type InspectionStatus = 'lead' | 'scheduled' | 'in_progress' | 'complete';
@@ -707,6 +734,14 @@ export type Inspection = {
   condition: RoofCondition;
   brittlenessTest: BrittlenessTest;
   collateralChecklist: Record<string, boolean>;
+  /**
+   * Roof pitch measured with the Pitch Gauge, in degrees, when it was taken
+   * for the whole roof rather than one slope (from the New Job wizard, or
+   * "Whole roof" in the gauge's attach sheet). Slopes created after it is
+   * set, and slopes that had no pitch when it was set, seed
+   * `Slope.pitchDegrees` from it; a slope's own reading always wins.
+   */
+  pitchDegrees?: number;
 
   // Event
   event?: StormEvent;
@@ -742,6 +777,13 @@ export type Inspection = {
 
   // Traceability
   originEstimateId?: string;
+  /**
+   * The pipeline lead this job was converted from. The lead carries the
+   * matching `Lead.inspectionId`, so the money chain reads in both
+   * directions (lead → job → proposal, and back). Absent on jobs created
+   * standalone.
+   */
+  leadId?: string;
 
   // Signatures
   inspectorSignaturePng?: string;  // base64 or file URI
@@ -934,6 +976,11 @@ export type Lead = {
    * number is only honest if it measures the stage, not the last touch.
    */
   stageChangedAt?: string;
+  /**
+   * The inspection this lead was converted into (`Inspection.leadId` points
+   * back). Set by the New Job wizard on save; absent until then.
+   */
+  inspectionId?: string;
   syncStatus?: 'pending' | 'synced' | 'failed';
   /**
    * Last NOAA storm this address matched. Absent means "never checked" —
@@ -1092,6 +1139,12 @@ export type Proposal = {
   signaturePng?: string;
   /** Serialized SVG path string of the homeowner signature ("M x y L x y …"). */
   homeownerSignatureSvg?: string;
+  /** Price-book provenance (lib/stores/pricingStore.ts) — which numbers
+   *  priced this proposal. `priceBookVersion` 0 means the RoofWise fallback
+   *  table, never the contractor's own book. Also printed in `termsText`. */
+  priceBookVersion?: number;
+  priceBookUpdatedAt?: string;
+  priceBookCustomized?: boolean;
 };
 
 // -----------------------------------------------------------------------------
@@ -1136,6 +1189,12 @@ export type Correction = {
   confidenceStars?: 1 | 2 | 3 | 4 | 5;
   /** Future certification weighting for the learning loop. Absent by default. */
   inspectorTrustWeight?: number;
+  /** Upload attempts so far — the sync gives up after a bounded number. */
+  syncAttempts?: number;
+  /** ISO time before which the sync must not retry this record (backoff). */
+  nextSyncAt?: string;
+  /** Plain-language reason for the last failed attempt. */
+  syncError?: string;
 };
 
 export type UserCorrectionProfile = {
@@ -1198,6 +1257,12 @@ export type SavedEstimate = {
     bounds?: { sw: { lat: number; lng: number }; ne: { lat: number; lng: number } };
     planes: PropertyIntelSlope[];
   };
+  /** Price-book provenance (lib/stores/pricingStore.ts) — which numbers
+   *  priced this estimate. `priceBookVersion` 0 means the RoofWise fallback
+   *  table, never the contractor's own book. */
+  priceBookVersion?: number;
+  priceBookUpdatedAt?: string;
+  priceBookCustomized?: boolean;
 };
 
 export type MileageTrip = {

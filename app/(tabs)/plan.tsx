@@ -26,7 +26,17 @@ import { AnimatedCounter, PulseRing } from '@/components/motion';
 import { RichCard } from '@/components/ui/RichCard';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import { IconChip, CHIP_TONES, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
-import type { Inspection, Lead, KnockSession } from '@/lib/models/types';
+import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
+import {
+  followUpsDue as followUpsDueFor,
+  inspectionsThisWeek,
+  inspectionsToday,
+  liveKeyFor,
+  scheduleItemsFor,
+  type ScheduleItem,
+} from '@/components/home/todayAgenda';
+import { daysInStage, goingColdLeads } from '@/components/pipeline/chain';
+import type { Inspection } from '@/lib/models/types';
 import {
   brand,
   colors,
@@ -137,11 +147,9 @@ function Segmented<T extends string>({
   );
 }
 
-/** One stop on Today's rail — a real point in time from a real store. */
-type ScheduleItem =
-  | { key: string; time: number; kind: 'inspection'; ins: Inspection }
-  | { key: string; time: number; kind: 'followup'; lead: Lead; overdue: boolean }
-  | { key: string; time: number; kind: 'route'; session: KnockSession };
+// `ScheduleItem` — one stop on Today's rail, a real point in time from a real
+// store — now lives in `components/home/todayAgenda.ts` so Home's Today
+// module and this screen build the day from the same rules.
 
 const STATUS_PILL_TONE: Record<Inspection['status'], PillTone> = {
   lead: 'neutral',
@@ -168,33 +176,19 @@ export default function PlanScreen() {
     planEntrancePlayed = true;
   }, []);
 
-  const followUpsDue = useMemo(() => {
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-    return leads
-      .filter(
-        (l) =>
-          l.followUpAt &&
-          l.stage !== 'signed' &&
-          l.stage !== 'lost' &&
-          new Date(l.followUpAt).getTime() <= endOfDay.getTime(),
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.followUpAt!).getTime() - new Date(b.followUpAt!).getTime(),
-      );
-  }, [leads]);
+  // Shared with Home's Today module (`components/home/todayAgenda.ts`) so the
+  // two screens can never disagree about what is due.
+  const followUpsDue = useMemo(() => followUpsDueFor(leads), [leads]);
 
-  const todayInspections = useMemo(() => {
-    const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const endOfDay = startOfDay + 24 * 60 * 60 * 1000;
-    const endOfWeek = startOfDay + 7 * 24 * 60 * 60 * 1000;
-    return inspections.filter((ins) => {
-      const t = new Date(ins.createdAt).getTime();
-      return view === 'today' ? t >= startOfDay && t < endOfDay : t >= startOfDay && t < endOfWeek;
-    });
-  }, [inspections, view]);
+  const todayInspections = useMemo(
+    () => (view === 'today' ? inspectionsToday(inspections) : inspectionsThisWeek(inspections)),
+    [inspections, view],
+  );
+
+  // Leads going quiet: pre-sale, no follow-up on the calendar, a week or
+  // more in their stage. Stalest first — the one that has waited longest is
+  // the one to call first. Hidden entirely when there are none.
+  const goingCold = useMemo(() => goingColdLeads(leads), [leads]);
 
   const todayKnocks = useMemo(() => {
     const startOfDay = new Date();
@@ -212,50 +206,19 @@ export default function PlanScreen() {
   // inspection actually logged today, a lead follow-up actually due, or the
   // door-knocking route actually in progress. Nothing here is invented
   // (Drift #5); "actual scheduled items" means real data, not a filled slot.
-  const scheduleItems = useMemo<ScheduleItem[]>(() => {
-    if (view !== 'today') return [];
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const items: ScheduleItem[] = [];
-
-    for (const ins of todayInspections) {
-      items.push({ key: `ins_${ins.id}`, time: new Date(ins.createdAt).getTime(), kind: 'inspection', ins });
-    }
-    for (const lead of followUpsDue) {
-      const t = new Date(lead.followUpAt!).getTime();
-      items.push({
-        key: `fu_${lead.id}`,
-        time: t,
-        kind: 'followup',
-        lead,
-        overdue: t < startOfDay.getTime(),
-      });
-    }
-    if (active) {
-      items.push({
-        key: `route_${active.id}`,
-        time: new Date(active.startedAt).getTime(),
-        kind: 'route',
-        session: active,
-      });
-    }
-
-    return items.sort((a, b) => a.time - b.time);
-  }, [view, todayInspections, followUpsDue, active]);
+  const scheduleItems = useMemo<ScheduleItem[]>(
+    () =>
+      view !== 'today'
+        ? []
+        : scheduleItemsFor({ inspections: todayInspections, followUps: followUpsDue, activeRoute: active }),
+    [view, todayInspections, followUpsDue, active],
+  );
 
   // The one dot that pulses: the route in progress if there is one (it's
   // genuinely happening right now), otherwise the earliest stop still ahead
   // of the clock. All-past and no active route → nothing pulses; that's
   // honest, not a bug (Drift #5: never fake a "live" state).
-  const liveKey = useMemo(() => {
-    const routeItem = scheduleItems.find((i) => i.kind === 'route');
-    if (routeItem) return routeItem.key;
-    const now = Date.now();
-    const next = scheduleItems
-      .filter((i) => i.kind !== 'route' && i.time >= now)
-      .sort((a, b) => a.time - b.time)[0];
-    return next?.key ?? null;
-  }, [scheduleItems]);
+  const liveKey = useMemo(() => liveKeyFor(scheduleItems), [scheduleItems]);
 
   const today = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
@@ -265,7 +228,7 @@ export default function PlanScreen() {
 
   return (
     <View style={styles.root}>
-    <ScreenHeader title="Plan" />
+    <ScreenHeader title="Plan" right={<SettingsAffordance />} />
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
@@ -419,13 +382,78 @@ export default function PlanScreen() {
         </>
       )}
 
+      {/* Going cold — leads that have sat a week or more in a pre-sale stage
+          with nothing on the calendar. Driven by stage age (`stageChangedAt`),
+          so it measures the deal, not the last edit. Absent when none. */}
+      {goingCold.length > 0 && (
+        <Rise index={4}>
+          <Text style={styles.sectionLabel}>Going cold</Text>
+          <View style={styles.card}>
+            {goingCold.map((lead, i) => {
+              const days = daysInStage(lead);
+              return (
+                <PressableScale
+                  key={lead.id}
+                  style={[styles.row, i > 0 && styles.rowBorder]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${lead.customerName}, ${
+                    days === null ? 'going cold' : `${days} days in stage`
+                  }`}
+                  onPress={() => router.push(`/lead/${lead.id}` as any)}
+                >
+                  <IconChip name="snow-outline" tone="quiet" size="sm" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{lead.customerName}</Text>
+                    <Text style={styles.rowSub}>{lead.address}</Text>
+                  </View>
+                  <Pill
+                    label={days === null ? 'Going cold' : `${days}d quiet`}
+                    tone="warn"
+                    size="sm"
+                  />
+                </PressableScale>
+              );
+            })}
+          </View>
+        </Rise>
+      )}
+
       {/* Every action chip carries a tile hue — a single peach chip beside
-          two greys read as an inconsistency, not as emphasis. */}
-      <Rise index={4}>
+          two greys read as an inconsistency, not as emphasis. Jobs and Reports
+          lead the list: both used to be reachable only through Home or
+          Settings, and Plan is where the day's work is decided. */}
+      <Rise index={5}>
         <Text style={styles.sectionLabel}>Quick actions</Text>
         <View style={styles.card}>
           <PressableScale
             style={styles.actionRow}
+            accessibilityRole="button"
+            accessibilityLabel="Jobs. Every inspection as a pipeline card."
+            // `at` is a nonce: tab params persist, so a second tap after the
+            // roofer flipped back to Leads by hand still lands on Jobs.
+            onPress={() =>
+              router.push({
+                pathname: '/(tabs)/leads',
+                params: { segment: 'jobs', at: String(Date.now()) },
+              } as any)
+            }
+          >
+            <IconChip name="briefcase-outline" tone="blue" size="sm" />
+            <Text style={styles.actionText}>Jobs</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+          </PressableScale>
+          <PressableScale
+            style={[styles.actionRow, styles.rowBorder]}
+            accessibilityRole="button"
+            accessibilityLabel="Reports. Revenue, leads, and claim outcomes."
+            onPress={() => router.push('/reports')}
+          >
+            <IconChip name="bar-chart-outline" tone="green" size="sm" />
+            <Text style={styles.actionText}>Reports</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+          </PressableScale>
+          <PressableScale
+            style={[styles.actionRow, styles.rowBorder]}
             accessibilityRole="button"
             accessibilityLabel="Start door-knocking route"
             onPress={() => router.push('/door-knocking')}

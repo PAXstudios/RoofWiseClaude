@@ -21,6 +21,7 @@ import { Aurora } from '@/components/glass/Aurora';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { useTrainingQueueStore } from '@/lib/stores/trainingQueueStore';
 import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
@@ -295,7 +296,11 @@ export default function TrainScreen() {
 
   return (
     <View style={styles.root}>
-    <ScreenHeader title="Train" subtitle="Inspector review queue + AI calibration" />
+    <ScreenHeader
+      title="Train"
+      subtitle="Inspector review queue + AI calibration"
+      right={<SettingsAffordance />}
+    />
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}

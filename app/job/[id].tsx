@@ -19,6 +19,12 @@ import { Image } from 'expo-image';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
+import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
+import { QuickActions } from '@/components/pipeline/QuickActions';
+import { FOLLOW_UP_OPTIONS, FollowUpSheet } from '@/components/pipeline/FollowUpSheet';
+import { LinkedLeadCard } from '@/components/pipeline/LinkedLeadCard';
+import { findLinkedLead, nextStageFor } from '@/components/pipeline/chain';
 import * as ImagePicker from 'expo-image-picker';
 import { generateHaagReport } from '@/lib/services/haagPdf';
 import { generateLongReport } from '@/lib/services/longReport';
@@ -178,6 +184,12 @@ export default function JobDetail() {
   const proposal = useProposalStore((s) => (id ? s.getByJob(id) : undefined));
   const attachRawPhotos = useInspectionStore((s) => s.attachRawPhotos);
   const multiSelectImport = useCaptureSettingsStore((s) => s.multiSelectImport);
+  // The lead behind this job — the other half of the Lead → Job chain. Read
+  // here so the customer action row and the status toggle can move it.
+  const leads = useLeadStore((s) => s.leads);
+  const setLeadStage = useLeadStore((s) => s.setStage);
+  const setLeadFollowUp = useLeadStore((s) => s.setFollowUp);
+  const [followUpSheet, setFollowUpSheet] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingLong, setGeneratingLong] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -218,6 +230,28 @@ export default function JobDetail() {
   const { haag, decision } = resolveEngineResult(inspection, Date.now(), { honorFreeze: false });
   const engineFreshness = storedEngineFreshness(inspection);
   const isClaim = inspection.kind === 'insurance_claim';
+
+  // Explicit link only (`inspection.leadId` / `lead.inspectionId`) — never a
+  // name match, which could hang another customer's follow-ups on this roof.
+  const linkedLead = findLinkedLead(inspection, leads);
+
+  /** Follow-ups live on the lead; a job with no lead has nowhere to keep one. */
+  const onPickFollowUp = (when: Date | null) => {
+    setFollowUpSheet(false);
+    if (!linkedLead) return;
+    if (!when) {
+      setLeadFollowUp(linkedLead.id, undefined);
+      toast({ tone: 'info', title: 'Follow-up cleared' });
+      return;
+    }
+    setLeadFollowUp(linkedLead.id, when.toISOString());
+    scheduleFollowUpReminder({
+      leadId: linkedLead.id,
+      customerName: linkedLead.customerName,
+      date: when,
+    }).catch(() => {});
+    toast({ tone: 'success', title: 'Follow-up set', body: formatDateShort(when) });
+  };
 
   // The hero's photo — the job's real first captured photo, across any
   // slope. Never stock imagery: no photo yet means the crafted gradient
@@ -492,11 +526,18 @@ export default function JobDetail() {
             logActivity({
               kind: next === 'complete' ? 'inspection_completed' : 'job_created',
               inspectionId: inspection.id,
+              leadId: linkedLead?.id,
               message:
                 next === 'complete'
                   ? `Marked ${inspection.reportId} complete`
                   : `Reopened ${inspection.reportId}`,
             });
+            // A completed inspection moves its lead to "Inspection Complete"
+            // — forward only, so a lead already past it stays where it is.
+            if (next === 'complete' && linkedLead) {
+              const stage = nextStageFor(linkedLead, 'inspection_complete');
+              if (stage) setLeadStage(linkedLead.id, stage);
+            }
           }}
           hitSlop={10}
           style={[
@@ -551,6 +592,28 @@ export default function JobDetail() {
           band={haag.claim_viability}
           recommendation={haag.roofwise_recommendation}
         />
+
+        {/* Customer action row — the phone and email were already on the
+            record; this surfaces them. Call / Text / Email / Directions open
+            the OS; "Follow-up" books on the linked lead and is absent when
+            there is no lead to book on (no dead buttons). */}
+        <QuickActions
+          name={inspection.customerName}
+          phone={inspection.customerPhone}
+          email={inspection.customerEmail}
+          address={inspection.address}
+          coords={{ lat: inspection.lat, lng: inspection.lng }}
+          onBook={linkedLead ? () => setFollowUpSheet(true) : undefined}
+          bookLabel="Follow-up"
+          onContacted={
+            linkedLead && linkedLead.stage === 'new'
+              ? () => setLeadStage(linkedLead.id, 'contacted')
+              : undefined
+          }
+        />
+
+        {/* The lead this job came from — stage and next follow-up, tap → lead. */}
+        {linkedLead && <LinkedLeadCard lead={linkedLead} />}
 
         {/* The owner's ask: from inside a job, take photos to analyse — a big,
             unmissable primary. Opens capture linked to THIS job so every photo
@@ -1030,6 +1093,17 @@ export default function JobDetail() {
           </Text>
         </PressableScale>
       </ScrollView>
+    {linkedLead && (
+      <FollowUpSheet
+        visible={followUpSheet}
+        title="Set follow-up"
+        subtitle={linkedLead.customerName}
+        options={FOLLOW_UP_OPTIONS}
+        clearLabel={linkedLead.followUpAt ? 'Clear follow-up' : undefined}
+        onPick={onPickFollowUp}
+        onClose={() => setFollowUpSheet(false)}
+      />
+    )}
     <SlopePickerSheet
       visible={importSlopePicker}
       title="Import to which slope?"
