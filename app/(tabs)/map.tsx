@@ -28,7 +28,12 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { Map, MapPin, MapCircle, regionForLatLon, type Region } from '@/components/map/Map';
-import { StormOverlay, useStormOverlaySelection, useStormSwaths } from '@/components/map/StormOverlay';
+import {
+  StormOverlay,
+  swathEmphasisForRegion,
+  useStormOverlaySelection,
+  useStormSwaths,
+} from '@/components/map/StormOverlay';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -430,6 +435,10 @@ export default function MapScreen() {
   const [searchText, setSearchText] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [locating, setLocating] = useState(false);
+  // The legend is four rows of glass over the map. Behind a chip, off by
+  // default: the chips already carry hail-blue / wind-orange, and a roofer in
+  // gloves wants the map, not a key to it.
+  const [legendOpen, setLegendOpen] = useState(false);
 
   // Safety mode. `null` = still reading the signal (overlays stay off until
   // the answer is in — the safe default costs one frame, not a crash).
@@ -774,6 +783,7 @@ export default function MapScreen() {
             <StormOverlay
               selection={selection}
               swaths={swaths}
+              swathEmphasis={swathEmphasisForRegion(region)}
               onSelectEvent={setSelectedEvent}
               onSelectCluster={onSelectCluster}
             />
@@ -976,8 +986,15 @@ export default function MapScreen() {
                         if (!overlaysOn) setSafetyNotice(null);
                       }}
                     />
+                    <GlassChip
+                      active={legendOpen}
+                      icon="information-circle-outline"
+                      label="Legend"
+                      accessibilityLabel={legendOpen ? 'Hide the legend' : 'Show the legend'}
+                      onPress={() => setLegendOpen((v) => !v)}
+                    />
                   </ScrollView>
-                  <StormLegend />
+                  {legendOpen && <StormLegend />}
                 </View>
               )}
             </GlassCard>

@@ -116,12 +116,35 @@ const WIND_FLOOR_MPH = 58;
 const INFLUENCE_CAP_KM = 8;
 
 export function defaultInfluenceRadiusKm(magnitude: number | null, peril: SwathPeril): number {
-  if (peril === 'hail') {
-    const inches = magnitude != null && Number.isFinite(magnitude) ? Math.max(0, magnitude) : 0.5;
-    return Math.min(INFLUENCE_CAP_KM, HAIL_BASE_KM + HAIL_PER_INCH_KM * inches);
-  }
-  const mph = magnitude != null && Number.isFinite(magnitude) ? Math.max(WIND_FLOOR_MPH, magnitude) : WIND_FLOOR_MPH;
-  return Math.min(INFLUENCE_CAP_KM, WIND_BASE_KM + WIND_PER_MPH_KM * (mph - WIND_FLOOR_MPH));
+  return scaledInfluenceRadiusKm(1)(magnitude, peril);
+}
+
+/**
+ * The same model at a viewing scale.
+ *
+ * At a 50-mile view the 8 km cap is the reason the impacted area read as
+ * confetti on the owner's phone: a 1 in report is a 3.5 km blob — one or two
+ * 2.6 km grid cells — so each report drew its own little square instead of
+ * the reports merging into the continuous, graded area a HailTrace map shows.
+ * Zoomed out, the SMOOTHING radius should grow with the view (bridging the
+ * gaps between corroborating reports is the whole point of it) while the
+ * relative claim stays the same: it is still "impacted area — from storm
+ * reports", never a statement that hail fell that far from the reporter.
+ * Zoomed in, the radius comes back down and the detail returns.
+ */
+export function scaledInfluenceRadiusKm(
+  scale: number,
+): (magnitude: number | null, peril: SwathPeril) => number {
+  const k = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const cap = INFLUENCE_CAP_KM * k;
+  return (magnitude, peril) => {
+    if (peril === 'hail') {
+      const inches = magnitude != null && Number.isFinite(magnitude) ? Math.max(0, magnitude) : 0.5;
+      return Math.min(cap, (HAIL_BASE_KM + HAIL_PER_INCH_KM * inches) * k);
+    }
+    const mph = magnitude != null && Number.isFinite(magnitude) ? Math.max(WIND_FLOOR_MPH, magnitude) : WIND_FLOOR_MPH;
+    return Math.min(cap, (WIND_BASE_KM + WIND_PER_MPH_KM * (mph - WIND_FLOOR_MPH)) * k);
+  };
 }
 
 // -----------------------------------------------------------------------------

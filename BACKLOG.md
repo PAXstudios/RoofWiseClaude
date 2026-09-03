@@ -13,6 +13,7 @@ entry does not count as tracked.
 
 ## Now (committed next steps, in order — see docs/PRODUCT_SYNTHESIS.md §5 for the full rationale)
 
+- [ ] **PUBLISH — the phone is on the pre-#71 bundle.** `eas-cli whoami` → Not logged in in this container (no token survived the restart). Owner: `npx eas-cli update --channel preview --message "…"` from the Mac, or hand over an EXPO_TOKEN. Everything from #66 through #76 is only on GitHub until then — #76
 - [ ] **Confirm the new analysis fields populate on the phone** — #75 added per-hit `evidence`, `shingle_count`, `test_square_coverage`, `subject` / `collateral_damage` to the Gemini schema. No key in this container, so unverified live. Re-analyze one slope on the device and check the photo report shows the HAAG §1 line, shingle count and coverage, and the slope block's "Functional damage:" reason. Older photos need Re-analyze to gain evidence — #75
 - [ ] **Confirm the Map pan-crash is gone on the owner's iPhone** — #71's quantised overlay selection removes the mid-gesture native-annotation churn that fits the symptom, but no device crash log was ever captured. If it still crashes: Settings → Diagnostics right after, and send the .ips — #71
 - [ ] **Matching gate is never populated** — `§3 appearance_match_impossible` forces FULL_REPLACEMENT on its own, and nothing in the app ever sets it (no field in the data model). Carriers frequently approve a whole roof off ONE qualifying slope because shingles must match and warranties bar partial replacement on matched planes. Capturing discontinued/unmatchable shingle would put that argument in packets that today argue only hit counts — #69
@@ -114,6 +115,7 @@ entry does not count as tracked.
 
 ## Done (most recent first)
 
+- [x] **Storm Tracer polish** — swath smoothing radius scales with zoom (far 2.5×) so the 50-mi view reads as continuous graded areas instead of per-report confetti (12 sparse reports: 4 fragments → 2 areas; near view keeps 24 rings); fill emphasis by viewport; legend behind a chip; cluster inches glyphs untouched — closed by #76
 - [x] **HAAG-grade detection** — per-hit evidence class (mat fracture / exposed substrate / granule loss only), `deriveFunctional()` finally SETS the §1 functional flag nothing ever set, look-alike rules, capture context to the model, shingle count + test-square coverage per photo, squares documented from photos (pure) — closed by #75
 - [x] **Estimator overhead + saved-estimate page** — satellite imagery with a coloured rectangle per measured roof face (Solar per-face boxes carried through solar → intel → saved estimate); `app/estimate/[id]` shows the property and the numbers (the Home tile used to open a fresh wizard); wizard hero + Result show the overhead; job Property card too — closed by #74
 - [x] **Guided capture coach** — the HAAG walk (4 slopes → 4 collateral zones → brittleness on a claim) as a glass step strip over the camera; progress derived from photos, never ticked by hand; collateral photos fill their claim-evidence zone; on by default, one-tap off — closed by #73

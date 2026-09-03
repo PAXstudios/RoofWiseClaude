@@ -2707,3 +2707,20 @@ There was no exit. Once a pass started, the primary button became a spinner, "Re
 **Verified.** Typecheck, lint, web export green; 8 functional-derivation + 3 counting assertions; the damage-score worked examples still pass; `buildAnalyzeRequest` asserted offline to carry the context line, the evidence enum, the counting fields, and both HAAG sections. **Not verified live:** this container's `.env.local` has no `EXPO_PUBLIC_GEMINI_API_KEY` (only the model name), so no model call could run here. Every new field is optional and parsed defensively — an older or non-conforming response degrades to "absent", never to a guess — but the first real analysis on the phone is the true test. BACKLOG carries it.
 
 **Files touched:** `lib/services/{functionalDamage,documentedSquares}.ts` (new), `lib/services/{gemini,analyzeSlope}.ts`, `lib/models/types.ts`, `app/photo-report.tsx`, `app/job/[id].tsx`.
+
+---
+
+### [2026-09-03] #76 — Storm Tracer polish: continuous swaths at the browse zoom, the inches glyphs kept, the legend behind a chip
+
+**Prompt (with a screenshot of the Map tab on the phone):**
+> "I want to keep the feature that shows the hail inches on the map. Still want you to continue improving the maps"
+
+The screenshot was the OLD bundle ("Map" title, 1–4 yr chips) — #71 has not reached the phone because this container has no EAS login. Two things it showed were worth fixing before it lands.
+
+**Kept, untouched:** the far-zoom cluster glyphs — count over strongest magnitude (`85 / 1.00"`, `16 / 2.50"`) — come from `clusterMagnitudeLabel` in `StormOverlay.tsx`, which #71 did not change. The peril / magnitude chips now filter events BEFORE clustering, so "≥1.5" hail" thins the glyphs to the ones that matter.
+
+**Fixed — the swaths read as confetti at 50 miles.** Each report drew its own small square instead of the continuous graded area a HailTrace map shows. Cause: the influence radius (2 km + 1.5 km/in, capped 8 km) did not scale with the view — at the far bucket a 1 in report is a 3.5 km blob, one or two 2.6 km grid cells, so sparse reports never merged. `scaledInfluenceRadiusKm(scale)` grows the SMOOTHING radius with the zoom bucket (near 1×, mid 1.6×, far 2.5× — 1 in hail = 8.75 km, cap 20 km) and `useStormSwaths` passes it per bucket; `swathEmphasisForRegion` bolds the fill at the far view (×1.6, capped) so the areas read as areas. The claim is unchanged — "impacted area — from storm reports", a smoothing of spot observations, never a statement that hail fell that far from the reporter. Pure test with 12 reports spaced 7–9 km apart across a county: far view unscaled **4 fragments → scaled 2 continuous areas**, near view keeps **24 rings** of per-report detail, every report inside a swath in all three, vertex cap respected, deterministic.
+
+**Fixed — a tall control stack over the map.** The four-row legend is now behind a `Legend` chip, collapsed by default: the chips already carry hail-blue / wind-orange, and a roofer in gloves wants the map, not a key to it.
+
+**Files touched:** `lib/services/stormSwath.ts`, `components/map/StormOverlay.tsx`, `app/(tabs)/map.tsx`.

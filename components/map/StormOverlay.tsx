@@ -40,6 +40,7 @@ import {
 } from '@/lib/services/stormCluster';
 import {
   computeStormSwaths,
+  scaledInfluenceRadiusKm,
   swathPointsFromEvents,
   type StormSwath,
   type SwathPeril,
@@ -109,9 +110,29 @@ export function useStormSwaths(
   }, [region]);
   return useMemo(() => {
     if (!enabled || points.length === 0) return [];
+    // Cell size AND smoothing radius grow with the view. At the far bucket
+    // (the 50-mile browse view) the radius is 2.5x so corroborating reports
+    // merge into one graded area instead of each drawing its own cell — the
+    // confetti the owner saw. Near, both come back down and detail returns.
     const cellSizeKm = bucket === 0 ? 1.2 : bucket === 1 ? 1.8 : 2.6;
-    return computeStormSwaths(points, { cellSizeKm });
+    const radiusScale = bucket === 0 ? 1 : bucket === 1 ? 1.6 : 2.5;
+    return computeStormSwaths(points, {
+      cellSizeKm,
+      influenceRadiusFor: scaledInfluenceRadiusKm(radiusScale),
+    });
   }, [points, bucket, enabled]);
+}
+
+/**
+ * How boldly to fill the swaths for a viewport: a 50-mile view needs the
+ * areas to read as areas, a street view should let the imagery through.
+ */
+export function swathEmphasisForRegion(region: Region | null): number {
+  const span = region ? Math.max(region.longitudeDelta, region.latitudeDelta) : 2;
+  if (!Number.isFinite(span)) return 1.4;
+  if (span < 0.4) return 1;
+  if (span < 1.2) return 1.2;
+  return 1.6;
 }
 
 /**
@@ -121,13 +142,24 @@ export function useStormSwaths(
  * through Map.tsx's MapPolygon guard (invalid coords dropped before native).
  * Non-interactive: taps fall through to the pins above.
  */
-export const StormSwathLayer = memo(function StormSwathLayer({ swaths }: { swaths: StormSwath[] }) {
+export const StormSwathLayer = memo(function StormSwathLayer({
+  swaths,
+  emphasis = 1,
+}: {
+  swaths: StormSwath[];
+  /** Fill-alpha multiplier (see `swathEmphasisForRegion`). */
+  emphasis?: number;
+}) {
+  const k = Number.isFinite(emphasis) && emphasis > 0 ? emphasis : 1;
   return (
     <>
       {swaths.map((s) => {
         const hue = SWATH_HUE[s.peril];
-        const fill = hexWithAlpha(hue, SWATH_FILL_ALPHA[Math.min(s.bandIndex, SWATH_FILL_ALPHA.length - 1)]);
-        const stroke = hexWithAlpha(hue, SWATH_STROKE_ALPHA);
+        const fill = hexWithAlpha(
+          hue,
+          Math.min(0.6, SWATH_FILL_ALPHA[Math.min(s.bandIndex, SWATH_FILL_ALPHA.length - 1)] * k),
+        );
+        const stroke = hexWithAlpha(hue, Math.min(0.8, SWATH_STROKE_ALPHA * k));
         return s.rings.map((ring, ri) => (
           <MapPolygon
             key={`swath:${s.peril}:${s.bandIndex}:${ri}`}
@@ -241,13 +273,18 @@ const ClusterGlyph = memo(function ClusterGlyph({
 export const StormOverlay = memo(function StormOverlay({
   selection,
   swaths,
+  swathEmphasis,
   onSelectEvent,
   onSelectCluster,
-}: StormOverlayProps & { swaths?: StormSwath[] }) {
+}: StormOverlayProps & {
+  swaths?: StormSwath[];
+  /** Fill boldness for the swaths, from `swathEmphasisForRegion`. */
+  swathEmphasis?: number;
+}) {
   return (
     <>
       {/* Impacted-area contours FIRST so they sit under the circles and pins. */}
-      {swaths && swaths.length > 0 ? <StormSwathLayer swaths={swaths} /> : null}
+      {swaths && swaths.length > 0 ? <StormSwathLayer swaths={swaths} emphasis={swathEmphasis} /> : null}
       {selection.circles.map((e) => {
         const tone = stormTone(e);
         const fill = tone === 'severe' ? TONE_FILL.severe : TONE_FILL.hail;
