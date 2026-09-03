@@ -2887,3 +2887,15 @@ The Context Summary now describes the tree as of #84 (determination chain incl. 
 **Verified:** 8 pure assertions (`scratchpad/gate-decisions.test.ts`): brittleness tick → BORDERLINE through both `collateralGateInputs` and the full `engineInputFromInspection`; mat-exposed lands on the damaged slope only, on nothing when no slope is damaged, and never without the tick. Typecheck + lint green. Republished (below).
 
 **Files touched:** `lib/services/decisionEngine.ts`, `BACKLOG.md`, `PROMPT_LOG.md`.
+
+### [2026-09-03] #88 — Census key wired: the knock finder scores roof age from real ACS data; caught the EXPO_PUBLIC bundler-cache gotcha
+
+**Prompt:** "Can you just do it for me? Drop it into .env.local (and the EAS preview environment) as EXPO_PUBLIC_CENSUS_API_KEY … Here is the census key …"
+
+**What was done.** The key was verified against the live ACS API (HTTP 200, real tract data), then added to (1) the EAS `preview` environment (`env:create`, sensitive) and (2) the container's `.env.local`. End-to-end proof from Node with the real key: `isCensusConfigured: true`, and `housingProfileForPoint` returns `source: 'acs'` — Plano tract 320.03 median-built 1977 / 43 % owner-occupied, Frisco tract 304.03 median-built 1997 / 60 % — so the finder now scores roof age from the tract instead of the national prior. Published to the phone as update group **`fa6c6257-291b-41ca-a8a1-5717bf723d90`** (runtime `exposdk:54.0.0`, iOS + Android). The Census key was pasted in chat → added to the ⚡ PRE-LAUNCH rotate list.
+
+**The gotcha, and why it took three publishes.** `EXPO_PUBLIC_*` vars are inlined into the JS bundle by a Babel transform that is **cached**. The first census publish (`3beb7f53`) exported against a Metro cache built during #87 — before the key existed — so `process.env.EXPO_PUBLIC_CENSUS_API_KEY` re-used the stale `undefined` and the key was **absent from the bundle** (grep of the exported `.hbc`: 0 matches) while `isCensusConfigured` read false on the phone. It only surfaced because the publish pipeline greps the exported bundle for each key's own value before shipping (maps key: 1, census: 0). The fix: `rm -rf .expo node_modules/.cache && npx expo export --clear` + `eas update --clear-cache`, re-verified (census: 1). The container restarted once mid-publish (the cache-cleared bundle had verified but `eas update` was killed), so the corrected bundle went out on the retry. **`CLAUDE.md` now documents this** so no future session ships a key the bundle silently dropped.
+
+**The owner's Mac.** The container's `.env.local` is gitignored and ephemeral — it does not reach the Mac. For local `expo start` there the owner adds the same line or runs `npx eas-cli env:pull preview`; the phone (EAS update) is fully wired.
+
+**Files touched:** `.env.local` (gitignored), EAS `preview` env (`EXPO_PUBLIC_CENSUS_API_KEY`), `CLAUDE.md`, `BACKLOG.md`, `PROMPT_LOG.md`. No app-code change — the reader (`lib/env.ts`, `lib/services/censusHousing.ts`) has been in place since #81.
