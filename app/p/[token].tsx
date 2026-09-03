@@ -81,10 +81,11 @@ export default function HomeownerProposalView() {
     );
   }
 
+  // Fires from the pad's explicit "Accept & sign" only — never from a
+  // stroke. The pad is only mounted while unsigned, so this is the first
+  // signature; the guard keeps a double-tap from double-logging it.
   const onSign = (svg: string) => {
     if (!svg) return;
-    // The pad is only mounted while unsigned, so this is the first signature;
-    // the guard keeps a re-render mid-stroke from double-logging it.
     const firstSignature = proposal.status !== 'signed';
     upsertProposal({
       ...proposal,
@@ -221,10 +222,10 @@ export default function HomeownerProposalView() {
             <>
               <SectionHeader title="Sign to accept" style={styles.sectionSpace} />
               <Text style={styles.body}>
-                By signing below you're approving the scope and total above. We'll follow up with a deposit invoice.
+                Sign below, then tap Accept & sign to approve the scope and total above. We'll follow up with a deposit invoice.
               </Text>
               <View style={{ alignItems: 'center', marginTop: spacing.md }}>
-                <SignaturePad onChange={onSign} />
+                <SignaturePad onAccept={onSign} acceptLabel="Accept & sign" />
               </View>
             </>
           )}

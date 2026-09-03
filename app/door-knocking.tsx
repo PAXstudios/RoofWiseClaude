@@ -18,6 +18,10 @@ import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
+import { reverseGeocode } from '@/lib/services/geocoding';
+import { isGoogleMapsConfigured } from '@/lib/env';
+import { PLACEHOLDER_KNOCK_NAME } from '@/lib/services/placeholderDetails';
 import type { KnockOutcome } from '@/lib/models/types';
 import {
   colors,
@@ -58,6 +62,13 @@ export default function DoorKnockingScreen() {
   const mapRef = useRef<MapView>(null);
   const [position, setPosition] = useState<Location.LocationObjectCoords | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  // Where to frame the map before there is a fix or a target: the roofer's
+  // own service area, when one has a centroid. Never a hard-coded city.
+  const areaCentroid = useServiceAreaStore((s) =>
+    s.areas.find((a) => a.centroidLat != null && a.centroidLng != null),
+  );
+  // A knock is being turned into a lead (reverse-geocode in flight).
+  const [savingKnock, setSavingKnock] = useState(false);
 
   // Live time elapsed for the route timer
   const [now, setNow] = useState(Date.now());
@@ -124,7 +135,7 @@ export default function DoorKnockingScreen() {
     ]);
   };
 
-  const onLogKnock = (outcome: KnockOutcome) => {
+  const onLogKnock = async (outcome: KnockOutcome) => {
     if (!activeSession) {
       Alert.alert('Start a route first');
       return;
@@ -133,13 +144,38 @@ export default function DoorKnockingScreen() {
       Alert.alert('Locating…', 'Waiting for a GPS fix.');
       return;
     }
+    if (savingKnock) return;
+    // Pin the fix now — the watcher keeps moving `position` while the
+    // geocoder answers, and the knock belongs where the roofer stood.
+    const { latitude: lat, longitude: lng } = position;
+    const coordText = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+    // The street, when Google can name it. Otherwise the lead keeps the real
+    // coordinates and SAYS so ("GPS only — add the address") rather than
+    // wearing an invented street (Drift #5).
+    let address = coordText;
+    setSavingKnock(true);
+    try {
+      if (isGoogleMapsConfigured) {
+        try {
+          const g = await reverseGeocode({ lat, lng });
+          if (g?.formattedAddress) address = g.formattedAddress;
+        } catch {
+          // Key refused / offline — the coordinate string stays, labelled.
+        }
+      }
+    } finally {
+      setSavingKnock(false);
+    }
+    const gpsOnly = address === coordText;
+
     let createdLeadId: string | undefined;
     if (outcome === 'interested' || outcome === 'inspection_scheduled') {
       const lead = createLead({
-        customerName: 'Walk-in lead',
-        address: `${position.latitude.toFixed(5)}, ${position.longitude.toFixed(5)}`,
-        lat: position.latitude,
-        lng: position.longitude,
+        customerName: PLACEHOLDER_KNOCK_NAME,
+        address,
+        lat,
+        lng,
         stage: outcome === 'inspection_scheduled' ? 'inspection_scheduled' : 'new',
         source: 'door_knock',
       });
@@ -152,8 +188,9 @@ export default function DoorKnockingScreen() {
     }
 
     const k = logKnock({
-      lat: position.latitude,
-      lng: position.longitude,
+      lat,
+      lng,
+      address: gpsOnly ? undefined : address,
       outcome,
       createdLeadId,
     });
@@ -164,9 +201,13 @@ export default function DoorKnockingScreen() {
       message: `Knock logged: ${outcome.replace(/_/g, ' ')}`,
     });
     toast({
-      tone: 'success',
+      tone: createdLeadId && gpsOnly ? 'warn' : 'success',
       title: createdLeadId ? 'Knock saved · lead created' : 'Knock saved',
-      body: outcome.replace(/_/g, ' '),
+      body: createdLeadId
+        ? gpsOnly
+          ? 'GPS only — add the address and name on the lead.'
+          : `${address} — add the name on the lead.`
+        : outcome.replace(/_/g, ' '),
     });
   };
 
@@ -188,11 +229,17 @@ export default function DoorKnockingScreen() {
   // "add the area to my route" is to look at where the hail fell before
   // driving there. The canvass radius is drawn so the roofer sees the edge.
   const target = activeSession?.routeTarget;
+  // No target and no fix yet → the service area's centroid, when there is
+  // one; otherwise no map at all, just the honest "waiting" state below. A
+  // hard-coded city here framed every new user on a town they may never
+  // have worked.
   const initialRegion = target
     ? regionForLatLon(target.lat, target.lng, Math.max(0.02, target.radiusMiles / 30))
     : position
       ? regionForLatLon(position.latitude, position.longitude, 0.01)
-      : regionForLatLon(33.0198, -96.6989, 0.05);
+      : areaCentroid?.centroidLat != null && areaCentroid.centroidLng != null
+        ? regionForLatLon(areaCentroid.centroidLat, areaCentroid.centroidLng, 0.05)
+        : undefined;
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -215,29 +262,43 @@ export default function DoorKnockingScreen() {
       </View>
 
       <View style={styles.mapWrap}>
-        <Map ref={mapRef} initialRegion={initialRegion}>
-          {target && (
-            <MapCircle
-              center={{ latitude: target.lat, longitude: target.lng }}
-              radius={target.radiusMiles * 1609.34}
-              strokeColor={colors.stormHail}
-              strokeWidth={2}
-              fillColor={colors.stormHailFill}
-            />
-          )}
-          {activeSession?.knocks.map((k) => {
-            const tone = OUTCOMES.find((o) => o.id === k.outcome)?.tone ?? 'info';
-            return (
-              <MapPin
-                key={k.id}
-                coordinate={{ latitude: k.lat, longitude: k.lng }}
-                pinColor={TONE[tone]}
-                title={k.outcome.replace(/_/g, ' ')}
+        {initialRegion ? (
+          <Map ref={mapRef} initialRegion={initialRegion}>
+            {target && (
+              <MapCircle
+                center={{ latitude: target.lat, longitude: target.lng }}
+                radius={target.radiusMiles * 1609.34}
+                strokeColor={colors.stormHail}
+                strokeWidth={2}
+                fillColor={colors.stormHailFill}
               />
-            );
-          })}
-        </Map>
-        {!position && !permissionError && (
+            )}
+            {activeSession?.knocks.map((k) => {
+              const tone = OUTCOMES.find((o) => o.id === k.outcome)?.tone ?? 'info';
+              return (
+                <MapPin
+                  key={k.id}
+                  coordinate={{ latitude: k.lat, longitude: k.lng }}
+                  pinColor={TONE[tone]}
+                  title={k.outcome.replace(/_/g, ' ')}
+                />
+              );
+            })}
+          </Map>
+        ) : (
+          <View style={styles.waiting}>
+            {!permissionError && <ActivityIndicator color={colors.textMuted} />}
+            <Text style={styles.waitingTitle}>
+              {permissionError ? 'Location is off' : 'Waiting for location'}
+            </Text>
+            <Text style={styles.waitingBody}>
+              {permissionError
+                ? 'Allow location for RoofWise to see the route map.'
+                : 'The map frames your position as soon as the phone has a fix.'}
+            </Text>
+          </View>
+        )}
+        {initialRegion && !position && !permissionError && (
           <View style={styles.locating}>
             <ActivityIndicator color={colors.textInverse} />
           </View>
@@ -261,8 +322,15 @@ export default function DoorKnockingScreen() {
               {OUTCOMES.map((o) => (
                 <Pressable
                   key={o.id}
-                  style={[styles.outcomeBtn, { backgroundColor: TONE[o.tone] }]}
-                  onPress={() => onLogKnock(o.id)}
+                  style={[
+                    styles.outcomeBtn,
+                    { backgroundColor: TONE[o.tone] },
+                    savingKnock && styles.outcomeBtnBusy,
+                  ]}
+                  disabled={savingKnock}
+                  onPress={() => {
+                    onLogKnock(o.id).catch(() => {});
+                  }}
                 >
                   <Text style={styles.outcomeText}>{o.label}</Text>
                 </Pressable>
@@ -284,11 +352,17 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
-  headerBtn: { padding: spacing.xs },
+  // Glove-sized back target (Drift #1) — was a 26px icon in 4pt of padding.
+  headerBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
   statsLine: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
 
@@ -319,6 +393,16 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
   errorText: { color: colors.danger, fontSize: fontSize.bodySm },
+  // Honest no-fix state in the map's own frame (Drift #5: never a stand-in city).
+  waiting: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    padding: spacing.xxl,
+  },
+  waitingTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.text },
+  waitingBody: { fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center' },
 
   dock: {
     paddingHorizontal: spacing.xl,
@@ -347,6 +431,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  outcomeBtnBusy: { opacity: 0.6 },
   outcomeText: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
   endBtn: {
     flexDirection: 'row',

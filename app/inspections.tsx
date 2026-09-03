@@ -16,6 +16,7 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { ROOF_MATERIAL_LABELS, type InspectionStatus } from '@/lib/models/types';
 import { CLAIM_VIABILITY_LABELS } from '@/lib/services/decisionEngine';
 import { resolveEngineResult } from '@/lib/services/storedEngine';
+import { summarizeInspection } from '@/components/DamageDetailSection';
 import { RichCard } from '@/components/ui/RichCard';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { Pill, type PillTone } from '@/components/ui/Pill';
@@ -170,6 +171,13 @@ export default function InspectionsList() {
               const { haag, decision } = resolveEngineResult(ins, Date.now(), {
                 honorFreeze: false,
               });
+              // A fresh job has no verdict — the engine returns one anyway,
+              // and "Medium · Repair" on an unphotographed roof is invented
+              // (Drift #5). Same gate the job screen applies.
+              const hasEvidence = summarizeInspection(ins).analyzedPhotos > 0;
+              const verdictLine = hasEvidence
+                ? `${CLAIM_VIABILITY_LABELS[haag.claim_viability]} · ${decision.roofRecommendation.replace(/_/g, ' ')}`
+                : 'Not assessed — analyze photos';
               const meta = STATUS_META[ins.status];
               const statusLabel = ins.status.replace(/_/g, ' ');
               return (
@@ -186,9 +194,7 @@ export default function InspectionsList() {
                     <Text style={styles.rowMeta} numberOfLines={1}>
                       {ins.reportId} · {ROOF_MATERIAL_LABELS[ins.material]} · {ins.ageYears}yr
                       {' · '}
-                      {CLAIM_VIABILITY_LABELS[haag.claim_viability]}
-                      {' · '}
-                      {decision.roofRecommendation.replace(/_/g, ' ')}
+                      {verdictLine}
                     </Text>
                   }
                   accessibilityLabel={`${ins.customerName}, ${ins.address}, ${statusLabel}. ${ins.reportId}.`}

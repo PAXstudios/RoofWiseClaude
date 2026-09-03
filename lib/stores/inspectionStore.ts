@@ -27,6 +27,7 @@ import type {
 } from '../models/types';
 import { squaresFacing } from '../services/propertyIntel';
 import { bucketHitCountsByMode } from '../services/captureSession';
+import { deriveFunctional } from '../services/functionalDamage';
 import {
   brittlenessResultToLegacy,
   emptyCollateralEvidence,
@@ -135,6 +136,33 @@ type ClaimDetailsPatch = Partial<
   >
 >;
 
+/**
+ * Customer / property / roof-system fields editable after creation — the
+ * job screen's Property card and the "name this job" sheet a standalone
+ * Quick Inspection opens on Done. Everything a placeholder job ("Quick
+ * inspection" at "Address pending", architectural asphalt, good) needs
+ * corrected before its packet can go to a carrier.
+ */
+export type InspectionDetailsPatch = Partial<
+  Pick<
+    Inspection,
+    | 'customerName'
+    | 'customerPhone'
+    | 'customerEmail'
+    | 'address'
+    | 'lat'
+    | 'lng'
+    | 'material'
+    | 'ageYears'
+    | 'geometry'
+    | 'condition'
+    | 'carrier'
+    | 'policyNumber'
+    | 'claimNumber'
+    | 'adjusterName'
+  >
+>;
+
 export type PhotoCapture = {
   uri: string;
   slope: SlopeOrientation;
@@ -186,6 +214,14 @@ type InspectionStoreState = {
   setKind: (id: string, kind: InspectionKind) => void;
   setCauseOfLoss: (id: string, cause: CauseOfLoss | undefined) => void;
   setClaimDetails: (id: string, patch: ClaimDetailsPatch) => void;
+  /**
+   * Correct the customer, address, or roof system on an existing job. Keys
+   * present in `patch` are written as given (including `undefined`, which
+   * clears an optional field); absent keys are untouched. No sync stamp is
+   * needed: `inspectionSync` diffs object identity and marks the record
+   * dirty on its own, the same as every other mutator here.
+   */
+  updateDetails: (id: string, patch: InspectionDetailsPatch) => void;
   setCollateralZone: (
     id: string,
     zone: CollateralZone,
@@ -288,6 +324,13 @@ function withRecount(slope: Slope): Slope {
   return {
     ...slope,
     ...modeCounts,
+    // §1 functional flag, re-derived from the markers as they stand NOW. The
+    // engine treats it as authoritative and never re-derives it, so a marker
+    // edit that left it behind would be the worst kind of stale: an inspector
+    // who deletes the model's only mat-fracture hit would still ship a slope
+    // marked functional, and one who adds a confirmed soft spot could not
+    // establish it. Same derivation analyzeSlope runs after a pass.
+    functional: deriveFunctional(slope).functional,
     hailCount: m.filter((x) => x.category === 'hail_hits').length,
     bruisingCount: m.filter((x) => x.category === 'bruising').length,
     windLiftCount: m.filter((x) =>
@@ -549,6 +592,13 @@ export const useInspectionStore = create<InspectionStoreState>()(
         })),
 
       setClaimDetails: (id, patch) =>
+        set((s) => ({
+          inspections: s.inspections.map((i) =>
+            i.id === id ? { ...i, ...patch } : i,
+          ),
+        })),
+
+      updateDetails: (id, patch) =>
         set((s) => ({
           inspections: s.inspections.map((i) =>
             i.id === id ? { ...i, ...patch } : i,

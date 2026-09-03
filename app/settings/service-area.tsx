@@ -17,6 +17,10 @@ import { useToastStore } from '@/lib/stores/toastStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { requestPushPermission, scheduleWeeklyCalibrationPush } from '@/lib/services/pushNotifications';
 import { checkStormWatch } from '@/lib/services/stormWatch';
+import {
+  HAIL_VALIDATION_FLOOR_INCHES,
+  WIND_VALIDATION_FLOOR_MPH,
+} from '@/lib/services/stormMatch';
 import { geocodeText } from '@/lib/services/geocoding';
 import { UseMyLocationButton, type ResolvedLocation } from '@/components/AddressAutocomplete';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -171,8 +175,9 @@ export default function ServiceAreaScreen() {
             footer={
               <Text style={styles.footerCaption}>
                 Add the cities or ZIPs you cover. Storm Watch will scan NOAA every 30
-                minutes while the app is open and alert you when hail ≥0.75" or wind
-                ≥58mph hits your areas.
+                minutes while the app is open and alert you when hail ≥
+                {HAIL_VALIDATION_FLOOR_INCHES.toFixed(2)}" or wind ≥{WIND_VALIDATION_FLOOR_MPH} mph
+                hits your areas — the same validation floor every storm match uses.
               </Text>
             }
           >

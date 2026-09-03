@@ -105,11 +105,9 @@ export default function SearchScreen() {
       const jobId = hit.kind === 'inspection' ? hit.id : hit.jobId;
       router.push(`/job/${jobId}` as any);
     } else {
-      // dismissTo (POP_TO), not navigate/push: from a root-level screen a
-      // NAVIGATE that does not match the current route PUSHES a second tab
-      // shell on the root stack (the old one stays mounted underneath).
-      // POP_TO pops back to the existing shell and switches its tab (NAV-3).
-      router.dismissTo('/(tabs)/leads');
+      // The lead itself, the same way a job hit opens its job — not the
+      // Leads list, where the roofer would have to find it again.
+      router.push(`/lead/${hit.id}` as any);
     }
   };
 
@@ -195,11 +193,17 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
-  headerBtn: { padding: spacing.xs },
+  // Glove-sized back target (Drift #1) — was a 26px icon in 4pt of padding.
+  headerBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   searchRow: {
     flex: 1,
     flexDirection: 'row',

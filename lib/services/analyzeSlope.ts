@@ -17,6 +17,7 @@ import {
   GeminiNotConfiguredError,
   NO_ROOF_MESSAGE,
   analyzePhoto,
+  analyzePhotoTiled,
   describeAnalysisError,
   isRetryableGeminiError,
   type AnalysisResult,
@@ -27,8 +28,9 @@ import { useCorrectionsStore } from '../stores/correctionsStore';
 import { useTrainingQueueStore } from '../stores/trainingQueueStore';
 import { useToastStore } from '../stores/toastStore';
 import { computeProfile } from './learning/userCorrectionProfile';
-import { userStylePromptPrefix } from './learning/localLearningEngine';
+import { userStylePromptPrefix, effectiveThreshold } from './learning/localLearningEngine';
 import { needsExpertReview } from './confidenceTiers';
+import { useAiSettingsStore } from '../stores/aiSettingsStore';
 import { snapshotEngineResult } from './storedEngine';
 import { getSafetyForecast } from './weather';
 import { clearMark, mark, measure, recordAnalysisMs } from './telemetry';
@@ -203,24 +205,56 @@ async function runAnalyzeSlope(
     try {
       const base64 = await readPhotoBase64(uri);
       const photoMeta = slope.photoMeta?.find((m) => m.photoIndex === photoIndex);
-      const r = await analyzePhoto({
+      const captureMode = photoMeta?.captureMode ?? 'square_10x10';
+      const analyzeOpts = {
         imageBase64: base64,
         slope: slope.orientation,
         // What the inspector told the camera — test square vs close-up decides
         // what counting means; the declared material sets the geometry.
-        captureMode: photoMeta?.captureMode ?? 'square_10x10',
+        captureMode,
         areaTag: photoMeta?.areaTag,
         material: inspection.material,
         userStylePrefix: prefix || undefined,
         signal: opts.signal,
-      });
+      };
+      // Test squares decide the per-square threshold, so they get the tiled
+      // pass (full frame + 2×2 at full resolution, PROMPT_LOG #79) unless the
+      // roofer turned it off in Settings → AI thresholds. Close-ups and
+      // collateral shots are one call — a single shingle is already large.
+      const r =
+        captureMode === 'square_10x10' && useAiSettingsStore.getState().tiledTestSquares !== false
+          ? await analyzePhotoTiled({ ...analyzeOpts, uri })
+          : await analyzePhoto(analyzeOpts);
       results.push(r);
       modelUsed = r.modelUsed ?? modelUsed;
+
+      // --- AI threshold control (BACKLOG #6 + #11): per-category confidence
+      // gate, applied exactly here — where Gemini markers are mapped onto the
+      // slope. `effectiveThreshold()` (learning/localLearningEngine.ts) was
+      // computed from this inspector's correction history but never
+      // consulted anywhere; `profile` above (built for the prompt prefix) is
+      // reused so a category the inspector keeps rejecting is held to a
+      // stricter bar. The roofer's own floor (Settings → AI thresholds,
+      // aiSettingsStore.ts) is a hard minimum the learned value can only
+      // raise, never loosen below. Toggling the store off restores the
+      // pre-existing behavior of keeping every marker Gemini returned.
+      const aiSettings = useAiSettingsStore.getState();
+      const gatedMarkers = aiSettings.enabled
+        ? r.markers.filter(
+            (m) =>
+              m.confidence >=
+              Math.max(
+                aiSettings.perCategoryFloor[m.category] ?? 0,
+                effectiveThreshold(profile, m.category),
+              ),
+          )
+        : r.markers;
+
       useInspectionStore.getState().replacePhotoMarkers(
         inspection.id,
         slope.id,
         photoIndex,
-        r.markers,
+        gatedMarkers,
       );
       mergeFindingsForPhoto(inspectionId, slopeId, photoIndex, r);
       setPhotoAnalysisState(inspectionId, slopeId, uri, {

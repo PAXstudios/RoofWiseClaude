@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -13,8 +13,12 @@ import { useAuthStore } from '@/lib/auth/authStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
-import { useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
+import { hasCompanyBranding, useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
+import { useAiSettingsStore } from '@/lib/stores/aiSettingsStore';
+import { usePricingStore } from '@/lib/stores/pricingStore';
+import { DAMAGE_CATEGORIES, DAMAGE_CATEGORY_LABELS, type DamageCategory } from '@/lib/models/types';
+import { CONFIDENCE_BOUNDS } from '@/lib/services/confidenceTiers';
 import { syncLeads } from '@/lib/services/leadSync';
 import { syncInspections } from '@/lib/services/inspectionSync';
 import { syncInspectionPhotos } from '@/lib/services/photoSync';
@@ -85,6 +89,8 @@ export default function SettingsScreen() {
   const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
   const correctionsCount = useCorrectionsStore((s) => s.corrections.length);
   const inspectorProfile = useInspectorProfileStore((s) => s.profile);
+  const companyBranded = hasCompanyBranding(inspectorProfile.company);
+  const pricingCustomized = usePricingStore((s) => s.book.customized);
   const preFlightEnabled = useSafetyStore((s) => s.preFlightEnabled);
   const setPreFlightEnabled = useSafetyStore((s) => s.setPreFlightEnabled);
   const pendingLeads = useLeadStore((s) => s.leads.filter((l) => l.syncStatus !== 'synced').length);
@@ -161,7 +167,7 @@ export default function SettingsScreen() {
           sub={
             isGeminiConfigured
               ? 'Connected'
-              : 'Add EXPO_PUBLIC_GEMINI_API_KEY to .env.local'
+              : "AI analysis isn't set up on this build — ask your admin"
           }
         />
         <Sep />
@@ -212,6 +218,28 @@ export default function SettingsScreen() {
       </Group>
 
       <Group index={3} label="Business">
+        <Row
+          icon="pricetag-outline"
+          tone="orange"
+          title="Pricing"
+          sub={
+            pricingCustomized
+              ? 'Your material, labor & markup rates'
+              : 'Starting numbers — set yours'
+          }
+          chevron
+          onPress={() => router.push('/settings/pricing')}
+        />
+        <Sep />
+        <Row
+          icon="color-palette-outline"
+          tone="purple"
+          title="Company branding"
+          sub={companyBranded ? 'On every PDF' : 'Not set — reports print your name only'}
+          chevron
+          onPress={() => router.push('/settings/branding')}
+        />
+        <Sep />
         <Row
           icon="bar-chart-outline"
           tone="purple"
@@ -359,15 +387,19 @@ export default function SettingsScreen() {
         />
       </Group>
 
-      <Group index={6} label="Coming soon">
-        <Row icon="options-outline" tone="quiet" title="AI thresholds: minimum confidence, auto-approve cutoffs" muted />
+      <Group index={6} label="AI thresholds">
+        <AiThresholdsRow />
         <Sep />
+        <TiledSquaresRow />
+      </Group>
+
+      <Group index={7} label="Not available yet">
         <Row icon="people-circle-outline" tone="quiet" title="Team & roles (Adjuster, Crew Lead, Owner)" muted />
         <Sep />
         <Row icon="link-outline" tone="quiet" title="CRM + accounting integrations (HubSpot, QuickBooks)" muted />
       </Group>
 
-      <FadeSlideIn index={7} style={styles.section}>
+      <FadeSlideIn index={8} style={styles.section}>
         <PressableScale
           style={styles.signOutRow}
           onPress={confirmSignOut}
@@ -655,6 +687,136 @@ function GoogleApisRow() {
   );
 }
 
+// ---------- AI thresholds (Business group replacement for the old dead row) ----------
+
+/**
+ * Per-category minimum-confidence gate, the real control behind the row that
+ * used to say "AI thresholds: minimum confidence, auto-approve cutoffs —
+ * Coming soon". Backed by `aiSettingsStore` (BACKLOG #11); the value this
+ * sets is read at the one site that gates markers,
+ * `lib/services/analyzeSlope.ts`, alongside the auto-learned
+ * `effectiveThreshold()` (BACKLOG #6) — whichever is stricter wins, so this
+ * screen is a floor the roofer sets, not a ceiling the learning loop can be
+ * talked down from.
+ */
+function AiThresholdsRow() {
+  const [open, setOpen] = useState(false);
+  const enabled = useAiSettingsStore((s) => s.enabled);
+  const setEnabled = useAiSettingsStore((s) => s.setEnabled);
+  const perCategoryFloor = useAiSettingsStore((s) => s.perCategoryFloor);
+  const setFloor = useAiSettingsStore((s) => s.setFloor);
+  const resetFloors = useAiSettingsStore((s) => s.resetFloors);
+
+  const changedCount = DAMAGE_CATEGORIES.filter(
+    (c) => perCategoryFloor[c] !== CONFIDENCE_BOUNDS.reviewThreshold,
+  ).length;
+
+  return (
+    <>
+      <Row
+        icon="options-outline"
+        tone={enabled ? 'green' : 'quiet'}
+        title="Per-category minimum confidence"
+        sub={
+          enabled
+            ? changedCount === 0
+              ? `On · default floor ${CONFIDENCE_BOUNDS.reviewThreshold}`
+              : `On · ${changedCount} categor${changedCount === 1 ? 'y' : 'ies'} adjusted`
+            : 'Off — every AI detection is kept'
+        }
+        trailing={
+          <Ionicons
+            name={open ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={colors.textSubtle}
+          />
+        }
+        onPress={() => setOpen(!open)}
+      />
+      {open ? (
+        <View style={styles.apiList}>
+          <View style={styles.aiToggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.apiTitle}>Apply the gate</Text>
+              <Text style={styles.apiSub}>
+                Detections below a category's floor are held back before they reach
+                reports. Corrections you make tighten a category's floor automatically.
+              </Text>
+            </View>
+            <PressableScale
+              onPress={() => setEnabled(!enabled)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: enabled }}
+              accessibilityLabel="Apply the gate"
+            >
+              <MiniSwitch on={enabled} />
+            </PressableScale>
+          </View>
+          {DAMAGE_CATEGORIES.map((cat) => (
+            <AiThresholdStepper
+              key={cat}
+              category={cat}
+              value={perCategoryFloor[cat]}
+              dimmed={!enabled}
+              onChange={(v) => setFloor(cat, v)}
+            />
+          ))}
+          <PressableScale
+            style={styles.apiCheckBtn}
+            onPress={resetFloors}
+            accessibilityRole="button"
+            accessibilityLabel="Reset all categories to the default floor"
+          >
+            <Ionicons name="refresh" size={18} color={colors.navy} />
+            <Text style={styles.apiCheckText}>Reset to {CONFIDENCE_BOUNDS.reviewThreshold} for all</Text>
+          </PressableScale>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+function AiThresholdStepper({
+  category,
+  value,
+  dimmed,
+  onChange,
+}: {
+  category: DamageCategory;
+  value: number;
+  dimmed: boolean;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <View style={[styles.aiStepperRow, dimmed && styles.rowDisabled]}>
+      <Text style={styles.aiStepperLabel} numberOfLines={1}>
+        {DAMAGE_CATEGORY_LABELS[category]}
+      </Text>
+      <View style={styles.aiStepperControls}>
+        <Pressable
+          style={styles.aiStepperBtn}
+          hitSlop={8}
+          onPress={() => onChange(value - 5)}
+          accessibilityRole="button"
+          accessibilityLabel={`Lower ${DAMAGE_CATEGORY_LABELS[category]} floor`}
+        >
+          <Ionicons name="remove" size={18} color={colors.navy} />
+        </Pressable>
+        <Text style={styles.aiStepperValue}>{value}</Text>
+        <Pressable
+          style={styles.aiStepperBtn}
+          hitSlop={8}
+          onPress={() => onChange(value + 5)}
+          accessibilityRole="button"
+          accessibilityLabel={`Raise ${DAMAGE_CATEGORY_LABELS[category]} floor`}
+        >
+          <Ionicons name="add" size={18} color={colors.navy} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 // ---------- grouped-list primitives ----------
 
 function Group({
@@ -679,6 +841,32 @@ function Group({
 
 function Sep() {
   return <View style={styles.sep} />;
+}
+
+/**
+ * Test-square photos: one full-frame call plus a 2×2 tiled pass at full
+ * resolution (a 1" strike is ~6 px in what the model sees of a whole 10×10
+ * frame). Five calls per square photo; off keeps the single pass.
+ */
+function TiledSquaresRow() {
+  const on = useAiSettingsStore((s) => s.tiledTestSquares);
+  const setOn = useAiSettingsStore((s) => s.setTiledTestSquares);
+  return (
+    <Row
+      icon="grid-outline"
+      tone="blue"
+      title="Sharpen test-square photos"
+      sub={on ? 'On — full frame + 4 tiles per 10×10 square (5 calls)' : 'Off — one call per photo'}
+      trailing={
+        <Switch
+          value={on}
+          onValueChange={setOn}
+          trackColor={{ true: colors.accent, false: colors.borderStrong }}
+          accessibilityLabel="Sharpen test-square photos with tiled analysis"
+        />
+      }
+    />
+  );
 }
 
 function Row({
@@ -873,6 +1061,43 @@ const styles = StyleSheet.create({
   },
   apiCheckText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
   apiFooter: { fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 15 },
+
+  // AI thresholds — expanded per-category list under the AI thresholds row.
+  aiToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.standard,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
+    marginBottom: spacing.xs,
+  },
+  aiStepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    minHeight: touchTarget.standard,
+  },
+  aiStepperLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
+  aiStepperControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  aiStepperBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.fillQuiet,
+  },
+  aiStepperValue: {
+    minWidth: 32,
+    textAlign: 'center',
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
 
   switchTrack: {
     width: 51,

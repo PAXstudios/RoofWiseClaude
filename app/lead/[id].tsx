@@ -5,6 +5,7 @@ import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconC
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { formatDateShort } from '@/lib/format/date';
+import { useState } from 'react';
 import { ScrollView, View, Text, StyleSheet, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -15,6 +16,12 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
+import {
+  describeMissingDetails,
+  isCoordinateAddress,
+  missingLeadDetails,
+} from '@/lib/services/placeholderDetails';
+import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
 import {
   LEAD_STAGE_LABELS,
   LEAD_STAGE_ORDER,
@@ -48,9 +55,13 @@ export default function LeadDetail() {
   const lead = useLeadStore((s) => s.leads.find((l) => l.id === id));
   const setStage = useLeadStore((s) => s.setStage);
   const setFollowUp = useLeadStore((s) => s.setFollowUp);
+  const updateDetails = useLeadStore((s) => s.updateDetails);
   const remove = useLeadStore((s) => s.remove);
   const setPrefill = useWizardPrefillStore((s) => s.set);
   const toast = useToastStore((s) => s.show);
+  // Name / phone / email / address editor — the way a door-knock lead
+  // ("Walk-in lead" at a GPS pair) becomes a customer.
+  const [editSheet, setEditSheet] = useState(false);
   // The job this lead already became, when it is on this device. A link to
   // a job that was deleted (or lives only on another device) reads as none —
   // the CTA then offers a fresh conversion rather than a dead button.
@@ -134,7 +145,8 @@ export default function LeadDetail() {
       addressLat: lead.lat,
       addressLng: lead.lng,
     });
-    setStage(lead.id, 'inspection_scheduled');
+    // The stage moves when the wizard SAVES (new-job.tsx), not here — a
+    // cancelled wizard must leave the lead exactly as it was.
     router.push('/new-job');
   };
 
@@ -152,10 +164,21 @@ export default function LeadDetail() {
     ]);
   };
 
+  // Placeholder name / coordinate-only address (a door knock, or a lead
+  // saved before the homeowner was asked). Stated, never dressed as real.
+  const missing = missingLeadDetails(lead);
+  const gpsOnly = isCoordinateAddress(lead.address);
+
   // Detail rows for the Contact card — built as a list (not four separate
   // conditionals) so the hairline separators between them are never guessed.
   const detailRows: { key: string; icon: IoniconName; tone: ChipTone; label: string; value: string }[] = [
-    { key: 'address', icon: 'location-outline', tone: 'blue', label: 'Address', value: lead.address },
+    {
+      key: 'address',
+      icon: 'location-outline',
+      tone: 'blue',
+      label: gpsOnly ? 'GPS only — add the address' : 'Address',
+      value: lead.address,
+    },
   ];
   if (lead.customerPhone) {
     detailRows.push({ key: 'phone', icon: 'call-outline', tone: 'green', label: 'Phone', value: lead.customerPhone });
@@ -205,6 +228,30 @@ export default function LeadDetail() {
       />
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        {/* A knock-created lead announces what it is missing before anything
+            else — one tap opens the editor. */}
+        {missing.any && (
+          <FadeSlideIn index={0}>
+            <PressableScale
+              style={styles.missingBanner}
+              onPress={() => setEditSheet(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`${describeMissingDetails(missing)}. Tap to edit this lead.`}
+            >
+              <Ionicons name="person-add-outline" size={22} color={colors.warn} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.missingTitle}>{describeMissingDetails(missing)}</Text>
+                <Text style={styles.missingBody}>
+                  {gpsOnly
+                    ? 'This lead was saved from a GPS fix with no street address.'
+                    : 'This lead still has placeholder details.'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.warn} />
+            </PressableScale>
+          </FadeSlideIn>
+        )}
+
         {/* Contact actions — colour-chipped so each action reads before the label does. */}
         <FadeSlideIn index={0} style={styles.actionsRow}>
           <ActionButton
@@ -233,7 +280,12 @@ export default function LeadDetail() {
 
         {/* Contact card — icon-chipped detail rows, hairline-separated. */}
         <FadeSlideIn index={1}>
-          <RichCard title="Contact" icon="person-outline" iconTone="blue">
+          <RichCard
+            title="Contact"
+            icon="person-outline"
+            iconTone="blue"
+            action={{ label: 'Edit', onPress: () => setEditSheet(true), icon: 'create-outline' }}
+          >
             {detailRows.map((row, i) => (
               <View key={row.key}>
                 {i > 0 && <View style={styles.detailSeparator} />}
@@ -342,6 +394,37 @@ export default function LeadDetail() {
           )}
         </FadeSlideIn>
       </ScrollView>
+
+      <CustomerDetailsSheet
+        visible={editSheet}
+        onClose={() => setEditSheet(false)}
+        title={missing.any ? 'Who did you talk to?' : 'Edit lead'}
+        subtitle={
+          missing.any
+            ? 'Name the homeowner and the property so this lead can be worked.'
+            : undefined
+        }
+        initial={{
+          customerName: lead.customerName,
+          customerPhone: lead.customerPhone,
+          customerEmail: lead.customerEmail,
+          address: lead.address,
+          lat: lead.lat,
+          lng: lead.lng,
+        }}
+        onSave={(d) => {
+          updateDetails(lead.id, {
+            customerName: d.customerName,
+            customerPhone: d.customerPhone,
+            customerEmail: d.customerEmail,
+            address: d.address,
+            lat: d.lat,
+            lng: d.lng,
+          });
+          setEditSheet(false);
+          toast({ tone: 'success', title: 'Lead updated', body: d.customerName });
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -427,6 +510,21 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingBottom: spacing.xxxl,
   },
+
+  // Placeholder-details banner — warn-toned, ≥56pt, first thing on the page.
+  missingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.standard,
+    padding: spacing.md,
+    borderRadius: radii.card,
+    backgroundColor: colors.warnSoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.warn,
+  },
+  missingTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
+  missingBody: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginTop: 2 },
 
   actionsRow: { flexDirection: 'row', gap: spacing.sm },
   actionBtn: {

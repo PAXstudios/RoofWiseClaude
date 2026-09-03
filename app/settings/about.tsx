@@ -8,6 +8,12 @@ import Constants from 'expo-constants';
 import { LEADS_SQL } from '@/lib/services/leadSync';
 import { INSPECTIONS_SQL } from '@/lib/services/inspectionSync';
 import { PHOTOS_SQL } from '@/lib/services/photoSync';
+import {
+  DOL_MATCH_WINDOW_DAYS,
+  HAIL_VALIDATION_FLOOR_INCHES,
+  MATCH_RADIUS_MILES,
+  WIND_VALIDATION_FLOOR_MPH,
+} from '@/lib/services/stormMatch';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
@@ -32,7 +38,11 @@ const VERSION = Constants.expoConfig?.version ?? '0.1.0';
 
 const FEATURES = [
   { title: 'Forensic Quick Inspection', desc: 'Camera → Gemini Vision → HAAG-protocol verdicts.' },
-  { title: 'Auto storm match', desc: 'NOAA ≥0.75" hail / ≥58 mph wind within 5 mi / ±30 d stamped on every inspection.' },
+  // Read from stormMatch.ts so the copy cannot contradict the service.
+  {
+    title: 'Auto storm match',
+    desc: `NOAA ≥${HAIL_VALIDATION_FLOOR_INCHES.toFixed(2)}" hail / ≥${WIND_VALIDATION_FLOOR_MPH} mph wind within ${MATCH_RADIUS_MILES} mi / ±${DOL_MATCH_WINDOW_DAYS} d stamped on every inspection.`,
+  },
   { title: 'Recursive learning', desc: 'Every correction calibrates Gemini per inspector; trust-weighted server retraining.' },
   { title: 'HAAG PDF + Proposal PDF', desc: 'Signatures, line items, branded covers.' },
   { title: 'Storm Watch + push', desc: 'Background polling for your service area; local push when severe events hit.' },

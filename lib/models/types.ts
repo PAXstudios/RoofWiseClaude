@@ -89,6 +89,14 @@ export const ROOF_MATERIAL_LABELS: Record<RoofMaterial, string> = {
   epdm: 'EPDM',
 };
 
+/**
+ * Every material, in picker order — derived from the label table so a picker
+ * built from it cannot drift from the taxonomy (the New Job wizard and the
+ * Estimator each used to carry a hand-copied subset that silently dropped
+ * wood shingle, synthetic slate, composite, rolled roofing and EPDM).
+ */
+export const ROOF_MATERIALS = Object.keys(ROOF_MATERIAL_LABELS) as RoofMaterial[];
+
 // -----------------------------------------------------------------------------
 // Roof geometry + condition
 // -----------------------------------------------------------------------------
@@ -229,6 +237,14 @@ export type DamageMarker = {
   box?: { xmin: number; ymin: number; xmax: number; ymax: number };
   /** HAAG §1 evidence class for hail_hits / bruising. Absent on older markers. */
   evidence?: HitEvidence;
+  /**
+   * Inspector-side confirmation: the mark felt SOFT under finger pressure on
+   * the roof — HAAG's bruise test, which no photograph can perform. Set only
+   * by hand in the marker editor; a model must never write it. A soft spot on
+   * a test-square photo is functional damage regardless of what the model
+   * saw (`deriveFunctional`), because the inspector confirmed it.
+   */
+  softSpot?: boolean;
 };
 
 export type InspectionFinding = {

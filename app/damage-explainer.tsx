@@ -13,6 +13,7 @@ import {
   fontSize,
   fontWeight,
   spacing,
+  touchTarget,
 } from '@/theme/tokens';
 
 const DAMAGE_INFO: Record<
@@ -217,11 +218,17 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
-  headerBtn: { padding: spacing.xs },
+  // Glove-sized back target (Drift #1) — was a 26px icon in 4pt of padding.
+  headerBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.navy },
   sub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
 

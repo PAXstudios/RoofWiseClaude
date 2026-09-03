@@ -38,8 +38,12 @@ import {
   ROOF_MATERIAL_LABELS,
   legacyBrittlenessToResult,
 } from '../models/types';
-import type { InspectorProfile } from '../stores/inspectorProfileStore';
-import { useInspectorProfileStore } from '../stores/inspectorProfileStore';
+import type { CompanyProfile, InspectorProfile } from '../stores/inspectorProfileStore';
+import {
+  BRAND_COLOR_SWATCHES,
+  hasCompanyBranding,
+  useInspectorProfileStore,
+} from '../stores/inspectorProfileStore';
 import {
   CARRIER_IMPACT_NORM_NOTE,
   CLAIM_VIABILITY_LABELS,
@@ -422,6 +426,7 @@ function renderHtml(
       <div class="name">RoofWise</div>
       <div class="cert">${isInsurance ? 'Haag Protocol · Insurance Claim' : 'Haag Protocol'}</div>
     </div>
+    ${companyCoverLine(inspector.company)}
     <h1>HAAG Certified<br/>Roof Damage Report</h1>
     <div class="sub">${esc(ins.reportId)} · Inspected ${esc(createdDate)}</div>
     <div class="meta-grid">
@@ -632,7 +637,7 @@ function renderHtml(
   <div class="footer">
     <strong>RoofWise HAAG Certified Report</strong> · ${esc(ins.reportId)}<br/>
     Generated ${esc(generatedAt)} · ${totalPhotos} photograph${totalPhotos === 1 ? '' : 's'} on file · ${ins.slopes.length} slope${ins.slopes.length === 1 ? '' : 's'} inspected<br/>
-    ${esc(engineProvenance(resolved.source, resolved.at))}
+    ${esc(engineProvenance(resolved.source, resolved.at))}${companyFooterLine(inspector.company)}
   </div>
 </div>
 </body>
@@ -1071,6 +1076,76 @@ export function engineProvenance(
 
 function formatRecommendation(r: string): string {
   return r.replace('_', ' ');
+}
+
+// -----------------------------------------------------------------------------
+// Company branding — shared by every PDF variant (proposalPdf.ts imports
+// these too). Inline-styled rather than tied to REPORT_BASE_CSS's classes so
+// the same two functions drop into proposalPdf.ts's differently-styled
+// template unchanged.
+//
+// When no company name is set this returns '' — the document falls back to
+// the inspector's own name (already on every cover's meta grid) and prints
+// NO placeholder company. Never "Your Company Here".
+// -----------------------------------------------------------------------------
+
+/** Resolves the token-safe brand-color key to a hex the print HTML can use.
+ *  REPORT_BASE_CSS documents PDF output as exempt from Drift #11 (app-UI
+ *  tokens) — the KEY the roofer picks in Settings → Branding is still
+ *  token-safe; only this print-only resolution touches a raw hex. */
+export function companyBrandHex(company: CompanyProfile | undefined): string {
+  const key = company?.brandColor;
+  return key ? BRAND_COLOR_SWATCHES[key].hex : '#2B4EF5'; // --royal fallback
+}
+
+/**
+ * Cover-block company line — logo + name + a joined contact/credential
+ * string, tinted with the roofer's chosen brand color. Sits directly under
+ * the existing `.brand` row (the RoofWise mark stays untouched either way —
+ * this is a "prepared by" line, not a replacement of the app's own mark).
+ */
+export function companyCoverLine(company: CompanyProfile | undefined): string {
+  if (!hasCompanyBranding(company)) return '';
+  const c = company!;
+  const hex = companyBrandHex(company);
+  const contact = [
+    c.licenseNumber ? `License #${c.licenseNumber}` : null,
+    c.phone,
+    c.email,
+    c.website,
+  ]
+    .filter((v): v is string => Boolean(v && v.trim()))
+    .map(esc)
+    .join(' · ');
+  const logo = c.logoBase64
+    ? `<img src="${c.logoBase64}" style="width:34px;height:34px;border-radius:9px;object-fit:cover;border:1.5px solid rgba(255,255,255,0.35);" />`
+    : '';
+  return `
+  <div style="display:flex;align-items:center;gap:10px;margin-top:16px;padding-top:14px;border-top:2px solid ${hex};">
+    ${logo}
+    <div>
+      <div style="font-size:14.5px;font-weight:800;color:#fff;letter-spacing:-0.2px;">${esc(c.name)}</div>
+      ${contact ? `<div style="font-size:9.5px;color:rgba(255,255,255,0.7);margin-top:2px;">${contact}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+/** Footer contact line. Nothing when no company is set. */
+export function companyFooterLine(company: CompanyProfile | undefined): string {
+  if (!hasCompanyBranding(company)) return '';
+  const c = company!;
+  const parts = [
+    c.name,
+    c.licenseNumber ? `License #${c.licenseNumber}` : null,
+    c.insuranceLine,
+    c.phone,
+    c.email,
+    c.website,
+  ]
+    .filter((v): v is string => Boolean(v && v.trim()))
+    .map(esc)
+    .join(' · ');
+  return `<br/>${parts}`;
 }
 
 function formatVerdict(v: string): string {

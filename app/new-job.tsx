@@ -54,6 +54,7 @@ import {
   INSURANCE_CARRIER_LABELS,
   INSURANCE_CARRIER_TIER,
   POLICY_TYPE_LABELS,
+  ROOF_MATERIALS,
   ROOF_MATERIAL_LABELS,
   emptyCollateralEvidence,
   isDeductibleHigh,
@@ -61,6 +62,7 @@ import {
 } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { nextStageFor } from '@/components/pipeline/chain';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { researchProperty } from '@/lib/services/propertyIntel';
@@ -291,6 +293,7 @@ export default function NewJobWizard() {
   const toast = useToastStore((s) => s.show);
   const consumePrefill = useWizardPrefillStore((s) => s.consume);
   const linkLeadInspection = useLeadStore((s) => s.linkInspection);
+  const setLeadStage = useLeadStore((s) => s.setStage);
   // The lead this job is being converted from (Lead → Convert). Kept out of
   // `draft` so the dirty check and the review step never see it; save()
   // links both ends with it.
@@ -496,8 +499,17 @@ export default function NewJobWizard() {
       leadId: sourceLeadIdRef.current,
       pitchDegrees: draft.pitchDegrees,
     });
-    // Lead → job: both ends of the link, in the same tick the job exists.
-    if (sourceLeadIdRef.current) linkLeadInspection(sourceLeadIdRef.current, ins.id);
+    // Lead → job: both ends of the link, in the same tick the job exists —
+    // and the stage move with them. The lead screen used to flip the stage
+    // to Inspection Scheduled on "Convert", before this save ran, so a
+    // cancelled wizard left a lead claiming an inspection that never
+    // existed. Forward only: a lead already past this stage stays put.
+    if (sourceLeadIdRef.current) {
+      linkLeadInspection(sourceLeadIdRef.current, ins.id);
+      const lead = useLeadStore.getState().leads.find((l) => l.id === sourceLeadIdRef.current);
+      const stage = lead ? nextStageFor(lead, 'inspection_scheduled') : null;
+      if (lead && stage) setLeadStage(lead.id, stage);
+    }
     logActivity({
       kind: 'job_created',
       inspectionId: ins.id,
@@ -1305,18 +1317,10 @@ function ClaimStep({
 
 // ---------- Step: Roof System ----------
 
-const MATERIALS_DISPLAY: RoofMaterial[] = [
-  'three_tab_asphalt',
-  'architectural_asphalt',
-  'luxury_asphalt',
-  'metal_standing_seam',
-  'metal_shingle',
-  'wood_shake',
-  'clay_tile',
-  'concrete_tile',
-  'slate',
-  'tpo',
-];
+// Every material in the taxonomy, from the canonical list — a hand-copied
+// subset here used to drop wood shingle, synthetic slate, composite, rolled
+// roofing and EPDM, so those roofs could not be entered at all.
+const MATERIALS_DISPLAY: RoofMaterial[] = ROOF_MATERIALS;
 
 const GEOMETRIES: RoofGeometry[] = ['gable', 'hip', 'mansard', 'flat', 'mixed'];
 const CONDITIONS: RoofCondition[] = ['excellent', 'good', 'fair', 'poor'];

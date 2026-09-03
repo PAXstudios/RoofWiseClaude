@@ -57,6 +57,8 @@ export function findLinkedInspection(
 // -----------------------------------------------------------------------------
 
 export type ChainEvent =
+  /** The New Job wizard SAVED a job converted from this lead. */
+  | 'inspection_scheduled'
   | 'inspection_complete'
   | 'proposal_sent'
   | 'proposal_signed'
@@ -65,6 +67,7 @@ export type ChainEvent =
 
 /** Board column each event lands the lead in. */
 export const STAGE_FOR_CHAIN_EVENT: Record<ChainEvent, LeadStage> = {
+  inspection_scheduled: 'inspection_scheduled',
   inspection_complete: 'inspected',
   proposal_sent: 'estimate_sent',
   proposal_signed: 'signed',

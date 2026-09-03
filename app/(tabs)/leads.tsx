@@ -238,12 +238,13 @@ export default function LeadsScreen() {
                     : 'Try a different stage filter.'}
                 </Text>
                 {leads.length === 0 && (
+                  // Matches the segment's FAB: the Leads segment adds a LEAD.
                   <PressableScale
                     style={styles.emptyBtn}
-                    onPress={() => router.push('/new-job')}
+                    onPress={() => router.push('/new-lead')}
                     accessibilityRole="button"
                   >
-                    <Text style={styles.emptyBtnText}>Start a new job</Text>
+                    <Text style={styles.emptyBtnText}>Add a lead</Text>
                   </PressableScale>
                 )}
               </FadeSlideIn>
@@ -1178,12 +1179,14 @@ function ColumnPage({
           Nothing in {LEAD_STAGE_LABELS[stage]}.
         </Text>
         <Text style={styles.columnEmptyHint}>Swipe for the next stage.</Text>
+        {/* A board column holds leads, so its empty action adds a lead —
+            the same thing the segment's FAB does. */}
         <PressableScale
           style={styles.emptyBtn}
-          onPress={() => router.push('/new-job')}
+          onPress={() => router.push('/new-lead')}
           accessibilityRole="button"
         >
-          <Text style={styles.emptyBtnText}>Start a new job</Text>
+          <Text style={styles.emptyBtnText}>Add a lead</Text>
         </PressableScale>
       </Animated.View>
     );

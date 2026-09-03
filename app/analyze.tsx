@@ -114,10 +114,7 @@ export default function AnalyzeView() {
 
   const run = async (onlyNew: boolean) => {
     if (!isGeminiConfigured) {
-      Alert.alert(
-        'AI not connected',
-        'Add EXPO_PUBLIC_GEMINI_API_KEY to .env.local to enable damage detection.',
-      );
+      Alert.alert('AI not connected', "AI analysis isn't set up on this build — ask your admin.");
       return;
     }
 
@@ -241,7 +238,8 @@ export default function AnalyzeView() {
           <View style={styles.warnBanner}>
             <Ionicons name="information-circle-outline" size={20} color={colors.warn} />
             <Text style={styles.warnText}>
-              Gemini key missing. Add EXPO_PUBLIC_GEMINI_API_KEY to .env.local.
+              AI analysis isn't set up on this build — ask your admin. Photos are saved without
+              analysis.
             </Text>
           </View>
         )}
@@ -300,42 +298,86 @@ export default function AnalyzeView() {
             Analyzing {progress.done + 1} of {progress.total}…
           </Text>
         )}
-        <View style={styles.btnRow}>
-          <Pressable
-            style={[styles.secondaryBtn, passInFlight && { opacity: 0.5 }]}
-            disabled={passInFlight || slope.photoPaths.length === 0}
-            onPress={() => run(false)}
-          >
-            <Text style={styles.secondaryBtnText}>Re-analyze all</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.primaryBtn, (passInFlight || unanalyzed.length === 0) && styles.primaryBtnDisabled]}
-            disabled={passInFlight || unanalyzed.length === 0}
-            onPress={() => run(true)}
-          >
-            {running ? (
-              <ActivityIndicator color={colors.textInverse} />
-            ) : (
-              <Text style={styles.primaryBtnText}>
-                Analyze {unanalyzed.length || ''} new
+        {/* The 88pt primary is whichever action is live. With new photos it
+            is "Analyze N new"; with nothing new (the normal case after the
+            camera's own analysis) it is "Next — go to the job", and the
+            analyze button steps down to a secondary. A disabled orange
+            primary above a 44pt text link left the roofer nothing to press. */}
+        {unanalyzed.length > 0 ? (
+          <>
+            <View style={styles.btnRow}>
+              <Pressable
+                style={[styles.secondaryBtn, passInFlight && { opacity: 0.5 }]}
+                disabled={passInFlight || slope.photoPaths.length === 0}
+                onPress={() => run(false)}
+              >
+                <Text style={styles.secondaryBtnText}>Re-analyze all</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.primaryBtn, passInFlight && styles.primaryBtnDisabled]}
+                disabled={passInFlight}
+                onPress={() => run(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Analyze ${unanalyzed.length} new photos`}
+              >
+                {running ? (
+                  <ActivityIndicator color={colors.textInverse} />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Analyze {unanalyzed.length} new</Text>
+                )}
+              </Pressable>
+            </View>
+            {/* ALWAYS live — including mid-analysis. Waiting on a spinner is
+                not the job; the roof is. Anything still unanalyzed is handed
+                to the background queue on the way out (the Processing screen
+                and the queue chip show it finishing), and `analyzeSlope` joins
+                the pass already in flight rather than starting a rival one, so
+                nothing is analyzed or counted twice. */}
+            <Pressable
+              style={styles.queueBtn}
+              onPress={goToJob}
+              accessibilityRole="button"
+              accessibilityLabel="Next: go to the job and finish analysis in the background"
+            >
+              <Ionicons name="arrow-forward-circle-outline" size={18} color={colors.brand} />
+              <Text style={styles.nextBtnText}>
+                {`Next — finish ${pendingAfterLeaving} in the background`}
               </Text>
-            )}
-          </Pressable>
-        </View>
-        {/* ALWAYS live — including mid-analysis. Waiting on a spinner is not
-            the job; the roof is. Anything still unanalyzed is handed to the
-            background queue on the way out (the Processing screen and the
-            queue chip show it finishing), and `analyzeSlope` joins the pass
-            already in flight rather than starting a rival one, so nothing is
-            analyzed or counted twice. */}
-        <Pressable style={styles.queueBtn} onPress={goToJob}>
-          <Ionicons name="arrow-forward-circle-outline" size={18} color={colors.brand} />
-          <Text style={styles.nextBtnText}>
-            {pendingAfterLeaving > 0
-              ? `Next — finish ${pendingAfterLeaving} in the background`
-              : 'Next — go to the job'}
-          </Text>
-        </Pressable>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <View style={styles.btnRow}>
+              <Pressable
+                style={[styles.secondaryBtn, passInFlight && { opacity: 0.5 }]}
+                disabled={passInFlight || slope.photoPaths.length === 0}
+                onPress={() => run(false)}
+              >
+                <Text style={styles.secondaryBtnText}>Re-analyze all</Text>
+              </Pressable>
+              <View style={[styles.secondaryBtn, styles.secondaryBtnDisabled]} accessibilityState={{ disabled: true }}>
+                {running ? (
+                  <ActivityIndicator color={colors.navy} />
+                ) : (
+                  <Text style={styles.secondaryBtnText}>Nothing new to analyze</Text>
+                )}
+              </View>
+            </View>
+            <Pressable
+              style={styles.primaryBtn}
+              onPress={goToJob}
+              accessibilityRole="button"
+              accessibilityLabel={
+                passInFlight ? 'Next: go to the job and finish analysis in the background' : 'Next: go to the job'
+              }
+            >
+              <Ionicons name="arrow-forward-circle-outline" size={20} color={colors.textInverse} />
+              <Text style={styles.primaryBtnText}>
+                {passInFlight ? 'Next — finish in the background' : 'Next — go to the job'}
+              </Text>
+            </Pressable>
+          </>
+        )}
       </View>
 
       <PhotoActionsSheet
@@ -379,11 +421,17 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
-  headerBtn: { padding: spacing.xs },
+  // Glove-sized back target (Drift #1) — was a 26px icon in 4pt of padding.
+  headerBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   reportId: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold },
   title: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.navy },
 
@@ -428,12 +476,13 @@ const styles = StyleSheet.create({
   footer: { padding: spacing.xl, gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   progressText: { color: colors.slate, fontSize: fontSize.bodySm, textAlign: 'center' },
   btnRow: { flexDirection: 'row', gap: spacing.md },
+  // The quiet Next under a live Analyze primary — still a full 56pt row.
   queueBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    minHeight: touchTarget.small,
+    minHeight: touchTarget.standard,
   },
   nextBtnText: {
     fontSize: fontSize.bodyMd,
@@ -451,9 +500,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  secondaryBtnDisabled: { opacity: 0.45 },
   secondaryBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
   primaryBtn: {
     flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
     height: touchTarget.sticky,
     borderRadius: radii.pill,
     backgroundColor: colors.orange,

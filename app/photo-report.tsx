@@ -136,7 +136,7 @@ export default function PhotoReportScreen() {
   const reanalyze = async () => {
     if (reanalyzing) return;
     if (!isGeminiConfigured) {
-      Alert.alert('AI not connected', 'Add the Gemini key in Settings to analyze photos.');
+      Alert.alert('AI not connected', "AI analysis isn't set up on this build — ask your admin.");
       return;
     }
     setReanalyzing(true);

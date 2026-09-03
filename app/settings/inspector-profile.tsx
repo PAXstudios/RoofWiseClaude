@@ -77,7 +77,26 @@ export default function InspectorProfileScreen() {
           />
         </Section>
 
-        <Section index={2} title="HAAG certification">
+        <FadeSlideIn index={2} style={styles.section}>
+          <RichCard padded={false}>
+            <PressableScale
+              style={styles.brandingRow}
+              onPress={() => router.push('/settings/branding')}
+              accessibilityRole="button"
+              accessibilityLabel="Company branding"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toggleLabel}>Company branding</Text>
+                <Text style={styles.toggleSub}>
+                  Logo, license, insurance & contact info printed on every PDF
+                </Text>
+              </View>
+              <Text style={styles.brandingChevron}>›</Text>
+            </PressableScale>
+          </RichCard>
+        </FadeSlideIn>
+
+        <Section index={3} title="HAAG certification">
           <PressableScale
             style={styles.toggleRow}
             onPress={() => update({ haagCertified: !profile.haagCertified })}
@@ -117,7 +136,7 @@ export default function InspectorProfileScreen() {
           />
         </Section>
 
-        <Section index={3} title="Safety">
+        <Section index={4} title="Safety">
           <Field
             label="Emergency contact name"
             value={profile.emergencyContact ?? ''}
@@ -134,7 +153,7 @@ export default function InspectorProfileScreen() {
           />
         </Section>
 
-        <FadeSlideIn index={4}>
+        <FadeSlideIn index={5}>
           <PressableScale
             style={styles.doneBtnShadow}
             onPress={() => {
@@ -266,6 +285,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
+  brandingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  brandingChevron: { fontSize: fontSize.titleMd, color: colors.textSubtle },
   toggleText: { flex: 1 },
   toggleLabel: {
     fontSize: fontSize.bodyMd,

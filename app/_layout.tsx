@@ -45,7 +45,8 @@ export default function RootLayout() {
   }, [initialize]);
 
   // Deep-link from notification taps. Routes Storm Watch alerts to the
-  // alert detail sheet and the weekly calibration nudge to the Train tab.
+  // alert detail sheet, a lead follow-up reminder to that lead, and the
+  // weekly calibration nudge to the Train tab.
   // Gated on navigator readiness — a cold launch from a notification tap
   // delivers the pending response immediately, which can beat the root
   // navigator's mount and throw "Attempted to navigate before mounting".
@@ -54,10 +55,14 @@ export default function RootLayout() {
     if (!navReady) return;
     const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
       const data = resp.notification.request.content.data as
-        | { kind?: string; alertId?: string }
+        | { kind?: string; alertId?: string; leadId?: string }
         | undefined;
       if (data?.kind === 'storm_alert' && data.alertId) {
         router.push({ pathname: '/storm-alert/[id]', params: { id: data.alertId } } as any);
+      } else if (data?.kind === 'lead_follow_up' && data.leadId) {
+        // `scheduleFollowUpReminder` (pushNotifications.ts) stamps the lead
+        // id; the tap lands on the lead the reminder is about.
+        router.push({ pathname: '/lead/[id]', params: { id: data.leadId } } as any);
       } else if (data?.kind === 'calibration_weekly') {
         // navigate, not push: a push while a detail screen is open stacks a
         // second tab shell on the root stack instead of switching the one

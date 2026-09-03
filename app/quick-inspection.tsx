@@ -67,6 +67,13 @@ import {
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { CaptureCoach } from '@/components/capture/CaptureCoach';
 import { AddPhotosToSheet, type AddPhotosChoice } from '@/components/sheets/AddPhotosToSheet';
+import { CustomerDetailsSheet, type AutoLocation } from '@/components/sheets/CustomerDetailsSheet';
+import { resolveDeviceLocation } from '@/components/LocationField';
+import {
+  PLACEHOLDER_ADDRESS,
+  PLACEHOLDER_CUSTOMER_NAME,
+  missingJobDetails,
+} from '@/lib/services/placeholderDetails';
 import { coachProgress, coachSteps, nextIncompleteStep, zoneForAreaTag } from '@/lib/services/captureCoach';
 import {
   COMPASS_USABLE_ACCURACY,
@@ -218,6 +225,7 @@ function QuickInspectionNative() {
   const attachRawPhotos = useInspectionStore((s) => s.attachRawPhotos);
   const createInspection = useInspectionStore((s) => s.create);
   const removeInspection = useInspectionStore((s) => s.remove);
+  const updateDetails = useInspectionStore((s) => s.updateDetails);
   const logActivity = useActivityStore((s) => s.log);
   const toast = useToastStore((s) => s.show);
   const liveOverlay = useCaptureSettingsStore((s) => s.liveOverlay);
@@ -262,6 +270,13 @@ function QuickInspectionNative() {
   const [cameraReady, setCameraReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [livePausedReason, setLivePausedReason] = useState<string | null>(null);
+  // "Who is this job for?" — asked on Done when the job is still the
+  // placeholder the first shutter created. Prefilled from a GPS
+  // reverse-geocode when one resolves; never from an invented address.
+  const [namingOpen, setNamingOpen] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [autoLocation, setAutoLocation] = useState<AutoLocation | null>(null);
+  const [locationNote, setLocationNote] = useState<string | null>(null);
   // Live shingle count / coverage from the last live frame, for the HUD line.
   const [liveStats, setLiveStats] = useState<{ shingleCount?: number; coverageFraction?: number; pixelsPerInch: number | null } | null>(null);
   // The bottom dock grew several rows; the HUD's bottom-left stack tracks its
@@ -650,11 +665,12 @@ function QuickInspectionNative() {
 
   const ensureInspection = (): string => {
     if (targetIdRef.current) return targetIdRef.current;
-    // Customer/address/roof details default to placeholders the inspector
-    // can edit later on the Job screen.
+    // Customer/address/roof details start as placeholders so the photo has
+    // somewhere to live; Done asks for the real ones (`finish`), and the Job
+    // screen keeps asking until they are real.
     const ins = createInspection({
-      customerName: 'Quick inspection',
-      address: 'Address pending',
+      customerName: PLACEHOLDER_CUSTOMER_NAME,
+      address: PLACEHOLDER_ADDRESS,
       material: 'architectural_asphalt',
       ageYears: 0,
       geometry: 'gable',
@@ -844,13 +860,50 @@ function QuickInspectionNative() {
     }
   };
 
+  /**
+   * Done. A job still wearing the placeholder name/address gets asked for
+   * the real ones FIRST — with the address prefilled from where the phone
+   * is standing when a geocoder can name it. The roofer can skip; the job
+   * screen then shows the "Add customer & address" banner and keeps the
+   * packet and proposal off until the details are real.
+   */
   const finish = () => {
     const inspectionId = targetIdRef.current;
     if (photos.length === 0 || !inspectionId) {
       router.back();
       return;
     }
+    const ins = useInspectionStore.getState().getById(inspectionId);
+    if (ins && missingJobDetails(ins).any) {
+      setNamingOpen(true);
+      setAutoLocation(null);
+      setLocationNote(null);
+      setLocating(true);
+      resolveDeviceLocation()
+        .then((r) => {
+          if (!mountedRef.current) return;
+          if (r.status === 'ok' && r.addressKnown) {
+            setAutoLocation({ address: r.location.address, lat: r.location.lat, lng: r.location.lng });
+          } else if (r.status === 'ok') {
+            // A real fix nobody could name: the field stays empty and says why.
+            setLocationNote(r.location.note ?? 'Couldn\'t find a street address here — type it in.');
+          } else if (r.status === 'permission_denied') {
+            setLocationNote('Location is off for RoofWise — type the address in.');
+          } else if (r.status === 'no_fix') {
+            setLocationNote('No GPS fix yet — type the address in.');
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (mountedRef.current) setLocating(false);
+        });
+      return;
+    }
+    continueToAnalyze(inspectionId);
+  };
 
+  /** Hand-off after Done (and after the naming sheet, saved or skipped). */
+  const continueToAnalyze = (inspectionId: string) => {
     const singles = photos.filter((p) => p.captureMode === 'single_shingle').length;
     logActivity({
       kind: 'photo_captured',
@@ -962,7 +1015,7 @@ function QuickInspectionNative() {
   const chromeTop = insets.top + topBarHeight + spacing.sm;
   const chromeBottom = dockHeight ? dockHeight + insets.bottom + spacing.sm : undefined;
   const targetPitch = inspection?.slopes.find((s) => s.orientation === slope)?.pitchDegrees;
-  const livePaused = capturing || importing || analyzing;
+  const livePaused = capturing || importing || analyzing || namingOpen;
 
   // The most recent failed photo's reason, in plain words, where the roofer
   // is already looking — the pill alone only has room for "Failed · Retry".
@@ -982,7 +1035,7 @@ function QuickInspectionNative() {
     : lastFailure
     ? `Analysis failed — ${(lastFailure.error ?? 'unknown reason').replace(/[.\s]+$/, '')}. Tap the photo to retry.`
     : !isGeminiConfigured
-    ? 'AI is not connected — photos are saved without analysis. Run "Analyze" from the job once a key is set.'
+    ? "AI analysis isn't set up on this build — photos are saved without analysis. Ask your admin."
     : liveOverlay
     ? 'Live overlay reads the camera. Photos analyze as you shoot — tap Done when finished.'
     : 'Photos analyze as you shoot. Tap a thumbnail to check it, Done when finished.';
@@ -1297,6 +1350,52 @@ function QuickInspectionNative() {
         visible={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         livePausedReason={livePausedReason}
+      />
+
+      {/* Cancel / drag-down returns to the camera (Done is abandoned); "Skip
+          for now" continues without details and lets the job screen nag. */}
+      <CustomerDetailsSheet
+        visible={namingOpen}
+        onClose={() => setNamingOpen(false)}
+        title="Who is this job for?"
+        subtitle="Name the customer and the property so the report can go out. The address is prefilled from where you are standing when it can be."
+        initial={{
+          customerName: inspection?.customerName,
+          customerPhone: inspection?.customerPhone,
+          customerEmail: inspection?.customerEmail,
+          address: inspection?.address,
+          lat: inspection?.lat,
+          lng: inspection?.lng,
+          material: inspection?.material,
+          condition: inspection?.condition,
+        }}
+        roof
+        locating={locating}
+        autoLocation={autoLocation}
+        locationNote={locationNote}
+        saveLabel="Save & continue"
+        skipLabel="Skip for now"
+        onSave={(d) => {
+          const inspectionId = targetIdRef.current;
+          if (!inspectionId) return;
+          updateDetails(inspectionId, {
+            customerName: d.customerName,
+            customerPhone: d.customerPhone,
+            customerEmail: d.customerEmail,
+            address: d.address,
+            lat: d.lat,
+            lng: d.lng,
+            ...(d.material ? { material: d.material } : {}),
+            ...(d.condition ? { condition: d.condition } : {}),
+          });
+          setNamingOpen(false);
+          continueToAnalyze(inspectionId);
+        }}
+        onSkip={() => {
+          const inspectionId = targetIdRef.current;
+          setNamingOpen(false);
+          if (inspectionId) continueToAnalyze(inspectionId);
+        }}
       />
     </View>
   );

@@ -36,7 +36,7 @@ import {
 } from '../models/types';
 import { useInspectorProfileStore } from '../stores/inspectorProfileStore';
 import { thresholdFor } from './haagThresholds';
-import { REPORT_BASE_CSS, engineProvenance, esc } from './haagPdf';
+import { REPORT_BASE_CSS, companyCoverLine, companyFooterLine, engineProvenance, esc } from './haagPdf';
 import { resolveEngineResult, storedEngineFreshness } from './storedEngine';
 import { stampReportIntegrity } from './reportIntegrity';
 import { recordReportMs } from './telemetry';
@@ -123,6 +123,29 @@ export type LongReportPayload = {
   engine?: EngineRoofResult;
   perSlope?: EngineSlopeResult[];
 };
+
+/**
+ * §3 repairability-gate friction — the SAME condition
+ * `app/job/[id].tsx` computes locally (as `brittlenessGap`) before its HAAG
+ * packet CTA, which until now was the only place this gate was applied
+ * (BACKLOG "Long Report CTA has no finalize gate"). Exported so a Long
+ * Report CTA can ask the same question before generating; also used below to
+ * put the same disclosure the HAAG packet shows front-and-center in the
+ * document itself, not just in the §9 record-completeness table. Informative
+ * friction, never a hard block — returns null when satisfied or when the
+ * inspection is not a claim (the gate is claim-only, per HAAG §3).
+ */
+export function brittlenessEvidenceGap(inspection: Inspection): string | null {
+  if (inspection.kind !== 'insurance_claim') return null;
+  const proto = inspection.brittlenessProtocol;
+  if (!proto?.result) {
+    return 'Brittleness test not recorded. The HAAG repairability gate (§3) cannot be evaluated without it.';
+  }
+  if (proto.photoIds.length === 0) {
+    return `Brittleness test recorded as ${proto.result}, but no photo evidence is attached. The field protocol requires a photo of the test process.`;
+  }
+  return null;
+}
 
 export type GeneratedLongReport = {
   uri: string;
@@ -478,6 +501,11 @@ export function renderLongReportHtml(payload: LongReportPayload): string {
   const totalPhotos = ins.slopes.reduce((n, s) => n + s.photoPaths.length, 0);
   const triggeredCount = perSlope.filter((s) => s.haag_threshold_triggered).length;
   const missing = missingDataRegister(ins, perSlope);
+  // Same gate as the HAAG packet CTA (brittlenessEvidenceGap above) —
+  // surfaced here as a callout, not left to the §07 completeness table alone,
+  // so a claim-mode Long Report foregrounds the gap exactly like the HAAG
+  // Certified Report's Section B does.
+  const brittlenessGap = brittlenessEvidenceGap(ins);
   const brittleResult =
     ins.brittlenessProtocol?.result ?? legacyBrittlenessToResult(ins.brittlenessTest);
   // Slope-by-slope supplementary facts (photo counts) come from the
@@ -664,6 +692,7 @@ export function renderLongReportHtml(payload: LongReportPayload): string {
       <div class="name">RoofWise</div>
       <div class="cert">${isInsurance ? 'Long Report · Insurance Claim' : 'Long Report · Haag Protocol'}</div>
     </div>
+    ${companyCoverLine(inspector.company)}
     <h1>Long-Form<br/>Inspection Report</h1>
     <div class="sub">${esc(ins.reportId)} · Inspected ${esc(createdDate)}</div>
     <div class="meta-grid">
@@ -709,6 +738,9 @@ export function renderLongReportHtml(payload: LongReportPayload): string {
   Viability is deliberately a band, not a numeric score.</p>
   <p><strong>Safety:</strong> ${esc(SAFETY_SENTENCE[engine.roofer_safety_rating])}.</p>
   <p class="reasoning">${esc(engine.detailed_explanation)}</p>
+  ${brittlenessGap
+    ? `<div class="callout warn"><strong>Repairability gate incomplete (§3).</strong> ${esc(brittlenessGap)} This does not block the report — it is disclosed here, and again in Section 07, so the gap travels with the document.</div>`
+    : ''}
 
   <h2><span class="n">03</span>Weather &amp; Event</h2>
   ${weatherBlock}
@@ -769,7 +801,7 @@ export function renderLongReportHtml(payload: LongReportPayload): string {
   <div class="footer">
     <strong>RoofWise Long-Form Inspection Report</strong> · ${esc(ins.reportId)}<br/>
     Generated ${esc(generatedAt)} · Restates the stored RoofWise decision-engine output · ${ins.slopes.length} slope${ins.slopes.length === 1 ? '' : 's'} inspected<br/>
-    ${esc(provenance)}
+    ${esc(provenance)}${companyFooterLine(inspector.company)}
   </div>
 </div>
 </body>

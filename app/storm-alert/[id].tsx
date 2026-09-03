@@ -245,7 +245,13 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.navy,
   },
-  headerBtn: { padding: spacing.xs },
+  // Glove-sized back / dismiss targets (Drift #1) — were icons in 4pt of padding.
+  headerBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: { flex: 1, color: colors.textInverse, fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, textAlign: 'center' },
 
   scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },

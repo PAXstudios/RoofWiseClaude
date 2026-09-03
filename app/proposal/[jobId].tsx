@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
+  ActivityIndicator,
   Alert,
   Share,
 } from 'react-native';
@@ -13,7 +14,6 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { RichCard } from '@/components/ui/RichCard';
 import { IconChip } from '@/components/ui/IconChip';
-import * as Clipboard from 'expo-clipboard';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
 import { useProposalLinkStore } from '@/lib/stores/proposalLinkStore';
@@ -35,19 +35,36 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
+/**
+ * True once the persisted proposals have been read back from storage. The
+ * store's default is an empty list, so `getByJob` says "no proposal" for a
+ * beat on a cold start — and the auto-create below would mint a fresh draft
+ * over a SIGNED proposal that was about to rehydrate. Wait for the read.
+ */
+function useProposalsHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(() => useProposalStore.persist.hasHydrated());
+  useEffect(() => {
+    if (hydrated) return;
+    const unsub = useProposalStore.persist.onFinishHydration(() => setHydrated(true));
+    // Rehydration can finish between the initial read and the subscription.
+    if (useProposalStore.persist.hasHydrated()) setHydrated(true);
+    return unsub;
+  }, [hydrated]);
+  return hydrated;
+}
+
 export default function ProposalView() {
   const router = useRouter();
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
   const inspection = useInspectionStore((s) =>
     s.inspections.find((i) => i.id === jobId),
   );
+  const hydrated = useProposalsHydrated();
   const existing = useProposalStore((s) => s.getByJob(jobId));
   const upsert = useProposalStore((s) => s.upsert);
   const create = useProposalStore((s) => s.create);
   const setStatus = useProposalStore((s) => s.setStatus);
   const getOrCreateLink = useProposalLinkStore((s) => s.getOrCreate);
-  const urlFor = useProposalLinkStore((s) => s.urlFor);
-  const allLinks = useProposalLinkStore((s) => s.links);
   const logActivity = useActivityStore((s) => s.log);
   const leads = useLeadStore((s) => s.leads);
   const setLeadStage = useLeadStore((s) => s.setStage);
@@ -59,13 +76,14 @@ export default function ProposalView() {
   // which React flags as "Cannot update a component while rendering a
   // different component" and which can double-create the proposal or drop
   // the write entirely. The guard ref keeps StrictMode's double-invoke from
-  // minting two proposals for the same job.
+  // minting two proposals for the same job. Gated on hydration: before the
+  // persisted list is back, "no proposal" is not a fact.
   const creatingRef = useRef(false);
   useEffect(() => {
-    if (existing || !inspection || creatingRef.current) return;
+    if (!hydrated || existing || !inspection || creatingRef.current) return;
     creatingRef.current = true;
     create(generateProposalDraft(inspection));
-  }, [existing, inspection, create]);
+  }, [hydrated, existing, inspection, create]);
 
   // Reset the guard if the user navigates to a different job on the same
   // mounted screen.
@@ -74,6 +92,17 @@ export default function ProposalView() {
   }, [jobId]);
 
   const proposal = existing ?? null;
+
+  if (!hydrated) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.empty}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!inspection || !proposal) {
     return (
@@ -119,10 +148,26 @@ export default function ProposalView() {
     );
   };
 
+  /**
+   * Generate the PDF and hand it to the system share sheet. The status moves
+   * to `sent` only AFTER the sheet reports a share (not a dismissal), and
+   * never off `signed` — re-sharing a signed contract used to demote it to
+   * "sent" before the sheet had even opened. Android's share sheet cannot
+   * report a dismissal, so it always counts as shared there.
+   */
   const onSend = async () => {
     try {
       setBusy(true);
       const { uri } = await generateProposalPdf(proposal, inspection);
+      const result = await Share.share({
+        url: uri,
+        message: `RoofWise proposal — ${inspection.customerName}`,
+      });
+      if (result.action === Share.dismissedAction) return;
+      if (proposal.status === 'signed') {
+        toast({ tone: 'success', title: 'Signed proposal shared' });
+        return;
+      }
       setStatus(proposal.id, 'sent', { sentAt: new Date().toISOString() });
       logActivity({
         kind: 'proposal_sent',
@@ -131,16 +176,43 @@ export default function ProposalView() {
         message: `Sent proposal for ${inspection.reportId}`,
       });
       advanceLead('proposal_sent');
-      await Share.share({
-        url: uri,
-        message: `RoofWise proposal — ${inspection.customerName}`,
-      });
       toast({ tone: 'success', title: 'Proposal sent' });
     } catch (e) {
       Alert.alert('Send failed', e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setBusy(false);
     }
+  };
+
+  /** The in-app homeowner page — signed on the roofer's own phone at the door. */
+  const onPreview = () => {
+    const link = getOrCreateLink({ proposalId: proposal.id, jobId: inspection.id });
+    router.push({ pathname: '/p/[token]', params: { token: link.token } } as any);
+  };
+
+  /** Fires from the pad's explicit "Accept & sign" only — never from a stroke. */
+  const onHomeownerSigned = (svg: string) => {
+    if (!svg) return;
+    // `proposal` is this render's record: the accept that signs sees
+    // 'draft'/'sent', a later re-accept sees 'signed', so the log line and
+    // the stage move fire exactly once.
+    const firstSignature = proposal.status !== 'signed';
+    upsert({
+      ...proposal,
+      homeownerSignatureSvg: svg,
+      status: 'signed',
+      signedAt: new Date().toISOString(),
+    });
+    if (firstSignature) {
+      logActivity({
+        kind: 'proposal_signed',
+        inspectionId: inspection.id,
+        proposalId: proposal.id,
+        message: `${inspection.customerName} signed the proposal for ${inspection.reportId}`,
+      });
+      advanceLead('proposal_signed');
+    }
+    toast({ tone: 'success', title: 'Proposal signed' });
   };
 
   return (
@@ -202,103 +274,44 @@ export default function ProposalView() {
           <Text style={styles.body}>{proposal.termsText}</Text>
         </RichCard>
 
-        <RichCard title="Share link" icon="link-outline" iconTone="orange" contentStyle={styles.cardBody}>
-          {(() => {
-            const existing = allLinks.find((l) => l.proposalId === proposal.id);
-            if (!existing) {
-              return (
-                <>
-                  <Text style={styles.body}>
-                    Generate a tokenized URL the homeowner can open from email or SMS.
-                  </Text>
-                  <Pressable
-                    style={styles.secondaryBtn}
-                    onPress={() => {
-                      const link = getOrCreateLink({
-                        proposalId: proposal.id,
-                        jobId: inspection.id,
-                      });
-                      toast({
-                        tone: 'success',
-                        title: 'Link generated',
-                        body: urlFor(link.token),
-                      });
-                    }}
-                  >
-                    <Ionicons name="link-outline" size={18} color={colors.navy} />
-                    <Text style={styles.secondaryBtnText}>Generate link</Text>
-                  </Pressable>
-                </>
-              );
-            }
-            const url = urlFor(existing.token);
-            return (
-              <>
-                <Text selectable style={styles.urlText}>{url}</Text>
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <Pressable
-                    style={[styles.secondaryBtn, { flex: 1 }]}
-                    onPress={async () => {
-                      await Clipboard.setStringAsync(url);
-                      toast({ tone: 'success', title: 'Link copied' });
-                    }}
-                  >
-                    <Ionicons name="copy-outline" size={18} color={colors.navy} />
-                    <Text style={styles.secondaryBtnText}>Copy</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.secondaryBtn, { flex: 1 }]}
-                    onPress={async () => {
-                      await Share.share({ message: `Your roofing proposal: ${url}` });
-                    }}
-                  >
-                    <Ionicons name="share-outline" size={18} color={colors.navy} />
-                    <Text style={styles.secondaryBtnText}>Share</Text>
-                  </Pressable>
-                </View>
-                <Pressable
-                  style={styles.previewBtn}
-                  onPress={() =>
-                    router.push({ pathname: '/p/[token]', params: { token: existing.token } } as any)
-                  }
-                >
-                  <Ionicons name="eye-outline" size={18} color={colors.navy} />
-                  <Text style={styles.secondaryBtnText}>Preview as homeowner</Text>
-                </Pressable>
-              </>
-            );
-          })()}
+        {/* The PDF is what the homeowner receives. The old "Share link" card
+            handed out https://roofwise.app/p/<token> — a domain nothing hosts,
+            rendering a page that only exists in THIS phone's storage — so a
+            homeowner who tapped it got nothing. The in-app page stays as the
+            at-the-door preview, which does work on this device.
+            TODO(owner): hosted proposal page — when a public host exists,
+            proposalLinkStore.urlFor() already mints the token URL. */}
+        <RichCard title="Share proposal" icon="share-outline" iconTone="orange" contentStyle={styles.cardBody}>
+          <Text style={styles.body}>
+            Send the homeowner the proposal PDF by text, email, or AirDrop. To have them sign on
+            your phone, open the homeowner view.
+          </Text>
+          <Pressable
+            style={[styles.secondaryBtn, busy && { opacity: 0.5 }]}
+            disabled={busy}
+            onPress={onSend}
+            accessibilityRole="button"
+            accessibilityLabel="Share proposal PDF"
+          >
+            <Ionicons name="document-attach-outline" size={18} color={colors.navy} />
+            <Text style={styles.secondaryBtnText}>{busy ? 'Generating PDF…' : 'Share proposal PDF'}</Text>
+          </Pressable>
+          <Pressable
+            style={styles.previewBtn}
+            onPress={onPreview}
+            accessibilityRole="button"
+            accessibilityLabel="Preview as homeowner"
+          >
+            <Ionicons name="eye-outline" size={18} color={colors.navy} />
+            <Text style={styles.secondaryBtnText}>Preview as homeowner</Text>
+          </Pressable>
         </RichCard>
 
         <RichCard title="Homeowner signature" icon="create-outline" iconTone="blue" contentStyle={styles.cardBody}>
           <Text style={styles.body}>
-            Have the homeowner sign below before sending the proposal.
+            Have the homeowner sign below, then tap Accept & sign. Nothing is signed until that tap.
           </Text>
-          <SignaturePad
-            onChange={(svg) => {
-              if (svg) {
-                // `proposal` is this render's record: the first stroke that
-                // signs sees 'draft'/'sent', every later stroke sees 'signed',
-                // so the log line and the stage move fire exactly once.
-                const firstSignature = proposal.status !== 'signed';
-                upsert({
-                  ...proposal,
-                  homeownerSignatureSvg: svg,
-                  status: 'signed',
-                  signedAt: new Date().toISOString(),
-                });
-                if (firstSignature) {
-                  logActivity({
-                    kind: 'proposal_signed',
-                    inspectionId: inspection.id,
-                    proposalId: proposal.id,
-                    message: `${inspection.customerName} signed the proposal for ${inspection.reportId}`,
-                  });
-                  advanceLead('proposal_signed');
-                }
-              }
-            }}
-          />
+          <SignaturePad onAccept={onHomeownerSigned} acceptLabel="Accept & sign" />
           {proposal.homeownerSignatureSvg && (
             <View style={styles.signedBadge}>
               <Ionicons name="checkmark-circle" size={18} color={colors.success} />
@@ -353,11 +366,17 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
-  headerBtn: { padding: spacing.xs },
+  // Glove-sized back target (Drift #1) — was a 26px icon in 4pt of padding.
+  headerBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   reportId: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold },
   title: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.navy },
 
@@ -430,15 +449,6 @@ const styles = StyleSheet.create({
     borderColor: colors.navy,
   },
   secondaryBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
-  urlText: {
-    fontSize: fontSize.bodyMd,
-    color: colors.navy,
-    fontFamily: 'Courier',
-    backgroundColor: colors.surfaceMuted,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    marginVertical: spacing.sm,
-  },
   previewBtn: {
     flexDirection: 'row',
     alignItems: 'center',

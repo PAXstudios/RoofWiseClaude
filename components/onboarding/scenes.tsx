@@ -21,8 +21,14 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { brand, colors, fontSize, fontWeight, glass, motion, radii, spacing } from '@/theme/tokens';
+import { HAAG_THRESHOLDS } from '@/lib/services/haagThresholds';
 
 const STAGE = 260;
+
+/** The number the verdict scene teaches — the engine's own, never a copy. */
+const ASPHALT_THRESHOLD = HAAG_THRESHOLDS.architectural_asphalt.hitsPerTestSquare;
+/** Gauge range: the 12 observed hits sit at 12/14 of the track. */
+const GAUGE_MAX_HITS = 14;
 
 export type SceneProps = { active: boolean };
 
@@ -203,7 +209,10 @@ export function VerdictScene({ active }: SceneProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // 12 observed hits against a 10-hit architectural-asphalt threshold.
+  // 12 observed hits against the architectural-asphalt threshold — read from
+  // the same table the engine uses (8, the carrier standard; see
+  // docs/THRESHOLD_PROVENANCE.md), so the pitch can never teach a number the
+  // packet does not argue.
   const barStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
   const countStyle = useAnimatedStyle(() => ({ opacity: fill.value }));
   const stampStyle = useAnimatedStyle(() => ({
@@ -215,17 +224,19 @@ export function VerdictScene({ active }: SceneProps) {
     <View style={styles.stage}>
       <View style={styles.verdictCard}>
         <Text style={styles.verdictLabel}>ARCHITECTURAL ASPHALT</Text>
-        <Text style={styles.verdictRule}>HAAG threshold · 10 hits / test square</Text>
+        <Text style={styles.verdictRule}>
+          HAAG threshold · {ASPHALT_THRESHOLD}+ hits per test square (carrier standard)
+        </Text>
 
         <View style={styles.gaugeTrack}>
           <Animated.View style={[styles.gaugeFill, barStyle]} />
-          {/* Threshold marker sits at 10/14 of the bar's range. */}
-          <View style={[styles.gaugeThreshold, { left: `${(10 / 14) * 100}%` }]} />
+          {/* Threshold marker sits at threshold/14 of the bar's range. */}
+          <View style={[styles.gaugeThreshold, { left: `${(ASPHALT_THRESHOLD / GAUGE_MAX_HITS) * 100}%` }]} />
         </View>
 
         <View style={styles.gaugeLegend}>
           <Animated.Text style={[styles.gaugeCount, countStyle]}>12 hits observed</Animated.Text>
-          <Text style={styles.gaugeThresholdLabel}>threshold 10</Text>
+          <Text style={styles.gaugeThresholdLabel}>threshold {ASPHALT_THRESHOLD}</Text>
         </View>
       </View>
 

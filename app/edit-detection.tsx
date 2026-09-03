@@ -24,8 +24,10 @@ import {
 import {
   DAMAGE_CATEGORIES,
   DAMAGE_CATEGORY_LABELS,
+  HIT_EVIDENCE_LABELS,
   type DamageCategory,
   type DamageMarker,
+  type HitEvidence,
   type Severity,
 } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
@@ -42,6 +44,24 @@ function newMarkerId(): string {
 }
 
 const SEVERITIES: Severity[] = ['minor', 'moderate', 'severe'];
+
+/**
+ * HAAG §1 evidence classes the inspector can assign to a hail / bruise mark.
+ * `unclear` leads and is the default — a hand-placed hit never defaults to a
+ * functional class; the inspector has to say what they saw.
+ */
+const EVIDENCE_OPTIONS: HitEvidence[] = [
+  'unclear',
+  'exposed_substrate',
+  'mat_fracture',
+  'granule_loss_only',
+  'cosmetic',
+];
+
+/** The two categories that carry evidence and the soft-spot confirmation. */
+function isHailCategory(c: DamageCategory): boolean {
+  return c === 'hail_hits' || c === 'bruising';
+}
 
 export default function EditDetectionView() {
   const router = useRouter();
@@ -74,6 +94,10 @@ export default function EditDetectionView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [category, setCategory] = useState<DamageCategory>('hail_hits');
   const [severity, setSeverity] = useState<Severity>('moderate');
+  // What the NEXT hand-placed hail mark carries. Never defaults to a
+  // functional class (Drift #5) — `unclear` until the inspector says.
+  const [evidence, setEvidence] = useState<HitEvidence>('unclear');
+  const [softSpot, setSoftSpot] = useState(false);
 
   if (!inspection || !slope || !photoUri) {
     return (
@@ -92,8 +116,18 @@ export default function EditDetectionView() {
 
   const dirty = JSON.stringify(draftMarkers) !== JSON.stringify(photoMarkers);
 
+  // The selected marker, when it is a hail / bruise mark: the evidence and
+  // soft-spot chips then edit IT rather than the defaults for the next tap.
+  const selected = selectedId ? draftMarkers.find((m) => m.id === selectedId) : undefined;
+  const selectedHail = selected && isHailCategory(selected.category) ? selected : undefined;
+  const chipsCategory = selectedHail ? selectedHail.category : category;
+  const showEvidence = isHailCategory(chipsCategory);
+  const activeEvidence: HitEvidence = selectedHail ? (selectedHail.evidence ?? 'unclear') : evidence;
+  const activeSoftSpot = selectedHail ? selectedHail.softSpot === true : softSpot;
+
   const onAddMarker = (x: number, y: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const hail = isHailCategory(category);
     setDraftMarkers((prev) => [
       ...prev,
       {
@@ -105,8 +139,35 @@ export default function EditDetectionView() {
         radius: 0.03,
         confidence: 100,
         note: 'Added by inspector',
+        // Evidence rides every hand-placed hail mark so `deriveFunctional`
+        // can read it; other categories carry neither field.
+        ...(hail ? { evidence, softSpot: softSpot || undefined } : {}),
       },
     ]);
+  };
+
+  const setEvidenceFor = (value: HitEvidence) => {
+    Haptics.selectionAsync();
+    if (selectedHail) {
+      setDraftMarkers((prev) =>
+        prev.map((m) => (m.id === selectedHail.id ? { ...m, evidence: value } : m)),
+      );
+      return;
+    }
+    setEvidence(value);
+  };
+
+  const toggleSoftSpot = () => {
+    Haptics.selectionAsync();
+    if (selectedHail) {
+      setDraftMarkers((prev) =>
+        prev.map((m) =>
+          m.id === selectedHail.id ? { ...m, softSpot: m.softSpot ? undefined : true } : m,
+        ),
+      );
+      return;
+    }
+    setSoftSpot((v) => !v);
   };
 
   const onSelectMarker = (id: string) => {
@@ -241,7 +302,59 @@ export default function EditDetectionView() {
       </View>
 
       <View style={styles.toolbar}>
-        <Text style={styles.toolbarLabel}>Tap photo to add. Tap a marker to edit.</Text>
+        <Text style={styles.toolbarLabel}>
+          {selectedHail
+            ? 'Editing the selected hit — what did you see? Press it: soft under your finger?'
+            : 'Tap photo to add. Tap a marker to edit.'}
+        </Text>
+
+        {/* HAAG §1 for hail / bruise marks: the evidence class the inspector
+            saw, and the soft-spot test only a finger on the roof can run.
+            Shown for the next tap's category, or for the selected hit. */}
+        {showEvidence && (
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}
+            >
+              <Text style={styles.rowLabel}>EVIDENCE</Text>
+              {EVIDENCE_OPTIONS.map((e) => {
+                const active = activeEvidence === e;
+                return (
+                  <Pressable
+                    key={e}
+                    style={[styles.evChip, active && styles.evChipActive]}
+                    onPress={() => setEvidenceFor(e)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={`Evidence: ${HIT_EVIDENCE_LABELS[e]}`}
+                  >
+                    <Text style={[styles.evChipText, active && styles.evChipTextActive]}>
+                      {HIT_EVIDENCE_LABELS[e]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              <Pressable
+                style={[styles.evChip, styles.softChip, activeSoftSpot && styles.softChipActive]}
+                onPress={toggleSoftSpot}
+                accessibilityRole="button"
+                accessibilityState={{ checked: activeSoftSpot }}
+                accessibilityLabel="Soft spot felt under finger pressure"
+              >
+                <Ionicons
+                  name={activeSoftSpot ? 'checkmark-circle' : 'hand-left-outline'}
+                  size={18}
+                  color={activeSoftSpot ? colors.textInverse : colors.cream}
+                />
+                <Text style={[styles.evChipText, activeSoftSpot && styles.evChipTextActive]}>
+                  Soft spot (felt)
+                </Text>
+              </Pressable>
+            </ScrollView>
+          </>
+        )}
 
         <ScrollView
           horizontal
@@ -301,11 +414,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
     backgroundColor: 'rgba(0,0,0,0.85)',
   },
-  headerBtn: { padding: spacing.xs },
+  // Glove-sized close / edit targets (Drift #1) — were icons in 4pt of padding.
+  headerBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: { flex: 1, color: colors.textInverse, fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold },
 
   canvas: { flex: 1, backgroundColor: '#000' },
@@ -331,6 +450,31 @@ const styles = StyleSheet.create({
   catChipActive: { backgroundColor: colors.orange },
   catChipText: { color: colors.cream, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   catChipTextActive: { color: colors.textInverse },
+
+  rowLabel: {
+    color: colors.cream,
+    opacity: 0.6,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    marginRight: spacing.xs,
+  },
+  // Evidence chips: brand-blue when active so they never read as the orange
+  // category selection; the soft-spot toggle goes green — it is a confirmation.
+  evChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    height: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    justifyContent: 'center',
+  },
+  evChipActive: { backgroundColor: colors.brand },
+  evChipText: { color: colors.cream, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  evChipTextActive: { color: colors.textInverse },
+  softChip: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  softChipActive: { backgroundColor: colors.success, borderColor: colors.success },
 
   sevRow: { flexDirection: 'row', gap: spacing.sm },
   sevChip: {

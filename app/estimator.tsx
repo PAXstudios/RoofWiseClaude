@@ -40,10 +40,13 @@ import { describeGoogleApiError } from '@/lib/services/googleApi';
 import {
   estimateCost,
   regionForState,
+  stateFromAddress,
   type CostEstimate,
   type DamageScope,
 } from '@/lib/services/costEstimator';
+import { priceBookProvenance, usePricingStore } from '@/lib/stores/pricingStore';
 import {
+  ROOF_MATERIALS,
   ROOF_MATERIAL_LABELS,
   type RoofMaterial,
 } from '@/lib/models/types';
@@ -60,14 +63,8 @@ type Draft = {
   scope: DamageScope;
 };
 
-const MATERIAL_CHOICES: RoofMaterial[] = [
-  'three_tab_asphalt',
-  'architectural_asphalt',
-  'metal_standing_seam',
-  'wood_shake',
-  'clay_tile',
-  'slate',
-];
+// The canonical list, so the picker cannot drift from the taxonomy (audit P2 #26).
+const MATERIAL_CHOICES: RoofMaterial[] = [...ROOF_MATERIALS];
 
 const SCOPE_CHOICES: { id: DamageScope; label: string; sub: string }[] = [
   { id: 'repair', label: 'Repair only', sub: 'Spot fixes — minor damage' },
@@ -105,6 +102,7 @@ export default function CostEstimatorScreen() {
   });
   const [measuring, setMeasuring] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const priceBook = usePricingStore((s) => s.book);
 
   const convertToJob = () => {
     setPrefill({
@@ -120,12 +118,15 @@ export default function CostEstimatorScreen() {
   const totalSquares = draft.measurement?.totalSquares ?? draft.manualSquares ?? 0;
   const estimate: CostEstimate | null =
     totalSquares > 0
-      ? estimateCost({
-          material: draft.material,
-          region: regionForState(),
-          scope: draft.scope,
-          totalSquares,
-        })
+      ? estimateCost(
+          {
+            material: draft.material,
+            region: regionForState(stateFromAddress(draft.address)),
+            scope: draft.scope,
+            totalSquares,
+          },
+          priceBook,
+        )
       : null;
 
   const runMeasurement = async () => {
@@ -367,6 +368,36 @@ export default function CostEstimatorScreen() {
                 </Text>
               </View>
 
+              {/* Price-book provenance — every generated estimate states which
+                  numbers priced it (Wave C requirement). Tapping goes straight
+                  to Settings → Pricing so an unedited starting book is one tap
+                  from being fixed, not just disclosed. */}
+              <Pressable
+                style={styles.provenanceRow}
+                onPress={() => router.push('/settings/pricing')}
+                accessibilityRole="button"
+                accessibilityLabel="Open pricing settings"
+              >
+                <Ionicons
+                  name={estimate.priceBookCustomized ? 'pricetag-outline' : 'alert-circle-outline'}
+                  size={16}
+                  color={estimate.priceBookCustomized ? colors.slate : colors.warn}
+                />
+                <Text
+                  style={[
+                    styles.provenanceText,
+                    !estimate.priceBookCustomized && styles.provenanceTextWarn,
+                  ]}
+                >
+                  {priceBookProvenance({
+                    customized: estimate.priceBookCustomized,
+                    revision: estimate.priceBookVersion,
+                    updatedAt: estimate.priceBookUpdatedAt ?? new Date().toISOString(),
+                  })}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
+              </Pressable>
+
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Line items</Text>
                 {estimate.lineItems.map((li) => (
@@ -393,6 +424,9 @@ export default function CostEstimatorScreen() {
                       totalLow: estimate.totalLow,
                       totalMid: estimate.totalMid,
                       totalHigh: estimate.totalHigh,
+                      priceBookVersion: estimate.priceBookVersion,
+                      priceBookUpdatedAt: estimate.priceBookUpdatedAt,
+                      priceBookCustomized: estimate.priceBookCustomized,
                       // Only when the squares came from the imagery — a manual
                       // count has no property to draw (Drift #5).
                       measurement:
@@ -457,7 +491,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     gap: spacing.md,
   },
-  headerBtn: { padding: spacing.xs },
+  // 56pt (Drift #1) — was a 34pt pad around the glyph.
+  headerBtn: { minWidth: touchTarget.standard, minHeight: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
   stepCount: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold },
   stepTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.navy },
 
@@ -573,6 +608,16 @@ const styles = StyleSheet.create({
   priceLabel: { color: 'rgba(240,240,228,0.78)', fontSize: fontSize.bodyMd, marginBottom: spacing.sm },
   priceMid: { color: colors.orange, fontSize: 48, fontWeight: fontWeight.bold },
   priceRange: { color: colors.cream, fontSize: fontSize.bodyMd, marginTop: spacing.xs },
+
+  provenanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: touchTarget.small,
+    paddingHorizontal: spacing.md,
+  },
+  provenanceText: { flex: 1, fontSize: fontSize.bodySm, color: colors.slate },
+  provenanceTextWarn: { color: colors.warn, fontWeight: fontWeight.medium },
 
   lineItem: {
     flexDirection: 'row',

@@ -8,6 +8,7 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
 import { PressableScale } from '@/components/PressableScale';
+import { ConfirmSheet } from '@/components/sheets/ConfirmSheet';
 import { RichCard } from '@/components/ui/RichCard';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { activityHref } from '@/components/home/activityRoute';
@@ -51,6 +52,9 @@ export default function ActivityScreen() {
   const leads = useLeadStore((s) => s.leads);
   const proposals = useProposalStore((s) => s.proposals);
   const [filter, setFilter] = useState<FilterId>('all');
+  // Clearing the feed is destructive and irreversible — it asks in a sheet
+  // (Drift #1), never fires on the tap.
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const filtered = useMemo(() => events.filter((e) => matchesFilter(e.kind, filter)), [events, filter]);
 
@@ -75,7 +79,7 @@ export default function ActivityScreen() {
         <Text style={styles.title}>Activity</Text>
         {events.length > 0 && (
           <Pressable
-            onPress={clear}
+            onPress={() => setConfirmClear(true)}
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel="Clear activity"
@@ -153,6 +157,15 @@ export default function ActivityScreen() {
           </RichCard>
         )}
       </ScrollView>
+
+      <ConfirmSheet
+        visible={confirmClear}
+        title="Clear activity?"
+        body={`${events.length} event${events.length === 1 ? '' : 's'} will be removed from this feed. This cannot be undone.`}
+        confirmLabel="Clear"
+        onConfirm={clear}
+        onClose={() => setConfirmClear(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -215,13 +228,20 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
-  headerBtn: { padding: spacing.xs },
+  // Glove-sized targets (Drift #1) — the back chevron was a 26px icon in 4pt
+  // of padding, and Clear (destructive) sat at 44pt.
+  headerBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: { flex: 1, fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
-  clearBtn: { minHeight: touchTarget.small, justifyContent: 'center' },
+  clearBtn: { minHeight: touchTarget.standard, paddingHorizontal: spacing.sm, justifyContent: 'center' },
   clear: { color: colors.orange, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
   chipScroll: { maxHeight: 56 },

@@ -10,12 +10,27 @@ function newId(): string {
   return `lead_${Date.now()}_${counter++}`;
 }
 
+/**
+ * Contact fields editable from the lead screen — what a door-knock lead
+ * ("Walk-in lead" at a bare GPS pair) needs before it is a real customer.
+ */
+export type LeadDetailsPatch = Partial<
+  Pick<Lead, 'customerName' | 'customerPhone' | 'customerEmail' | 'address' | 'lat' | 'lng'>
+>;
+
 type LeadStoreState = {
   leads: Lead[];
 
   create: (input: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'syncStatus'>) => Lead;
   upsert: (lead: Lead) => Lead;
   setStage: (id: string, stage: LeadStage) => void;
+  /**
+   * Correct name / phone / email / address on an existing lead. Keys present
+   * in `patch` are written as given (`undefined` clears an optional field);
+   * absent keys are untouched. Stamps `updatedAt` + `syncStatus: 'pending'`
+   * like every other mutator so the next push carries it.
+   */
+  updateDetails: (id: string, patch: LeadDetailsPatch) => void;
   setFollowUp: (id: string, followUpAt: string | undefined) => void;
   setStormMatch: (id: string, match: Lead['lastStormMatch']) => void;
   /**
@@ -103,6 +118,20 @@ export const useLeadStore = create<LeadStoreState>()(
                   // Stamped alongside updatedAt so the board can measure time
                   // in stage rather than time since any edit.
                   stageChangedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  syncStatus: 'pending',
+                }
+              : l,
+          ),
+        })),
+
+      updateDetails: (id, patch) =>
+        set((s) => ({
+          leads: s.leads.map((l) =>
+            l.id === id
+              ? {
+                  ...l,
+                  ...patch,
                   updatedAt: new Date().toISOString(),
                   syncStatus: 'pending',
                 }

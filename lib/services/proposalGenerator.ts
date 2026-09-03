@@ -5,6 +5,7 @@ import type { Inspection, Proposal, ProposalLineItem } from '../models/types';
 import { totalSquares as totalSquaresFor } from './propertyIntel';
 import { resolveEngineResult } from './storedEngine';
 import { estimateCost, regionForState, type DamageScope } from './costEstimator';
+import { priceBookProvenance, usePricingStore } from '../stores/pricingStore';
 
 let lineCounter = 0;
 function newLineId(): string {
@@ -30,7 +31,15 @@ export function generateProposalDraft(
   inspection: Inspection,
   opts: GenerateOptions = {},
 ): Omit<Proposal, 'id'> {
-  const cfg = { ...DEFAULTS, ...opts };
+  // The roofer's own price book overrides the generic defaults above for tax
+  // and deposit — but only once they've actually set it (Drift #5: an
+  // unedited starting book is not "the roofer's rate"). An explicit `opts`
+  // value always wins over either.
+  const book = usePricingStore.getState().book;
+  const bookDefaults = book.customized
+    ? { taxRate: book.taxPercent / 100, depositRate: book.depositPercent / 100 }
+    : {};
+  const cfg = { ...DEFAULTS, ...bookDefaults, ...opts };
 
   // Same read path as the job screen and the reports: the STORED
   // determination when it still speaks for the current inputs. Re-deriving
@@ -63,12 +72,15 @@ export function generateProposalDraft(
   const squaresAreEstimated = opts.totalSquares == null && measuredSquares == null;
   const totalSquares = opts.totalSquares ?? measuredSquares ?? 1;
 
-  const cost = estimateCost({
-    material: inspection.material,
-    region: regionForState(parseStateFromAddress(inspection.address)),
-    scope,
-    totalSquares,
-  });
+  const cost = estimateCost(
+    {
+      material: inspection.material,
+      region: regionForState(parseStateFromAddress(inspection.address)),
+      scope,
+      totalSquares,
+    },
+    book,
+  );
 
   const lineItems: ProposalLineItem[] = cost.lineItems.map((li) => {
     const unitPrice = (li.unitPriceLow + li.unitPriceHigh) / 2;
@@ -101,8 +113,15 @@ export function generateProposalDraft(
     deposit: Math.round(deposit),
     total: Math.round(total),
     warrantyYears: cfg.warrantyYears,
-    termsText: buildTerms(cfg.warrantyYears),
+    // The price-book disclosure lives IN the printed terms (proposalPdf.ts
+    // renders termsText verbatim) as well as on these three stamp fields —
+    // so the provenance is visible in the actual PDF regardless of which
+    // screen ever reads the stamp fields directly.
+    termsText: buildTerms(cfg.warrantyYears, cost.priceBookCustomized, cost.priceBookVersion, cost.priceBookUpdatedAt),
     expirationAt: expirationAt.toISOString(),
+    priceBookVersion: cost.priceBookVersion,
+    priceBookUpdatedAt: cost.priceBookUpdatedAt,
+    priceBookCustomized: cost.priceBookCustomized,
   };
 }
 
@@ -129,10 +148,20 @@ function buildScope(reasoning: string, squares: number, estimated: boolean): str
   return `${area} ${reasoning} All materials installed per manufacturer specification and applicable code.`;
 }
 
-function buildTerms(warrantyYears: number): string {
+function buildTerms(
+  warrantyYears: number,
+  priceBookCustomized: boolean,
+  priceBookVersion: number,
+  priceBookUpdatedAt?: string,
+): string {
   return (
     `Workmanship warranty: ${warrantyYears} years from completion. Manufacturer materials warranty per ` +
     `data sheet. Payment: 25% deposit on signing, 25% on material delivery, balance on completion. ` +
-    `Proposal valid for 30 days. Change orders billed separately.`
+    `Proposal valid for 30 days. Change orders billed separately. ` +
+    priceBookProvenance({
+      customized: priceBookCustomized,
+      revision: priceBookVersion,
+      updatedAt: priceBookUpdatedAt ?? new Date().toISOString(),
+    })
   );
 }

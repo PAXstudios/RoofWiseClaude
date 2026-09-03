@@ -4,6 +4,8 @@ import { formatDateTime } from '@/lib/format/date';
 import * as Print from 'expo-print';
 import type { Inspection, Proposal } from '../models/types';
 import { INSURANCE_CARRIER_LABELS, ROOF_MATERIAL_LABELS } from '../models/types';
+import { useInspectorProfileStore } from '../stores/inspectorProfileStore';
+import { companyCoverLine, companyFooterLine } from './haagPdf';
 
 export type GeneratedProposalPdf = {
   uri: string;
@@ -22,6 +24,7 @@ export async function generateProposalPdf(
 function renderHtml(p: Proposal, ins: Inspection): string {
   const generatedAt = formatDateTime(new Date());
   const carrier = ins.carrier ? INSURANCE_CARRIER_LABELS[ins.carrier] : '—';
+  const inspector = useInspectorProfileStore.getState().profile;
 
   return `<!DOCTYPE html>
 <html>
@@ -71,6 +74,7 @@ function renderHtml(p: Proposal, ins: Inspection): string {
 <div class="page">
   <div class="cover">
     <div class="brand"><div class="mark"><span>RW</span></div><div class="name">RoofWise</div></div>
+    ${companyCoverLine(inspector.company)}
     <h1>Roof Restoration Proposal</h1>
     <div class="sub">${esc(ins.reportId)} · Prepared ${esc(generatedAt)}</div>
     <div class="meta">
@@ -135,7 +139,7 @@ function renderHtml(p: Proposal, ins: Inspection): string {
   </div>
 
   <div class="footer">
-    Proposal ${esc(p.id)} · Generated ${esc(generatedAt)} · RoofWise — Forensic Roof Inspection
+    Proposal ${esc(p.id)} · Generated ${esc(generatedAt)} · RoofWise — Forensic Roof Inspection${companyFooterLine(inspector.company)}
   </div>
 </div>
 </body>

@@ -30,6 +30,7 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 import { useToastStore } from '@/lib/stores/toastStore';
+import { ConfirmSheet } from '@/components/sheets/ConfirmSheet';
 import type { AudioNote } from '@/lib/models/types';
 
 type Props = {
@@ -44,6 +45,9 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }:
   const [recording, setRecording] = useState(false);
   const [permission, setPermission] = useState<boolean | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  // The note whose trash icon was tapped — deletion asks in a sheet first
+  // (Drift #1); a recording cannot be re-taken.
+  const [pendingDelete, setPendingDelete] = useState<AudioNote | null>(null);
   const playbackRef = useRef<AudioPlayer | null>(null);
   const toast = useToastStore((s) => s.show);
 
@@ -239,23 +243,44 @@ export function VoiceNoteRecorder({ notes, onRecorded, onRemove, onTranscribe }:
                       setTranscribingId(null);
                     }
                   }}
-                  hitSlop={10}
+                  style={styles.iconBtn}
                   disabled={transcribingId === note.id}
+                  accessibilityRole="button"
+                  accessibilityLabel="Transcribe voice note"
                 >
                   {transcribingId === note.id ? (
                     <ActivityIndicator color={colors.orange} />
                   ) : (
-                    <Ionicons name="sparkles-outline" size={18} color={colors.orange} />
+                    <Ionicons name="sparkles-outline" size={20} color={colors.orange} />
                   )}
                 </Pressable>
               )}
-              <Pressable onPress={() => onRemove(note.id)} hitSlop={10}>
-                <Ionicons name="trash-outline" size={18} color={colors.danger} />
+              <Pressable
+                onPress={() => setPendingDelete(note)}
+                style={styles.iconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Delete voice note"
+              >
+                <Ionicons name="trash-outline" size={20} color={colors.danger} />
               </Pressable>
             </View>
           ))}
         </View>
       )}
+
+      <ConfirmSheet
+        visible={pendingDelete !== null}
+        title="Delete this voice note?"
+        body={
+          pendingDelete
+            ? `${pendingDelete.label ?? `Note · ${formatDuration(pendingDelete.durationSec)}`} will be removed. A recording cannot be re-taken.`
+            : undefined
+        }
+        onConfirm={() => {
+          if (pendingDelete) onRemove(pendingDelete.id);
+        }}
+        onClose={() => setPendingDelete(null)}
+      />
     </View>
   );
 }
@@ -314,4 +339,12 @@ const styles = StyleSheet.create({
   },
   noteLabel: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
   noteMeta: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  // Row icon buttons take the glove floor (Drift #1) — they were bare 18px
+  // glyphs with hitSlop.
+  iconBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

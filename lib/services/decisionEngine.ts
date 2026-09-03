@@ -1007,6 +1007,55 @@ function hailHitsPerSquare(s: Slope): number {
   return total / squares;
 }
 
+/**
+ * Checklist keys the job screen's "Collateral Checklist" writes (see
+ * `COLLATERAL_ITEMS` in app/job/[id].tsx). Kept here so the engine and the
+ * screen agree on the spelling without the engine importing UI.
+ */
+export const CHECKLIST_GATE_KEYS = {
+  multiLayer: 'multi_layer',
+  matExposed: 'mat_exposed',
+  brittlenessObserved: 'brittleness_observed',
+} as const;
+
+/**
+ * The §3 inputs a ticked checklist asserts. Pure: a tick maps to the value the
+ * §3 table names; an unticked box maps to `undefined` (unknown), never to a
+ * pass. Exported so a test can pin the mapping without building an
+ * Inspection.
+ */
+export function collateralGateInputs(checklist: Record<string, boolean>): {
+  layers: number | undefined;
+  substrate_exposure: true | undefined;
+  brittleness_result: BrittlenessResult | undefined;
+} {
+  return {
+    layers: checklist[CHECKLIST_GATE_KEYS.multiLayer] === true ? 2 : undefined,
+    substrate_exposure: checklist[CHECKLIST_GATE_KEYS.matExposed] === true ? true : undefined,
+    brittleness_result:
+      checklist[CHECKLIST_GATE_KEYS.brittlenessObserved] === true ? 'FAIL' : undefined,
+  };
+}
+
+/**
+ * Which slopes a roof-level "mat exposure on damaged slopes" tick lands on:
+ * the slopes with recorded damage; failing that, the slopes with photos
+ * (the inspector saw it on something they shot); failing that, all of them.
+ */
+function slopesForSubstrateExposure(slopes: Slope[]): Set<string> {
+  const damaged = slopes.filter(
+    (s) =>
+      s.functional ||
+      s.hailCount > 0 ||
+      s.bruisingCount > 0 ||
+      s.windLiftCount > 0 ||
+      s.missingCount > 0,
+  );
+  const photographed = slopes.filter((s) => s.photoPaths.length > 0);
+  const targets = damaged.length > 0 ? damaged : photographed.length > 0 ? photographed : slopes;
+  return new Set(targets.map((s) => s.id));
+}
+
 export function engineInputFromInspection(
   inspection: Inspection,
   asOfIso?: string,
@@ -1016,13 +1065,37 @@ export function engineInputFromInspection(
   // photos); it wins over the legacy quick-capture chip. The legacy mapping
   // handles the 'borderline' member added for claim mode — BORDERLINE gates
   // repairs exactly like FAIL (§3/§4).
+  // §3 gates the job screen's quick-observation checklist collects. These are
+  // the inspector's own observations, so they reach the engine as the inputs
+  // the §3 table names — and ONLY when ticked. An unticked box is "not
+  // recorded", never "not present": the engine keeps reporting the gate as an
+  // uncertainty rather than being told it passed.
+  const checklist = inspection.collateralChecklist ?? {};
+  const gates = collateralGateInputs(checklist);
+
+  // Brittleness: the field protocol (result + photos) wins, then the legacy
+  // quick-capture chip, then the checklist's "brittleness observed on test
+  // shingles" — which is a FAIL by definition (the shingles broke when
+  // lifted; §3 gates FAIL and BORDERLINE identically). A recorded PASS is
+  // never overridden by the tick.
   const brittleness: BrittlenessResult | undefined =
     inspection.brittlenessProtocol?.result ??
-    legacyBrittlenessToResult(inspection.brittlenessTest);
+    legacyBrittlenessToResult(inspection.brittlenessTest) ??
+    gates.brittleness_result;
 
-  const collateral = Object.entries(inspection.collateralChecklist ?? {})
+  const collateral = Object.entries(checklist)
     .filter(([, checked]) => checked)
     .map(([item]) => item);
+
+  // "Mat exposure visible on damaged slopes" is a roof-level tick, but the
+  // engine reads substrate exposure per slope and counts a slope with it as
+  // damaged. Pin it to the slopes that already show damage so an undamaged
+  // elevation is not made to look damaged by a roof-level checkbox; if no
+  // slope shows damage yet, the inspector saw it on whatever was
+  // photographed. Unticked → undefined on every slope (unknown, not "no").
+  const substrateSlopeIds = gates.substrate_exposure
+    ? slopesForSubstrateExposure(inspection.slopes)
+    : new Set<string>();
 
   // Triple-Check (§6): pure DOL-vs-event corroboration. The reported date of
   // loss (claim mode) is checked against the attached NOAA event; without a
@@ -1051,9 +1124,13 @@ export function engineInputFromInspection(
       number_of_slopes: inspection.slopes.length,
       square_footage: roofSquares != null ? roofSquares * 100 : undefined,
       brittleness_result: brittleness,
-      // is_discontinued / layers / mat_transfer are not captured by the legacy
-      // model — left undefined so the engine reports them as uncertainty (§9)
-      // instead of silently assuming.
+      // §3 layer gate from the checklist's "Multi-layer roof system (2+
+      // layers)": the tick says AT LEAST two, so 2 is the honest count — never
+      // more. Unticked stays undefined and the engine reports it unknown.
+      layers: gates.layers,
+      // is_discontinued / mat_transfer are not captured by the legacy model —
+      // left undefined so the engine reports them as uncertainty (§9) instead
+      // of silently assuming.
       slopes: inspection.slopes.map((s, i) => ({
         slope: s.id,
         // Only hits captured in a 10x10 test square are the per-square
@@ -1067,6 +1144,9 @@ export function engineInputFromInspection(
         missing_shingles: s.missingCount,
         // §1 authoritative flag, mapped from the legacy `functional` boolean.
         functional_damage_present: s.functional,
+        // §4 REPAIR precondition "no substrate exposure" — true only on the
+        // slopes the checklist tick was pinned to (see above), else unknown.
+        substrate_exposure: substrateSlopeIds.has(s.id) ? true : undefined,
         // The legacy model has no independent cosmetic flag — left undefined
         // (unknown) so raw counts still drive the §4 tree.
         collateral_damage: i === 0 ? collateral : [],

@@ -46,9 +46,11 @@ import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
 import { DamageScoreCard } from '@/components/DamageScoreCard';
 import { PropertyIntelCard } from '@/components/PropertyIntelCard';
-import { DamageDetailSection } from '@/components/DamageDetailSection';
+import { DamageDetailSection, summarizeInspection } from '@/components/DamageDetailSection';
 import { documentedCoverage, documentedSummary } from '@/lib/services/documentedSquares';
 import { deriveFunctional } from '@/lib/services/functionalDamage';
+import { describeMissingDetails, missingJobDetails } from '@/lib/services/placeholderDetails';
+import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
@@ -176,6 +178,7 @@ export default function JobDetail() {
   const setReportFinalizedAt = useInspectionStore((s) => s.setReportFinalizedAt);
   const setStoredEngineResult = useInspectionStore((s) => s.setStoredEngineResult);
   const setNotes = useInspectionStore((s) => s.setNotes);
+  const updateDetails = useInspectionStore((s) => s.updateDetails);
   const addAudioNote = useInspectionStore((s) => s.addAudioNote);
   const removeAudioNote = useInspectionStore((s) => s.removeAudioNote);
   const setAudioNoteLabel = useInspectionStore((s) => s.setAudioNoteLabel);
@@ -190,6 +193,10 @@ export default function JobDetail() {
   const setLeadStage = useLeadStore((s) => s.setStage);
   const setLeadFollowUp = useLeadStore((s) => s.setFollowUp);
   const [followUpSheet, setFollowUpSheet] = useState(false);
+  // The customer / address / roof-system editor. A standalone Quick
+  // Inspection lands here as "Quick inspection / Address pending"; this is
+  // where it gets corrected.
+  const [detailsSheet, setDetailsSheet] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingLong, setGeneratingLong] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -230,6 +237,20 @@ export default function JobDetail() {
   const { haag, decision } = resolveEngineResult(inspection, Date.now(), { honorFreeze: false });
   const engineFreshness = storedEngineFreshness(inspection);
   const isClaim = inspection.kind === 'insurance_claim';
+
+  // A verdict needs evidence. With zero analyzed photos the engine still
+  // returns a band and a recommendation (it evaluates whatever it is given),
+  // and rendering "Medium · Repair" on a job nobody has photographed is a
+  // synthesized determination (Drift #5). Every verdict slot below reads this
+  // and shows "Not assessed" until at least one photo has been analyzed —
+  // the same rule DamageScoreCard already enforces for the score.
+  const analyzedPhotos = summarizeInspection(inspection).analyzedPhotos;
+  const hasEvidence = analyzedPhotos > 0;
+
+  // Placeholder customer / address (a standalone Quick Inspection, or a job
+  // whose details were never filled). The packet and the proposal CTAs stay
+  // off until both are real — "Address pending" must never reach a carrier.
+  const missing = missingJobDetails(inspection);
 
   // Explicit link only (`inspection.leadId` / `lead.inspectionId`) — never a
   // name match, which could hang another customer's follow-ups on this roof.
@@ -470,6 +491,12 @@ export default function JobDetail() {
   };
 
   const runHaagReport = async () => {
+    // Belt and braces with the disabled CTA: nothing generates a packet that
+    // names "Quick inspection" at "Address pending".
+    if (missing.any) {
+      setDetailsSheet(true);
+      return;
+    }
     try {
       setGenerating(true);
       // Freeze first, then render from the frozen record.
@@ -582,15 +609,37 @@ export default function JobDetail() {
       </View>
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll}>
+        {/* A placeholder job announces itself before anything else on the
+            page: the hero below would otherwise present "Address pending" as
+            the property. One tap opens the editor. */}
+        {missing.any && (
+          <PressableScale
+            style={styles.missingBanner}
+            onPress={() => setDetailsSheet(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`${describeMissingDetails(missing)}. This job still has placeholder details. Tap to add them.`}
+          >
+            <Ionicons name="person-add-outline" size={22} color={colors.warn} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.missingTitle}>{describeMissingDetails(missing)}</Text>
+              <Text style={styles.missingBody}>
+                This job still has placeholder details. Reports and the proposal are off until the
+                customer and address are real.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.warn} />
+          </PressableScale>
+        )}
+
         {/* The screen's cinematic moment: the job's own photo, the address,
             the claim-viability call, and the verdict — a document a carrier
             respects, not a settings row. */}
         <JobHero
           photoUri={heroPhoto}
           reportId={inspection.reportId}
-          address={inspection.address}
-          band={haag.claim_viability}
-          recommendation={haag.roofwise_recommendation}
+          address={missing.address ? 'Address not set' : inspection.address}
+          band={hasEvidence ? haag.claim_viability : undefined}
+          recommendation={hasEvidence ? haag.roofwise_recommendation : undefined}
         />
 
         {/* Customer action row — the phone and email were already on the
@@ -667,12 +716,30 @@ export default function JobDetail() {
           onMeasured={(intel) => setPropertyIntel(inspection.id, intel)}
         />
 
+        {/* Customer, address, and roof system — editable. Placeholders read as
+            what they are ("not set"), never as a name or a street. */}
         <RichCard
-          icon="layers-outline"
+          icon="person-outline"
           iconTone="blue"
-          title={ROOF_MATERIAL_LABELS[inspection.material]}
-          subtitle={roofSystemLine(inspection)}
-        />
+          title={missing.name ? 'Customer not set' : inspection.customerName}
+          subtitle={missing.address ? 'Address not set' : inspection.address}
+          action={{ label: 'Edit', onPress: () => setDetailsSheet(true), icon: 'create-outline' }}
+          contentStyle={styles.bodyRows}
+          accessibilityLabel="Customer and property details"
+        >
+          {(inspection.customerPhone || inspection.customerEmail) && (
+            <Text style={styles.cardSub}>
+              {[inspection.customerPhone, inspection.customerEmail].filter(Boolean).join('  ·  ')}
+            </Text>
+          )}
+          <View style={styles.roofLine}>
+            <Ionicons name="layers-outline" size={15} color={colors.textMuted} />
+            <Text style={styles.cardSub}>
+              {ROOF_MATERIAL_LABELS[inspection.material]}
+              {roofSystemLine(inspection) ? ` · ${roofSystemLine(inspection)}` : ''}
+            </Text>
+          </View>
+        </RichCard>
 
         {(inspection.carrier || isClaim) && (
           <RichCard
@@ -717,7 +784,7 @@ export default function JobDetail() {
         <DamageScoreCard result={damageScoreFromEngine(inspection, haag)} />
 
         <DamageScoreBar
-          band={haag.claim_viability}
+          band={hasEvidence ? haag.claim_viability : undefined}
           stats={[
             { label: 'Slopes', value: String(inspection.slopes.length) },
             { label: 'Photos', value: String(totalPhotos) },
@@ -732,12 +799,20 @@ export default function JobDetail() {
         <DamageDetailSection inspection={inspection} />
 
         <RichCard
-          icon={RECOMMENDATION_ICON[haag.roofwise_recommendation]}
-          iconTone={RECOMMENDATION_TONE[haag.roofwise_recommendation]}
+          icon={hasEvidence ? RECOMMENDATION_ICON[haag.roofwise_recommendation] : 'help-circle-outline'}
+          iconTone={hasEvidence ? RECOMMENDATION_TONE[haag.roofwise_recommendation] : 'quiet'}
           title="HAAG Verdict"
-          subtitle={ROOFWISE_RECOMMENDATION_LABELS[haag.roofwise_recommendation]}
+          subtitle={
+            hasEvidence
+              ? ROOFWISE_RECOMMENDATION_LABELS[haag.roofwise_recommendation]
+              : 'Not assessed — analyze photos'
+          }
         >
-          <Text style={styles.cardSub}>{decision.roofVerdictReasoning}</Text>
+          <Text style={styles.cardSub}>
+            {hasEvidence
+              ? decision.roofVerdictReasoning
+              : 'No analyzed photos yet — a verdict with no evidence behind it would be invented. Capture and analyze photos to get one.'}
+          </Text>
           <View style={styles.safetyRow}>
             <Ionicons name="shield-outline" size={15} color={colors.textMuted} />
             <Text style={styles.safetyText}>
@@ -787,15 +862,24 @@ export default function JobDetail() {
           })
         )}
 
+        {/* A proposal names the customer and the property on its cover; with
+            placeholders it opens the editor instead of a document that says
+            "Quick inspection". */}
         <RichCard
-          onPress={() => router.push(`/proposal/${inspection.id}` as any)}
+          onPress={() =>
+            missing.any
+              ? setDetailsSheet(true)
+              : router.push(`/proposal/${inspection.id}` as any)
+          }
           icon="document-attach-outline"
-          iconTone={proposal ? 'green' : 'blue'}
+          iconTone={missing.any ? 'quiet' : proposal ? 'green' : 'blue'}
           title={proposal ? `Proposal · $${proposal.total.toLocaleString()}` : 'Generate proposal'}
           subtitle={
-            proposal
-              ? `${proposal.status} · ${proposal.lineItems.length} line items`
-              : 'From Decision Engine + Solar squares + regional pricing'
+            missing.any
+              ? `${describeMissingDetails(missing)} first — the proposal names them`
+              : proposal
+                ? `${proposal.status} · ${proposal.lineItems.length} line items`
+                : 'From Decision Engine + Solar squares + regional pricing'
           }
           chevron
         />
@@ -975,7 +1059,7 @@ export default function JobDetail() {
               toast({
                 tone: 'warn',
                 title: 'AI not connected',
-                body: 'Add EXPO_PUBLIC_GEMINI_API_KEY in .env.local to transcribe.',
+                body: "AI analysis isn't set up on this build — ask your admin.",
               });
               return;
             }
@@ -1003,8 +1087,10 @@ export default function JobDetail() {
         >
           <View style={{ alignItems: 'center', marginTop: spacing.md }}>
             <SignaturePad
-              onChange={(svg) => {
-                if (svg) setInspectorSignature(inspection.id, svg);
+              onChange={(svg, meta) => {
+                // A knuckle-brush is not a seal: only a signature's worth of
+                // ink is recorded (the pad reports, this screen decides).
+                if (svg && meta.meaningful) setInspectorSignature(inspection.id, svg);
               }}
             />
           </View>
@@ -1019,11 +1105,12 @@ export default function JobDetail() {
         {/* THE one orange moment on this screen: generate the report / claim
             packet. Everything else on the page is quiet by comparison. */}
         <PressableScale
-          style={[styles.reportCtaShadow, generating && styles.reportCtaDisabled]}
-          disabled={generating}
+          style={[styles.reportCtaShadow, (generating || missing.any) && styles.reportCtaDisabled]}
+          disabled={generating || missing.any}
           onPress={onGenerateHaagReport}
           accessibilityRole="button"
           accessibilityLabel={isClaim ? 'Generate HAAG claim packet PDF' : 'Generate HAAG report PDF'}
+          accessibilityState={{ disabled: generating || missing.any }}
         >
           <View style={styles.reportCtaClip}>
             <LinearGradient
@@ -1044,6 +1131,12 @@ export default function JobDetail() {
             </View>
           </View>
         </PressableScale>
+        {missing.any && (
+          <Text style={styles.gateHint}>
+            {describeMissingDetails(missing)} before generating — a packet cannot go to a carrier
+            with placeholder details.
+          </Text>
+        )}
         {isClaim && brittlenessGap && (
           <Text style={styles.gateHint}>
             Brittleness evidence is incomplete — the packet will disclose it.
@@ -1062,9 +1155,14 @@ export default function JobDetail() {
         )}
 
         <PressableScale
-          style={[styles.quietCta, generatingLong && { opacity: 0.5 }]}
-          disabled={generatingLong}
+          style={[styles.quietCta, (generatingLong || missing.any) && { opacity: 0.5 }]}
+          disabled={generatingLong || missing.any}
+          accessibilityState={{ disabled: generatingLong || missing.any }}
           onPress={async () => {
+            if (missing.any) {
+              setDetailsSheet(true);
+              return;
+            }
             try {
               setGeneratingLong(true);
               // Freeze first, then render from the frozen record. The Long
@@ -1113,6 +1211,41 @@ export default function JobDetail() {
         runJobLibraryImportFor(sl).catch(() => {});
       }}
       onCancel={() => setImportSlopePicker(false)}
+    />
+    <CustomerDetailsSheet
+      visible={detailsSheet}
+      onClose={() => setDetailsSheet(false)}
+      title={missing.any ? 'Who is this job for?' : 'Edit customer & property'}
+      subtitle={
+        missing.any
+          ? 'This job was saved from a quick capture. Name the customer and the property so the packet can go out.'
+          : inspection.reportId
+      }
+      initial={{
+        customerName: inspection.customerName,
+        customerPhone: inspection.customerPhone,
+        customerEmail: inspection.customerEmail,
+        address: inspection.address,
+        lat: inspection.lat,
+        lng: inspection.lng,
+        material: inspection.material,
+        condition: inspection.condition,
+      }}
+      roof
+      onSave={(d) => {
+        updateDetails(inspection.id, {
+          customerName: d.customerName,
+          customerPhone: d.customerPhone,
+          customerEmail: d.customerEmail,
+          address: d.address,
+          lat: d.lat,
+          lng: d.lng,
+          ...(d.material ? { material: d.material } : {}),
+          ...(d.condition ? { condition: d.condition } : {}),
+        });
+        setDetailsSheet(false);
+        toast({ tone: 'success', title: 'Details saved', body: d.customerName });
+      }}
     />
     </SafeAreaView>
   );
@@ -1180,8 +1313,9 @@ function JobHero({
   photoUri?: string;
   reportId: string;
   address: string;
-  band: ClaimViabilityBand;
-  recommendation: RoofwiseRecommendation;
+  /** Absent until at least one photo has been analyzed — renders "Not assessed". */
+  band?: ClaimViabilityBand;
+  recommendation?: RoofwiseRecommendation;
 }) {
   return (
     <View style={[styles.heroShell, shadows.hero]}>
@@ -1218,16 +1352,27 @@ function JobHero({
             {address}
           </Text>
           <View style={styles.heroBadgeRow}>
-            <Pill
-              label={CLAIM_VIABILITY_LABELS[band]}
-              tone={BAND_PILL_TONE[band]}
-              solid
-              size="md"
-              icon="shield-checkmark"
-            />
-            <Text style={styles.heroVerdict} numberOfLines={1}>
-              {ROOFWISE_RECOMMENDATION_LABELS[recommendation]}
-            </Text>
+            {band && recommendation ? (
+              <>
+                <Pill
+                  label={CLAIM_VIABILITY_LABELS[band]}
+                  tone={BAND_PILL_TONE[band]}
+                  solid
+                  size="md"
+                  icon="shield-checkmark"
+                />
+                <Text style={styles.heroVerdict} numberOfLines={1}>
+                  {ROOFWISE_RECOMMENDATION_LABELS[recommendation]}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Pill label="Not assessed" tone="neutral" solid size="md" icon="help-circle-outline" />
+                <Text style={styles.heroVerdict} numberOfLines={1}>
+                  Analyze photos for a verdict
+                </Text>
+              </>
+            )}
           </View>
         </View>
       </View>
@@ -1256,13 +1401,26 @@ function SlopeBlock({
   const threshold = thresholdFor(inspection.material);
   const coverage = documentedCoverage(slope);
   const functionalInfo = deriveFunctional(slope);
+  // Same "analyzed" read summarizeInspection uses: an explicit done state, or
+  // the legacy analyzed-index list. A slope with none has no verdict to show.
+  const legacyAnalyzed = new Set(slope.analyzedPhotoIndices ?? []);
+  const analyzedHere = slope.photoPaths.filter((uri, i) => {
+    const st = slope.photoAnalysis?.[uri];
+    return st?.status === 'done' || (!st && legacyAnalyzed.has(i));
+  }).length;
 
   return (
     <RichCard
       icon="home-outline"
       iconTone="blue"
       title={`Slope ${slope.orientation}`}
-      headerTrailing={<Pill label={SLOPE_VERDICT_LABEL[verdict]} tone={SLOPE_VERDICT_PILL_TONE[verdict]} size="sm" />}
+      headerTrailing={
+        analyzedHere > 0 ? (
+          <Pill label={SLOPE_VERDICT_LABEL[verdict]} tone={SLOPE_VERDICT_PILL_TONE[verdict]} size="sm" />
+        ) : (
+          <Pill label="Not assessed" tone="neutral" size="sm" />
+        )
+      }
     >
       <PressableScale
         style={styles.analyzeBtn}
@@ -1364,10 +1522,16 @@ function SlopeBlock({
         </View>
       )}
 
-      {reasoning && (
+      {analyzedHere > 0 ? (
+        reasoning ? (
+          <Text style={styles.reasoning}>
+            {reasoning}
+            {confidenceAvg > 0 ? ` (avg confidence ${Math.round(confidenceAvg)}%)` : ''}
+          </Text>
+        ) : null
+      ) : (
         <Text style={styles.reasoning}>
-          {reasoning}
-          {confidenceAvg > 0 ? ` (avg confidence ${Math.round(confidenceAvg)}%)` : ''}
+          Not assessed — analyze photos on this slope to get a per-slope verdict.
         </Text>
       )}
     </RichCard>
@@ -1440,6 +1604,23 @@ const styles = StyleSheet.create({
   },
   importCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   pendingStrip: { marginTop: spacing.xs },
+
+  // Placeholder-details banner — warn-toned, ≥56pt, sits above the hero so
+  // it is the first thing on the page (Drift #5: a placeholder is stated).
+  missingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: touchTarget.standard,
+    padding: spacing.md,
+    borderRadius: radii.card,
+    backgroundColor: colors.warnSoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.warn,
+  },
+  missingTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
+  missingBody: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginTop: 2 },
+  roofLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
 
   // ── Hero ──────────────────────────────────────────────────────────────
   heroShell: { borderRadius: radii.xl },

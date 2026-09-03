@@ -893,6 +893,8 @@ export default function MapScreen() {
                       ? `In storm core · ${miles.toFixed(1)} mi · ${lead.stage.replace('_', ' ')}`
                       : `Stage: ${lead.stage.replace('_', ' ')}`
                   }
+                  // Audit P2: job pins opened the job, lead pins opened nothing.
+                  onCalloutPress={() => router.push(`/lead/${lead.id}` as any)}
                   tone={inCore ? 'danger' : 'info'}
                 />
               );
