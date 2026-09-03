@@ -13,6 +13,8 @@ import { formatDate } from '@/lib/format/date';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { RoofOverheadView } from '@/components/RoofOverheadView';
+import { Image } from 'expo-image';
+import { recordFactsLine, recordHeroUrl } from '@/lib/services/propertyRecord';
 import { RichCard } from '@/components/ui/RichCard';
 import { IconChip } from '@/components/ui/IconChip';
 import { SectionHeader } from '@/components/ui/SectionHeader';
@@ -85,10 +87,14 @@ export default function SavedEstimateScreen() {
       />
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* The property first — where it is and what the roof looks like from above. */}
+        {recordHeroUrl(est.propertyRecord) ? (
+          <Image source={{ uri: recordHeroUrl(est.propertyRecord) }} style={styles.housePhoto} contentFit="cover" transition={200} accessibilityLabel="Property photo from the Zillow listing" />
+        ) : null}
         <View style={styles.addressBlock}>
           <Ionicons name="location" size={18} color={colors.brand} />
           <Text style={styles.address}>{est.address || 'No address'}</Text>
         </View>
+        {recordFactsLine(est.propertyRecord) ? <Text style={styles.facts}>{recordFactsLine(est.propertyRecord)} · Zillow</Text> : null}
 
         {m ? (
           <RoofOverheadView planes={m.planes} bounds={m.bounds} center={m.center ?? (est.lat != null && est.lng != null ? { lat: est.lat, lng: est.lng } : undefined)} />
@@ -186,6 +192,8 @@ export default function SavedEstimateScreen() {
 }
 
 const styles = StyleSheet.create({
+  housePhoto: { width: '100%', height: 200, borderRadius: radii.card, backgroundColor: colors.surfaceMuted },
+  facts: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: -spacing.xs },
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl },
   addressBlock: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

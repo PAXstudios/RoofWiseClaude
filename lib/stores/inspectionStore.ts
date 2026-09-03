@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { roofAgePrefill } from '../services/propertyRecord';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
@@ -9,21 +10,24 @@ import type {
   CollateralChecklistItem,
   CollateralEvidence,
   CollateralZone,
+  CoverPhoto,
+  DamageMarker,
   Inspection,
+  InspectionFinding,
   InspectionKind,
   InspectionStatus,
-  PolicyType,
-  RoofMaterial,
-  RoofGeometry,
-  RoofCondition,
   InsuranceCarrier,
   PhotoMeta,
   PhotoSyncState,
+  PolicyType,
+  PropertyIntel,
+  PropertyRecord,
+  RoofAgeSource,
+  RoofCondition,
+  RoofGeometry,
+  RoofMaterial,
   Slope,
   SlopeOrientation,
-  DamageMarker,
-  InspectionFinding,
-  PropertyIntel,
 } from '../models/types';
 import { squaresFacing } from '../services/propertyIntel';
 import { bucketHitCountsByMode } from '../services/captureSession';
@@ -100,6 +104,8 @@ type CreateDraft = {
   adjusterName?: string;
   material: RoofMaterial;
   ageYears: number;
+  /** Where the age came from; absent = inspector-entered. */
+  ageSource?: RoofAgeSource;
   geometry: RoofGeometry;
   condition: RoofCondition;
   brittlenessTest?: BrittlenessTest;
@@ -146,6 +152,7 @@ type ClaimDetailsPatch = Partial<
 export type InspectionDetailsPatch = Partial<
   Pick<
     Inspection,
+    | 'ageSource'
     | 'customerName'
     | 'customerPhone'
     | 'customerEmail'
@@ -209,6 +216,14 @@ type InspectionStoreState = {
    * proposal all read the same number without each re-deriving it.
    */
   setPropertyIntel: (id: string, intel: PropertyIntel) => void;
+  /**
+   * Store the Zillow record and PREFILL roof age from it — only when the
+   * inspector has not entered one (`ageYears` 0 / unset). A number the
+   * inspector typed is never overwritten; `ageSource` says where it came from.
+   */
+  setPropertyRecord: (id: string, record: PropertyRecord) => void;
+  /** Choose (or clear, with undefined) the photo that fronts the job. */
+  setCoverPhoto: (id: string, cover: CoverPhoto | undefined) => void;
   setInspectorSignature: (id: string, svg: string) => void;
   setCollateralItem: (id: string, key: string, value: boolean) => void;
   setKind: (id: string, kind: InspectionKind) => void;
@@ -474,6 +489,7 @@ export const useInspectionStore = create<InspectionStoreState>()(
           adjusterName: d.adjusterName,
           material: d.material,
           ageYears: d.ageYears,
+          ageSource: d.ageSource,
           geometry: d.geometry,
           condition: d.condition,
           brittlenessTest:
@@ -528,6 +544,26 @@ export const useInspectionStore = create<InspectionStoreState>()(
           inspections: s.inspections.map((i) =>
             i.id === id ? { ...i, stormSearchOutcome: outcome } : i,
           ),
+        })),
+
+      setPropertyRecord: (id, record) =>
+        set((st) => ({
+          inspections: st.inspections.map((i) => {
+            if (i.id !== id) return i;
+            const prefill = roofAgePrefill(record, new Date().getFullYear());
+            const inspectorEntered = i.ageYears > 0 && (i.ageSource == null || i.ageSource === 'inspector');
+            const applyAge = prefill != null && !inspectorEntered;
+            return {
+              ...i,
+              propertyRecord: record,
+              ...(applyAge ? { ageYears: prefill.ageYears, ageSource: prefill.source } : {}),
+            };
+          }),
+        })),
+
+      setCoverPhoto: (id, cover) =>
+        set((st) => ({
+          inspections: st.inspections.map((i) => (i.id === id ? { ...i, coverPhoto: cover } : i)),
         })),
 
       setPropertyIntel: (id, intel) =>

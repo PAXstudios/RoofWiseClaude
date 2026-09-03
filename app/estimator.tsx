@@ -16,6 +16,7 @@ import { IconChip } from '@/components/ui/IconChip';
 import { AddressAutocomplete, type ResolvedLocation } from '@/components/AddressAutocomplete';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useEstimateStore } from '@/lib/stores/estimateStore';
+import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
 import { RoofOverheadView } from '@/components/RoofOverheadView';
 import { useToastStore } from '@/lib/stores/toastStore';
 import {
@@ -84,6 +85,8 @@ export default function CostEstimatorScreen() {
   const router = useRouter();
   const setPrefill = useWizardPrefillStore((s) => s.set);
   const saveEstimate = useEstimateStore((s) => s.save);
+  const setEstimateRecord = useEstimateStore((s) => s.setPropertyRecord);
+  const lookupRecord = usePropertyRecordStore((s) => s.lookup);
   const toast = useToastStore((s) => s.show);
   const [step, setStep] = useState<Step>(0);
   // "Re-estimate" from a saved estimate lands here with the address already
@@ -447,6 +450,10 @@ export default function CostEstimatorScreen() {
                             }
                           : undefined,
                     });
+                    // The house's own photo for the saved estimate (cache-first).
+                    if (draft.address.trim().length >= 8) {
+                      void lookupRecord(draft.address).then((rec) => setEstimateRecord(saved.id, rec));
+                    }
                     toast({ tone: 'success', title: 'Estimate saved' });
                     router.replace({ pathname: '/estimate/[id]', params: { id: saved.id } } as any);
                   }}

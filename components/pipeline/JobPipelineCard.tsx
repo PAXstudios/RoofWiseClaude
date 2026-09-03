@@ -1,4 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { coverPhotoUri } from '@/lib/services/propertyRecord';
 import { RichCard } from '@/components/ui/RichCard';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import type { ChipTone, IoniconName } from '@/components/ui/IconChip';
@@ -13,7 +15,7 @@ import {
   type InspectionStatus,
   type Lead,
 } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, spacing } from '@/theme/tokens';
+import { colors, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
 import { QuickActions } from './QuickActions';
 
 /**
@@ -101,6 +103,15 @@ export function JobPipelineCard({
         />
       }
     >
+      {coverPhotoUri(inspection, 'card') ? (
+        <Image
+          source={{ uri: coverPhotoUri(inspection, 'card') }}
+          style={styles.cover}
+          contentFit="cover"
+          transition={150}
+          accessibilityLabel="Property photo"
+        />
+      ) : null}
       <Text style={styles.meta} numberOfLines={1}>
         {metaLine}
       </Text>
@@ -133,6 +144,7 @@ export function JobPipelineCard({
 }
 
 const styles = StyleSheet.create({
+  cover: { width: '100%', height: 120, borderRadius: radii.md, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
   body: { gap: spacing.sm },
   meta: { fontSize: fontSize.bodySm, color: colors.textMuted },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },

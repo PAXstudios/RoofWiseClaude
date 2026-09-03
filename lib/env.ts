@@ -60,6 +60,10 @@ export const env = {
   // api.census.gov/data/key_signup.html; the API 302s every unkeyed request.
   // Optional — without it the finder scores storms only and says so.
   CENSUS_API_KEY: pick(process.env.EXPO_PUBLIC_CENSUS_API_KEY),
+  // APIllow (api.apillow.co) — Zillow property records: the house photo, year
+  // built, living area, facts. Free tier is 50 lookups/month, so records are
+  // cached per address (lib/stores/propertyRecordStore.ts). Optional.
+  APILLOW_API_KEY: pick(process.env.EXPO_PUBLIC_APILLOW_API_KEY),
 
   // Feature flags
   USE_LIVE_AR: pick(process.env.EXPO_PUBLIC_USE_LIVE_AR, 'false') === 'true',
@@ -76,3 +80,4 @@ export const isGooglePlacesConfigured = env.GOOGLE_PLACES_API_KEY.length > 0;
 export const isGoogleSolarConfigured = env.GOOGLE_SOLAR_API_KEY.length > 0;
 export const isWeatherConfigured = env.GOOGLE_WEATHER_API_KEY.length > 0;
 export const isCensusConfigured = env.CENSUS_API_KEY.length > 0;
+export const isApillowConfigured = env.APILLOW_API_KEY.length > 0;

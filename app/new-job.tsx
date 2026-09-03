@@ -61,6 +61,8 @@ import {
   isStormCause,
 } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
+import { roofAgePrefill } from '@/lib/services/propertyRecord';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { nextStageFor } from '@/components/pipeline/chain';
 import { useActivityStore } from '@/lib/stores/activityStore';
@@ -108,6 +110,8 @@ type Draft = {
 
   material: RoofMaterial | null;
   ageYears: number;
+  /** Set when the age was taken from the property record's offer. */
+  ageSource?: 'inspector' | 'year_built' | 'listing';
   geometry: RoofGeometry | null;
   condition: RoofCondition | null;
   brittlenessTest: BrittlenessTest;
@@ -287,6 +291,11 @@ export default function NewJobWizard() {
   const router = useRouter();
   const createInspection = useInspectionStore((s) => s.create);
   const setPropertyIntel = useInspectionStore((s) => s.setPropertyIntel);
+  const setPropertyRecord = useInspectionStore((s) => s.setPropertyRecord);
+  const lookupRecord = usePropertyRecordStore((s) => s.lookup);
+  // What Zillow said about the address the roofer picked — an offer, never a silent write.
+  const [ageHint, setAgeHint] = useState<{ ageYears: number; note: string } | null>(null);
+
   const setEvent = useInspectionStore((s) => s.setEvent);
   const setStormSearchOutcome = useInspectionStore((s) => s.setStormSearchOutcome);
   const logActivity = useActivityStore((s) => s.log);
@@ -300,6 +309,23 @@ export default function NewJobWizard() {
   const sourceLeadIdRef = useRef<string | undefined>(undefined);
   const [stepIndex, setStepIndex] = useState(0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
+
+  useEffect(() => {
+    if (draft.addressLat == null || draft.addressLng == null || draft.address.trim().length < 8) {
+      setAgeHint(null);
+      return;
+    }
+    let cancelled = false;
+    void lookupRecord(draft.address).then((rec) => {
+      if (!cancelled) setAgeHint(roofAgePrefill(rec, new Date().getFullYear()));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Keyed on the resolved coordinates: typing in the field clears them,
+    // picking a place sets them — one lookup per picked place.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.addressLat, draft.addressLng]);
   const [stormLookup, setStormLookup] = useState<StormLookup | null>(null);
   const stormKeyRef = useRef<string | null>(null);
 
@@ -471,6 +497,7 @@ export default function NewJobWizard() {
       adjusterName: draft.adjusterName.trim() || undefined,
       material: draft.material,
       ageYears: draft.ageYears,
+      ageSource: draft.ageYears > 0 ? draft.ageSource ?? 'inspector' : undefined,
       geometry: draft.geometry,
       condition: draft.condition,
       // In claim mode the field protocol owns brittleness; the store derives
@@ -542,6 +569,14 @@ export default function NewJobWizard() {
     // squares it is, and the §5 cost formula (RC = D x U x R x A) has an A.
     // Every outcome is persisted, failures included with their reason, so the
     // job screen can say what happened instead of showing an empty measurement.
+    // The house's own photo and facts (Zillow via APIllow) — cache-first, so
+    // a wizard that already looked the address up spends nothing more.
+    void lookupRecord(ins.address).then((rec) => {
+      setPropertyRecord(ins.id, rec);
+      if (rec.status === 'found' && rec.imageUrls?.length) {
+        toast({ tone: 'success', title: 'House photo added', body: 'From the Zillow listing — change it on the job.' });
+      }
+    });
     researchProperty({ address: ins.address, lat: ins.lat, lng: ins.lng })
       .then((intel) => {
         setPropertyIntel(ins.id, intel);
@@ -647,7 +682,7 @@ export default function NewJobWizard() {
               {stepKey === 'claim' && (
                 <ClaimStep draft={draft} setDraft={setDraft} stormLookup={stormLookup} />
               )}
-              {stepKey === 'roof' && <RoofStep draft={draft} setDraft={setDraft} />}
+              {stepKey === 'roof' && <RoofStep draft={draft} setDraft={setDraft} ageHint={ageHint} />}
               {stepKey === 'evidence' && <EvidenceStep draft={draft} setDraft={setDraft} />}
               {stepKey === 'review' && (
                 <ReviewStep
@@ -1325,7 +1360,16 @@ const MATERIALS_DISPLAY: RoofMaterial[] = ROOF_MATERIALS;
 const GEOMETRIES: RoofGeometry[] = ['gable', 'hip', 'mansard', 'flat', 'mixed'];
 const CONDITIONS: RoofCondition[] = ['excellent', 'good', 'fair', 'poor'];
 
-function RoofStep({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => void }) {
+function RoofStep({
+  draft,
+  setDraft,
+  ageHint,
+}: {
+  draft: Draft;
+  setDraft: (d: Draft) => void;
+  /** The property record's roof-age offer (top-level lookup), or null. */
+  ageHint?: { ageYears: number; note: string } | null;
+}) {
   return (
     <View style={styles.stepBody}>
       <View>
@@ -1350,18 +1394,29 @@ function RoofStep({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => v
         <View style={styles.stepperRow}>
           <Pressable
             style={styles.stepperBtn}
-            onPress={() => setDraft({ ...draft, ageYears: Math.max(0, draft.ageYears - 1) })}
+            onPress={() => setDraft({ ...draft, ageYears: Math.max(0, draft.ageYears - 1), ageSource: 'inspector' })}
           >
             <Ionicons name="remove" size={24} color={colors.navy} />
           </Pressable>
-          <Text style={styles.stepperValue}>{draft.ageYears} yr</Text>
+          <Text style={styles.stepperValue}>{draft.ageYears === 0 ? 'Not set' : `${draft.ageYears} yr`}</Text>
           <Pressable
             style={styles.stepperBtn}
-            onPress={() => setDraft({ ...draft, ageYears: draft.ageYears + 1 })}
+            onPress={() => setDraft({ ...draft, ageYears: draft.ageYears + 1, ageSource: 'inspector' })}
           >
             <Ionicons name="add" size={24} color={colors.navy} />
           </Pressable>
         </View>
+        {ageHint ? (
+          <Pressable
+            style={styles.ageHint}
+            onPress={() => setDraft({ ...draft, ageYears: ageHint.ageYears, ageSource: ageHint.note.startsWith('Listing') ? 'listing' : 'year_built' })}
+            accessibilityRole="button"
+            accessibilityLabel={`Use ${ageHint.ageYears} years from the property record`}
+          >
+            <Ionicons name="sparkles-outline" size={16} color={colors.brand} />
+            <Text style={styles.ageHintText}>Use {ageHint.ageYears} yr — {ageHint.note}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View>
@@ -1778,6 +1833,8 @@ function Field({
 }
 
 const styles = StyleSheet.create({
+  ageHint: { minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.button, backgroundColor: colors.brandSoft, marginTop: spacing.sm },
+  ageHintText: { flex: 1, fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
   root: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
 

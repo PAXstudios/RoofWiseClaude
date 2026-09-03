@@ -813,6 +813,15 @@ export type Inspection = {
 
   // Free-form notes
   notes?: string;
+  /** Zillow record for the address (APIllow). Absent until looked up. */
+  propertyRecord?: PropertyRecord;
+  /**
+   * The job's front photo. Absent → `coverPhotoUri()` falls back to the
+   * record's lead photo, then the first captured photo.
+   */
+  coverPhoto?: CoverPhoto;
+  /** Provenance of `ageYears`. Absent on jobs created before this existed (inspector-entered). */
+  ageSource?: RoofAgeSource;
 };
 
 /**
@@ -830,6 +839,71 @@ export type Inspection = {
  * "not measured, here's why" instead of quietly showing zero squares as if
  * that were a finding (Drift #5).
  */
+// -----------------------------------------------------------------------------
+// Property record (Zillow via APIllow) — what the listing world knows about
+// the house: its photo, when it was built, how big it is. Never measured by
+// us; always attributed. Read the photo through `coverPhotoUri()` in
+// lib/services/propertyRecord.ts so every surface fronts the same image.
+// -----------------------------------------------------------------------------
+
+export type PropertyRecordStatus =
+  /** A Zillow record was found for the address. */
+  | 'found'
+  /** The service answered and has no record at this address. */
+  | 'not_found'
+  /** Key, quota (50/month free), or network — retryable. */
+  | 'unavailable'
+  /** No APIllow key on this build. */
+  | 'not_configured';
+
+export type PropertyRecord = {
+  fetchedAt: string;
+  source: 'zillow';
+  status: PropertyRecordStatus;
+  /** Plain-English reason when `status` is not 'found'. */
+  reason?: string;
+  zpid?: number;
+  url?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zipcode?: string;
+  lat?: number;
+  lng?: number;
+  /** Zillow static photo URLs, listing order (first = the listing's lead photo). */
+  imageUrls?: string[];
+  yearBuilt?: number;
+  livingAreaSqFt?: number;
+  lotSizeSqFt?: number;
+  stories?: number;
+  propertyType?: string;
+  homeStatus?: string;
+  lastSoldDate?: string;
+  lastSoldPrice?: number;
+  zestimate?: number;
+  taxAssessedValue?: number;
+  /** Zillow's "Roof: …" fact when the listing carried one (e.g. "Composition"). */
+  roofFact?: string;
+  /**
+   * Sentences from the listing that mention the roof, with a year when one
+   * was stated ("New roof 2021"). Hints for the inspector, never a value the
+   * app writes on its own.
+   */
+  roofHints?: { text: string; year?: number }[];
+  /** When Zillow's page was read, per the service. */
+  scrapedAt?: string;
+};
+
+/** The photo that fronts a job: chosen by the inspector or taken from the record. */
+export type CoverPhoto = {
+  uri: string;
+  source: 'zillow' | 'capture' | 'library';
+  setAt: string;
+};
+
+/** Where `Inspection.ageYears` came from — the packet says so. */
+export type RoofAgeSource = 'inspector' | 'year_built' | 'listing';
+
 export type PropertyIntel = {
   /** ISO timestamp the research ran. */
   measuredAt: string;
@@ -1279,6 +1353,8 @@ export type SavedEstimate = {
   priceBookVersion?: number;
   priceBookUpdatedAt?: string;
   priceBookCustomized?: boolean;
+  /** Zillow record for the address (APIllow), so the saved estimate fronts with the house. */
+  propertyRecord?: PropertyRecord;
 };
 
 export type MileageTrip = {

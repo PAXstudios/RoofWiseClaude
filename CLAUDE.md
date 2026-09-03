@@ -104,6 +104,7 @@ Pulled from `PROMPT_LOG.md`. The full list is canonical there; this is the short
   - `EXPO_PUBLIC_GEMINI_API_KEY`
   - `EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY`, `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY`, `EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY` (Places / Solar / Weather / Geocoding share these as appropriate)
   - `EXPO_PUBLIC_CENSUS_API_KEY` (optional, free — roof age / ownership for the knock finder; the ACS API refuses unkeyed calls)
+  - `EXPO_PUBLIC_APILLOW_API_KEY` (optional — APIllow/Zillow property records: the house photo that fronts jobs and estimates, year built, facts. **Free tier = 50 lookups/month** — every lookup goes through the per-address cache in `lib/stores/propertyRecordStore.ts`; never call `fetchPropertyRecord` directly from a screen)
 - `SUPABASE_SERVICE_ROLE_KEY` is **server-only** — it must never ship in a client bundle.
 - If a key was ever pasted in chat, treat it as exposed and rotate.
 
@@ -150,6 +151,7 @@ npm run lint                      # expo lint
 | Pure services (HAAG, decision, taxonomy) | `lib/services/{decisionEngine,haagThresholds,haagPdf,proposalGenerator,proposalPdf,costEstimator}.ts` |
 | Network/IO services | `lib/services/{gemini,places,solar,geocoding,weather,stormMatch,stormWatch,pushNotifications,transcribeAudio,analyzeSlope}.ts` |
 | "Where should I knock?" | `lib/services/knockOpportunities.ts` (pure formula — `docs/KNOCK_OPPORTUNITIES.md` is the authority), `knockFinder.ts` (orchestrator), `censusHousing.ts`, `opportunityBrief.ts` (Gemini phrases the engine's numbers), `app/knock-finder.tsx` |
+| Property record (Zillow) + cover photo | `lib/services/propertyRecord.ts` (APIllow I/O + pure readers: `coverPhotoUri()` is how EVERY surface picks a job's photo, `roofAgePrefill()` never overwrites an inspector's age), `lib/stores/propertyRecordStore.ts` (30-day per-address cache — the quota guard), `components/sheets/CoverPhotoSheet.tsx` |
 | Cloud sync | `lib/services/{leadSync,inspectionSync,photoSync,correctionsSync,analysisQueue,lifecycleHooks,backup}.ts` |
 | Learning loop | `lib/services/learning/{userCorrectionProfile,localLearningEngine}.ts` |
 | Shared UI | `components/{ScreenHeader,PressableScale,SignaturePad,VoiceNoteRecorder,AnalysisQueueChip,DamageScoreBar,DamageMarkerLayer,CameraHUD,WeatherTile,AICalibrationCard,AddressAutocomplete,AppleSignInButton,ToastHost}.tsx` |

@@ -50,6 +50,8 @@ export type CustomerDetailsResult = {
   /** Only when the sheet was opened with `roof`. */
   material?: RoofMaterial;
   condition?: RoofCondition;
+  /** Only when the sheet was opened with `roof` and the roofer touched the age. */
+  ageYears?: number;
 };
 
 /** A real place from a geocoder — what the caller's GPS lookup produced. */
@@ -70,9 +72,12 @@ type Props = {
     lng?: number;
     material?: RoofMaterial;
     condition?: RoofCondition;
+    ageYears?: number;
   };
   /** Show the roof material + condition pickers (jobs). */
   roof?: boolean;
+  /** What the property record suggests for roof age — offered as a chip, never applied silently. */
+  ageHint?: { ageYears: number; note: string } | null;
   /** The caller is still resolving a GPS fix into an address. */
   locating?: boolean;
   /** A resolved address to drop into an EMPTY address field — never over one the roofer typed. */
@@ -109,6 +114,7 @@ export function CustomerDetailsSheet({
   skipLabel,
   onSave,
   onSkip,
+  ageHint,
 }: Props) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -118,6 +124,7 @@ export function CustomerDetailsSheet({
   const [lng, setLng] = useState<number | undefined>();
   const [material, setMaterial] = useState<RoofMaterial | undefined>();
   const [condition, setCondition] = useState<RoofCondition | undefined>();
+  const [ageYears, setAgeYears] = useState<number | undefined>();
   const [autoFilled, setAutoFilled] = useState(false);
 
   // Fresh draft every time the sheet opens; placeholders come in as blanks so
@@ -133,6 +140,7 @@ export function CustomerDetailsSheet({
     setLng(addressReal ? initial.lng : undefined);
     setMaterial(initial.material);
     setCondition(initial.condition);
+    setAgeYears(initial.ageYears);
     setAutoFilled(false);
     // The initial object is rebuilt each render by callers; keying on its
     // members keeps the reset to the moment the sheet opens.
@@ -165,7 +173,7 @@ export function CustomerDetailsSheet({
       address: address.trim(),
       lat,
       lng,
-      ...(roof ? { material, condition } : {}),
+      ...(roof ? { material, condition, ageYears } : {}),
     });
   };
 
@@ -290,6 +298,40 @@ export function CustomerDetailsSheet({
                   );
                 })}
               </View>
+
+              <Text style={styles.fieldLabel}>Roof age</Text>
+              <View style={styles.stepperRow}>
+                <PressableScale
+                  style={styles.stepperBtn}
+                  pressedScale={0.94}
+                  onPress={() => setAgeYears(Math.max(0, (ageYears ?? 0) - 1))}
+                  accessibilityRole="button"
+                  accessibilityLabel="Roof age minus one year"
+                >
+                  <Ionicons name="remove" size={24} color={colors.text} />
+                </PressableScale>
+                <Text style={styles.stepperValue}>{ageYears == null || ageYears === 0 ? 'Not set' : `${ageYears} yr`}</Text>
+                <PressableScale
+                  style={styles.stepperBtn}
+                  pressedScale={0.94}
+                  onPress={() => setAgeYears((ageYears ?? 0) + 1)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Roof age plus one year"
+                >
+                  <Ionicons name="add" size={24} color={colors.text} />
+                </PressableScale>
+              </View>
+              {ageHint ? (
+                <PressableScale
+                  style={styles.hintChip}
+                  onPress={() => setAgeYears(ageHint.ageYears)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use ${ageHint.ageYears} years from the property record`}
+                >
+                  <Ionicons name="sparkles-outline" size={16} color={colors.brand} />
+                  <Text style={styles.hintText}>Use {ageHint.ageYears} yr — {ageHint.note}</Text>
+                </PressableScale>
+              ) : null}
             </>
           )}
         </ScrollView>
@@ -376,6 +418,26 @@ const styles = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   noteText: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  stepperBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    borderRadius: radii.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.fillQuiet,
+  },
+  stepperValue: { flex: 1, textAlign: 'center', fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text },
+  hintChip: {
+    minHeight: touchTarget.standard,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.button,
+    backgroundColor: colors.brandSoft,
+  },
+  hintText: { flex: 1, fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
   // 56pt chips (Drift #1).
   chip: {
     minHeight: touchTarget.standard,

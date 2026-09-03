@@ -51,6 +51,9 @@ import { documentedCoverage, documentedSummary } from '@/lib/services/documented
 import { deriveFunctional } from '@/lib/services/functionalDamage';
 import { describeMissingDetails, missingJobDetails } from '@/lib/services/placeholderDetails';
 import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
+import { CoverPhotoSheet } from '@/components/sheets/CoverPhotoSheet';
+import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
+import { coverPhotoUri, recordFactsLine, roofAgePrefill } from '@/lib/services/propertyRecord';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
@@ -107,7 +110,13 @@ import {
  * is worse than one reading "12 yr".
  */
 function roofSystemLine(ins: Inspection): string {
-  return [ins.geometry, `${ins.ageYears} yr`, ins.condition]
+  const age =
+    ins.ageSource === 'year_built'
+      ? `≤${ins.ageYears} yr (from build year)`
+      : ins.ageSource === 'listing'
+        ? `${ins.ageYears} yr (listing)`
+        : `${ins.ageYears} yr`;
+  return [ins.geometry, age, ins.condition]
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
     .join(' · ');
 }
@@ -179,6 +188,11 @@ export default function JobDetail() {
   const setStoredEngineResult = useInspectionStore((s) => s.setStoredEngineResult);
   const setNotes = useInspectionStore((s) => s.setNotes);
   const updateDetails = useInspectionStore((s) => s.updateDetails);
+  const setPropertyRecord = useInspectionStore((s) => s.setPropertyRecord);
+  const setCoverPhoto = useInspectionStore((s) => s.setCoverPhoto);
+  const lookupRecord = usePropertyRecordStore((s) => s.lookup);
+  const [coverSheet, setCoverSheet] = useState(false);
+  const [recordBusy, setRecordBusy] = useState(false);
   const addAudioNote = useInspectionStore((s) => s.addAudioNote);
   const removeAudioNote = useInspectionStore((s) => s.removeAudioNote);
   const setAudioNoteLabel = useInspectionStore((s) => s.setAudioNoteLabel);
@@ -274,10 +288,11 @@ export default function JobDetail() {
     toast({ tone: 'success', title: 'Follow-up set', body: formatDateShort(when) });
   };
 
-  // The hero's photo — the job's real first captured photo, across any
-  // slope. Never stock imagery: no photo yet means the crafted gradient
-  // placeholder below, not a synthesized image.
-  const heroPhoto = inspection.slopes.flatMap((sl) => sl.photoPaths)[0];
+  // The hero's photo: the inspector's pick, else the Zillow listing photo,
+  // else the first captured photo (lib/services/propertyRecord.ts). Never
+  // stock imagery: nothing yet means the gradient placeholder, not a
+  // synthesized house.
+  const heroPhoto = coverPhotoUri(inspection);
   const totalPhotos = inspection.slopes.reduce((a, sl) => a + sl.photoPaths.length, 0);
   const totalFindings = inspection.slopes.reduce(
     (a, sl) => a + (sl.aiFindings ?? []).filter((f) => f.detected).length,
@@ -679,6 +694,7 @@ export default function JobDetail() {
             respects, not a settings row. */}
         <JobHero
           photoUri={heroPhoto}
+          onChangePhoto={() => setCoverSheet(true)}
           reportId={inspection.reportId}
           address={missing.address ? 'Address not set' : inspection.address}
           band={hasEvidence ? haag.claim_viability : undefined}
@@ -757,6 +773,32 @@ export default function JobDetail() {
         <PropertyIntelCard
           inspection={inspection}
           onMeasured={(intel) => setPropertyIntel(inspection.id, intel)}
+        />
+
+        {/* What the listing world knows (Zillow via APIllow): the house photo,
+            year built, size, last sale. Roof age is PREFILLED from it only
+            when the inspector has not entered one, and the card says so. */}
+        <PropertyRecordCard
+          inspection={inspection}
+          busy={recordBusy}
+          onLookup={async (force) => {
+            if (missing.address) {
+              setDetailsSheet(true);
+              return;
+            }
+            setRecordBusy(true);
+            try {
+              const rec = await lookupRecord(inspection.address, { force });
+              setPropertyRecord(inspection.id, rec);
+              toast(
+                rec.status === 'found'
+                  ? { tone: 'success', title: 'Property record found', body: recordFactsLine(rec) }
+                  : { tone: 'warn', title: 'No property record', body: rec.reason },
+              );
+            } finally {
+              setRecordBusy(false);
+            }
+          }}
         />
 
         {/* Customer, address, and roof system — editable. Placeholders read as
@@ -1248,9 +1290,12 @@ export default function JobDetail() {
         lng: inspection.lng,
         material: inspection.material,
         condition: inspection.condition,
+        ageYears: inspection.ageYears,
       }}
       roof
+      ageHint={roofAgePrefill(inspection.propertyRecord, new Date().getFullYear())}
       onSave={(d) => {
+        const addressChanged = d.address.trim() !== inspection.address.trim();
         updateDetails(inspection.id, {
           customerName: d.customerName,
           customerPhone: d.customerPhone,
@@ -1260,9 +1305,24 @@ export default function JobDetail() {
           lng: d.lng,
           ...(d.material ? { material: d.material } : {}),
           ...(d.condition ? { condition: d.condition } : {}),
+          // The inspector's number, with its provenance — it beats any prefill.
+          ...(d.ageYears != null && d.ageYears !== inspection.ageYears ? { ageYears: d.ageYears, ageSource: 'inspector' as const } : {}),
         });
         setDetailsSheet(false);
         toast({ tone: 'success', title: 'Details saved', body: d.customerName });
+        // A new address is a new house: fetch its record (cache-first).
+        if (addressChanged && d.address.trim().length >= 8) {
+          void lookupRecord(d.address).then((rec) => setPropertyRecord(inspection.id, rec));
+        }
+      }}
+    />
+    <CoverPhotoSheet
+      visible={coverSheet}
+      inspection={inspection}
+      onClose={() => setCoverSheet(false)}
+      onChoose={(cover) => {
+        setCoverPhoto(inspection.id, cover);
+        toast({ tone: 'success', title: cover ? 'Job photo updated' : 'Back to the automatic photo' });
       }}
     />
     </SafeAreaView>
@@ -1321,14 +1381,71 @@ const HERO_HEIGHT = 300;
  * No photo yet → a crafted gradient ground with the roof glyph, never stock
  * imagery (Drift #5 extends to imagery: nothing here is synthesized).
  */
+/**
+ * The Zillow record card. Every line is attributed; a missing record says
+ * why; the button is the only way a lookup is spent (free tier: 50/month).
+ */
+function PropertyRecordCard({
+  inspection,
+  busy,
+  onLookup,
+}: {
+  inspection: Inspection;
+  busy: boolean;
+  onLookup: (force: boolean) => void;
+}) {
+  const rec = inspection.propertyRecord;
+  const facts = recordFactsLine(rec);
+  const prefill = roofAgePrefill(rec, new Date().getFullYear());
+  if (!rec || rec.status === 'not_configured') {
+    return (
+      <RichCard
+        icon="business-outline"
+        iconTone="quiet"
+        title="Property record"
+        subtitle={rec?.status === 'not_configured' ? rec.reason : 'Not looked up yet'}
+        action={rec?.status === 'not_configured' ? undefined : { label: busy ? 'Looking up…' : 'Look up', onPress: () => onLookup(false), icon: 'search-outline' }}
+      />
+    );
+  }
+  return (
+    <RichCard
+      icon="business-outline"
+      iconTone={rec.status === 'found' ? 'green' : 'orange'}
+      title={rec.status === 'found' ? 'Property record (Zillow)' : 'Property record'}
+      subtitle={rec.status === 'found' ? facts ?? rec.streetAddress : rec.reason}
+      action={{ label: busy ? 'Refreshing…' : 'Refresh', onPress: () => onLookup(true), icon: 'refresh-outline' }}
+    >
+      {rec.status === 'found' ? (
+        <View style={{ gap: spacing.xs }}>
+          {rec.lotSizeSqFt ? <Text style={styles.recordLine}>Lot {Math.round(rec.lotSizeSqFt).toLocaleString()} sq ft{rec.propertyType ? ` · ${rec.propertyType.replace(/_/g, ' ').toLowerCase()}` : ''}</Text> : null}
+          {rec.zestimate ? <Text style={styles.recordLine}>Zestimate ${rec.zestimate.toLocaleString()}{rec.lastSoldPrice ? ` · last sold $${rec.lastSoldPrice.toLocaleString()}` : ''}</Text> : null}
+          {rec.roofHints?.length ? <Text style={styles.recordHint}>Listing on the roof: "{rec.roofHints[0].text}"</Text> : null}
+          {prefill ? (
+            <Text style={styles.recordHint}>
+              {inspection.ageSource === 'inspector' || (inspection.ageYears > 0 && !inspection.ageSource)
+                ? `Zillow suggests ${prefill.ageYears} yr; the inspector's ${inspection.ageYears} yr stands.`
+                : prefill.note}
+            </Text>
+          ) : null}
+          <Text style={styles.recordFoot}>No permit or roof-repair records exist in this data — age from a build year is an upper bound.</Text>
+        </View>
+      ) : null}
+    </RichCard>
+  );
+}
+
 function JobHero({
   photoUri,
+  onChangePhoto,
   reportId,
   address,
   band,
   recommendation,
 }: {
   photoUri?: string;
+  /** Opens the cover-photo sheet. */
+  onChangePhoto?: () => void;
   reportId: string;
   address: string;
   /** Absent until at least one photo has been analyzed — renders "Not assessed". */
@@ -1364,6 +1481,16 @@ function JobHero({
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
+        {onChangePhoto ? (
+          <PressableScale
+            style={styles.heroPhotoBtn}
+            onPress={onChangePhoto}
+            accessibilityRole="button"
+            accessibilityLabel="Change the job photo"
+          >
+            <Ionicons name="camera-outline" size={22} color={colors.textInverse} />
+          </PressableScale>
+        ) : null}
         <View style={styles.heroContent}>
           <Text style={styles.heroEyebrow}>{reportId}</Text>
           <Text style={styles.heroAddress} numberOfLines={2}>
@@ -1641,6 +1768,9 @@ const styles = StyleSheet.create({
   roofLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
 
   // ── Hero ──────────────────────────────────────────────────────────────
+  recordLine: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  recordHint: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  recordFoot: { fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 16 },
   heroShell: { borderRadius: radii.xl },
   heroCard: {
     height: HERO_HEIGHT,
@@ -1651,6 +1781,18 @@ const styles = StyleSheet.create({
     backgroundColor: brand.royalInk,
   },
   heroPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  // 56pt glass button, top-right of the hero (Drift #1).
+  heroPhotoBtn: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    borderRadius: touchTarget.standard / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.overlay,
+  },
   heroPlaceholderIcon: { opacity: 0.4 },
   heroContent: {
     position: 'absolute',

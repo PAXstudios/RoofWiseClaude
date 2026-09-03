@@ -43,6 +43,7 @@ import { AnimatedCounter } from '@/components/motion';
 import { AreaActivityCard } from '@/components/home/AreaActivityCard';
 import { TodayModule, useTodayAgenda } from '@/components/home/TodayModule';
 import { QuickActionsSheet } from '@/components/sheets/QuickActionsSheet';
+import { coverPhotoUri, recordCardUrl } from '@/lib/services/propertyRecord';
 import { activityHref } from '@/components/home/activityRoute';
 import { Aurora } from '@/components/glass/Aurora';
 import { IconChip, CHIP_TONES, type ChipTone } from '@/components/ui/IconChip';
@@ -612,7 +613,8 @@ export default function HomeScreen() {
             contentContainerStyle={styles.recentRow}
           >
             {inspections.slice(0, 8).map((ins) => {
-              const firstPhoto = ins.slopes.flatMap((sl) => sl.photoPaths)[0];
+              // The house, not a shingle: the Zillow photo when there is one.
+              const firstPhoto = coverPhotoUri(ins, 'card');
               return (
                 <View key={ins.id} style={styles.recentCardShadow}>
                   <PressableScale
@@ -711,6 +713,14 @@ export default function HomeScreen() {
                 // The saved estimate itself — not a fresh wizard.
                 onPress={() => router.push({ pathname: '/estimate/[id]', params: { id: est.id } } as any)}
               >
+                {recordCardUrl(est.propertyRecord) ? (
+                  <Image
+                    source={{ uri: recordCardUrl(est.propertyRecord) }}
+                    style={styles.estimateImage}
+                    contentFit="cover"
+                    transition={150}
+                  />
+                ) : null}
                 <Text style={styles.estimateAmount}>
                   ${est.totalMid.toLocaleString()}
                 </Text>
@@ -1143,6 +1153,7 @@ const styles = StyleSheet.create({
   recentAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
   recentMeta: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: spacing.xs },
 
+  estimateImage: { width: '100%', height: 84, borderRadius: radii.md, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
   estimateCard: {
     width: 200,
     backgroundColor: colors.surface,
