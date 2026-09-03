@@ -18,7 +18,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import type { MotionSample } from '@/lib/services/deviceMotion';
-import { colors, fontSize, fontWeight, glass, motion, radii, spacing } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, glass, motion, radii, spacing } from '@/theme/tokens';
 
 /** ~10 Hz — plenty for a level, a tenth of the pitch gauge's 30 Hz. */
 const MOTION_INTERVAL_MS = 100;
@@ -235,6 +235,7 @@ const styles = StyleSheet.create({
   caption: {
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
   gridLineV: {
     position: 'absolute',

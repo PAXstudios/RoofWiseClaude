@@ -20,7 +20,7 @@ import {
   type MotionSample,
 } from '@/lib/services/deviceMotion';
 import { pitchDegreesToRatio, yawToOrientation } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, glass, radii, spacing } from '@/theme/tokens';
+import { colors, dataLabel, fontSize, glass, radii, spacing } from '@/theme/tokens';
 
 type Props = {
   /** Currently-selected slope (S, N, etc.) so the cluster can flag a heading that drifts. */
@@ -149,6 +149,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   chipWarn: { borderColor: colors.warn },
-  chipStrong: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.bold },
-  chipText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
+  // Instrument readouts (heading, pitch, altitude, live count) read as the
+  // mock's mono/uppercase data-label convention (docs/DESIGN_1A.md §3) — an
+  // instrument cluster, not prose.
+  chipStrong: { ...dataLabel, color: colors.textInverse, fontSize: fontSize.bodySm, letterSpacing: 0.6 },
+  chipText: { ...dataLabel, color: colors.textInverse, opacity: 0.88 },
 });

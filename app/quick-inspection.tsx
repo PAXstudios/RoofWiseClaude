@@ -49,6 +49,8 @@ import { useReducedMotion } from 'react-native-reanimated';
 import {
   brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -182,12 +184,14 @@ const webStyles = StyleSheet.create({
   title: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.navy,
     textAlign: 'center',
     maxWidth: 420,
   },
   body: {
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.slate,
     textAlign: 'center',
     maxWidth: 420,
@@ -205,6 +209,7 @@ const webStyles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
   },
 });
 
@@ -1525,16 +1530,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
   },
+  // The slope NAME (S, NE, …) — 1A's mono "slope name" treatment
+  // (docs/DESIGN_1A.md §3), kept at body-large size rather than dropping to
+  // dataLabel's caption size: this is the one thing a roofer reads at a
+  // glance, not an auxiliary meta tag.
   slopePillSlope: {
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.mono,
+    letterSpacing: 0.5,
   },
+  // "auto · 3" / "pinned · 5" — the small status word next to it is the
+  // literal data-label case: mono, uppercase, tracked.
   slopePillText: {
+    ...dataLabel,
     color: colors.textInverse,
     opacity: 0.85,
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
     flexShrink: 1,
   },
 
@@ -1556,6 +1568,7 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     textAlign: 'center',
   },
   shutterRow: {
@@ -1580,7 +1593,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
   },
-  doneText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
+  doneText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
 
   // ── Secondary chrome ──────────────────────────────────────────────────
   modeStrip: { position: 'absolute', left: 0, right: 0 },
@@ -1589,8 +1607,20 @@ const styles = StyleSheet.create({
 
   permRoot: { flex: 1, backgroundColor: colors.navy },
   permWrap: { flex: 1, padding: spacing.xxl, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  permTitle: { color: colors.textInverse, fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, textAlign: 'center' },
-  permBody: { color: colors.textInverse, opacity: 0.82, fontSize: fontSize.bodyMd, textAlign: 'center' },
+  permTitle: {
+    color: colors.textInverse,
+    fontSize: fontSize.titleLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+    textAlign: 'center',
+  },
+  permBody: {
+    color: colors.textInverse,
+    opacity: 0.82,
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
+    textAlign: 'center',
+  },
   permBtn: {
     height: touchTarget.sticky,
     paddingHorizontal: spacing.xxxl,
@@ -1600,12 +1630,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.lg,
   },
-  permBtnText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  permBtnText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   permLink: {
     minHeight: touchTarget.standard,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
   },
-  linkText: { color: colors.textInverse, fontSize: fontSize.bodyMd },
+  linkText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular },
 });

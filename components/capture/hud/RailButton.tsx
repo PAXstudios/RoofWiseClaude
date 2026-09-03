@@ -6,7 +6,7 @@
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { IoniconName } from '@/components/ui/IconChip';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 import { hudActive, hudDisc, hudInk, hudInkActive } from './glass';
 
 type Props = {
@@ -76,6 +76,7 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     letterSpacing: 0.2,
     paddingHorizontal: spacing.xs,
     borderRadius: radii.pill,

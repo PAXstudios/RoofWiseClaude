@@ -19,7 +19,7 @@ import { Pill } from '@/components/ui/Pill';
 import type { Inspection } from '@/lib/models/types';
 import { shortAreaTag } from '@/lib/services/captureSession';
 import { useAnnotationStore } from '@/lib/stores/annotationStore';
-import { colors, fontSize, fontWeight, glass, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, glass, radii, spacing, touchTarget } from '@/theme/tokens';
 import { HUD_GAP } from './glass';
 import {
   pillFor,
@@ -211,8 +211,18 @@ const styles = StyleSheet.create({
   sheet: { padding: spacing.lg, gap: spacing.md },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: HUD_GAP },
   headText: { flex: 1, gap: 2 },
-  title: { color: colors.textInverse, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold },
-  subtitle: { color: colors.textInverse, opacity: 0.8, fontSize: fontSize.bodySm },
+  title: {
+    color: colors.textInverse,
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
+  subtitle: {
+    color: colors.textInverse,
+    opacity: 0.8,
+    fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
+  },
   closeBtn: {
     width: touchTarget.standard,
     height: touchTarget.standard,
@@ -221,7 +231,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  status: { color: colors.textInverse, opacity: 0.85, fontSize: fontSize.bodySm, lineHeight: 18 },
+  status: {
+    color: colors.textInverse,
+    opacity: 0.85,
+    fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
+    lineHeight: 18,
+  },
   statusWarn: { color: colors.warnSoft, opacity: 1 },
   strip: { gap: HUD_GAP, alignItems: 'flex-start', paddingVertical: spacing.xs },
   thumbCol: { alignItems: 'center', gap: spacing.xs, minWidth: TILE },
@@ -245,7 +261,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     alignItems: 'center',
   },
-  thumbTagText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.bold },
+  // "Front Slope · S" — the mock's badge-chip convention: mono, uppercase,
+  // tracked (docs/DESIGN_1A.md §3).
+  thumbTagText: { ...dataLabel, color: colors.textInverse, letterSpacing: 0.6 },
   thumbModeDot: {
     position: 'absolute',
     top: 4,
@@ -272,7 +290,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.scrim,
   },
-  annotateDotText: { color: colors.textInverse, fontSize: 9, fontWeight: fontWeight.bold },
+  annotateDotText: { color: colors.textInverse, fontSize: 9, fontWeight: fontWeight.bold, fontFamily: fontFamily.mono },
   // The session's one orange moment, at the sticky size (Drift #1).
   done: {
     height: touchTarget.sticky,
@@ -283,7 +301,18 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   doneOff: { backgroundColor: colors.fillDisabled },
-  doneText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
-  doneSub: { color: colors.textInverse, opacity: 0.9, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  doneText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
+  doneSub: {
+    color: colors.textInverse,
+    opacity: 0.9,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   doneTextOff: { color: colors.textInverse, opacity: 0.6 },
 });

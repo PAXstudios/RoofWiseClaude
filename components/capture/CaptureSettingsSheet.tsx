@@ -38,6 +38,8 @@ import { useCaptureChromeStore } from '@/lib/stores/captureChromeStore';
 import { isGeminiConfigured } from '@/lib/env';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
@@ -461,11 +463,13 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
   subtitle: {
     color: colors.textInverse,
     opacity: 0.78,
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
     marginTop: spacing.xs,
     marginBottom: spacing.sm,
   },
@@ -495,11 +499,13 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
   },
   rowSub: {
     color: colors.textInverse,
     opacity: 0.75,
     fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
   },
 
   chevronWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
@@ -511,11 +517,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: glass.borderStrong,
   },
-  badgeText: {
-    color: colors.textInverse,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-  },
+  // "Full app" / "No sensor" / "Turn on" — the mock's status-badge convention.
+  badgeText: { ...dataLabel, color: colors.textInverse, letterSpacing: 0.6 },
 
   switchTrack: {
     width: 51,
@@ -550,18 +553,21 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
   body: {
     color: colors.textInverse,
     opacity: 0.9,
     fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
     lineHeight: fontSize.bodyMd * 1.45,
   },
-  bodyStrong: { fontWeight: fontWeight.bold, opacity: 1 },
+  bodyStrong: { fontWeight: fontWeight.bold, fontFamily: fontFamily.archivo.bold, opacity: 1 },
   deviceLine: {
     color: colors.textInverse,
     opacity: 0.6,
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.mono,
   },
 
   cta: {
@@ -577,6 +583,7 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
   doneBtn: {
     marginTop: spacing.lg,
@@ -592,5 +599,6 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
   },
 });

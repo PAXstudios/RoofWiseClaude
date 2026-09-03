@@ -12,8 +12,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { GlassCard } from '@/components/glass/GlassCard';
+import { hudSelected, hudSelectedInk } from '@/components/capture/hud/glass';
 import type { SlopeOrientation } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, glass, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, glass, radii, spacing, touchTarget } from '@/theme/tokens';
 
 /** The eight compass slopes, laid out as a compass rose reads: row by row. */
 const ROSE: SlopeOrientation[][] = [
@@ -132,8 +133,19 @@ const styles = StyleSheet.create({
   sheetWrap: { paddingHorizontal: spacing.md },
   sheet: { padding: spacing.lg, gap: spacing.md },
   header: { gap: spacing.xs },
-  title: { color: colors.textInverse, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold },
-  reason: { color: colors.textInverse, opacity: 0.8, fontSize: fontSize.bodySm, lineHeight: 18 },
+  title: {
+    color: colors.textInverse,
+    fontSize: fontSize.titleSm,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
+  reason: {
+    color: colors.textInverse,
+    opacity: 0.8,
+    fontSize: fontSize.bodySm,
+    fontFamily: fontFamily.archivo.regular,
+    lineHeight: 18,
+  },
   suggest: {
     minHeight: touchTarget.standard,
     flexDirection: 'row',
@@ -143,12 +155,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.surface,
   },
-  suggestText: { color: colors.text, fontSize: fontSize.bodyMd, flexShrink: 1 },
-  suggestStrong: { fontWeight: fontWeight.bold },
+  suggestText: { color: colors.text, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, flexShrink: 1 },
+  suggestStrong: { fontWeight: fontWeight.bold, fontFamily: fontFamily.archivo.bold },
   rose: { gap: spacing.sm },
   roseRow: { flexDirection: 'row', gap: spacing.sm },
   // 64pt cells — the "preferred" target for a gloved thumb, and a compass rose
-  // reads faster than a row of eight chips.
+  // reads faster than a row of eight chips. This IS the app's slope selector
+  // (docs/DESIGN_1A.md §6: "recolour to brand.royal active"), so the chosen
+  // cell takes `hudSelected` rather than the toggle language's plain white.
   cell: {
     flex: 1,
     minHeight: touchTarget.preferred,
@@ -158,12 +172,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
-  cellActive: { backgroundColor: colors.surface },
-  cellText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
-  cellTextActive: { color: colors.text },
-  cellCount: { color: colors.textInverse, opacity: 0.7, fontSize: fontSize.caption },
-  cellCountActive: { color: colors.textMuted, opacity: 1 },
+  cellActive: hudSelected,
+  // Slope letters carry the "slope names" data-label treatment (mono,
+  // tracked) without dropping to caption size — this is the one thing a
+  // roofer must read at a glance, not an auxiliary meta tag.
+  cellText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.mono,
+    letterSpacing: 0.5,
+  },
+  cellTextActive: { color: hudSelectedInk },
+  cellCount: {
+    color: colors.textInverse,
+    opacity: 0.7,
+    fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.regular,
+  },
+  cellCountActive: { color: hudSelectedInk, opacity: 0.85 },
   cancel: { minHeight: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
-  cancelText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  cancelText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   pressed: { opacity: 0.7 },
 });

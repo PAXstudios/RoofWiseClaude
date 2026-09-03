@@ -19,7 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
-import { colors, fontSize, fontWeight, glass, motion, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, glass, motion, radii, spacing, touchTarget } from '@/theme/tokens';
 
 export type ThumbState = 'empty' | 'queued' | 'analyzing' | 'done' | 'failed' | 'no_ai';
 
@@ -182,7 +182,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  importText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
+  importText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.mono,
+  },
   stateDot: {
     position: 'absolute',
     left: 4,
@@ -209,5 +214,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.bold },
+  badgeText: {
+    color: colors.textInverse,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.mono,
+  },
 });

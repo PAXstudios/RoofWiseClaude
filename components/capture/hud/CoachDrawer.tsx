@@ -30,7 +30,7 @@ import Animated, {
 import type { CoachProgress } from '@/lib/services/captureCoach';
 import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import type { CoachDetent } from '@/lib/stores/captureChromeStore';
-import { colors, fontSize, fontWeight, glass, motion, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, glass, motion, radii, spacing, touchTarget } from '@/theme/tokens';
 import { HUD_GAP, hudPanel } from './glass';
 
 const DETENTS: CoachDetent[] = ['peek', 'half', 'full'];
@@ -325,19 +325,37 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: glass.fillHigh,
   },
+  // The mock's "STEP 01 · CAPTURE" convention (docs/DESIGN_1A.md §3) — mono,
+  // uppercase, wide tracking.
   eyebrow: {
+    ...dataLabel,
     color: colors.textInverse,
-    opacity: 0.7,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    letterSpacing: 0.5,
+    opacity: 0.72,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  title: { flex: 1, color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
-  shots: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, opacity: 0.85 },
+  title: {
+    flex: 1,
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
+  shots: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.mono,
+    opacity: 0.85,
+  },
 
   card: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: spacing.md },
-  hint: { color: colors.textInverse, opacity: 0.9, fontSize: fontSize.bodyMd, lineHeight: 21 },
+  hint: {
+    color: colors.textInverse,
+    opacity: 0.9,
+    fontSize: fontSize.bodyMd,
+    fontFamily: fontFamily.archivo.regular,
+    lineHeight: 21,
+  },
   navRow: { flexDirection: 'row', gap: HUD_GAP },
   navBtn: {
     flexDirection: 'row',
@@ -354,8 +372,18 @@ const styles = StyleSheet.create({
   // "chosen" fill and the room.
   navBtnNext: { flex: 1, backgroundColor: colors.surface },
   navBtnOff: { opacity: 0.35 },
-  navText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
-  navTextStrong: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
+  navText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
+  navTextStrong: {
+    color: colors.text,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
 
   list: { flex: 1, marginTop: spacing.sm },
   listContent: { paddingHorizontal: spacing.sm, paddingBottom: spacing.md, gap: spacing.xs },
@@ -370,10 +398,26 @@ const styles = StyleSheet.create({
   },
   rowActive: { backgroundColor: glass.fillHigh },
   rowMain: { flex: 1, gap: 1 },
-  rowTitle: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
-  rowTitleActive: { fontWeight: fontWeight.bold },
-  rowHint: { color: colors.textInverse, opacity: 0.75, fontSize: fontSize.caption, lineHeight: 15 },
-  rowShots: { color: colors.textInverse, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  rowTitle: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
+  rowTitleActive: { fontWeight: fontWeight.bold, fontFamily: fontFamily.archivo.bold },
+  rowHint: {
+    color: colors.textInverse,
+    opacity: 0.75,
+    fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.regular,
+    lineHeight: 15,
+  },
+  rowShots: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.mono,
+  },
   dismiss: {
     minHeight: touchTarget.standard,
     flexDirection: 'row',
@@ -381,6 +425,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  dismissText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  dismissText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   pressed: { opacity: 0.7 },
 });

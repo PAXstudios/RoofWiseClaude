@@ -26,8 +26,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import type { IoniconName } from '@/components/ui/IconChip';
 import type { AreaTag, CaptureMode } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
-import { HUD_GAP, hudActive, hudInk, hudInkActive, hudPanel } from './glass';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { HUD_GAP, hudInk, hudPanel, hudSelected, hudSelectedInk } from './glass';
 
 export type FrameMode = 'square' | 'closeup' | 'edges' | 'collateral';
 
@@ -170,7 +170,7 @@ export function ModeStrip({
               <Ionicons
                 name={active ? 'checkmark-circle' : m.icon}
                 size={20}
-                color={active ? hudInkActive : hudInk}
+                color={active ? hudSelectedInk : hudInk}
               />
               <View>
                 <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
@@ -208,7 +208,7 @@ export function ModeStrip({
               accessibilityState={{ selected: active }}
               accessibilityLabel={active ? `${tag}, selected subject` : `Tag the next photo ${tag}`}
             >
-              {active && <Ionicons name="pricetag" size={14} color={hudInkActive} />}
+              {active && <Ionicons name="pricetag" size={14} color={hudSelectedInk} />}
               <Text style={[styles.tagText, active && styles.chipTextActive]} numberOfLines={1}>
                 {tag}
               </Text>
@@ -236,11 +236,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
   },
-  chipActive: hudActive,
+  chipActive: hudSelected,
   pressed: { opacity: 0.75 },
-  chipText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
-  chipTextActive: { color: colors.text },
-  chipSub: { color: colors.textMuted, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
+  chipText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
+  },
+  chipTextActive: { color: hudSelectedInk },
+  chipSub: {
+    color: hudSelectedInk,
+    opacity: 0.85,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   tag: {
     ...hudPanel,
     flexDirection: 'row',
@@ -251,5 +262,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radii.button,
   },
-  tagText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  tagText: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyMd,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
 });

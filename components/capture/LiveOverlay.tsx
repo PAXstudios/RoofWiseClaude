@@ -47,7 +47,10 @@ import {
   type SlopeOrientation,
 } from '@/lib/models/types';
 import {
+  brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
@@ -72,11 +75,22 @@ const PAUSED_LABEL_MS = 8000;
 /** Smallest drawn box, so a pinhead hail hit is still visible at arm's length. */
 const MIN_BOX_PT = 28;
 
+// The live finding tag's colour, by severity (docs/DESIGN_1A.md: "recolour
+// through brand.burnt/brand.royal/brand.amber by severity"). `amber`'s a
+// bright yellow-orange, so it needs an INK label rather than white to stay
+// sun-readable (Drift #1) — SEVERITY_INK carries that per-tint choice rather
+// than assuming white always reads.
 const SEVERITY_TINT: Record<Severity, string> = {
-  none: colors.slate,
-  minor: colors.info,
-  moderate: colors.warn,
-  severe: colors.danger,
+  none: colors.textSubtle,
+  minor: brand.royal,
+  moderate: brand.amber,
+  severe: brand.burntDeep,
+};
+const SEVERITY_INK: Record<Severity, string> = {
+  none: colors.text,
+  minor: colors.textInverse,
+  moderate: colors.text,
+  severe: colors.textInverse,
 };
 
 type LiveFrame = {
@@ -455,13 +469,14 @@ function LiveBox({
   }));
 
   const tint = SEVERITY_TINT[marker.severity];
+  const ink = SEVERITY_INK[marker.severity];
   return (
     <Animated.View
       pointerEvents="none"
       style={[styles.box, { left, top, width, height, borderColor: tint }, style]}
     >
       <View style={[styles.boxPill, { backgroundColor: tint }]}>
-        <Text style={styles.boxPillText} numberOfLines={1}>
+        <Text style={[styles.boxPillText, { color: ink }]} numberOfLines={1}>
           {DAMAGE_CATEGORY_LABELS[marker.category]} · {SEVERITY_LABELS[marker.severity]}
         </Text>
       </View>
@@ -500,7 +515,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: 'visible',
   },
-  guideOverflow: { borderColor: colors.warn },
+  // Overflow ("back up to fit") is the guide's own caution state — brand.amber,
+  // the 1A moderate/caution hue, rather than the generic semantic warn.
+  guideOverflow: { borderColor: brand.amber },
   courseLine: {
     position: 'absolute',
     left: 0,
@@ -518,7 +535,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  guideTagText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
+  guideTagText: {
+    color: colors.textInverse,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
+  },
   labelWrap: {
     position: 'absolute',
     left: spacing.xl,
@@ -538,10 +560,13 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   labelPillPaused: { borderColor: colors.warn },
+  // A full sentence ("Live overlay paused — <reason>") stays Archivo, not the
+  // mono/uppercase data-label treatment — that's for short tags, not prose.
   labelText: {
     color: colors.textInverse,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     letterSpacing: 0.2,
     flexShrink: 1,
   },
@@ -560,9 +585,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     maxWidth: 220,
   },
+  // The live finding tag — "HAIL BRUISE · SEVERE" (docs/DESIGN_1A.md §6),
+  // the mock's data-label chip: mono, uppercase, tracked. Colour is set
+  // per-box from SEVERITY_INK above.
   boxPillText: {
-    color: colors.textInverse,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
+    ...dataLabel,
+    letterSpacing: 0.6,
   },
 });
