@@ -22,7 +22,11 @@ import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useAnalysisQueueStore } from '@/lib/stores/analysisQueueStore';
 import { drainAnalysisQueue } from '@/lib/services/analysisQueue';
-import { analyzeSlope, getPhotoAnalysisState } from '@/lib/services/analyzeSlope';
+import {
+  analyzeSlope,
+  getPhotoAnalysisState,
+  isSlopeAnalysisRunning,
+} from '@/lib/services/analyzeSlope';
 import { describeAnalysisError } from '@/lib/services/gemini';
 import { scorePhotos } from '@/lib/services/photoQuality';
 import { isGeminiConfigured } from '@/lib/env';
@@ -175,6 +179,43 @@ export default function AnalyzeView() {
     }
   };
 
+  // A pass this screen did not start can still be running — the background
+  // queue picked the slope up after a previous "Next". Read the real state so
+  // the buttons do not invite a redundant run. Not reactive on its own, but
+  // every pass writes markers to the inspection store, which re-renders here.
+  const passInFlight = running || isSlopeAnalysisRunning(inspection.id, slope.id);
+
+  // What will still be outstanding once the inspector walks away: whatever has
+  // not been analyzed, plus the pass currently in flight.
+  const pendingAfterLeaving = unanalyzed.length + (passInFlight ? 1 : 0);
+
+  /**
+   * Move on to the job. Never blocked on analysis.
+   *
+   * `replace`, not `push`: this screen was itself reached by `replace` from the
+   * camera, so the job becomes the destination rather than stacking on top of a
+   * capture flow the inspector has finished with. Works for a job just created
+   * and for one they were adding photos to — both arrive here with the same
+   * `inspectionId`.
+   */
+  const goToJob = () => {
+    if (unanalyzed.length > 0) {
+      // Idempotent: returns null when this slope is already queued or running.
+      const job = enqueueAnalysis({
+        inspectionId: inspection.id,
+        slopeId: slope.id,
+        slopeLabel: slope.orientation,
+      });
+      if (job) drainAnalysisQueue().catch(() => {});
+      toast({
+        tone: 'success',
+        title: `${unanalyzed.length} photo${unanalyzed.length === 1 ? '' : 's'} still analyzing`,
+        body: 'Finishing in the background — watch it on Processing.',
+      });
+    }
+    router.replace({ pathname: `/job/${inspection.id}` as any });
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -266,15 +307,15 @@ export default function AnalyzeView() {
         )}
         <View style={styles.btnRow}>
           <Pressable
-            style={[styles.secondaryBtn, running && { opacity: 0.5 }]}
-            disabled={running || slope.photoPaths.length === 0}
+            style={[styles.secondaryBtn, passInFlight && { opacity: 0.5 }]}
+            disabled={passInFlight || slope.photoPaths.length === 0}
             onPress={() => run(false)}
           >
             <Text style={styles.secondaryBtnText}>Re-analyze all</Text>
           </Pressable>
           <Pressable
-            style={[styles.primaryBtn, (running || unanalyzed.length === 0) && styles.primaryBtnDisabled]}
-            disabled={running || unanalyzed.length === 0}
+            style={[styles.primaryBtn, (passInFlight || unanalyzed.length === 0) && styles.primaryBtnDisabled]}
+            disabled={passInFlight || unanalyzed.length === 0}
             onPress={() => run(true)}
           >
             {running ? (
@@ -286,31 +327,18 @@ export default function AnalyzeView() {
             )}
           </Pressable>
         </View>
-        <Pressable
-          style={[styles.queueBtn, (running || unanalyzed.length === 0) && { opacity: 0.4 }]}
-          disabled={running || unanalyzed.length === 0}
-          onPress={() => {
-            const job = enqueueAnalysis({
-              inspectionId: inspection.id,
-              slopeId: slope.id,
-              slopeLabel: slope.orientation,
-            });
-            if (!job) {
-              toast({ tone: 'info', title: 'Already queued' });
-              return;
-            }
-            toast({
-              tone: 'success',
-              title: 'Added to queue',
-              body: 'Runs automatically while the app is open — you\'ll get a notification.',
-            });
-            drainAnalysisQueue().catch(() => {});
-            router.back();
-          }}
-        >
-          <Ionicons name="time-outline" size={16} color={colors.slate} />
-          <Text style={styles.queueBtnText}>
-            Queue for auto-run instead
+        {/* ALWAYS live — including mid-analysis. Waiting on a spinner is not
+            the job; the roof is. Anything still unanalyzed is handed to the
+            background queue on the way out (the Processing screen and the
+            queue chip show it finishing), and `analyzeSlope` joins the pass
+            already in flight rather than starting a rival one, so nothing is
+            analyzed or counted twice. */}
+        <Pressable style={styles.queueBtn} onPress={goToJob}>
+          <Ionicons name="arrow-forward-circle-outline" size={18} color={colors.brand} />
+          <Text style={styles.nextBtnText}>
+            {pendingAfterLeaving > 0
+              ? `Next — finish ${pendingAfterLeaving} in the background`
+              : 'Next — go to the job'}
           </Text>
         </Pressable>
       </View>
@@ -378,6 +406,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
     minHeight: touchTarget.small,
+  },
+  nextBtnText: {
+    fontSize: fontSize.bodyMd,
+    color: colors.brand,
+    fontWeight: fontWeight.semibold,
   },
   queueBtnText: { color: colors.slate, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
   secondaryBtn: {

@@ -101,7 +101,45 @@ export type AnalyzeSlopeOptions = {
   signal?: AbortSignal;
 };
 
-export async function analyzeSlope(
+/**
+ * Passes currently running, keyed by slope.
+ *
+ * Two callers targeting the same slope at once is the NORMAL case, not an edge
+ * one: the analyze screen hands its remaining photos to the background queue
+ * when the inspector moves on to the job, and the queue picks the slope up
+ * while that screen's own pass is still in flight. Both passes run `onlyNew`,
+ * both see the same not-yet-analyzed indices, and both attach their markers —
+ * doubling the hail count that HAAG §2 decides replacement on.
+ *
+ * A second call therefore joins the pass already running instead of starting a
+ * rival one. It receives that pass's result, which means a `photoIndexes` or
+ * `onlyNew: false` request arriving mid-pass is answered by the pass in flight
+ * rather than re-running; callers that need a genuine re-analysis (the screen's
+ * "Re-analyze all") disable themselves while a pass is running.
+ */
+const inFlightBySlope = new Map<string, Promise<SlopeAnalysisResult>>();
+
+export function analyzeSlope(
+  inspectionId: string,
+  slopeId: string,
+  opts: AnalyzeSlopeOptions = {},
+): Promise<SlopeAnalysisResult> {
+  const key = `${inspectionId}:${slopeId}`;
+  const running = inFlightBySlope.get(key);
+  if (running) return running;
+  const pass = runAnalyzeSlope(inspectionId, slopeId, opts).finally(() => {
+    inFlightBySlope.delete(key);
+  });
+  inFlightBySlope.set(key, pass);
+  return pass;
+}
+
+/** True while a pass is running for this slope — drives "still analyzing" UI. */
+export function isSlopeAnalysisRunning(inspectionId: string, slopeId: string): boolean {
+  return inFlightBySlope.has(`${inspectionId}:${slopeId}`);
+}
+
+async function runAnalyzeSlope(
   inspectionId: string,
   slopeId: string,
   opts: AnalyzeSlopeOptions = {},
