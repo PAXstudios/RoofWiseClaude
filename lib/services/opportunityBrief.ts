@@ -84,6 +84,8 @@ export async function writeOpportunityBrief(args: {
   areas: ScoredArea[];
   plan: TripPlan;
   signal?: AbortSignal;
+  /** Default 45 s; the finder passes a tighter budget so a slow model never holds the plan. */
+  timeoutMs?: number;
 }): Promise<OpportunityBrief | null> {
   if (!isGeminiConfigured || args.areas.length === 0) return null;
 
@@ -120,7 +122,7 @@ export async function writeOpportunityBrief(args: {
   };
 
   try {
-    const { json, modelUsed } = await geminiGenerateContent(body, { signal: args.signal, timeoutMs: 45_000 });
+    const { json, modelUsed } = await geminiGenerateContent(body, { signal: args.signal, timeoutMs: args.timeoutMs ?? 45_000 });
     const text = extractGeminiText(json, modelUsed);
     const parsed = JSON.parse(text) as Partial<OpportunityBrief>;
     if (!parsed || typeof parsed.headline !== 'string' || !Array.isArray(parsed.areas)) return null;

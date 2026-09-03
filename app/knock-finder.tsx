@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { LocationField, type ResolvedLocation } from '@/components/LocationField';
+import { LocationField, resolveDeviceLocation, type ResolvedLocation } from '@/components/LocationField';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Pill } from '@/components/ui/Pill';
@@ -88,6 +88,38 @@ export default function KnockFinderScreen() {
   const [step, setStep] = useState<FinderStep | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noStorms, setNoStorms] = useState<number | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!running || startedAt == null) return;
+    const id = setInterval(() => setElapsed(Math.round((Date.now() - startedAt) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [running, startedAt]);
+
+  // No service area, no last plan → find the phone instead of showing a
+  // disabled button ("isn't working" is what a disabled button reads as).
+  const [locating, setLocating] = useState(false);
+  useEffect(() => {
+    if (base || defaultBase || locating) return;
+    let cancelled = false;
+    setLocating(true);
+    void resolveDeviceLocation()
+      .then((r) => {
+        if (cancelled || r.status !== 'ok') return;
+        const loc = r.location;
+        const label = loc.city ? `${loc.city}${loc.stateCode ? `, ${loc.stateCode}` : ''}` : loc.address;
+        setBase({ lat: loc.lat, lng: loc.lng, label });
+        setBaseText(loc.address);
+      })
+      .finally(() => {
+        if (!cancelled) setLocating(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Once, on first mount with nothing to go on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onResolved = useCallback((loc: ResolvedLocation) => {
     const label = loc.city ? `${loc.city}${loc.stateCode ? `, ${loc.stateCode}` : ''}` : loc.address;
@@ -101,6 +133,8 @@ export default function KnockFinderScreen() {
     setError(null);
     setNoStorms(null);
     setStep('storms');
+    setStartedAt(Date.now());
+    setElapsed(0);
     const own = {
       knocks: [...(activeSession ? [activeSession] : []), ...archive].flatMap((s) =>
         s.knocks.map((k) => ({ lat: k.lat, lng: k.lng, at: k.createdAt })),
@@ -115,6 +149,8 @@ export default function KnockFinderScreen() {
         own,
         housingCache: { get: cachedHousing, set: cacheHousing },
         onStep: setStep,
+        // Show the ranked areas the moment they exist; enrichment fills in.
+        onPartial: setResult,
       });
       if (outcome.status === 'ok') setResult(outcome.result);
       else if (outcome.status === 'no_storms') setNoStorms(outcome.eventCount);
@@ -179,7 +215,7 @@ export default function KnockFinderScreen() {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScreenHeader
-        title="Where should I knock?"
+        title="Knock Planner"
         subtitle={`Storms within ${SEARCH_RADIUS_MILES} mi · last ${LOOKBACK_MONTHS} months · roof age · your footprint`}
         back={() => router.back()}
       />
@@ -196,7 +232,7 @@ export default function KnockFinderScreen() {
           />
         </RichCard>
 
-        {running && step ? <ProgressCard step={step} /> : null}
+        {running && step ? <ProgressCard step={step} elapsed={elapsed} /> : null}
 
         {error && !running ? (
           <RichCard icon="cloud-offline-outline" iconTone="orange" title="Storm history not available" subtitle={error}>
@@ -210,7 +246,7 @@ export default function KnockFinderScreen() {
           </RichCard>
         ) : null}
 
-        {result && !running ? (
+        {result ? (
           <>
             <FadeSlideIn index={0}>
               <RichCard
@@ -312,9 +348,12 @@ export default function KnockFinderScreen() {
 
 // ---------------------------------------------------------------------------
 
-function ProgressCard({ step }: { step: FinderStep }) {
+function ProgressCard({ step, elapsed }: { step: FinderStep; elapsed: number }) {
   const idx = FINDER_STEPS.findIndex((s) => s.id === step);
-  const current = FINDER_STEPS[idx]?.label;
+  const label = FINDER_STEPS[idx]?.label ?? '';
+  // Past 15 s say so — the Census geocoder and the model are the slow legs,
+  // and the ranked areas are already on screen underneath.
+  const current = elapsed >= 15 ? `${label} · ${elapsed}s — still working; the ranked areas below are ready to use` : label;
   return (
     <RichCard padded={false}>
       {/* The map being searched — what the finder is doing, not a spinner. */}

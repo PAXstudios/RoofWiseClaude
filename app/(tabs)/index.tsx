@@ -444,6 +444,40 @@ export default function HomeScreen() {
         </RichCard>
       </Rise>
 
+      {/* Tools — directly under the two hero CTAs (owner 2026-09-03): the
+          four things a roofer opens between jobs, each its own saturated
+          tile. Knock Planner is the storm-hit-streets finder. */}
+      <Rise index={3} style={styles.toolGrid}>
+        <ToolTile
+          icon="thunderstorm"
+          gradient={gradients.tileStorm}
+          title="Storm Tracer"
+          sub="Hail + wind map"
+          onPress={() => router.push({ pathname: '/(tabs)/map', params: { filter: 'storms' } } as any)}
+        />
+        <ToolTile
+          icon="compass"
+          gradient={gradients.tileKnock}
+          title="Knock Planner"
+          sub="Storm-hit streets"
+          onPress={() => router.push('/knock-finder')}
+        />
+        <ToolTile
+          icon="calculator"
+          gradient={gradients.tileEstimate}
+          title="Estimator"
+          sub="Solar + cost"
+          onPress={() => router.push('/estimator')}
+        />
+        <ToolTile
+          icon="car"
+          gradient={gradients.tileMileage}
+          title="Mileage"
+          sub="Tax log"
+          onPress={() => router.push('/mileage')}
+        />
+      </Rise>
+
       {/* Today — the roofer's real next actions (today's inspections,
           follow-ups due, leads going cold, the live route), each row landing
           on its job or lead. It sits right under the hero CTAs ONLY when
@@ -507,11 +541,6 @@ export default function HomeScreen() {
       </Rise>
 
       {/* Field tools — crafted cells, colour-chipped per tool. */}
-      <Rise index={5} style={styles.utilityRow}>
-        <UtilityCta icon="thunderstorm-outline" tone="blue" title="Storm Tracer" sub="Hail + wind map" onPress={() => router.push({ pathname: '/(tabs)/map', params: { filter: 'storms' } } as any)} />
-        <UtilityCta icon="calculator-outline" tone="green" title="Estimator" sub="Solar + cost" onPress={() => router.push('/estimator')} />
-        <UtilityCta icon="car-outline" tone="purple" title="Mileage" sub="Tax log" onPress={() => router.push('/mileage')} />
-      </Rise>
 
       <Rise index={6} style={styles.stack}>
         <AnalysisQueueChip />
@@ -866,29 +895,41 @@ function SectionTitle({ title }: { title: string }) {
   return <Text style={styles.sectionTitle}>{title}</Text>;
 }
 
-function UtilityCta({
+function ToolTile({
   icon,
-  tone,
+  gradient,
   title,
   sub,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  tone: ChipTone;
+  gradient: readonly [string, string];
   title: string;
   sub: string;
   onPress: () => void;
 }) {
   return (
     <PressableScale
-      style={styles.utilityCta}
+      style={styles.toolTileShadow}
+      pressedScale={0.97}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${sub}.`}
-      onPress={onPress}
+      onPress={() => {
+        tap();
+        onPress();
+      }}
     >
-      <IconChip name={icon} tone={tone} size="md" />
-      <Text style={styles.utilityTitle}>{title}</Text>
-      <Text style={styles.utilitySub}>{sub}</Text>
+      <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.toolTile}>
+        <View style={styles.toolTileIcon}>
+          <Ionicons name={icon} size={24} color={colors.textInverse} />
+        </View>
+        <Text style={styles.toolTileTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.toolTileSub} numberOfLines={1}>
+          {sub}
+        </Text>
+      </LinearGradient>
     </PressableScale>
   );
 }
@@ -1095,28 +1136,27 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
   },
 
-  utilityRow: { flexDirection: 'row', gap: spacing.md },
-  utilityCta: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: colors.surface,
+  // 2×2 tool tiles: 96pt tall (well past the 56pt floor), full-bleed gradient,
+  // white type — the colour and prominence the owner asked for.
+  toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  toolTileShadow: { width: '47.5%', borderRadius: radii.card, ...shadows.card },
+  toolTile: {
+    minHeight: 104,
     borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    minHeight: touchTarget.standard,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
+    padding: spacing.lg,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  toolTileIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.raised,
+    backgroundColor: glass.fill,
   },
-  utilityTitle: {
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-    marginTop: spacing.xs,
-  },
-  utilitySub: { fontSize: fontSize.caption, color: colors.textMuted },
+  toolTileTitle: { marginTop: spacing.sm, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.textInverse },
+  toolTileSub: { fontSize: fontSize.bodySm, color: colors.textInverse, opacity: 0.82 },
 
   recentRow: { gap: spacing.md, paddingRight: spacing.xl },
   // Shadow on the outer wrapper, clip + fill on the inner PressableScale —

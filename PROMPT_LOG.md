@@ -2946,3 +2946,17 @@ The Context Summary now describes the tree as of #84 (determination chain incl. 
 A rotating `<G transform>` fed by `useAnimatedProps` is not applied by react-native-svg on every platform. The wedge's polygon points and the leading-edge line end are now computed from the sweep angle inside the worklet (pure arithmetic on one shared value), and the wedge gradient is anchored to the base in user space. Same look, works wherever the other animated props already worked. Re-verified by reading the polygon's `points` across three frames on the web export.
 
 **Files touched:** `components/knock/SearchAnimation.tsx`, `PROMPT_LOG.md`.
+
+### [2026-09-03] #92 — Home tool tiles under the hero, 2×2 in colour, with a Knock Planner tile; the finder renamed "Knock Planner" and made to show its answer in seconds
+
+**Prompts:** "The attached buttons need to be under the quick inspection and new job buttons. Redesign them so they have more color and prominence. Also add a button that directs to where should I knock (but title the button something else …)." / "The where should I knock search isn't working. Also, the name should change so the user understands the feature better and what it does."
+
+**Home.** The Storm Tracer / Estimator / Mileage row moved from below the stats to directly under the two hero CTAs and became a **2×2 grid of saturated gradient tiles** (royal, burnt, emerald, violet — four new `gradients.tile*` tokens built from the brand palette, white icon in a frosted disc, white title, 104pt tall, card shadow). The fourth tile is **Knock Planner — "Storm-hit streets"**. `UtilityCta` and its styles are gone.
+
+**The name.** "Where should I knock?" → **Knock Planner** everywhere (screen title, Home tile, Quick Actions tile, Plan row, Storm Tracer chip). It says what it does: it plans your knocking around the streets storms hit.
+
+**"Isn't working" — what I could find from here, and what changed.** No device log was available, so I fixed every way the screen could read as broken: (1) with no service area and no earlier plan the button was **disabled** with a "pick a base" hint — the screen now resolves the phone's location on first open, so the button is live; (2) a full run could take 40–90 s behind a progress card — the Census geocoder is 2–8 s per call, two calls per area, ten areas, then a Gemini call with a 45 s budget — and a minute of spinner is "not working" to anyone. The finder now **emits the ranked areas the moment they are scored (~3 s after the storm pull)** and the screen shows them immediately with the plan, then fills in roof age, street names and the brief in place as each lands (`onPartial`); only the top 6 areas get a Census round-trip, at 5-wide concurrency with a 7 s cap; the brief has a 20 s budget; after 15 s the animation's caption says "still working — the ranked areas below are ready to use". If it still fails on the device the error card prints the service's reason; the owner can also send Settings → Diagnostics.
+
+**Verified:** typecheck + lint green; the web export was smoke-walked for the tile grid and the title (below). **Not verified:** the finder on the phone — the IEM call cannot be exercised from the headless browser here; the next device run is the test.
+
+**Files touched:** `app/(tabs)/index.tsx`, `theme/tokens.ts`, `app/knock-finder.tsx`, `lib/services/{knockFinder,opportunityBrief,censusHousing}.ts`, `components/sheets/QuickActionsSheet.tsx`, `app/(tabs)/{plan,map}.tsx`, `PROMPT_LOG.md`.

@@ -18,7 +18,9 @@ import { NATIONAL_HOUSING_PRIOR, type HousingProfile } from './knockOpportunitie
 
 const GEOCODER = 'https://geocoding.geo.census.gov/geocoder/geographies/coordinates';
 const ACS = 'https://api.census.gov/data/2023/acs/acs5';
-const REQUEST_TIMEOUT_MS = 10_000;
+// The Census geocoder routinely takes 2–8 s; past 7 s the prior is the
+// honest answer and the finder keeps moving.
+const REQUEST_TIMEOUT_MS = 7_000;
 const SQ_M_PER_SQ_MI = 2_589_988;
 
 export type CensusTract = {

@@ -168,6 +168,11 @@ export const gradients = {
   scrim: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.75)'] as const,
   /** Primary CTA depth — burnt with a shadowed base so it reads as a solid. */
   accent: [brand.burnt, brand.burntDeep] as const,
+  /** Home tool tiles — one saturated family per tool, white type on top. */
+  tileStorm: [brand.royal, brand.royalDeep] as const,
+  tileKnock: [brand.burnt, brand.burntDeep] as const,
+  tileEstimate: ['#1E9E62', '#0F6B43'] as const,
+  tileMileage: ['#6D48D8', '#5230A0'] as const,
 } satisfies Record<string, GradientStops>;
 
 export const radii = {

@@ -1115,8 +1115,8 @@ export default function MapScreen() {
                     <GlassChip
                       active={false}
                       icon="compass-outline"
-                      label="Where to knock?"
-                      accessibilityLabel="Find the best areas to door-knock"
+                      label="Knock Planner"
+                      accessibilityLabel="Knock Planner — find the best storm-hit streets"
                       onPress={() => router.push('/knock-finder')}
                     />
                   </ScrollView>

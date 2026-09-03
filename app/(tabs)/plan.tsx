@@ -455,11 +455,11 @@ export default function PlanScreen() {
           <PressableScale
             style={[styles.actionRow, styles.rowBorder]}
             accessibilityRole="button"
-            accessibilityLabel="Where should I knock? Find the best storm-hit areas and plan the day."
+            accessibilityLabel="Knock Planner. Find the best storm-hit streets and plan the day."
             onPress={() => router.push('/knock-finder')}
           >
             <IconChip name="compass-outline" tone="orange" size="sm" />
-            <Text style={styles.actionText}>Where should I knock?</Text>
+            <Text style={styles.actionText}>Knock Planner</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
           </PressableScale>
           <PressableScale

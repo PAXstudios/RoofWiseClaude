@@ -87,6 +87,13 @@ export async function findKnockOpportunities(args: {
   own?: OwnActivity;
   housingCache?: HousingCache;
   onStep?: (step: FinderStep) => void;
+  /**
+   * Called as soon as the areas are ranked (a few seconds in) and again after
+   * each enrichment lands, with a complete result each time — so the screen
+   * shows the plan while Census, street names and the brief are still on
+   * their way. The final resolved value is the same object shape.
+   */
+  onPartial?: (partial: KnockFinderResult) => void;
   now?: Date;
 }): Promise<FinderOutcome> {
   const now = args.now ?? new Date();
@@ -117,11 +124,33 @@ export async function findKnockOpportunities(args: {
   const cellCount = rankAreas({ base: args.base, now, events, own: args.own, limit: 10_000 }).length;
   if (ranked.length === 0) return { status: 'no_storms', eventCount: events.length };
 
+  const partialOf = (areasNow: ScoredArea[], extra: Partial<KnockFinderResult> = {}): KnockFinderResult => ({
+    generatedAt: now.toISOString(),
+    base: args.base,
+    radiusMiles: SEARCH_RADIUS_MILES,
+    lookbackMonths: LOOKBACK_MONTHS,
+    eventCount: events.length,
+    hailCount,
+    windCount,
+    cellCount,
+    areas: areasNow,
+    plan: planTrip(areasNow, args.base),
+    brief: null,
+    briefStatus: 'rules',
+    housingStatus: 'no_key',
+    notes: ['Still enriching — roof age, street names and the brief are on their way.'],
+    ...extra,
+  });
+  args.onPartial?.(partialOf(ranked.map((a) => ({ ...a, name: a.storm.town }))));
+
   // 3. Housing — cache first; the Census does not change week to week.
   args.onStep?.('housing');
   const housing = new Map<string, HousingProfile>();
   let acsHits = 0;
-  await mapLimit(ranked, 3, async (a) => {
+  // Only the areas a roofer will actually read get a Census round-trip (two
+  // calls each, and the geocoder is slow); the rest keep the prior.
+  const ENRICH = Math.min(ranked.length, 6);
+  await mapLimit(ranked.slice(0, ENRICH), 5, async (a) => {
     const cached = args.housingCache?.get(a.key);
     const profile = cached ?? (await housingProfileForPoint(a.lat, a.lng));
     if (!cached && profile.source === 'acs') args.housingCache?.set(a.key, profile);
@@ -130,15 +159,16 @@ export async function findKnockOpportunities(args: {
   });
   let areas = applyHousing(ranked, housing, now);
   const housingStatus: HousingStatus =
-    acsHits === ranked.length ? 'acs' : acsHits > 0 ? 'partial' : isCensusConfigured ? 'unavailable' : 'no_key';
+    acsHits === ENRICH ? 'acs' : acsHits > 0 ? 'partial' : isCensusConfigured ? 'unavailable' : 'no_key';
   if (housingStatus === 'no_key') notes.push('Roof age and ownership were not available (no Census key) — national averages assumed.');
   if (housingStatus === 'unavailable') notes.push('The Census service did not answer — national housing averages assumed.');
-  if (housingStatus === 'partial') notes.push(`Census housing data covered ${acsHits} of ${ranked.length} areas; the rest use national averages.`);
+  if (housingStatus === 'partial') notes.push(`Census housing data covered ${acsHits} of ${ENRICH} areas; the rest use national averages.`);
+  args.onPartial?.(partialOf(areas.map((a) => ({ ...a, name: a.name ?? a.storm.town })), { housingStatus, notes: [...notes, 'Naming the streets and writing the brief…'] }));
 
   // 4. Names — Google reverse geocode when configured, else the reports' town.
   args.onStep?.('naming');
   if (isGoogleMapsConfigured) {
-    areas = await mapLimit(areas, 3, async (a) => {
+    areas = await mapLimit(areas, 5, async (a) => {
       try {
         const g = await reverseGeocode({ lat: a.lat, lng: a.lng });
         if (!g) return { ...a, name: a.storm.town };
@@ -159,6 +189,8 @@ export async function findKnockOpportunities(args: {
   // 5. Plan.
   const plan = planTrip(areas, args.base);
 
+  args.onPartial?.(partialOf(areas, { plan, housingStatus, notes: [...notes, 'Writing the brief…'] }));
+
   // 6. Brief.
   args.onStep?.('brief');
   let brief: OpportunityBrief | null = null;
@@ -166,7 +198,7 @@ export async function findKnockOpportunities(args: {
   if (!isGeminiConfigured) {
     briefStatus = 'no_key';
   } else {
-    brief = await writeOpportunityBrief({ base: args.base, areas, plan });
+    brief = await writeOpportunityBrief({ base: args.base, areas, plan, timeoutMs: 20_000 });
     briefStatus = brief ? 'ai' : 'unavailable';
   }
 
