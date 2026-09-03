@@ -2976,3 +2976,13 @@ A rotating `<G transform>` fed by `useAnimatedProps` is not applied by react-nat
 **Verified:** 10 store assertions (dedupe-by-key, unread counts, savePlan/setAreaStatus/activeRun/migrate title); typecheck + lint green; headless walk on seeded plans and notifications: Home bell reads "1 unread", the notifications screen lists the plan and analysis rows, tapping the plan row opens `/knock-plan/plan_a` and drops unread to 0, the page shows both areas with status chips, the recently-sold button and Start this day, tapping "Knocked" persists `areaStatus`, and the planner lists Latest + the Aug 20 plan under Past plans with "1 acted on". **Not verified:** a real run end-to-end on the phone (the IEM/Census/Gemini legs cannot be reached from the headless browser here; from Node the same pipeline completes); the local push on a device.
 
 **Files touched:** `lib/services/knockPlanRunner.ts` (new), `lib/stores/{notificationStore}.ts` (new), `lib/stores/knockFinderStore.ts` (rewritten, v2 + migrate), `components/knock/PlanView.tsx` (new), `app/knock-plan/[id].tsx` (new), `app/notifications.tsx` (new), `app/knock-finder.tsx` (rewritten), `app/(tabs)/index.tsx` (bell), `app/_layout.tsx`, `lib/services/{analysisQueue,stormWatch}.ts`, `CLAUDE.md`, `BACKLOG.md`, `PROMPT_LOG.md`.
+
+### [2026-09-03] #94 — Lead → Convert: the wizard hydrates from the lead record itself
+
+**Prompt:** "When converting a lead into a job or inspection, the user should not have to retype all the owner information again it should self compile. See attached." (screenshots: a lead with address and phone; the New Job wizard, Step 1, empty)
+
+**What was found.** The prefill path existed (the lead screen writes `wizardPrefillStore`, the wizard consumes it in a mount effect) and on the web build it fills name, phone, email and address correctly — so the empty wizard on the phone is a mount-timing difference the headless walk cannot reproduce. Rather than guess at it, the dependency on timing is gone: **Convert now pushes `/new-job?leadId=…` and the wizard hydrates synchronously from the lead record in its state initializer** (name, phone, email, address, coordinates, the lead link for the save). The prefill store still serves estimates and plan homes; a lead prefill matching the route param is ignored so a draft the roofer started editing is never replaced. The lead's Zillow record, when it has one, is handed to the property cache so the new job fronts with the house at no lookup cost.
+
+**Verified:** typecheck + lint; headless walk on a fresh export — Lead → Convert lands on `/new-job?leadId=lead1` with all four fields filled. **Not verified:** on the phone (the next launch is the test).
+
+**Files touched:** `app/new-job.tsx`, `app/lead/[id].tsx`, `PROMPT_LOG.md`.

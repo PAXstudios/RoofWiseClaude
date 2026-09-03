@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, {
@@ -309,7 +309,24 @@ export default function NewJobWizard() {
   // links both ends with it.
   const sourceLeadIdRef = useRef<string | undefined>(undefined);
   const [stepIndex, setStepIndex] = useState(0);
-  const [draft, setDraft] = useState<Draft>(EMPTY);
+  // Lead → Convert: the lead's own record is the source of truth for the
+  // customer fields, read synchronously here so nothing depends on effect
+  // timing (the prefill store below still covers estimates and plan homes).
+  const { leadId: leadIdParam } = useLocalSearchParams<{ leadId?: string }>();
+  const sourceLead = useLeadStore((s) => (leadIdParam ? s.leads.find((l) => l.id === leadIdParam) : undefined));
+  const [draft, setDraft] = useState<Draft>(() => {
+    if (!sourceLead) return EMPTY;
+    sourceLeadIdRef.current = sourceLead.id;
+    return {
+      ...EMPTY,
+      customerName: sourceLead.customerName,
+      customerPhone: sourceLead.customerPhone ?? '',
+      customerEmail: sourceLead.customerEmail ?? '',
+      address: sourceLead.address,
+      addressLat: sourceLead.lat,
+      addressLng: sourceLead.lng,
+    };
+  });
 
   useEffect(() => {
     if (draft.addressLat == null || draft.addressLng == null || draft.address.trim().length < 8) {
@@ -352,6 +369,9 @@ export default function NewJobWizard() {
     const prefill = consumePrefill();
     if (!prefill) return;
     if (prefill.source === 'lead' && prefill.sourceId) sourceLeadIdRef.current = prefill.sourceId;
+    // Already hydrated from the lead record via the route param — do not
+    // replace a draft the roofer may have started editing.
+    if (prefill.source === 'lead' && leadIdParam && prefill.sourceId === leadIdParam) return;
     setDraft({
       ...EMPTY,
       pitchDegrees: prefill.pitchDegrees,
@@ -377,7 +397,15 @@ export default function NewJobWizard() {
         body: prefill.customerName ?? prefill.address,
       });
     }
-  }, [consumePrefill, toast]);
+  }, [consumePrefill, toast, leadIdParam]);
+
+  useEffect(() => {
+    if (sourceLead?.propertyRecord && sourceLead.address.trim().length >= 8) {
+      usePropertyRecordStore.getState().remember(sourceLead.address, sourceLead.propertyRecord);
+    }
+    // Once per converted lead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceLead?.id]);
 
   // The Pitch Gauge (`/pitch-gauge?target=wizard`) hands its reading back
   // through the same store while this wizard is still mounted — the

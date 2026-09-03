@@ -166,8 +166,10 @@ export default function LeadDetail() {
       addressLng: lead.lng,
     });
     // The stage moves when the wizard SAVES (new-job.tsx), not here — a
-    // cancelled wizard must leave the lead exactly as it was.
-    router.push('/new-job');
+    // cancelled wizard must leave the lead exactly as it was. The id rides
+    // the route as well as the prefill store, so the wizard can hydrate
+    // synchronously from the lead record whatever the mount timing.
+    router.push({ pathname: '/new-job', params: { leadId: lead.id } } as any);
   };
 
   const onDelete = () => {
