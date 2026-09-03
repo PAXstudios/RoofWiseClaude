@@ -521,16 +521,21 @@ FINDINGS (the 13-row summary table)
 Include all 13 damage categories in "findings". "detected": true when that category is genuinely present. "count" is the number of distinct instances visible (should roughly match the number of boxes you output for that category).
 
 HAAG FUNCTIONAL TEST — "evidence" on every hail_hits / bruising detection (this decides the claim)
-HAAG defines functional hail damage on asphalt as a puncture, tear, or FRACTURE OF THE SHINGLE MAT (a bruise: an indentation with a fracture in the mat that feels soft). Granule loss that does not expose the mat is NOT functional damage by itself. For every hail_hits or bruising box, set "evidence":
-- "mat_fracture": you can see the fiberglass/organic mat fractured or crushed inside the mark.
-- "exposed_substrate": the dark asphalt/mat is visibly exposed through the granules at the impact centre.
-- "granule_loss_only": granules displaced, but the mat below looks intact.
-- "cosmetic": a mark with no loss of granules or mat integrity (spatter, algae shadow).
-- "unclear": cannot tell at this resolution or angle.
-Be strict. An inspector's per-slope functional determination is derived from mat_fracture / exposed_substrate evidence on test-square photos; claiming a mat fracture that is not visible is the most expensive mistake this tool can make, and missing one that is visible is the second.
+HAAG defines functional hail damage on asphalt as a puncture, tear, or fracture of the shingle mat. A BRUISE is "an indentation with a fracture in the mat that feels soft" — the fracture is confirmed by FINGER PRESSURE, which a photograph cannot do. What a photograph CAN show is what HAAG says accompanies a bruise: granules displaced from the impact area "sufficient to expose the underlying bitumen". Exposed asphalt reduces service life and is functional damage in its own right. So, for every hail_hits or bruising box, set "evidence" to what is VISIBLE:
+- "exposed_substrate": the black bituminous (asphalt) layer is visible where granules are gone at the impact centre. This is the photographable functional sign — call it only when you can see the dark asphalt, not a shadow.
+- "mat_fracture": an OPEN, visible fracture, tear, or puncture through the shingle. Never infer this from a dent or a soft-looking spot — softness cannot be seen.
+- "granule_loss_only": granules displaced or thinned, but the layer beneath still looks granular/grey, not black asphalt.
+- "cosmetic": a mark with no loss of granules or integrity (spatter stain, algae shadow, dirt).
+- "unclear": cannot tell at this resolution, angle, or light.
+Be strict. The inspector's per-slope functional determination is derived from exposed_substrate / mat_fracture evidence on test-square photos, and the inspector confirms bruises by touch on the roof. Claiming exposed asphalt that is not visible is the most expensive mistake this tool can make; missing one that is visible is the second.
+
+HAIL VISUAL SIGNATURES (what a real strike looks like)
+- A hail strike is a SHALLOW indentation with gently sloped sides — the print of a sphere. Granules are often still present inside it, pressed down into the asphalt (warm-shingle strikes), with granules dislodged around the rim.
+- Strikes on one slope are RANDOMLY distributed, roughly consistent in size with each other, and more frequent on the slope facing the storm. A regular pattern is the shingle, not the hail.
+- Corroboration lives on soft metals: spatter marks on oxidised vents, dents in gutters and flashing, splatter on AC fins — report those as collateral on non-roof frames.
 
 HAAG LOOK-ALIKES (do not report these as hail)
-- Blisters: raised bubbles, often with a popped crater and granules still around the rim; a rough, irregular floor, not a fractured mat. Report as blistering, never hail_hits.
+- Blisters: small (usually a quarter inch or less), STEEP-SIDED pits with a FLAT floor, NO granules inside the crater, and often the mat visible at the bottom — the opposite of a hail strike's gently sloped, granule-bearing print. Report as blistering, never hail_hits.
 - Mechanical / foot-traffic scuffs: linear or smeared granule loss, often in a walking path, with no circular impact geometry.
 - Manufacturing defects and rasp marks: uniform or repeating patterns from the factory.
 - Thermal cracking / craze: fine linear cracks with age, no impact centre.
@@ -575,6 +580,8 @@ export type AnalyzeOptions = {
    * not generated for a frame nobody stores. Never set for a saved photo.
    */
   live?: boolean;
+  /** One tile of a tiled test-square pass (see analyzePhotoTiled). */
+  tile?: { index: number; total: number };
 };
 
 /** Extra user-turn text for a live frame. Same schema, less output. */
@@ -606,7 +613,11 @@ export function buildAnalyzeRequest(opts: AnalyzeOptions): unknown {
   if (opts.material) context.push(`declared roof material ${ROOF_MATERIAL_LABELS[opts.material]}`);
   const slopeHint = context.length > 0 ? `\n\nCAPTURE CONTEXT: ${context.join('; ')}.` : '';
   const prefix = opts.userStylePrefix ? `${opts.userStylePrefix}\n\n` : '';
-  const liveAddendum = opts.live ? LIVE_FRAME_ADDENDUM : '';
+  const liveAddendum = opts.live
+    ? LIVE_FRAME_ADDENDUM
+    : opts.tile
+      ? TILE_ADDENDUM(opts.tile.index, opts.tile.total)
+      : '';
 
   return {
     systemInstruction: {
@@ -638,6 +649,14 @@ export function buildAnalyzeRequest(opts: AnalyzeOptions): unknown {
     },
   };
 }
+
+/**
+ * Extra user-turn text for one tile of a test-square photo: detections only,
+ * at the tile's full resolution. Scale/coverage/subject come from the
+ * full-frame pass, not the tile.
+ */
+const TILE_ADDENDUM = (index: number, total: number) =>
+  `\n\nTILE ${index + 1} OF ${total}: this is one quadrant of a 10x10 ft test-square photo, cropped at full resolution so small strikes are legible. Apply STEP 0 and the HAAG FUNCTIONAL TEST exactly as above. Return the same JSON schema with "detections" for every distinct damage instance visible in THIS tile (box_2d relative to this tile's own edges), "findings" as an empty array, and "test_square_coverage" as null. A strike cut by the tile's edge should still be boxed if its centre is inside the tile.`;
 
 export async function analyzePhoto(opts: AnalyzeOptions): Promise<AnalysisResult> {
   if (!isGeminiConfigured) throw new GeminiNotConfiguredError();
@@ -1016,4 +1035,82 @@ function dedupNearbyMarkers(markers: DamageMarker[]): DamageMarker[] {
     if (!tooClose) kept.push(m);
   }
   return kept;
+}
+
+
+// -----------------------------------------------------------------------------
+// Tiled analysis — the accuracy lever for test squares.
+//
+// The model normalises an image into ~768 px tiles before it looks, so a 1 in
+// strike in a 2560 px test-square photo is ~6 px to the model. One full-frame
+// pass still runs (scale, coverage, shingle count, subject, shingle type —
+// all need the whole square), then the frame is cut into a 2x2 grid of
+// overlapping tiles and each is analysed for DETECTIONS at full resolution.
+// Markers are remapped into the photo frame and de-duplicated across the
+// overlap; the findings table is rebuilt from the survivors so counts and
+// boxes agree. Five model calls per test-square photo instead of one — spent
+// on the photos the per-square threshold is decided on, nowhere else.
+// -----------------------------------------------------------------------------
+
+import { cropTile, photoSize, tileGrid } from './imagePipeline';
+import { findingsFromMarkers, mergeTileMarkers } from './tileMerge';
+
+export type TiledAnalyzeOptions = Omit<AnalyzeOptions, 'imageBase64' | 'tile' | 'live'> & {
+  /** Local URI of the stored photo (tiles are cut from it). */
+  uri: string;
+  /** Base64 of the full frame, already prepared, for the full-frame pass. */
+  imageBase64: string;
+  /** 2 → 2x2 tiles (default). */
+  grid?: number;
+};
+
+export type TiledAnalysisResult = AnalysisResult & {
+  /** How many tile passes ran (0 when the photo could not be cut). */
+  tilesAnalyzed: number;
+  /** Detections the full-frame pass found before tiling, for comparison. */
+  fullFrameMarkerCount: number;
+};
+
+export async function analyzePhotoTiled(opts: TiledAnalyzeOptions): Promise<TiledAnalysisResult> {
+  const { uri, grid = 2, ...rest } = opts;
+  const full = await analyzePhoto({ ...rest, imageBase64: opts.imageBase64 });
+  // A non-roof frame has no roof detections to sharpen; keep the single pass.
+  if (full.noRoofDetected) return { ...full, tilesAnalyzed: 0, fullFrameMarkerCount: full.markers.length };
+
+  const size = await photoSize(uri);
+  if (!size) return { ...full, tilesAnalyzed: 0, fullFrameMarkerCount: full.markers.length };
+
+  const tiles = tileGrid(size.width, size.height, grid);
+  const perTile: { tile: (typeof tiles)[number]; markers: DamageMarker[] }[] = [];
+  for (const tile of tiles) {
+    if (rest.signal?.aborted) break;
+    try {
+      const cut = await cropTile(uri, tile);
+      const r = await analyzePhoto({
+        ...rest,
+        imageBase64: cut.base64,
+        tile: { index: tile.index, total: tiles.length },
+      });
+      if (!r.noRoofDetected) perTile.push({ tile, markers: r.markers });
+    } catch {
+      // A failed tile costs its quadrant's extra resolution, not the photo:
+      // the full-frame markers below still cover it.
+    }
+  }
+  if (perTile.length === 0) return { ...full, tilesAnalyzed: 0, fullFrameMarkerCount: full.markers.length };
+
+  // Tiles see more than the full frame; the union, de-duplicated, is the read.
+  const merged = mergeTileMarkers([
+    ...perTile,
+    { tile: { index: -1, originX: 0, originY: 0, width: size.width, height: size.height, sourceW: size.width, sourceH: size.height }, markers: full.markers },
+  ]);
+  const { markers, gridRejected } = sanitizeMarkers(merged);
+  return {
+    ...full,
+    markers,
+    findings: findingsFromMarkers(markers, full.findings, DAMAGE_CATEGORIES),
+    detectionAudit: { rawCount: merged.length, keptCount: markers.length, gridRejected },
+    tilesAnalyzed: perTile.length,
+    fullFrameMarkerCount: full.markers.length,
+  };
 }

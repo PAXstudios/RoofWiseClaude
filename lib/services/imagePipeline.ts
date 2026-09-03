@@ -76,3 +76,33 @@ export async function prepareCapturedPhoto(uri: string): Promise<string> {
   // Never silently drop a photo.
   return uri;
 }
+
+// -----------------------------------------------------------------------------
+// Tiles — because the model does not see 2560 px.
+//
+// Gemini normalises an image into ~768 px tiles before it looks. A 10x10 ft
+// test square framed edge to edge at 2560 px puts a 1 in hail strike at ~21 px
+// in the file and ~6 px in what the model actually inspects — below the size
+// at which exposed asphalt can be told from a shadow. Cropping the square
+// into a 2x2 grid of overlapping tiles and analysing each at full resolution
+// gives the model ~4x the pixels per strike. Detections are remapped into
+// full-frame coordinates and de-duplicated across the overlap band.
+// -----------------------------------------------------------------------------
+
+export { tileGrid, TILE_OVERLAP, type TileSpec } from './tileMerge';
+
+/** Cut one tile out of a photo as a base64 JPEG (no data-URI prefix). */
+export async function cropTile(uri: string, tile: import('./tileMerge').TileSpec): Promise<{ base64: string; width: number; height: number }> {
+  const out = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ crop: { originX: tile.originX, originY: tile.originY, width: tile.width, height: tile.height } }],
+    { compress: ANALYZE_PROFILE.compress, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+  );
+  if (!out.base64) throw new Error('Could not read the tile.');
+  return { base64: out.base64, width: out.width, height: out.height };
+}
+
+/** Source pixel size of a stored photo, or null when unreadable. */
+export function photoSize(uri: string): Promise<{ width: number; height: number } | null> {
+  return getSize(uri);
+}

@@ -5,12 +5,21 @@
 // (§1) and never re-derives it from counts. But nothing ever SET it: every
 // slope was created `functional: false` and no analysis path wrote it, so the
 // §4 branches that key on functional damage were dead for every AI-analyzed
-// job. The honest rule is HAAG's own: functional hail damage on asphalt is a
-// puncture, tear, or fracture of the shingle mat. So a slope is functional
-// when a hail/bruise detection on a TEST-SQUARE roof photo carries mat_fracture
-// or exposed_substrate evidence at a confidence an inspector would sign.
-// Granule loss alone never qualifies; a single-shingle close-up documents one
-// shingle and does not, by itself, make the slope functional.
+// job.
+//
+// WHAT A PHOTO CAN PROVE (owner's challenge, 2026-09-03, researched): HAAG's
+// bruise is "an indentation with a fracture in the mat that FEELS SOFT" —
+// confirmed by finger pressure, which no photograph can do. What HAAG says
+// accompanies a bruise, and what a photo CAN show, is granule loss "sufficient
+// to expose the underlying bitumen"; exposed asphalt shortens service life and
+// is functional damage in its own right. So the photographable functional
+// signs are `exposed_substrate` (black asphalt visible at the impact) and
+// `mat_fracture` (an OPEN, visible tear or puncture) — never a softness the
+// model cannot feel. The inspector's soft-spot test on the roof is the
+// confirmation, and the report says so. A slope is functional when a
+// hail/bruise detection on a TEST-SQUARE roof photo carries one of those two
+// at a confidence an inspector would sign. Granule loss alone never qualifies;
+// a single-shingle close-up documents one shingle, not the slope.
 
 import { FUNCTIONAL_EVIDENCE, type Slope } from '../models/types';
 
@@ -51,14 +60,14 @@ export function deriveFunctional(
     return {
       functional: true,
       qualifyingHits: qualifying,
-      reason: `${qualifying} hail hit${qualifying === 1 ? '' : 's'} on test-square photos show mat fracture or exposed substrate at ≥${FUNCTIONAL_MIN_CONFIDENCE}% confidence (HAAG §1).`,
+      reason: `${qualifying} hail hit${qualifying === 1 ? '' : 's'} on test-square photos show exposed asphalt or an open fracture at ≥${FUNCTIONAL_MIN_CONFIDENCE}% confidence (HAAG §1). Confirm bruises by finger pressure on the roof.`,
     };
   }
   return {
     functional: false,
     qualifyingHits: 0,
     reason: sawEvidenceField
-      ? 'No hail hit on a test-square photo shows mat fracture or exposed substrate — granule loss alone is not functional damage (HAAG §1).'
+      ? 'No hail hit on a test-square photo shows exposed asphalt or an open fracture — granule loss alone is not functional damage (HAAG §1). A soft spot under finger pressure would be; photos cannot feel it.'
       : 'Hits were analyzed before evidence classification existed — re-analyze to derive functional damage.',
   };
 }
