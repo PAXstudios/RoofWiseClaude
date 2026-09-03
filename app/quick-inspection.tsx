@@ -66,6 +66,7 @@ import {
 } from '@/lib/services/captureSession';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { CaptureCoach } from '@/components/capture/CaptureCoach';
+import { AddPhotosToSheet, type AddPhotosChoice } from '@/components/sheets/AddPhotosToSheet';
 import { coachProgress, coachSteps, nextIncompleteStep, zoneForAreaTag } from '@/lib/services/captureCoach';
 import {
   COMPASS_USABLE_ACCURACY,
@@ -276,6 +277,25 @@ function QuickInspectionNative() {
   const targetIdRef = useRef<string | null>(jobId ?? null);
   const createdHereRef = useRef(false);
   const [targetId, setTargetId] = useState<string | null>(jobId ?? null);
+  // A photo has to belong to somebody. Opened without a job, the camera used
+  // to create "Quick inspection / Address pending" on the first shutter and
+  // the roofer found a nameless job later. Now it ASKS first — new customer,
+  // one in the pipeline, or capture now and attach later — an explicit
+  // choice over the live viewfinder, never a silent placeholder.
+  const [addToOpen, setAddToOpen] = useState<boolean>(() => !jobId);
+  const onAddToChoice = (choice: AddPhotosChoice) => {
+    setAddToOpen(false);
+    if (choice.kind === 'existing') {
+      targetIdRef.current = choice.inspectionId;
+      setTargetId(choice.inspectionId);
+      return;
+    }
+    if (choice.kind === 'new_customer') {
+      // The wizard lands on the job when saved; the job has "Take photos".
+      router.replace('/new-job');
+    }
+    // 'later': today's standalone path — the first shutter creates the job.
+  };
   const inspection = useInspectionStore((s) =>
     targetId ? s.inspections.find((i) => i.id === targetId) : undefined,
   );
@@ -1244,6 +1264,16 @@ function QuickInspectionNative() {
           </Text>
         </View>
       </SafeAreaView>
+
+      <AddPhotosToSheet
+
+        visible={addToOpen}
+
+        onChoose={onAddToChoice}
+
+        onCancel={() => setAddToOpen(false)}
+
+      />
 
       <SlopePickerSheet
 

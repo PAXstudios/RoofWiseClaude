@@ -2743,3 +2743,20 @@ The screenshot was the OLD bundle ("Map" title, 1–4 yr chips) — #71 has not 
 **Verified:** typecheck, lint, web export green; 7 where/bearing assertions; the both-bars sentence across 6.9 / 8 / 9 / 10 / 12; headless: the alert screen renders Where it hit, Start knock route creates a session aimed at the core (`routeTarget` persisted, 3-mi radius), door-knocking opens framed on it, zero page errors. The live guide renders only on the native camera. **Still not on the phone** — no EAS login in this container.
 
 **Files touched:** `lib/services/{stormWatch,stormWhere,haagThresholds,gemini,haagPdf}.ts`, `lib/stores/{stormAlertStore,knockSessionStore}.ts`, `lib/models/types.ts`, `app/storm-alert/[id].tsx`, `app/door-knocking.tsx`, `app/(tabs)/map.tsx`, `app/quick-inspection.tsx`, `app/photo-report.tsx`, `app/job/[id].tsx`, `components/capture/LiveOverlay.tsx`.
+
+---
+
+### [2026-09-03] #78 — Pop-ups and motion: the sheet primitive, Quick Actions "+", "Add Photos To…" before capture, photo actions on long-press
+
+**Prompt (two screenshots of a reference app):**
+> "The app needs lots of animations and pop ups where applicable. It's too static. See attached example of a pop. Quick action (when you press the + button on the home screen) and add photos are pop ups on another app I'm using as an example."
+
+**Built (in the main thread, while four agents build Waves A/B/C and the audit in parallel):**
+- `components/ui/BottomSheet.tsx` — the app's one sheet: springs up on `motion.snappy`, the screen dims, grabber, top-left Cancel, drag-down / flick to dismiss (gesture-handler), reduced-motion collapses to a cut. Worklet-safe: the animated styles read only numeric shared values; dismissal crosses to JS with `runOnJS`.
+- `components/sheets/QuickActionsSheet.tsx` — the "+" grid: New Lead, Start Inspection, Capture Damage Photo, Track Mileage, File Storm Claim, New Job, Cost Estimate, Storm Tracer, Knock Route, Schedule — two per row, 128pt tiles, every one opens a real screen. **Not yet mounted on Home:** the Wave B agent owns `app/(tabs)/index.tsx` right now; the "+" lands the moment it reports.
+- `components/sheets/AddPhotosToSheet.tsx` — asked over the live viewfinder when the camera opens without a job: New Customer (→ wizard), Existing Customer (searchable pipeline picker, open-job count badge), Save Without Customer (LATER). Closes a real hole: a standalone capture used to create "Quick inspection / Address pending" silently on the first shutter.
+- `components/sheets/PhotoActionsSheet.tsx` — long-press on a photo in Analyze shows the photo with Open damage report / Rotate 90° / Re-analyze this photo / Delete (confirmed inside the sheet), replacing the system Alert.
+
+**Verified:** typecheck + lint green on the whole tree at commit time. The sheets render only on the native camera / long-press paths, so they were not booted headless; the primitive's motion is judged on device. This commit stages ONLY these files — the parallel agents' in-flight work (`components/pipeline/` etc.) is deliberately left out until it reports.
+
+**Files touched:** `components/ui/BottomSheet.tsx`, `components/sheets/{QuickActionsSheet,AddPhotosToSheet,PhotoActionsSheet}.tsx`, `app/quick-inspection.tsx`, `app/analyze.tsx`, `PROMPT_LOG.md`.

@@ -27,6 +27,7 @@ import {
   getPhotoAnalysisState,
   isSlopeAnalysisRunning,
 } from '@/lib/services/analyzeSlope';
+import { PhotoActionsSheet } from '@/components/sheets/PhotoActionsSheet';
 import { describeAnalysisError } from '@/lib/services/gemini';
 import { scorePhotos } from '@/lib/services/photoQuality';
 import { isGeminiConfigured } from '@/lib/env';
@@ -57,38 +58,32 @@ export default function AnalyzeView() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Long-press → the photo actions SHEET (with the photo in it), not a
+  // system Alert. Delete confirms inside the sheet.
+  const [actionIndex, setActionIndex] = useState<number | null>(null);
   const onPhotoLongPress = (photoIndex: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert('Edit photo', undefined, [
-      {
-        text: 'Rotate 90°',
-        onPress: async () => {
-          if (!inspection || !slope) return;
-          try {
-            const uri = slope.photoPaths[photoIndex];
-            const out = await ImageManipulator.manipulateAsync(
-              uri,
-              [{ rotate: 90 }],
-              { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
-            );
-            replacePhoto(inspection.id, slope.id, photoIndex, out.uri);
-            toast({ tone: 'success', title: 'Rotated' });
-          } catch {
-            toast({ tone: 'danger', title: 'Rotate failed' });
-          }
-        },
-      },
-      {
-        text: 'Delete photo',
-        style: 'destructive',
-        onPress: () => {
-          if (!inspection || !slope) return;
-          removePhoto(inspection.id, slope.id, photoIndex);
-          toast({ tone: 'warn', title: 'Photo deleted' });
-        },
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    setActionIndex(photoIndex);
+  };
+  const rotatePhoto = async (photoIndex: number) => {
+    if (!inspection || !slope) return;
+    try {
+      const uri = slope.photoPaths[photoIndex];
+      const out = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ rotate: 90 }],
+        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
+      );
+      replacePhoto(inspection.id, slope.id, photoIndex, out.uri);
+      toast({ tone: 'success', title: 'Rotated' });
+    } catch {
+      toast({ tone: 'danger', title: 'Rotate failed' });
+    }
+  };
+  const deletePhoto = (photoIndex: number) => {
+    if (!inspection || !slope) return;
+    removePhoto(inspection.id, slope.id, photoIndex);
+    toast({ tone: 'warn', title: 'Photo deleted' });
   };
 
   const slope = inspection?.slopes.find((sl) => sl.id === slopeId);
@@ -342,6 +337,39 @@ export default function AnalyzeView() {
           </Text>
         </Pressable>
       </View>
+
+      <PhotoActionsSheet
+        visible={actionIndex !== null}
+        uri={actionIndex !== null ? slope.photoPaths[actionIndex] : undefined}
+        caption={
+          actionIndex !== null
+            ? `Photo ${actionIndex + 1} of ${slope.photoPaths.length} · ${slope.orientation} slope`
+            : undefined
+        }
+        onClose={() => setActionIndex(null)}
+        onOpenReport={() => {
+          if (actionIndex === null) return;
+          router.push({
+            pathname: '/photo-report',
+            params: { inspectionId: inspection.id, slopeId: slope.id, photoIndex: String(actionIndex) },
+          });
+        }}
+        onRotate={() => {
+          if (actionIndex !== null) rotatePhoto(actionIndex).catch(() => {});
+        }}
+        onReanalyze={
+          isGeminiConfigured
+            ? () => {
+                if (actionIndex === null) return;
+                analyzeSlope(inspection.id, slope.id, { photoIndexes: [actionIndex] }).catch(() => {});
+                toast({ tone: 'info', title: 'Re-analyzing photo' });
+              }
+            : undefined
+        }
+        onDelete={() => {
+          if (actionIndex !== null) deletePhoto(actionIndex);
+        }}
+      />
     </SafeAreaView>
   );
 }
