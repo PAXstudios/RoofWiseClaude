@@ -11,6 +11,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
+import { useDoNotKnockStore } from '@/lib/stores/doNotKnockStore';
+import { DAMAGING_HAIL_INCHES, DAMAGING_WIND_MPH } from '@/lib/services/stormWatch';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { hasCompanyBranding, useInspectorProfileStore } from '@/lib/stores/inspectorProfileStore';
@@ -87,6 +89,9 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const signOut = useAuthStore((s) => s.signOut);
   const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
+  const autoPlanStorms = useServiceAreaStore((s) => s.autoPlanDamagingStorms);
+  const setAutoPlanStorms = useServiceAreaStore((s) => s.setAutoPlanDamagingStorms);
+  const doNotKnockCount = useDoNotKnockStore((s) => s.entries.length);
   const correctionsCount = useCorrectionsStore((s) => s.corrections.length);
   const inspectorProfile = useInspectorProfileStore((s) => s.profile);
   const companyBranded = hasCompanyBranding(inspectorProfile.company);
@@ -214,6 +219,32 @@ export default function SettingsScreen() {
           }
           chevron
           onPress={() => router.push('/settings/service-area')}
+        />
+        <Sep />
+        <Row
+          icon={autoPlanStorms ? 'compass' : 'compass-outline'}
+          tone={autoPlanStorms ? 'green' : 'quiet'}
+          title="Auto-plan damaging storms"
+          sub={
+            autoPlanStorms
+              ? `On — a knock plan is queued when hail ≥ ${DAMAGING_HAIL_INCHES} in or wind ≥ ${DAMAGING_WIND_MPH} mph hits your area`
+              : 'Off — alerts only; make plans by hand'
+          }
+          trailing={<MiniSwitch on={autoPlanStorms} />}
+          onPress={() => setAutoPlanStorms(!autoPlanStorms)}
+        />
+        <Sep />
+        <Row
+          icon="ban-outline"
+          tone="orange"
+          title="Do not knock"
+          sub={
+            doNotKnockCount === 0
+              ? 'Homes and zones you never canvass'
+              : `${doNotKnockCount} on your list — kept off every route and plan`
+          }
+          chevron
+          onPress={() => router.push('/do-not-knock' as any)}
         />
       </Group>
 

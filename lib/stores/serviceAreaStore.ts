@@ -11,17 +11,26 @@ function newId(): string {
 
 type ServiceAreaState = {
   areas: ServiceArea[];
+  /**
+   * Storm Watch setting: when a DAMAGING alert fires (hail ≥ 1 in / wind ≥ 70
+   * mph), queue a Knock Planner run on the storm core and ring the bell when
+   * the plan is ready. Default on — the whole point of an alert is the plan.
+   */
+  autoPlanDamagingStorms: boolean;
 
   add: (input: { label: string; kind: 'zip' | 'city'; centroidLat?: number; centroidLng?: number }) => ServiceArea;
   setCentroid: (id: string, lat: number, lng: number) => void;
   remove: (id: string) => void;
   clear: () => void;
+  setAutoPlanDamagingStorms: (on: boolean) => void;
 };
 
 export const useServiceAreaStore = create<ServiceAreaState>()(
   persist(
     (set) => ({
       areas: [],
+      autoPlanDamagingStorms: true,
+      setAutoPlanDamagingStorms: (on) => set({ autoPlanDamagingStorms: on }),
 
       add: (input) => {
         const area: ServiceArea = {
@@ -48,7 +57,7 @@ export const useServiceAreaStore = create<ServiceAreaState>()(
     {
       name: 'roofwise.serviceAreas.v1',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ areas: s.areas }),
+      partialize: (s) => ({ areas: s.areas, autoPlanDamagingStorms: s.autoPlanDamagingStorms }),
     },
   ),
 );

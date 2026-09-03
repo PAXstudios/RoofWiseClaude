@@ -1,3 +1,20 @@
+// Storm Tracer — the Map tab. One map, four layers (Leads / Jobs / Storms /
+// Knocks), and the shared map control system (components/map/controls):
+//
+//   top-left   SummaryChip — "Storms · 36 months · Hail + wind · All days";
+//              tap → the Layers & filters sheet. Search expands here.
+//   top-right  ControlRail — search, my location (hold: follow), layers
+//              (badge = active filters), legend, satellite; chevron tucks
+//              the stack. Tucks itself on a hand pan; remembered per screen.
+//   bottom     MapDrawer — peek: the stat line + Knock Planner + the one
+//              primary CTA (Knock mode, 88pt); half/full: the selected
+//              storm's report, the storm-matched lead cluster, the storm-day
+//              list. The crash-recovery row and errors sit in its header so
+//              they are visible at every detent.
+//
+// Everything that used to be a chip row over the imagery lives in the sheet;
+// nothing was removed, and every control is within two taps of the map.
+
 import {
   useCallback,
   useEffect,
@@ -9,15 +26,16 @@ import {
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   ActivityIndicator,
   AppState,
   Keyboard,
+  Pressable,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -34,15 +52,30 @@ import {
   useStormOverlaySelection,
   useStormSwaths,
 } from '@/components/map/StormOverlay';
+import {
+  ControlRail,
+  LayersSheet,
+  LegendStrip,
+  MapDrawer,
+  SummaryChip,
+  useMapPanTuck,
+  type LayersRow,
+  type LayersSection,
+  type LegendItem,
+  type RailItem,
+} from '@/components/map/controls';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
 import { PressableScale } from '@/components/PressableScale';
-import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { IconChip } from '@/components/ui/IconChip';
+import { SectionHeader } from '@/components/ui/SectionHeader';
 import { magnitudeLabel, type StormEvent } from '@/lib/noaa';
 import { LocationField, type ResolvedLocation } from '@/components/LocationField';
+import { KnockPinMarker } from '@/components/knock/KnockPinMarker';
+import { outcomeColor, outcomeIcon } from '@/components/knock/outcomeStyle';
 import { list as listDiagnostics } from '@/lib/services/diagnostics';
+import { KNOCK_OUTCOMES } from '@/lib/services/knockOutcomes';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
 import {
   browsedEvents,
@@ -61,7 +94,7 @@ import {
   type Peril,
   type Range,
 } from '@/lib/services/stormRange';
-import { eventsOnDay, stormDayLabel, stormDays } from '@/lib/services/stormDays';
+import { eventsOnDay, stormDayLabel, stormDays, type StormDay } from '@/lib/services/stormDays';
 import {
   isValidLatLon,
   isValidRegion,
@@ -74,7 +107,7 @@ import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
-import { KnockPinMarker } from '@/components/knock/KnockPinMarker';
+import { useMapChrome } from '@/lib/stores/mapChromeStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import {
@@ -82,7 +115,6 @@ import {
   fontSize,
   fontWeight,
   glass,
-  gradients,
   motion,
   radii,
   shadows,
@@ -99,6 +131,15 @@ const FILTERS: { id: Filter; label: string; icon: keyof typeof Ionicons.glyphMap
   { id: 'knocks', label: 'Knocks', icon: 'walk-outline' },
 ];
 
+const PERILS: { id: Peril; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { id: 'hail', label: 'Hail', icon: 'snow-outline' },
+  { id: 'wind', label: 'Wind', icon: 'flag-outline' },
+  { id: 'both', label: 'Both', icon: 'thunderstorm-outline' },
+];
+
+/** Sentinel id for "every storm day" in the sheet's day list. */
+const ALL_DAYS = '__all__';
+
 /** Viewport changes settle this long before the overlay re-selects. */
 const REGION_DEBOUNCE_MS = 250;
 
@@ -112,7 +153,7 @@ const BROWSE_SETTLE_MS = 700;
 
 /** How far a search / my-location jump zooms in: a neighbourhood. */
 const JUMP_REGION_DELTA = 0.08;
-/** Storm-day chips shown on the scrubber strip (newest first). */
+/** Storm-day rows shown in the drawer and the sheet (newest first). */
 const STORM_DAY_CHIPS = 12;
 
 /** Statewide-ish first view: the 50-mi browse ring fits on screen. */
@@ -141,7 +182,9 @@ export const FOCUS_STORM_LEADS = 'storm-leads';
 //      previous session (between the current boot marker and the one before
 //      it), or on the Map route within 5 s of that previous boot.
 //
-// Either ⇒ the Map tab opens with overlays OFF and says so in one line.
+// Either ⇒ the Map tab opens with overlays OFF and says so in one line. In
+// safety mode this screen's own chrome runs NO worklets: the entrance is
+// static, the rail cuts instead of fading, the drawer has no gesture.
 
 const OVERLAYS_ARMED_KEY = 'roofwise.map.stormOverlaysArmed.v1';
 const MAP_ROUTE_RE = /\/map$/;
@@ -208,8 +251,14 @@ function Rise({
   index = 0,
   style,
   static: isStatic = false,
+  pointerEvents,
   children,
-}: PropsWithChildren<{ index?: number; style?: StyleProp<ViewStyle>; static?: boolean }>) {
+}: PropsWithChildren<{
+  index?: number;
+  style?: StyleProp<ViewStyle>;
+  static?: boolean;
+  pointerEvents?: 'box-none' | 'none' | 'auto';
+}>) {
   const progress = useSharedValue(mapEntrancePlayed ? 1 : 0);
 
   useEffect(() => {
@@ -233,136 +282,61 @@ function Rise({
     }
   });
 
-  if (isStatic) return <View style={style}>{children}</View>;
-  return <Animated.View style={[style, anim]}>{children}</Animated.View>;
-}
-
-/**
- * A floating control over the map imagery — real frosted glass (BlurView on
- * iOS, a tinted-fill fallback elsewhere) so it stays legible in sun no matter
- * what's under it, per Drift #1. Selected state breaks from glass into a
- * solid royal fill — glass reads as "available", solid reads as "chosen".
- */
-function GlassChip({
-  active,
-  icon,
-  label,
-  onPress,
-  accessibilityLabel,
-}: {
-  active: boolean;
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-  accessibilityLabel: string;
-}) {
+  if (isStatic) {
+    return (
+      <View style={style} pointerEvents={pointerEvents}>
+        {children}
+      </View>
+    );
+  }
   return (
-    <PressableScale
-      style={active ? styles.chipShadow : undefined}
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={accessibilityLabel}
-      onPress={onPress}
-    >
-      {active ? (
-        // Selection is the royal RAMP with the brand-tinted lift, not a flat
-        // fully-saturated rectangle — that was the one generic-blue moment
-        // left in the app.
-        <View style={[styles.chip, styles.chipActive]}>
-          <LinearGradient
-            colors={gradients.clearDay}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          />
-          <Ionicons name={icon} size={16} color={colors.textInverse} />
-          <Text style={[styles.chipText, styles.chipTextActive]}>{label}</Text>
-        </View>
-      ) : (
-        // Idle chips live INSIDE the glass control bar now, so they carry a
-        // quiet fill rather than each being its own floating glass panel.
-        <View style={[styles.chip, styles.chipIdle]}>
-          <Ionicons name={icon} size={16} color={colors.text} />
-          <Text style={styles.chipText}>{label}</Text>
-        </View>
-      )}
-    </PressableScale>
+    <Animated.View style={[style, anim]} pointerEvents={pointerEvents}>
+      {children}
+    </Animated.View>
   );
 }
 
 /** Hail/wind/severe swatches for the semantic storm palette (Drift #11: theme
  *  tokens, not the raw per-magnitude hex `severityColor()` plots with), plus
- *  the impacted-area band scale. The label says "from storm reports" — this is
+ *  the impacted-area band scale. The title says "from storm reports" — this is
  *  the buffered contour of real NOAA LSRs, NEVER radar (Drift #5). */
-function StormLegend() {
-  return (
-    <View style={styles.legendCard}>
-      <Text style={styles.legendTitle} numberOfLines={2}>
-        Impacted area — hail / wind (from storm reports)
-      </Text>
-      <View style={styles.legendRow}>
-        <SwathSwatch color={colors.stormHail} label={'Hail  < 1"  ·  1–1.5"  ·  1.5–2"  ·  2"+'} />
-      </View>
-      <View style={styles.legendRow}>
-        <SwathSwatch color={colors.stormWind} label="Wind  58–70  ·  70–86  ·  86+ mph" />
-      </View>
-      <View style={styles.legendRow}>
-        <LegendSwatch color={colors.stormHail} label="Hail report" />
-        <LegendSwatch color={colors.stormWind} label="Wind report" />
-        <LegendSwatch color={colors.stormSevere} label="Severe" />
-      </View>
-    </View>
-  );
-}
+const STORM_LEGEND: LegendItem[] = [
+  { label: 'Hail  < 1"  ·  1–1.5"  ·  1.5–2"  ·  2"+', ramp: colors.stormHail },
+  { label: 'Wind  58–70  ·  70–86  ·  86+ mph', ramp: colors.stormWind },
+  { label: 'Hail report', color: colors.stormHail },
+  { label: 'Wind report', color: colors.stormWind },
+  { label: 'Severe', color: colors.stormSevere },
+];
+const STORM_LEGEND_TITLE = 'Impacted area — hail / wind (from storm reports)';
 
-/** A darkening ramp of the peril hue — mirrors how the nested band contours
- *  deepen from the weakest band to the strongest. */
-function SwathSwatch({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={styles.legendItem}>
-      <View style={styles.swathRamp}>
-        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.22 }]} />
-        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.42 }]} />
-        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.62 }]} />
-        <View style={[styles.swathCell, { backgroundColor: color, opacity: 0.85 }]} />
-      </View>
-      <Text style={styles.legendText} numberOfLines={1}>{label}</Text>
-    </View>
-  );
-}
-
-function LegendSwatch({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={styles.legendItem}>
-      <View style={[styles.legendDot, { backgroundColor: color }]} />
-      <Text style={styles.legendText}>{label}</Text>
-    </View>
-  );
-}
+/** Every knock outcome in its pin colour — the same disc Knock mode draws. */
+const KNOCK_LEGEND: LegendItem[] = KNOCK_OUTCOMES.map((m) => ({
+  label: m.short,
+  color: outcomeColor(m.id),
+  icon: outcomeIcon(m.id),
+}));
 
 /**
- * The reference's floating AI-insight pattern — a glass card surfacing the
- * real storm-matched lead cluster over the map imagery. Only ever mounted
- * with a genuine cluster (Drift #5): the caller gates on `cluster`.
+ * The reference's floating AI-insight pattern — the real storm-matched lead
+ * cluster, now a row in the drawer. Only ever mounted with a genuine cluster
+ * (Drift #5): the caller gates on `cluster`.
  */
 function ClusterInsight({ cluster, onPress }: { cluster: StormLeadCluster; onPress: () => void }) {
   return (
     <PressableScale
-      style={styles.insightShadow}
+      style={styles.insightCard}
       accessibilityRole="button"
       accessibilityLabel={`${cluster.headline}. Shows the matched leads on the map.`}
       onPress={onPress}
     >
-      <GlassCard onLight onArt radius={radii.card} style={styles.insightCard}>
-        <IconChip name="thunderstorm" tone="orange" size="md" />
-        <View style={styles.insightText}>
-          <Text style={styles.insightLabel}>STORM MATCH</Text>
-          <Text style={styles.insightHeadline} numberOfLines={2}>
-            {cluster.headline}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
-      </GlassCard>
+      <IconChip name="thunderstorm" tone="orange" size="md" />
+      <View style={styles.insightText}>
+        <Text style={styles.insightLabel}>STORM MATCH</Text>
+        <Text style={styles.insightHeadline} numberOfLines={2}>
+          {cluster.headline}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
     </PressableScale>
   );
 }
@@ -376,7 +350,7 @@ function StormDetailCard({ event, onClose }: { event: StormEvent; onClose: () =>
   const when = new Date(event.occurredAt);
   const where = [event.city, event.state].filter(Boolean).join(', ');
   return (
-    <GlassCard onLight onArt radius={radii.card} style={styles.detailCard}>
+    <View style={styles.detailCard} testID="storm-detail">
       <IconChip
         name={event.type === 'hail' ? 'snow-outline' : 'flag-outline'}
         tone={event.type === 'hail' ? 'blue' : 'orange'}
@@ -386,12 +360,12 @@ function StormDetailCard({ event, onClose }: { event: StormEvent; onClose: () =>
         <Text style={styles.insightLabel}>
           {kind.toUpperCase()} · {magnitudeLabel(event)}
         </Text>
-        <Text style={styles.insightHeadline} numberOfLines={1}>
+        <Text style={styles.insightHeadline} numberOfLines={2}>
           {when.toLocaleDateString()} {when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
           {where ? ` · ${where}` : ''}
         </Text>
         {event.remarks ? (
-          <Text style={styles.detailRemark} numberOfLines={2}>
+          <Text style={styles.detailRemark} numberOfLines={3}>
             {event.remarks}
           </Text>
         ) : null}
@@ -404,8 +378,36 @@ function StormDetailCard({ event, onClose }: { event: StormEvent; onClose: () =>
       >
         <Ionicons name="close" size={22} color={colors.text} />
       </PressableScale>
-    </GlassCard>
+    </View>
   );
+}
+
+/** One storm day in the drawer's list: newest first, the active one checked. */
+function StormDayRow({ day, active, onPress }: { day: StormDay; active: boolean; onPress: () => void }) {
+  const label = stormDayLabel(day);
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.dayRow, pressed && styles.rowPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={active ? `Show every storm day` : `Show only ${label}`}
+      accessibilityState={{ selected: active }}
+    >
+      <IconChip
+        name={day.hailCount > 0 ? 'snow-outline' : 'flag-outline'}
+        tone={day.hailCount > 0 ? 'blue' : 'orange'}
+        size="sm"
+      />
+      <Text style={[styles.dayText, active && styles.dayTextActive]} numberOfLines={2}>
+        {label}
+      </Text>
+      {active ? <Ionicons name="checkmark-circle" size={22} color={colors.brand} /> : null}
+    </Pressable>
+  );
+}
+
+function shortDayLabel(day: StormDay): string {
+  return new Date(day.startMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 export default function MapScreen() {
@@ -434,6 +436,10 @@ export default function MapScreen() {
   const serviceAreas = useServiceAreaStore((s) => s.areas);
   const alerts = useStormAlertStore((s) => s.alerts);
 
+  // Chrome memory: rail tucked, drawer detent, satellite — per screen.
+  const chrome = useMapChrome('storm');
+  const panTuck = useMapPanTuck(chrome.tucked, chrome.setTucked);
+
   const [filter, setFilter] = useState<Filter>(
     focus === FOCUS_STORM_LEADS ? 'leads' : 'storms',
   );
@@ -455,10 +461,18 @@ export default function MapScreen() {
   const [searchText, setSearchText] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [locating, setLocating] = useState(false);
-  // The legend is four rows of glass over the map. Behind a chip, off by
-  // default: the chips already carry hail-blue / wind-orange, and a roofer in
-  // gloves wants the map, not a key to it.
+  // Follow-me: hold "my location". The camera rides along with the phone
+  // until the roofer pans by hand.
+  const [follow, setFollow] = useState(false);
+  // The legend is a key over the map. Behind the rail's legend button, off by
+  // default: a roofer in gloves wants the map, not a key to it.
   const [legendOpen, setLegendOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
+  // Map area + drawer height, so the drawer sizes its detents and the Google
+  // attribution chip (Expo Go iOS) stays above the drawer — Google requires
+  // the credit visible.
+  const [mapHeight, setMapHeight] = useState(0);
+  const [drawerHeight, setDrawerHeight] = useState(0);
 
   // Safety mode. `null` = still reading the signal (overlays stay off until
   // the answer is in — the safe default costs one frame, not a crash).
@@ -516,17 +530,27 @@ export default function MapScreen() {
   );
 
   // Viewport, debounced. The overlay re-selects on this; the MapView never
-  // remounts on it.
+  // remounts on it. A settle that was not one of our own camera moves is a
+  // hand pan: follow-me stops and the rail tucks (Apple Maps).
   const [region, setRegion] = useState<Region>(initialRegion);
+  const regionRef = useRef(region);
+  regionRef.current = region;
   const regionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onRegionChangeComplete = useCallback((next: Region) => {
-    if (!isValidRegion(next)) return;
-    if (regionTimer.current) clearTimeout(regionTimer.current);
-    regionTimer.current = setTimeout(() => {
-      regionTimer.current = null;
-      setRegion(next);
-    }, REGION_DEBOUNCE_MS);
-  }, []);
+  const onRegionChangeComplete = useCallback(
+    (next: Region) => {
+      if (!isValidRegion(next)) return;
+      if (!panTuck.isAutoMove()) {
+        setFollow(false);
+        panTuck.onUserRegionSettled();
+      }
+      if (regionTimer.current) clearTimeout(regionTimer.current);
+      regionTimer.current = setTimeout(() => {
+        regionTimer.current = null;
+        setRegion(next);
+      }, REGION_DEBOUNCE_MS);
+    },
+    [panTuck],
+  );
   useEffect(
     () => () => {
       if (regionTimer.current) clearTimeout(regionTimer.current);
@@ -572,10 +596,6 @@ export default function MapScreen() {
     }
   }, [latParam, lngParam, ringParam, ringLabelParam, router]);
   const jumpToRef = useRef<((lat: number, lon: number) => void) | null>(null);
-
-  // Height of the floating stat bar / cluster card so the Google attribution
-  // chip (Expo Go iOS) sits above it — Google requires the credit visible.
-  const [statBarHeight, setStatBarHeight] = useState(0);
 
   // Storm history FOLLOWS THE VIEWPORT. Both maps used to fetch once around
   // the saved service area and never again — pan sixty miles to a property
@@ -631,22 +651,41 @@ export default function MapScreen() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const days = useMemo(() => stormDays(controlledEvents), [controlledEvents]);
   const activeDay = selectedDay && days.some((d) => d.day === selectedDay) ? selectedDay : null;
+  const activeDayInfo = useMemo(() => days.find((d) => d.day === activeDay) ?? null, [days, activeDay]);
   const events = useMemo(
     () => (activeDay ? eventsOnDay(controlledEvents, activeDay) : controlledEvents),
     [controlledEvents, activeDay],
   );
 
-  /** Jump the camera. Search and my-location both land here. */
-  const jumpTo = useCallback((lat: number, lon: number) => {
-    const next = regionForLatLon(lat, lon, JUMP_REGION_DELTA);
-    if (!isValidRegion(next)) return;
-    mapRef.current?.animateToRegion(next, 450);
-    // The settled-region callback fires after the animation; set it now too
-    // so the fetch starts without waiting on the camera.
-    setRegion(next);
-  }, []);
+  /** Jump the camera. Search, my-location, a storm day and follow-me land here. */
+  const jumpTo = useCallback(
+    (lat: number, lon: number, delta: number = JUMP_REGION_DELTA) => {
+      const next = regionForLatLon(lat, lon, delta);
+      if (!isValidRegion(next)) return;
+      panTuck.markAutoMove();
+      mapRef.current?.animateToRegion(next, 450);
+      // The settled-region callback fires after the animation; set it now too
+      // so the fetch starts without waiting on the camera.
+      setRegion(next);
+    },
+    [panTuck],
+  );
 
   jumpToRef.current = jumpTo;
+
+  const selectDay = useCallback(
+    (day: string | null) => {
+      if (day == null || day === activeDay) {
+        setSelectedDay(null);
+        return;
+      }
+      const info = days.find((d) => d.day === day);
+      setSelectedDay(day);
+      setSelectedEvent(null);
+      if (info) jumpTo(info.centerLat, info.centerLon);
+    },
+    [activeDay, days, jumpTo],
+  );
 
   const onSearchResolved = useCallback(
     (loc: ResolvedLocation) => {
@@ -678,6 +717,53 @@ export default function MapScreen() {
     }
   }, [jumpTo, locating]);
 
+  const toggleFollow = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setFollow((v) => !v);
+  }, []);
+
+  // Follow-me rides the phone's fixes while on and focused; a denied
+  // permission or any failure simply turns it back off (Drift #5: never a
+  // pretend position).
+  useEffect(() => {
+    if (!follow || !isFocused) return;
+    let cancelled = false;
+    let sub: Location.LocationSubscription | null = null;
+    (async () => {
+      try {
+        let perm = await Location.getForegroundPermissionsAsync();
+        if (perm.status !== 'granted' && perm.canAskAgain) {
+          perm = await Location.requestForegroundPermissionsAsync();
+        }
+        if (perm.status !== 'granted') {
+          if (!cancelled) {
+            setFollow(false);
+            setError('Location access is off — turn it on in Settings to follow your location.');
+          }
+          return;
+        }
+        sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 15, timeInterval: 3000 },
+          (fix) => {
+            if (cancelled) return;
+            const delta = Math.min(regionRef.current.latitudeDelta, JUMP_REGION_DELTA);
+            const next = regionForLatLon(fix.coords.latitude, fix.coords.longitude, delta);
+            if (!isValidRegion(next)) return;
+            panTuck.markAutoMove();
+            mapRef.current?.animateToRegion(next, 400);
+          },
+        );
+        if (cancelled) sub.remove();
+      } catch {
+        if (!cancelled) setFollow(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      sub?.remove();
+    };
+  }, [follow, isFocused, panTuck]);
+
   // Everything native receives for storms comes out of here — sanitised,
   // banded by zoom, capped. Empty (but honest about totals) while overlays
   // are off.
@@ -690,6 +776,27 @@ export default function MapScreen() {
     () => !!selectedEvent && selection.markers.some((e) => e.id === selectedEvent.id),
     [selectedEvent, selection.markers],
   );
+
+  // A tapped storm report raises the drawer to half so its card is in view;
+  // closing it lowers the drawer again only if this raise put it there.
+  const raisedForDetail = useRef(false);
+  const showDetail = filter === 'storms' && !!selectedEvent && selectedStillShown;
+  const { detent, setDetent } = chrome;
+  useEffect(() => {
+    if (showDetail && detent === 'peek') {
+      raisedForDetail.current = true;
+      setDetent('half');
+    }
+    // Only the selection should raise the drawer, not a hand-set detent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDetail]);
+  const closeDetail = useCallback(() => {
+    setSelectedEvent(null);
+    if (raisedForDetail.current) {
+      raisedForDetail.current = false;
+      if (chrome.detent === 'half') chrome.setDetent('peek');
+    }
+  }, [chrome]);
 
   // Armed flag: on only while storm overlays are actually drawn on a focused
   // screen; cleared the moment they aren't, and on every app background.
@@ -724,9 +831,10 @@ export default function MapScreen() {
         longitudeDelta: region.longitudeDelta / 3,
       };
       if (!isValidRegion(next)) return;
+      panTuck.markAutoMove();
       mapRef.current?.animateToRegion(next, 350);
     },
-    [region.latitudeDelta, region.longitudeDelta],
+    [region.latitudeDelta, region.longitudeDelta, panTuck],
   );
 
   const jobPins = useMemo(
@@ -756,6 +864,23 @@ export default function MapScreen() {
   );
   const clusterLeadIds = useMemo(() => new Set(cluster?.leadIds ?? []), [cluster]);
 
+  const toggleOverlays = useCallback(
+    (next: boolean) => {
+      setSelectedEvent(null);
+      setOverlaysEnabled(next);
+      if (next) setSafetyNotice(null);
+    },
+    [],
+  );
+
+  const resetStormControls = useCallback(() => {
+    setRange(DEFAULT_RANGE);
+    setPeril('both');
+    setMagnitude('all');
+    setSelectedDay(null);
+    setSelectedEvent(null);
+  }, []);
+
   // Hold the first paint until the safety signal is in: in safety mode the
   // entrance is static (no worklets at all on this screen's own chrome).
   if (overlaysEnabled === null) {
@@ -772,180 +897,387 @@ export default function MapScreen() {
         ? 'no area loaded'
         : 'loading area');
 
+  const statLine =
+    filter === 'storms'
+      ? stormOverlayCountLine(selection, countWindow, {
+          loading,
+          unavailable: error != null,
+          overlaysOff: !overlaysOn,
+        })
+      : filter === 'jobs'
+        ? `${jobPins.length} of ${inspections.length} jobs mapped`
+        : filter === 'leads'
+          ? `${leadPins.length} of ${leads.length} leads mapped`
+          : `${knockPins.length} knock pins`;
+
+  // ---- the summary chip: what the map is showing, in one line -------------
+  const filterLabel = FILTERS.find((f) => f.id === filter)?.label ?? 'Map';
+  const rangeShort = RANGE_LABELS[range].replace(/^Past /, '');
+  const perilShort = peril === 'both' ? 'Hail + wind' : peril === 'hail' ? 'Hail' : 'Wind';
+  const magShort =
+    magnitude === 'all' ? '' : ` ${MAGNITUDE_OPTIONS.find((m) => m.id === magnitude)?.label ?? ''}`;
+  const dayShort = activeDayInfo ? shortDayLabel(activeDayInfo) : 'All days';
+  const summary =
+    filter === 'storms'
+      ? `${filterLabel} · ${rangeShort} · ${perilShort}${magShort} · ${dayShort}${overlaysOn ? '' : ' · Overlays off'}`
+      : filter === 'leads'
+        ? `${filterLabel} · ${leadPins.length} mapped`
+        : filter === 'jobs'
+          ? `${filterLabel} · ${jobPins.length} mapped`
+          : `${filterLabel} · ${knockPins.length} pins`;
+
+  // Active-filter count for the layers badge: anything off its default.
+  const activeFilterCount =
+    (filter === 'storms'
+      ? (range !== DEFAULT_RANGE ? 1 : 0) +
+        (peril !== 'both' ? 1 : 0) +
+        (magnitude !== 'all' ? 1 : 0) +
+        (activeDay ? 1 : 0) +
+        (overlaysOn ? 0 : 1)
+      : 0) + (chrome.satellite ? 1 : 0);
+
+  const legendAvailable = filter === 'storms' || filter === 'knocks';
+
+  // ---- the rail ------------------------------------------------------------
+  const rail: RailItem[] = [
+    {
+      key: 'search',
+      icon: 'search',
+      label: 'Search an address',
+      active: searchOpen,
+      onPress: () => setSearchOpen((v) => !v),
+    },
+    {
+      key: 'locate',
+      icon: follow ? 'navigate' : 'locate',
+      label: 'Go to my location',
+      longPressHint: follow ? 'Hold to stop following your location' : 'Hold to follow your location',
+      onLongPress: toggleFollow,
+      active: follow,
+      busy: locating,
+      onPress: goToMyLocation,
+    },
+    {
+      key: 'layers',
+      icon: 'layers-outline',
+      label: 'Layers and filters',
+      badge: activeFilterCount,
+      onPress: () => setLayersOpen(true),
+    },
+  ];
+  if (legendAvailable) {
+    rail.push({
+      key: 'legend',
+      icon: 'information-circle-outline',
+      label: legendOpen ? 'Hide the legend' : 'Show the legend',
+      active: legendOpen,
+      onPress: () => setLegendOpen((v) => !v),
+    });
+  }
+  rail.push({
+    key: 'satellite',
+    icon: chrome.satellite ? 'map-outline' : 'earth-outline',
+    label: chrome.satellite ? 'Switch to the road map' : 'Switch to satellite',
+    active: chrome.satellite,
+    onPress: () => chrome.setSatellite(!chrome.satellite),
+  });
+
+  // ---- the layers & filters sheet -----------------------------------------
+  const sections: LayersSection[] = [
+    {
+      key: 'show',
+      title: 'Show on the map',
+      rows: [
+        {
+          kind: 'choice',
+          key: 'filter',
+          options: FILTERS.map((f) => ({ id: f.id, label: f.label, icon: f.icon, a11yLabel: `Show ${f.label}` })),
+          value: filter,
+          onChange: (id) => {
+            setSelectedEvent(null);
+            setFilter(id as Filter);
+          },
+        },
+      ],
+    },
+  ];
+  if (filter === 'storms') {
+    sections.push({
+      key: 'range',
+      title: 'Time range',
+      rows: [
+        {
+          kind: 'choice',
+          key: 'range',
+          options: RANGE_ORDER.map((r) => ({ id: r, label: RANGE_LABELS[r], icon: 'time-outline' })),
+          value: range,
+          onChange: (id) => setRange(id as Range),
+        },
+      ],
+    });
+    if (days.length > 0) {
+      sections.push({
+        key: 'day',
+        title: 'Storm day',
+        hint: "Isolate one event's footprint",
+        rows: [
+          {
+            kind: 'choice',
+            key: 'day',
+            layout: 'list',
+            options: [
+              { id: ALL_DAYS, label: 'All days', icon: 'calendar-outline', a11yLabel: 'Show every storm day' },
+              ...days.slice(0, STORM_DAY_CHIPS).map((d) => ({
+                id: d.day,
+                label: stormDayLabel(d),
+                icon: (d.hailCount > 0 ? 'snow-outline' : 'flag-outline') as 'snow-outline' | 'flag-outline',
+                a11yLabel: `Show only ${stormDayLabel(d)}`,
+              })),
+            ],
+            value: activeDay ?? ALL_DAYS,
+            onChange: (id) => selectDay(id === ALL_DAYS ? null : id),
+          },
+        ],
+      });
+    }
+    sections.push(
+      {
+        key: 'peril',
+        title: 'Peril',
+        rows: [
+          {
+            kind: 'choice',
+            key: 'peril',
+            options: PERILS.map((p) => ({ id: p.id, label: p.label, icon: p.icon, a11yLabel: `Show ${p.label.toLowerCase()} reports` })),
+            value: peril,
+            onChange: (id) => setPeril(id as Peril),
+          },
+        ],
+      },
+      {
+        key: 'magnitude',
+        title: 'Magnitude',
+        rows: [
+          {
+            kind: 'choice',
+            key: 'magnitude',
+            options: MAGNITUDE_OPTIONS.map((m) => ({ id: m.id, label: m.label, icon: 'speedometer-outline' })),
+            value: magnitude,
+            onChange: (id) => setMagnitude(id as Magnitude),
+          },
+        ],
+      },
+    );
+  }
+  const mapRows: LayersRow[] = [];
+  if (filter === 'storms') {
+    // Overlays toggle — the reversible half of safety mode, and a plain
+    // "quiet the map" control the rest of the time.
+    mapRows.push({
+      kind: 'toggle',
+      key: 'overlays',
+      label: 'Storm overlays',
+      hint: 'Impacted-area swaths and report pins',
+      icon: 'layers-outline',
+      value: overlaysOn,
+      onChange: toggleOverlays,
+      a11yOn: 'Show storm overlays',
+      a11yOff: 'Hide storm overlays',
+    });
+  }
+  mapRows.push({
+    kind: 'toggle',
+    key: 'satellite',
+    label: 'Satellite imagery',
+    hint: 'Aerial photos instead of the road map',
+    icon: 'earth-outline',
+    value: chrome.satellite,
+    onChange: chrome.setSatellite,
+    a11yOn: 'Switch to satellite',
+    a11yOff: 'Switch to the road map',
+  });
+  if (legendAvailable) {
+    mapRows.push({
+      kind: 'toggle',
+      key: 'legend',
+      label: 'Legend',
+      hint: filter === 'storms' ? 'Hail / wind bands and report colours' : 'Every pin colour',
+      icon: 'information-circle-outline',
+      value: legendOpen,
+      onChange: setLegendOpen,
+      a11yOn: 'Show the legend',
+      a11yOff: 'Hide the legend',
+    });
+  }
+  sections.push(
+    { key: 'map', title: 'Map', rows: mapRows },
+    {
+      key: 'tools',
+      title: 'Tools',
+      rows: [
+        {
+          kind: 'link',
+          key: 'planner',
+          label: 'Knock Planner',
+          hint: 'Find the best storm-hit streets',
+          icon: 'compass-outline',
+          a11yLabel: 'Knock Planner — find the best storm-hit streets',
+          onPress: () => {
+            setLayersOpen(false);
+            router.push('/knock-finder');
+          },
+        },
+      ],
+    },
+  );
+
+  const dayRows = days.slice(0, STORM_DAY_CHIPS);
+
   return (
     <View style={styles.root}>
-      {/* Large title on the grouped ground. Knock mode is this screen's single
-          accent action — everything else over the map goes quiet. */}
+      {/* Large title on the grouped ground. Settings is one tap from this
+          root too (shared affordance on every tab). Knock mode — this
+          screen's single accent action — lives in the drawer's thumb zone. */}
       <Rise index={0} static={safetyMode}>
         <ScreenHeader
           title={filter === 'storms' ? 'Storm Tracer' : 'Map'}
-          right={
-            // Settings sits beside Knock mode so it is one tap from this
-            // root too (shared affordance on every tab); the knock button
-            // itself is untouched.
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-              <SettingsAffordance />
-              <PressableScale
-                style={styles.knockBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Knock mode"
-                onPress={() => router.push('/door-knocking')}
-              >
-                <View style={styles.knockBtnFill}>
-                  <Ionicons name="walk-outline" size={18} color={colors.textInverse} />
-                  <Text style={styles.knockBtnText}>Knock mode</Text>
-                </View>
-              </PressableScale>
-            </View>
-          }
+          right={<SettingsAffordance />}
         />
       </Rise>
 
       {/* Density: the map fills everything under the header — the full-bleed
           cinematic moment. Controls float over the imagery as real glass. */}
-      <View style={styles.mapWrap}>
-        <Map
-          ref={mapRef}
-          initialRegion={initialRegion}
-          onRegionChangeComplete={onRegionChangeComplete}
-          // Web preview only: the fallback panel top-anchors under the two
-          // floating chip rows (list-screen empty-state pattern) instead of
-          // centering in the void. Offset = overlay top inset + two chip rows
-          // (56pt chips + row padding) + inter-row gap + breathing room.
-          fallbackTopOffset={
-            spacing.md +
-            2 * (touchTarget.standard + 2 * spacing.xs) +
-            spacing.sm +
-            spacing.xl
-          }
-          attributionInset={{ bottom: statBarHeight + spacing.md + spacing.sm }}
-          // Expo Go iOS only: the storm swaths + hit circles are vector
-          // overlays, and MapKit stacks the opaque Google tile overlay ABOVE
-          // them — the impacted-area fill (the substance of this filter) would
-          // vanish under it. Keep the Apple base while browsing storms; every
-          // other filter (pins are annotations, always on top) keeps Google
-          // imagery, and native builds render Google + overlays regardless.
-          googleImagery={filter !== 'storms'}
+      <View
+        style={styles.mapWrap}
+        onLayout={(e) => setMapHeight(Math.round(e.nativeEvent.layout.height))}
+      >
+        {/* A touch that MOVES over the map tucks the rail (see useMapPanTuck);
+            the chrome is a sibling, so its own taps never count. */}
+        <View
+          style={StyleSheet.absoluteFill}
+          onTouchStart={panTuck.onTouchStart}
+          onTouchMove={panTuck.onTouchMove}
+          onTouchEnd={panTuck.onTouchEnd}
+          onTouchCancel={panTuck.onTouchEnd}
         >
-          {serviceAreas
-            .filter((a) => isValidLatLon(a.centroidLat, a.centroidLng))
-            .map((a) => (
-              <MapCircle
-                key={a.id}
-                center={{ latitude: a.centroidLat as number, longitude: a.centroidLng as number }}
-                radius={8047}  // 5 mi in meters
-                strokeColor={colors.navy}
-                strokeWidth={2}
-                fillColor={glass.lightFill}
-              />
-            ))}
-          {/* The knock finder's chosen area: its 3-mi canvass ring and a
-              labelled pin whose callout goes back to the plan. */}
-          {focusRing && (
-            <>
-              <MapCircle
-                center={{ latitude: focusRing.lat, longitude: focusRing.lng }}
-                radius={focusRing.radiusMiles * 1609.34}
-                strokeColor={colors.accent}
-                strokeWidth={3}
-                fillColor={colors.accentSoft}
-              />
-              <MapPin
-                coordinate={{ latitude: focusRing.lat, longitude: focusRing.lng }}
-                title={focusRing.label}
-                description={`${focusRing.radiusMiles} mi canvass radius · tap for the plan`}
-                tone="orange"
-                onCalloutPress={() => router.push('/knock-finder')}
-              />
-            </>
-          )}
-          {filter === 'storms' && overlaysOn && (
-            <StormOverlay
-              selection={selection}
-              swaths={swaths}
-              swathEmphasis={swathEmphasisForRegion(region)}
-              onSelectEvent={setSelectedEvent}
-              onSelectCluster={onSelectCluster}
-            />
-          )}
-          {filter === 'jobs' &&
-            jobPins.map((ins) => (
-              <MapPin
-                key={ins.id}
-                coordinate={{ latitude: ins.lat!, longitude: ins.lng! }}
-                title={ins.customerName}
-                description={`${ins.reportId} · ${ins.status.replace('_', ' ')}`}
-                tone="orange"
-                onCalloutPress={() => router.push(`/job/${ins.id}` as any)}
-              />
-            ))}
-          {filter === 'leads' &&
-            leadPins.map((lead) => {
-              // Storm-matched leads ride the existing pin-tone system: red for
-              // "inside the core", the same read as a severe storm pin.
-              const inCore = clusterLeadIds.has(lead.id);
-              const miles = lead.lastStormMatch?.distanceMiles;
-              return (
-                <MapPin
-                  key={lead.id}
-                  coordinate={{ latitude: lead.lat!, longitude: lead.lng! }}
-                  title={lead.customerName}
-                  description={
-                    inCore && miles != null
-                      ? `In storm core · ${miles.toFixed(1)} mi · ${lead.stage.replace('_', ' ')}`
-                      : `Stage: ${lead.stage.replace('_', ' ')}`
-                  }
-                  // Audit P2: job pins opened the job, lead pins opened nothing.
-                  onCalloutPress={() => router.push(`/lead/${lead.id}` as any)}
-                  tone={inCore ? 'danger' : 'info'}
+          <Map
+            ref={mapRef}
+            initialRegion={initialRegion}
+            onRegionChangeComplete={onRegionChangeComplete}
+            mapType={chrome.satellite ? 'satellite' : 'standard'}
+            // Web preview only: the fallback panel top-anchors under the
+            // floating chip row (list-screen empty-state pattern) instead of
+            // centering in the void.
+            fallbackTopOffset={spacing.md + touchTarget.standard + spacing.xl}
+            attributionInset={{ bottom: drawerHeight + spacing.sm }}
+            // Expo Go iOS only: the storm swaths + hit circles are vector
+            // overlays, and MapKit stacks the opaque Google tile overlay ABOVE
+            // them — the impacted-area fill (the substance of this filter) would
+            // vanish under it. Keep the Apple base while browsing storms; every
+            // other filter (pins are annotations, always on top) keeps Google
+            // imagery, and native builds render Google + overlays regardless.
+            googleImagery={filter !== 'storms'}
+          >
+            {serviceAreas
+              .filter((a) => isValidLatLon(a.centroidLat, a.centroidLng))
+              .map((a) => (
+                <MapCircle
+                  key={a.id}
+                  center={{ latitude: a.centroidLat as number, longitude: a.centroidLng as number }}
+                  radius={8047}  // 5 mi in meters
+                  strokeColor={colors.navy}
+                  strokeWidth={2}
+                  fillColor={glass.lightFill}
                 />
-              );
-            })}
-          {/* Every knocked house in its outcome colour + glyph — the same disc
-              Knock mode draws, so the two maps never disagree. Earlier
-              routes' pins are muted; a tap opens Knock mode, where the pin's
-              sheet lives (history, follow-up, lead). */}
-          {filter === 'knocks' &&
-            knockPins.map((k) => (
-              <KnockPinMarker
-                key={k.id}
-                knock={k}
-                muted={!activeKnockIds.has(k.id)}
-                onPress={() => router.push('/door-knocking')}
+              ))}
+            {/* The knock finder's chosen area: its 3-mi canvass ring and a
+                labelled pin whose callout goes back to the plan. */}
+            {focusRing && (
+              <>
+                <MapCircle
+                  center={{ latitude: focusRing.lat, longitude: focusRing.lng }}
+                  radius={focusRing.radiusMiles * 1609.34}
+                  strokeColor={colors.accent}
+                  strokeWidth={3}
+                  fillColor={colors.accentSoft}
+                />
+                <MapPin
+                  coordinate={{ latitude: focusRing.lat, longitude: focusRing.lng }}
+                  title={focusRing.label}
+                  description={`${focusRing.radiusMiles} mi canvass radius · tap for the plan`}
+                  tone="orange"
+                  onCalloutPress={() => router.push('/knock-finder')}
+                />
+              </>
+            )}
+            {filter === 'storms' && overlaysOn && (
+              <StormOverlay
+                selection={selection}
+                swaths={swaths}
+                swathEmphasis={swathEmphasisForRegion(region)}
+                onSelectEvent={setSelectedEvent}
+                onSelectCluster={onSelectCluster}
               />
-            ))}
-        </Map>
-
-        {/* ONE floating glass control bar — real BlurView on iOS, tinted-fill
-            fallback elsewhere; glove-sized (≥56pt) either way. */}
-        <View style={styles.overlayTop} pointerEvents="box-none">
-          <Rise index={1} static={safetyMode} style={styles.controlBarShadow}>
-            <GlassCard onLight onArt radius={radii.lg} style={styles.controlBar}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.chipScroll}
-                contentContainerStyle={styles.chipScrollContent}
-              >
-                {FILTERS.map((f) => (
-                  <GlassChip
-                    key={f.id}
-                    active={filter === f.id}
-                    icon={f.icon}
-                    label={f.label}
-                    accessibilityLabel={`Show ${f.label}`}
-                    onPress={() => {
-                      setSelectedEvent(null);
-                      setFilter(f.id);
-                    }}
+            )}
+            {filter === 'jobs' &&
+              jobPins.map((ins) => (
+                <MapPin
+                  key={ins.id}
+                  coordinate={{ latitude: ins.lat!, longitude: ins.lng! }}
+                  title={ins.customerName}
+                  description={`${ins.reportId} · ${ins.status.replace('_', ' ')}`}
+                  tone="orange"
+                  onCalloutPress={() => router.push(`/job/${ins.id}` as any)}
+                />
+              ))}
+            {filter === 'leads' &&
+              leadPins.map((lead) => {
+                // Storm-matched leads ride the existing pin-tone system: red for
+                // "inside the core", the same read as a severe storm pin.
+                const inCore = clusterLeadIds.has(lead.id);
+                const miles = lead.lastStormMatch?.distanceMiles;
+                return (
+                  <MapPin
+                    key={lead.id}
+                    coordinate={{ latitude: lead.lat!, longitude: lead.lng! }}
+                    title={lead.customerName}
+                    description={
+                      inCore && miles != null
+                        ? `In storm core · ${miles.toFixed(1)} mi · ${lead.stage.replace('_', ' ')}`
+                        : `Stage: ${lead.stage.replace('_', ' ')}`
+                    }
+                    // Audit P2: job pins opened the job, lead pins opened nothing.
+                    onCalloutPress={() => router.push(`/lead/${lead.id}` as any)}
+                    tone={inCore ? 'danger' : 'info'}
                   />
-                ))}
-              </ScrollView>
+                );
+              })}
+            {/* Every knocked house in its outcome colour + glyph — the same disc
+                Knock mode draws, so the two maps never disagree. Earlier
+                routes' pins are muted; a tap opens Knock mode, where the pin's
+                sheet lives (history, follow-up, lead). */}
+            {filter === 'knocks' &&
+              knockPins.map((k) => (
+                <KnockPinMarker
+                  key={k.id}
+                  knock={k}
+                  muted={!activeKnockIds.has(k.id)}
+                  onPress={() => router.push('/door-knocking')}
+                />
+              ))}
+          </Map>
+        </View>
 
-              {/* Where to look: an address, or where the phone is. A map that
-                  cannot be pointed somewhere is a picture. */}
-              <View style={styles.searchRow}>
-                {searchOpen ? (
+        {/* Top chrome: the summary chip (or the expanded search) on the left,
+            the control rail on the right. Everything is glass (real BlurView
+            on iOS, tinted-fill fallback elsewhere), glove-sized either way. */}
+        <Rise index={1} static={safetyMode} style={styles.overlayTop} pointerEvents="box-none">
+          <View style={styles.overlayLeft} pointerEvents="box-none">
+            {searchOpen ? (
+              // Where to look: an address. A map that cannot be pointed
+              // somewhere is a picture.
+              <View style={styles.searchShadow}>
+                <GlassCard onLight onArt radius={radii.lg} style={styles.searchCard}>
                   <View style={styles.searchField}>
                     <LocationField
                       value={searchText}
@@ -959,34 +1291,8 @@ export default function MapScreen() {
                       returnKeyType="search"
                     />
                   </View>
-                ) : (
                   <PressableScale
-                    style={styles.searchBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="Search an address"
-                    onPress={() => setSearchOpen(true)}
-                  >
-                    <Ionicons name="search" size={18} color={colors.text} />
-                    <Text style={styles.searchBtnText} numberOfLines={1}>
-                      {searchText ? searchText : 'Search an address'}
-                    </Text>
-                  </PressableScale>
-                )}
-                <PressableScale
-                  style={styles.roundBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel="Go to my location"
-                  onPress={goToMyLocation}
-                >
-                  {locating ? (
-                    <ActivityIndicator color={colors.text} />
-                  ) : (
-                    <Ionicons name="locate" size={20} color={colors.text} />
-                  )}
-                </PressableScale>
-                {searchOpen && (
-                  <PressableScale
-                    style={styles.roundBtn}
+                    style={styles.searchClose}
                     accessibilityRole="button"
                     accessibilityLabel="Close search"
                     onPress={() => {
@@ -994,230 +1300,145 @@ export default function MapScreen() {
                       setSearchOpen(false);
                     }}
                   >
-                    <Ionicons name="close" size={20} color={colors.text} />
+                    <Ionicons name="close" size={22} color={colors.text} />
                   </PressableScale>
-                )}
+                </GlassCard>
               </View>
+            ) : (
+              <SummaryChip text={summary} onPress={() => setLayersOpen(true)} testID="map-summary" />
+            )}
+            {loading && (
+              <View style={styles.loadingShadow}>
+                <GlassCard onLight onArt radius={radii.pill} style={styles.loadingPill}>
+                  <ActivityIndicator color={colors.navy} />
+                  <Text style={styles.loadingText}>Loading storms</Text>
+                </GlassCard>
+              </View>
+            )}
+            {legendOpen && legendAvailable && (
+              <LegendStrip
+                title={filter === 'storms' ? STORM_LEGEND_TITLE : 'Knock pins'}
+                items={filter === 'storms' ? STORM_LEGEND : KNOCK_LEGEND}
+                testID="map-legend"
+              />
+            )}
+          </View>
+          <ControlRail
+            items={rail}
+            tucked={chrome.tucked}
+            onTuckedChange={chrome.setTucked}
+            hidden={chrome.detent !== 'peek'}
+            animated={!safetyMode}
+            testID="map-rail"
+          />
+        </Rise>
 
-              {filter === 'storms' && (
-                <View style={styles.controlBarSecond}>
-                  {/* Range — the tracer's Time Travel. */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.chipScroll}
-                    contentContainerStyle={styles.chipScrollContent}
-                  >
-                    {RANGE_ORDER.map((r) => (
-                      <GlassChip
-                        key={r}
-                        active={range === r}
-                        icon="time-outline"
-                        label={RANGE_LABELS[r]}
-                        accessibilityLabel={RANGE_LABELS[r]}
-                        onPress={() => setRange(r)}
-                      />
-                    ))}
-                  </ScrollView>
-                  {/* Storm days — isolate one event's footprint. Newest first,
-                      capped so the strip stays a strip; absent when the
-                      controls leave nothing. */}
-                  {days.length > 0 && (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.chipScroll}
-                      contentContainerStyle={styles.chipScrollContent}
-                    >
-                      <GlassChip
-                        active={activeDay == null}
-                        icon="calendar-outline"
-                        label="All days"
-                        accessibilityLabel="Show every storm day"
-                        onPress={() => setSelectedDay(null)}
-                      />
-                      {days.slice(0, STORM_DAY_CHIPS).map((d) => (
-                        <GlassChip
-                          key={d.day}
-                          active={activeDay === d.day}
-                          icon={d.hailCount > 0 ? 'snow-outline' : 'flag-outline'}
-                          label={stormDayLabel(d)}
-                          accessibilityLabel={`Show only ${stormDayLabel(d)}`}
-                          onPress={() => {
-                            if (activeDay === d.day) {
-                              setSelectedDay(null);
-                              return;
-                            }
-                            setSelectedDay(d.day);
-                            setSelectedEvent(null);
-                            jumpTo(d.centerLat, d.centerLon);
-                          }}
-                        />
-                      ))}
-                    </ScrollView>
-                  )}
-                  {/* Peril + magnitude + overlays. */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.chipScroll}
-                    contentContainerStyle={styles.chipScrollContent}
-                  >
-                    {(
-                      [
-                        { id: 'hail', label: 'Hail', icon: 'snow-outline' },
-                        { id: 'wind', label: 'Wind', icon: 'flag-outline' },
-                        { id: 'both', label: 'Both', icon: 'thunderstorm-outline' },
-                      ] as const
-                    ).map((p) => (
-                      <GlassChip
-                        key={p.id}
-                        active={peril === p.id}
-                        icon={p.icon}
-                        label={p.label}
-                        accessibilityLabel={`Show ${p.label.toLowerCase()} reports`}
-                        onPress={() => setPeril(p.id)}
-                      />
-                    ))}
-                    {MAGNITUDE_OPTIONS.map((m) => (
-                      <GlassChip
-                        key={m.id}
-                        active={magnitude === m.id}
-                        icon="speedometer-outline"
-                        label={m.label}
-                        accessibilityLabel={m.label}
-                        onPress={() => setMagnitude(m.id)}
-                      />
-                    ))}
-                    {/* Overlays toggle — the reversible half of safety mode,
-                        and a plain "quiet the map" control the rest of the time. */}
-                    <GlassChip
-                      active={overlaysOn}
-                      icon="layers-outline"
-                      label="Overlays"
-                      accessibilityLabel={overlaysOn ? 'Hide storm overlays' : 'Show storm overlays'}
-                      onPress={() => {
-                        setSelectedEvent(null);
-                        setOverlaysEnabled(!overlaysOn);
-                        if (!overlaysOn) setSafetyNotice(null);
-                      }}
-                    />
-                    <GlassChip
-                      active={legendOpen}
-                      icon="information-circle-outline"
-                      label="Legend"
-                      accessibilityLabel={legendOpen ? 'Hide the legend' : 'Show the legend'}
-                      onPress={() => setLegendOpen((v) => !v)}
-                    />
-                    {/* The one-button opportunity finder — the map's data,
-                        scored and turned into a day plan. */}
-                    <GlassChip
-                      active={false}
-                      icon="compass-outline"
-                      label="Knock Planner"
-                      accessibilityLabel="Knock Planner — find the best storm-hit streets"
-                      onPress={() => router.push('/knock-finder')}
-                    />
-                  </ScrollView>
-                  {legendOpen && <StormLegend />}
+        {/* The drawer: stat line + Knock Planner at peek, the report / cluster /
+            storm days above the one primary CTA when raised. Real numbers
+            only — each row is absent when there's nothing to report. */}
+        <MapDrawer
+          detent={chrome.detent}
+          onDetentChange={chrome.setDetent}
+          containerHeight={mapHeight}
+          animated={!safetyMode}
+          onHeightChange={setDrawerHeight}
+          accessibilityLabel="Storm Tracer panel"
+          testID="map-drawer"
+          header={
+            <View style={styles.drawerHead}>
+              {safetyMode && !overlaysOn && (
+                <PressableScale
+                  style={styles.safetyRow}
+                  accessibilityRole="button"
+                  accessibilityLabel="Loaded without storm overlays after a crash. Turn them on."
+                  onPress={() => {
+                    setOverlaysEnabled(true);
+                    setSafetyNotice(null);
+                  }}
+                >
+                  <Ionicons name="shield-checkmark-outline" size={22} color={colors.warn} />
+                  <Text style={styles.safetyText} numberOfLines={2}>
+                    Loaded without storm overlays after a crash — tap to turn them on
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+                </PressableScale>
+              )}
+              {error && (
+                <View style={styles.errorRow}>
+                  <Ionicons name="cloud-offline-outline" size={16} color={colors.danger} />
+                  <Text style={styles.errorText} numberOfLines={2}>
+                    {error}
+                  </Text>
                 </View>
               )}
-            </GlassCard>
-          </Rise>
-
-          {loading && (
-            <View style={styles.loadingShadow}>
-              <GlassCard onLight onArt radius={radii.button} style={styles.loadingPill}>
-                <ActivityIndicator color={colors.navy} />
-              </GlassCard>
+              <View style={styles.drawerHeadRow}>
+                <Text style={styles.statText} numberOfLines={2} testID="map-stat">
+                  {statLine}
+                </Text>
+                {/* The one-button opportunity finder — the map's data, scored
+                    and turned into a day plan. */}
+                <PressableScale
+                  style={styles.plannerBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Knock Planner — find the best storm-hit streets"
+                  onPress={() => router.push('/knock-finder')}
+                >
+                  <Ionicons name="compass-outline" size={18} color={colors.brand} />
+                  <Text style={styles.plannerText}>Planner</Text>
+                </PressableScale>
+              </View>
             </View>
-          )}
-        </View>
-
-        {/* Cluster insight, storm detail, safety row and count float at the
-            bottom edge of the map. Real numbers only — each is absent when
-            there's nothing to report. */}
-        <View
-          style={styles.statBarWrap}
-          pointerEvents="box-none"
-          onLayout={(e) => setStatBarHeight(e.nativeEvent.layout.height)}
-        >
-          {error && (
-            <View style={styles.errorCard}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-          {safetyMode && !overlaysOn && (
+          }
+          footer={
             <PressableScale
-              style={styles.safetyShadow}
+              style={styles.cta}
               accessibilityRole="button"
-              accessibilityLabel="Loaded without storm overlays after a crash. Turn them on."
-              onPress={() => {
-                setOverlaysEnabled(true);
-                setSafetyNotice(null);
-              }}
+              accessibilityLabel="Knock mode"
+              onPress={() => router.push('/door-knocking')}
             >
-              <GlassCard onLight onArt radius={radii.button} style={styles.safetyRow}>
-                <Ionicons name="shield-checkmark-outline" size={22} color={colors.warn} />
-                <Text style={styles.safetyText} numberOfLines={2}>
-                  Loaded without storm overlays after a crash — tap to turn them on
-                </Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
-              </GlassCard>
+              <Ionicons name="walk-outline" size={24} color={colors.textInverse} />
+              <Text style={styles.ctaText}>Knock mode</Text>
             </PressableScale>
-          )}
-          {filter === 'storms' && selectedEvent && selectedStillShown && (
-            <View style={styles.insightShadow}>
-              <StormDetailCard event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+          }
+        >
+          {showDetail && selectedEvent && <StormDetailCard event={selectedEvent} onClose={closeDetail} />}
+          {cluster && <ClusterInsight cluster={cluster} onPress={() => setFilter('leads')} />}
+          {filter === 'storms' && dayRows.length > 0 && (
+            <View style={styles.daysBlock}>
+              <SectionHeader
+                title={`Storm days · ${days.length}`}
+                action={activeDay ? { label: 'All days', icon: null, onPress: () => selectDay(null) } : undefined}
+              />
+              <View style={styles.dayList}>
+                {dayRows.map((d) => (
+                  <StormDayRow key={d.day} day={d} active={activeDay === d.day} onPress={() => selectDay(d.day)} />
+                ))}
+              </View>
             </View>
           )}
-          {cluster && (
-            <Rise index={4} static={safetyMode}>
-              <ClusterInsight cluster={cluster} onPress={() => setFilter('leads')} />
-            </Rise>
+          {filter !== 'storms' && !cluster && (
+            <Text style={styles.drawerHint}>
+              {filter === 'knocks'
+                ? 'Tap a knock pin to open it in Knock mode.'
+                : `Tap a pin's callout to open the ${filter === 'leads' ? 'lead' : 'job'}.`}
+            </Text>
           )}
-          <Rise index={5} static={safetyMode}>
-            <View style={styles.statBarShadow}>
-              <GlassCard onLight onArt radius={radii.button} style={styles.statBar}>
-                <Text style={styles.statText}>
-                  {filter === 'storms' &&
-                    stormOverlayCountLine(selection, countWindow, {
-                      loading,
-                      unavailable: error != null,
-                      overlaysOff: !overlaysOn,
-                    })}
-                  {filter === 'jobs' && `${jobPins.length} of ${inspections.length} jobs mapped`}
-                  {filter === 'leads' && `${leadPins.length} of ${leads.length} leads mapped`}
-                  {filter === 'knocks' && `${knockPins.length} knock pins`}
-                </Text>
-              </GlassCard>
-            </View>
-          </Rise>
-        </View>
+        </MapDrawer>
       </View>
+
+      <LayersSheet
+        visible={layersOpen}
+        onClose={() => setLayersOpen(false)}
+        subtitle={summary}
+        sections={sections}
+        onReset={filter === 'storms' ? resetStormControls : undefined}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-
-  // Header action — 56pt target around a 44pt accent button (home pattern).
-  knockBtn: { minHeight: touchTarget.standard, justifyContent: 'center' },
-  knockBtnFill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    height: touchTarget.small,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.button,
-    backgroundColor: colors.accent,
-  },
-  knockBtnText: {
-    color: colors.textInverse,
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-  },
 
   // Full-bleed map under a hairline — the screen's content IS the map.
   mapWrap: {
@@ -1227,134 +1448,120 @@ const styles = StyleSheet.create({
     borderTopColor: colors.hairline,
   },
 
+  // Top chrome row: left column (chip / search / legend), right rail.
   overlayTop: {
     position: 'absolute',
     top: spacing.md,
-    left: 0,
-    right: 0,
+    left: spacing.md,
+    right: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
   },
-  // The single floating control bar. Shadow lives on the wrapper so it isn't
-  // clipped by the glass card's own corner radius.
-  controlBarShadow: {
-    marginHorizontal: spacing.lg,
-    borderRadius: radii.lg,
-    ...shadows.float,
-  },
-  controlBar: { paddingVertical: spacing.xs },
-  // Search + my-location row inside the glass bar. The search pill and the
-  // round buttons are all ≥56pt (Drift #1).
-  searchRow: {
+  overlayLeft: { flex: 1, gap: spacing.sm, alignItems: 'flex-start' },
+
+  // Expanded search: the field + a 56pt close, in one glass panel.
+  searchShadow: { alignSelf: 'stretch', borderRadius: radii.lg, ...shadows.float },
+  searchCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
+    gap: spacing.xs,
+    paddingLeft: spacing.sm,
+    paddingRight: spacing.xs,
     paddingVertical: spacing.xs,
   },
   searchField: { flex: 1 },
-  searchBtn: {
-    flex: 1,
-    minHeight: touchTarget.standard,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.button,
-    backgroundColor: colors.fillQuiet,
-  },
-  searchBtnText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.textMuted },
-  roundBtn: {
+  searchClose: {
     width: touchTarget.standard,
     height: touchTarget.standard,
-    borderRadius: radii.button,
-    backgroundColor: colors.fillQuiet,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  controlBarSecond: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.hairline,
-    paddingTop: spacing.xs,
-  },
 
-  chipScroll: { flexGrow: 0 },
-  chipScrollContent: {
-    // Tightened from `lg`/`sm` so the four layer chips clear a 390pt
-    // viewport: a chip edge meets the bar, not a cut glyph.
-    paddingHorizontal: spacing.sm,
-    gap: spacing.xs,
+  loadingShadow: { borderRadius: radii.pill, ...shadows.float },
+  loadingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
+  loadingText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
 
-  // Chips inside the bar. Selected breaks to the royal RAMP + brand lift;
-  // idle carries a quiet fill. The shadow lives on the PressableScale
-  // wrapper so it isn't clipped by the chip's own corner radius.
-  chipShadow: { borderRadius: radii.button, ...shadows.hero },
-  chip: {
+  // Drawer header: the stat line beside the Planner button (56pt).
+  drawerHead: { gap: spacing.sm },
+  drawerHeadRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  statText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.medium,
+    fontVariant: ['tabular-nums'],
+  },
+  plannerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.md,
     borderRadius: radii.button,
-    overflow: 'hidden',
+    backgroundColor: colors.brandSoft,
   },
-  chipIdle: { backgroundColor: colors.fillQuiet },
-  chipActive: { backgroundColor: colors.brand },
-  chipText: {
-    fontSize: fontSize.bodySm,
-    color: colors.text,
-    fontWeight: fontWeight.semibold,
-  },
-  chipTextActive: { color: colors.textInverse },
+  plannerText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
 
-  // Storm legend — semantic storm tokens (Drift #11), not the raw per-event
-  // hex. A row inside the control bar rather than a pill floating over (and
-  // colliding with) the pins.
-  legendCard: {
-    gap: spacing.xs,
+  // The one primary CTA — 88pt, burnt, in the thumb zone at every detent.
+  cta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: touchTarget.sticky,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accent,
+    ...shadows.card,
+  },
+  ctaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+
+  // Safety-mode row: one line, one tap, ≥56pt.
+  safetyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    minHeight: touchTarget.standard,
+    borderRadius: radii.card,
+    backgroundColor: colors.warnSoft,
   },
-  legendTitle: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
+  safetyText: {
+    flex: 1,
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.semibold,
     color: colors.text,
   },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.text },
-  // A 4-cell ramp echoing the deepening nested band contours.
-  swathRamp: { flexDirection: 'row', borderRadius: 3, overflow: 'hidden' },
-  swathCell: { width: 9, height: 10 },
-
-  loadingShadow: {
-    alignSelf: 'flex-start',
-    marginLeft: spacing.lg,
-    marginTop: spacing.sm,
-    borderRadius: radii.button,
-    ...shadows.float,
-  },
-  loadingPill: {
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    borderRadius: radii.card,
+    backgroundColor: colors.dangerSoft,
   },
+  // Ink, not danger, for the words: danger-on-dangerSoft is 3.7:1, ink is
+  // 15:1 (Drift #1). The icon carries the tone.
+  errorText: { flex: 1, color: colors.text, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
 
-  statBarWrap: {
-    position: 'absolute',
-    left: spacing.lg,
-    right: spacing.lg,
-    bottom: spacing.md,
-    gap: spacing.sm,
-  },
-
-  // Floating AI-insight card — the storm-lead cluster, real counts only.
-  insightShadow: { borderRadius: radii.card, ...shadows.float },
+  // Storm-lead cluster row (real counts only) and the storm detail card share
+  // one grammar: chip, two-line text, trailing affordance.
   insightCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.md,
     minHeight: touchTarget.standard,
+    borderRadius: radii.card,
+    backgroundColor: colors.accentSoft,
   },
   insightText: { flex: 1, gap: 1 },
   insightLabel: {
@@ -1368,8 +1575,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     color: colors.text,
   },
-
-  // Storm detail — same card grammar as the insight, plus a 56pt close.
   detailCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1378,6 +1583,8 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.md,
     paddingRight: spacing.xs,
     minHeight: touchTarget.standard,
+    borderRadius: radii.card,
+    backgroundColor: colors.brandSoft,
   },
   detailRemark: {
     fontSize: fontSize.caption,
@@ -1391,41 +1598,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Safety-mode row: one line, one tap, ≥56pt.
-  safetyShadow: { borderRadius: radii.button, ...shadows.float },
-  safetyRow: {
+  // Storm days — one 56pt row per day, newest first.
+  daysBlock: { gap: spacing.sm },
+  dayList: { borderRadius: radii.card, backgroundColor: colors.fillQuiet, overflow: 'hidden' },
+  dayRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
     minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  safetyText: {
-    flex: 1,
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-  },
+  rowPressed: { opacity: 0.7 },
+  dayText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
+  dayTextActive: { fontWeight: fontWeight.semibold, color: colors.brand },
 
-  statBarShadow: { borderRadius: radii.button, ...shadows.float },
-  statBar: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-  },
-  statText: {
-    color: colors.text,
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.medium,
-    textAlign: 'center',
-    fontVariant: ['tabular-nums'],
-  },
-
-  errorCard: {
-    backgroundColor: colors.dangerSoft,
-    padding: spacing.md,
-    borderRadius: radii.button,
-    ...shadows.float,
-  },
-  errorText: { color: colors.danger, fontSize: fontSize.bodySm, textAlign: 'center' },
+  drawerHint: { fontSize: fontSize.bodySm, color: colors.textMuted, paddingVertical: spacing.sm },
 });

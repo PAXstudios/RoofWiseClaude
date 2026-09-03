@@ -801,6 +801,17 @@ export type Inspection = {
    */
   leadId?: string;
 
+  // Scheduling (docs/PIPELINE.md). All optional; older records load unchanged.
+  /** When `status` last changed — the Pipeline board's days-in-stage for a job with no lead. */
+  statusChangedAt?: string;
+  /** The booked inspection appointment (a knock's "Booked" outcome writes it). */
+  scheduledAt?: string;
+  /** Install window. Setting `installStartAt` moves the pipeline to Install scheduled. */
+  installStartAt?: string;
+  installEndAt?: string;
+  /** When the install dates were set — the day-before reminder and the stage move key off it. */
+  installScheduledAt?: string;
+
   // Signatures
   inspectorSignaturePng?: string;  // base64 or file URI
   inspectorSignatureSvg?: string;  // serialized SVG path
@@ -900,6 +911,14 @@ export type PropertyRecord = {
   listingAgent?: { name?: string; phone?: string; email?: string; company?: string };
   /** Last "Listed for sale" / "Sold" event dates from the price history. */
   listedDate?: string;
+  /**
+   * Year the listing whose text we read went up — from `listedDate`, else
+   * `scrapedAt` minus `daysOnZillow`, else the sale date. A listing that says
+   * "new roof" with no year dates the roof to this year
+   * (`newRoofFromListing` in lib/services/propertyRecord.ts). Absent on
+   * records cached before this existed — `listingYearOf()` re-derives it.
+   */
+  listedYear?: number;
 };
 
 /** The photo that fronts a job: chosen by the inspector or taken from the record. */
@@ -909,8 +928,15 @@ export type CoverPhoto = {
   setAt: string;
 };
 
-/** Where `Inspection.ageYears` came from — the packet says so. */
-export type RoofAgeSource = 'inspector' | 'year_built' | 'listing';
+/**
+ * Where `Inspection.ageYears` came from — the packet says so.
+ *   inspector        — typed or stepped by the inspector; never overwritten.
+ *   year_built       — the Zillow build year (an upper bound on roof age).
+ *   listing          — the listing text stated a roof year ("new roof 2021").
+ *   listing_new_roof — the listing said the roof is new but gave no year, so
+ *                      the roof is dated to the year the listing went up.
+ */
+export type RoofAgeSource = 'inspector' | 'year_built' | 'listing' | 'listing_new_roof';
 
 export type PropertyIntel = {
   /** ISO timestamp the research ran. */
@@ -1004,24 +1030,30 @@ export const INSURANCE_CARRIER_LABELS: Record<InsuranceCarrier, string> = {
 /**
  * Pipeline stages. The first line is the original set — kept verbatim so
  * persisted leads never fail to load; the second line adds the Kanban PRD's
- * post-sale stages. `proposal_sent` is the legacy spelling of `estimate_sent`
- * and folds into that column via `leadStageColumn()`.
+ * post-sale stages; `inspecting` (docs/PIPELINE.md) is the column a lead
+ * lands in the moment its inspection STARTS — the point where, in the
+ * owner's words, a lead becomes a job. `proposal_sent` is the legacy
+ * spelling of `estimate_sent` and folds into that column via
+ * `leadStageColumn()`.
  */
 export type LeadStage =
   | 'new' | 'contacted' | 'inspection_scheduled' | 'inspected'
   | 'proposal_sent' | 'signed' | 'lost'
   | 'estimate_sent' | 'install_scheduled' | 'in_progress'
-  | 'completed' | 'invoiced' | 'paid';
+  | 'completed' | 'invoiced' | 'paid'
+  | 'inspecting';
 
 /**
- * The 11 board columns in display order (Kanban PRD). `lost` is terminal and
- * deliberately off-board; `proposal_sent` is absent because it maps onto
- * `estimate_sent` — bucket leads with `leadStageColumn()`, not raw equality.
+ * The 12 board columns in display order (Kanban PRD + `inspecting`). `lost`
+ * is terminal and deliberately off-board; `proposal_sent` is absent because
+ * it maps onto `estimate_sent` — bucket leads with `leadStageColumn()`, not
+ * raw equality.
  */
 export const LEAD_STAGE_ORDER: LeadStage[] = [
   'new',
   'contacted',
   'inspection_scheduled',
+  'inspecting',
   'inspected',
   'estimate_sent',
   'signed',
@@ -1036,6 +1068,7 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   new: 'New Lead',
   contacted: 'Contacted',
   inspection_scheduled: 'Inspection Scheduled',
+  inspecting: 'Inspection in progress',
   inspected: 'Inspection Complete',
   proposal_sent: 'Proposal Sent',
   estimate_sent: 'Estimate Sent',
@@ -1052,6 +1085,60 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
 export function leadStageColumn(stage: LeadStage): LeadStage {
   return stage === 'proposal_sent' ? 'estimate_sent' : stage;
 }
+
+/**
+ * Where a lead came from — the axis Reports' "source → signed rate" is drawn
+ * on. `Lead.source` stays a free string for compatibility with persisted and
+ * synced rows (`door_knock`, `manual`, `zillow` all exist in the wild);
+ * `normalizeLeadSource()` folds every spelling onto this union.
+ */
+export type LeadSource = 'knock' | 'storm' | 'referral' | 'web' | 'sign' | 'other';
+
+export const LEAD_SOURCES: LeadSource[] = ['knock', 'storm', 'referral', 'web', 'sign', 'other'];
+
+export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
+  knock: 'Door knock',
+  storm: 'Storm',
+  referral: 'Referral',
+  web: 'Web',
+  sign: 'Yard sign',
+  other: 'Other',
+};
+
+/**
+ * Fold any stored `Lead.source` onto the canonical union. Legacy spellings:
+ * `door_knock` → knock; `zillow` (planner sold homes) and `storm_alert` →
+ * storm; `manual` and anything unknown → other. Absent → other.
+ */
+export function normalizeLeadSource(source: string | null | undefined): LeadSource {
+  const s = (source ?? '').trim().toLowerCase();
+  if (s === 'knock' || s === 'door_knock' || s === 'door-knock' || s === 'doorknock') return 'knock';
+  if (s === 'storm' || s === 'storm_alert' || s === 'zillow' || s === 'planner') return 'storm';
+  if (s === 'referral' || s === 'referred') return 'referral';
+  if (s === 'web' || s === 'website' || s === 'online') return 'web';
+  if (s === 'sign' || s === 'yard_sign' || s === 'yard sign') return 'sign';
+  return 'other';
+}
+
+// -----------------------------------------------------------------------------
+// Tasks — "the little things" on a lead or a job (lib/stores/taskStore.ts)
+// -----------------------------------------------------------------------------
+
+export type TaskCreatedBy = 'automation' | 'roofer';
+
+export type Task = {
+  id: string;
+  /** The pipeline item this belongs to: the lead id when there is one, else the inspection id. */
+  itemId: string;
+  title: string;
+  dueAt?: string;
+  done: boolean;
+  doneAt?: string;
+  createdBy: TaskCreatedBy;
+  /** Manual sort position inside the item's list (lower first). */
+  order: number;
+  createdAt: string;
+};
 
 export type Lead = {
   id: string;
@@ -1269,21 +1356,6 @@ export type KnockRouteTarget = {
 };
 
 // -----------------------------------------------------------------------------
-// Proposal
-// -----------------------------------------------------------------------------
-
-export type ProposalLineItem = {
-  id: string;
-  label: string;
-  unit: string;            // "sq" | "ft" | "ea"
-  quantity: number;
-  unitPrice: number;
-  subtotal: number;
-};
-
-export type ProposalStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired';
-
-// -----------------------------------------------------------------------------
 // Do not knock — homes and zones the roofer must never canvass
 // -----------------------------------------------------------------------------
 
@@ -1317,6 +1389,21 @@ export type DoNotKnockEntry = {
   updatedAt: string;
 };
 
+// -----------------------------------------------------------------------------
+// Proposal
+// -----------------------------------------------------------------------------
+
+export type ProposalLineItem = {
+  id: string;
+  label: string;
+  unit: string;            // "sq" | "ft" | "ea"
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+};
+
+export type ProposalStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired';
+
 export type Proposal = {
   id: string;
   jobId: string;
@@ -1344,6 +1431,12 @@ export type Proposal = {
   priceBookVersion?: number;
   priceBookUpdatedAt?: string;
   priceBookCustomized?: boolean;
+  /**
+   * When the draft was minted. Optional because the store's `create` predates
+   * it; `proposalCreatedAt()` in lib/services/proposals.ts falls back to the
+   * timestamp inside the id (`prop_<ms>_<n>`) for older records.
+   */
+  createdAt?: string;
 };
 
 // -----------------------------------------------------------------------------
@@ -1414,7 +1507,10 @@ export type ActivityEventKind =
   | 'weather_checked' | 'proposal_sent' | 'proposal_signed'
   | 'signature_recorded' | 'knock_logged' | 'knock_converted_to_lead'
   | 'route_completed' | 'ai_calibration_updated' | 'storm_alert_received'
-  | 'lead_created' | 'inspection_completed' | 'pdf_generated';
+  | 'lead_created' | 'inspection_completed' | 'pdf_generated'
+  // Pipeline (docs/PIPELINE.md): a lead became a job, a stage moved, an
+  // automation rule ran, a task was added / finished.
+  | 'lead_converted' | 'stage_changed' | 'automation_ran' | 'task_added' | 'task_done';
 
 export type ActivityEvent = {
   id: string;
@@ -1464,6 +1560,68 @@ export type SavedEstimate = {
   priceBookCustomized?: boolean;
   /** Zillow record for the address (APIllow), so the saved estimate fronts with the house. */
   propertyRecord?: PropertyRecord;
+};
+
+// -----------------------------------------------------------------------------
+// Job budget — projected costs vs what was actually spent, against the
+// contract price. Pure maths in lib/services/budget.ts; persisted per job in
+// lib/stores/budgetStore.ts (`roofwise.budgets.v1`).
+// -----------------------------------------------------------------------------
+
+/** What an actual cost was spent on. Permits and dump fold into "other" when compared with the projected split. */
+export type BudgetKind = 'material' | 'labor' | 'permit' | 'dump' | 'other';
+
+export const BUDGET_KINDS: readonly BudgetKind[] = ['material', 'labor', 'permit', 'dump', 'other'];
+
+export const BUDGET_KIND_LABELS: Record<BudgetKind, string> = {
+  material: 'Material',
+  labor: 'Labor',
+  permit: 'Permit',
+  dump: 'Dump',
+  other: 'Other',
+};
+
+/** One real cost on the job — a supplier invoice, a crew payment, a dumpster. */
+export type BudgetEntry = {
+  id: string;
+  kind: BudgetKind;
+  label: string;
+  /** Dollars, never negative. */
+  amount: number;
+  /** ISO timestamp the cost was recorded. */
+  at: string;
+  note?: string;
+};
+
+/** Where the projected split came from — every projection says so. */
+export type BudgetProjectedSource = 'estimate' | 'proposal' | 'manual';
+
+/**
+ * Projected cost split, in dollars. A SNAPSHOT: taken from the saved
+ * estimate (or the proposal's frozen line items) at the moment it was set,
+ * so a later price-book edit never rewrites what the job was budgeted at.
+ */
+export type BudgetProjected = {
+  material: number;
+  labor: number;
+  other: number;
+  source: BudgetProjectedSource;
+  /** The estimate / proposal id the split was read from. */
+  sourceId?: string;
+  setAt: string;
+};
+
+export type JobBudget = {
+  jobId: string;
+  projected?: BudgetProjected;
+  actuals: BudgetEntry[];
+  /**
+   * The contract price when the roofer pinned one by hand. Absent means the
+   * card reads the SIGNED proposal's total live (lib/services/budget.ts
+   * `contractPriceFor`), which is the honest default.
+   */
+  contractPriceOverride?: number;
+  updatedAt: string;
 };
 
 export type MileageTrip = {

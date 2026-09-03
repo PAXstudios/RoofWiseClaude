@@ -25,7 +25,8 @@ import { useLeadStore } from '@/lib/stores/leadStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
-import { AREA_STATUS_LABELS, useKnockFinderStore, type AreaStatus, type KnockPlan } from '@/lib/stores/knockFinderStore';
+import { AREA_STATUS_LABELS, useKnockFinderStore, type AreaStatus, type KnockDaySchedule, type KnockPlan } from '@/lib/stores/knockFinderStore';
+import { ScheduleDaySheet, startClockLabel } from '@/components/knock/ScheduleDaySheet';
 import { directionsUrl } from '@/lib/services/knockFinder';
 import {
   CELL_MILES,
@@ -34,11 +35,12 @@ import {
   TARGET_FINDS,
   clockFromStart,
   fmtMinutes,
+  stormYearOf,
   type ScoredArea,
   type TripDay,
 } from '@/lib/services/knockOpportunities';
-import { fetchNearbyHomes, recordCardUrl, recordFactsLine } from '@/lib/services/propertyRecord';
-import { haversineMilesBetween } from '@/lib/services/stormWhere';
+import { areaPerformance, performanceLine, type PerformanceCounts } from '@/lib/services/knockCalibration';
+import { fetchNearbyHomes, recordCardUrl, recordFactsLine, roofYearFromRecord } from '@/lib/services/propertyRecord';
 import { KNOCK_ROUTE_RADIUS_MILES } from '@/lib/services/stormWatch';
 import { isApillowConfigured } from '@/lib/env';
 import type { KnockRouteTarget, PropertyRecord } from '@/lib/models/types';
@@ -53,9 +55,6 @@ const STATUS_TONE: Record<AreaStatus, 'neutral' | 'info' | 'success' | 'warn'> =
   skipped: 'neutral',
   done: 'success',
 };
-/** Outcomes that mean someone answered — read loosely so new outcomes count too. */
-const NON_CONTACT = new Set(['not_home', 'no_answer', 'not_interested', 'do_not_knock', 'vacant']);
-
 export function PlanView({ plan }: { plan: KnockPlan }) {
   const router = useRouter();
   const result = plan.result;
@@ -65,26 +64,19 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
   const setRouteTarget = useKnockSessionStore((s) => s.setRouteTarget);
   const setRouteStops = useKnockSessionStore((s) => s.setRouteStops);
   const setAreaStatus = useKnockFinderStore((s) => s.setAreaStatus);
+  // The trip day being put on the calendar (ScheduleDaySheet); null = closed.
+  const [scheduling, setScheduling] = useState<TripDay | null>(null);
   const toast = useToastStore((s) => s.show);
 
-  // Real knocks inside each area's ring since this plan was made.
+  // Real knocks inside each area's ring since this plan was made — the same
+  // counter the calibration feeds on (lib/services/knockCalibration.ts).
   const knocksByArea = useMemo(() => {
-    const since = new Date(plan.createdAt).getTime();
     const knocks = [...(activeSession ? [activeSession] : []), ...archive].flatMap((s) => s.knocks);
-    const out: Record<string, { doors: number; contacts: number }> = {};
-    for (const a of result.areas) {
-      let doors = 0;
-      let contacts = 0;
-      for (const k of knocks) {
-        if (new Date(k.createdAt).getTime() < since) continue;
-        if (haversineMilesBetween(a.lat, a.lng, k.lat, k.lng) > CELL_MILES) continue;
-        doors += 1;
-        if (!NON_CONTACT.has(k.outcome)) contacts += 1;
-      }
-      out[a.key] = { doors, contacts };
-    }
+    const out: Record<string, PerformanceCounts> = {};
+    for (const a of result.areas) out[a.key] = areaPerformance(knocks, a, plan.createdAt, CELL_MILES);
     return out;
   }, [activeSession, archive, plan.createdAt, result.areas]);
+  const neighbours = result.mode === 'neighbours';
 
   const showOnMap = (a: ScoredArea) =>
     router.push({
@@ -161,10 +153,12 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
     <>
       <FadeSlideIn index={0}>
         <RichCard
-          icon="sparkles-outline"
+          icon={neighbours ? 'home-outline' : 'sparkles-outline'}
           iconTone="orange"
-          title={result.brief?.headline ?? `${result.areas.length} areas worth a day`}
-          subtitle={`${result.eventCount} NWS reports (${result.hailCount} hail · ${result.windCount} wind) · ${result.cellCount} areas scored · ${formatRelative(result.generatedAt, 'just now')}`}
+          title={result.brief?.headline ?? (neighbours ? `${result.areas.length} streets around your jobs` : `${result.areas.length} areas worth a day`)}
+          subtitle={`${neighbours ? `${result.cellCount} streets with your jobs · ` : ''}${result.eventCount} NWS reports (${result.hailCount} hail · ${result.windCount} wind) within ${result.radiusMiles} mi${
+            neighbours ? '' : ` · ${result.cellCount} areas scored`
+          } · ${formatRelative(result.generatedAt, 'just now')}`}
         >
           <View style={styles.statRow}>
             <Stat value={String(result.plan.totalDoors)} label="doors planned" />
@@ -188,7 +182,7 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
         </RichCard>
       </FadeSlideIn>
 
-      <SectionHeader title="Best areas to knock" />
+      <SectionHeader title={neighbours ? 'Streets around your jobs' : 'Best areas to knock'} />
       {result.areas.map((a, i) => (
         <FadeSlideIn key={a.key} index={i + 1}>
           <AreaCard
@@ -210,7 +204,13 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
       {result.brief?.planNarrative ? <Text style={styles.narrative}>{result.brief.planNarrative}</Text> : null}
       {result.plan.days.map((d, i) => (
         <FadeSlideIn key={d.day} index={result.areas.length + 1 + i}>
-          <DayCard day={d} onStart={() => void startDay(d)} onDirections={() => openDirections(d.stops.map((s) => ({ lat: s.area.lat, lng: s.area.lng })))} />
+          <DayCard
+            day={d}
+            scheduled={plan.schedule?.find((s) => s.day === d.day)}
+            onStart={() => void startDay(d)}
+            onDirections={() => openDirections(d.stops.map((s) => ({ lat: s.area.lat, lng: s.area.lng })))}
+            onSchedule={() => setScheduling(d)}
+          />
         </FadeSlideIn>
       ))}
       {result.plan.unplanned.length > 0 ? (
@@ -223,13 +223,28 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
         <Text style={styles.body}>
           Each 3-mile area gets a Knock Score from the hail size and wind speed NWS reported there (bigger and more
           recent counts more), the roof age and owner-occupancy of its Census tract, the drive from base, and how much
-          of it you have knocked in the last 60 days. "Expect" is the per-roof chance of claim-grade damage (8+
-          functional hits per square) times {DOORS_PER_STOP} doors; "at least" is the {Math.round(CONFIDENCE * 100)}% floor.{' '}
-          {TARGET_FINDS} claim-grade roofs per stop is the bar a good day clears. Full method: docs/KNOCK_OPPORTUNITIES.md.
+          of it you have knocked in the last 60 days.{neighbours ? ' In this mode the streets are the ones your own jobs sit on — a signed job counts ×1.6, any job ×1.25.' : ''}{' '}
+          "Expect" is the per-roof chance of claim-grade damage (8+ functional hits per square) times {DOORS_PER_STOP} doors; "at least" is the{' '}
+          {Math.round(CONFIDENCE * 100)}% floor. {TARGET_FINDS} claim-grade roofs per stop is the bar a good day clears. The per-roof chance starts from a
+          base-rate table by hail size that your own knocked doors recalibrate over time, and homes Zillow says have a roof newer than the storm lower it.
+          Full method: docs/KNOCK_OPPORTUNITIES.md.
         </Text>
       </RichCard>
+
+      {scheduling ? (
+        <ScheduleDaySheet visible plan={plan} day={scheduling} onClose={() => setScheduling(null)} />
+      ) : null}
     </>
   );
+}
+
+/** "Thu 5" from a YYYY-MM-DD date, in the phone's locale; the raw string if it does not parse. */
+function scheduledDayLabel(ymd: string): string {
+  const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return ymd;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +291,7 @@ function AreaCard({
   rank: number;
   area: ScoredArea;
   status: AreaStatus;
-  knocks?: { doors: number; contacts: number };
+  knocks?: PerformanceCounts;
   aiRationale?: { rationale: string; opener: string };
   onStatus: (s: AreaStatus) => void;
   onMap: () => void;
@@ -307,10 +322,22 @@ function AreaCard({
           {area.landmark ? <Text style={styles.areaSub}>{area.landmark}</Text> : null}
           <Text style={styles.areaSub}>
             {Math.round(area.distanceMiles)} mi {area.bearing} · {fmtMinutes(area.driveMinutes)} drive
-            {knocks && knocks.doors > 0 ? ` · ${knocks.doors} knocked here · ${knocks.contacts} answered` : ''}
           </Text>
+          {knocks && knocks.doors > 0 ? <Text style={styles.performance}>Performance: {performanceLine(knocks)}</Text> : null}
           <View style={styles.pillRow}>
-            <Pill label={stormLine(area)} tone={area.storm.maxHailInches != null && area.storm.maxHailInches >= 1 ? 'danger' : 'info'} size="sm" icon="thunderstorm-outline" />
+            {area.mode === 'neighbours' && area.anchorJob ? (
+              <Pill
+                label={area.anchorJob.signed ? `Signed job here${(area.ownSignedJobs ?? 0) > 1 ? ` · ${area.ownSignedJobs}` : ''}` : `Your job here${area.ownJobs > 1 ? ` · ${area.ownJobs}` : ''}`}
+                tone={area.anchorJob.signed ? 'success' : 'brand'}
+                size="sm"
+                icon="ribbon-outline"
+              />
+            ) : null}
+            {area.storm.strongest || area.mode !== 'neighbours' ? (
+              <Pill label={stormLine(area)} tone={area.storm.maxHailInches != null && area.storm.maxHailInches >= 1 ? 'danger' : 'info'} size="sm" icon="thunderstorm-outline" />
+            ) : (
+              <Pill label="No storm on file" tone="neutral" size="sm" icon="thunderstorm-outline" />
+            )}
           </View>
         </View>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSubtle} />
@@ -326,6 +353,7 @@ function AreaCard({
               At least {hr.atLeast} at {Math.round(hr.confidence * 100)}% confidence · {Math.round(hr.pAtLeastTarget * 100)}% chance of {hr.target}+
               {hr.doorsForTarget != null && hr.doorsForTarget !== hr.doors ? ` · ${hr.doorsForTarget} doors for ${hr.target}` : ''}
             </Text>
+            {area.calibration && area.calibration.method !== 'table' ? <Text style={styles.calNote}>{area.calibration.note}</Text> : null}
           </View>
 
           <Text style={styles.housingLine}>
@@ -374,7 +402,7 @@ function AreaCard({
             ))}
           </View>
 
-          {area.zip && isApillowConfigured ? <NearbyHomes zip={area.zip} areaName={name} onRouteHome={onRouteHome} /> : null}
+          {area.zip && isApillowConfigured ? <NearbyHomes zip={area.zip} areaName={name} stormYear={stormYearOf(area.storm)} onRouteHome={onRouteHome} /> : null}
 
           <View style={styles.actions}>
             <PressableScale style={styles.secondaryBtn} onPress={onMap} accessibilityRole="button" accessibilityLabel="Show on Storm Tracer">
@@ -400,11 +428,37 @@ function AreaCard({
  * The doors behind an area: homes recently sold in its ZIP (Zillow via
  * APIllow). A recent sale is a new owner, a new policy and often an inherited
  * roof. Costs 5 of the month's 50 free lookups — a button that says so.
- * Every home can become a lead, a job, or the route target in one tap.
+ * Every home can become a lead, a job, or the route target in one tap. A
+ * home whose roof is at least as new as the storm (a listing that said "new
+ * roof", a stated roof year, a build after the storm) is not a claim
+ * candidate: it is marked, muted and sorted last.
  */
-function NearbyHomes({ zip, areaName, onRouteHome }: { zip: string; areaName: string; onRouteHome: (h: PropertyRecord, label: string) => void }) {
+function NearbyHomes({
+  zip,
+  areaName,
+  stormYear,
+  onRouteHome,
+}: {
+  zip: string;
+  areaName: string;
+  /** Year of the area's strongest storm day; null when there is none. */
+  stormYear: number | null;
+  onRouteHome: (h: PropertyRecord, label: string) => void;
+}) {
   const router = useRouter();
   const [state, setState] = useState<{ status: 'idle' } | { status: 'busy' } | { status: 'ok'; homes: PropertyRecord[] } | { status: 'error'; reason: string }>({ status: 'idle' });
+  const nowYear = new Date().getFullYear();
+  // Roof year per home, and the ones newer than the storm.
+  const roofs = useMemo(() => {
+    if (state.status !== 'ok') return [];
+    return state.homes.map((h) => {
+      const roof = roofYearFromRecord(h, nowYear);
+      const newSinceStorm = roof != null && stormYear != null && roof.year >= stormYear;
+      return { home: h, roof, newSinceStorm };
+    });
+  }, [state, stormYear, nowYear]);
+  const ordered = useMemo(() => [...roofs].sort((a, b) => Number(a.newSinceStorm) - Number(b.newSinceStorm)), [roofs]);
+  const newCount = roofs.filter((r) => r.newSinceStorm).length;
   const [leadFor, setLeadFor] = useState<Record<string, string>>({});
   const createLead = useLeadStore((s) => s.create);
   const setLeadRecord = useLeadStore((s) => s.setPropertyRecord);
@@ -487,12 +541,17 @@ function NearbyHomes({ zip, areaName, onRouteHome }: { zip: string; areaName: st
   return (
     <View style={styles.nearbyList}>
       <Text style={styles.nearbyTitle}>Recently sold in {areaName}</Text>
-      {state.homes.map((h, i) => {
+      {newCount > 0 ? (
+        <Text style={styles.nearbySub}>
+          {newCount} of {roofs.length} {newCount === 1 ? 'has' : 'have'} a new roof since the storm{stormYear ? ` (${stormYear})` : ''} — not claim candidates, listed last.
+        </Text>
+      ) : null}
+      {ordered.map(({ home: h, roof, newSinceStorm }, i) => {
         const address = [h.streetAddress, h.city].filter(Boolean).join(', ');
         const key = fullAddress(h);
         const leadId = leadFor[key];
         return (
-          <View key={h.zpid ?? i} style={styles.homeCard}>
+          <View key={h.zpid ?? i} style={[styles.homeCard, newSinceStorm && styles.homeCardMuted]}>
             <View style={styles.nearbyRow}>
               {recordCardUrl(h) ? (
                 <Image source={{ uri: recordCardUrl(h) }} style={styles.nearbyThumb} contentFit="cover" transition={120} />
@@ -504,6 +563,14 @@ function NearbyHomes({ zip, areaName, onRouteHome }: { zip: string; areaName: st
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={styles.nearbyAddr} numberOfLines={1}>{address || 'Address withheld'}</Text>
                 <Text style={styles.nearbySub} numberOfLines={2}>{recordFactsLine(h) ?? 'Recently sold'}</Text>
+                {roof ? (
+                  <Pill
+                    label={roof.source === 'year_built' ? `New build · ${roof.year}` : `New roof · ${roof.year}`}
+                    tone={newSinceStorm ? 'neutral' : 'info'}
+                    size="sm"
+                    icon="home-outline"
+                  />
+                ) : null}
               </View>
             </View>
             <View style={styles.homeActions}>
@@ -532,13 +599,31 @@ function NearbyHomes({ zip, areaName, onRouteHome }: { zip: string; areaName: st
   );
 }
 
-function DayCard({ day, onStart, onDirections }: { day: TripDay; onStart: () => void; onDirections: () => void }) {
+function DayCard({
+  day,
+  scheduled,
+  onStart,
+  onDirections,
+  onSchedule,
+}: {
+  day: TripDay;
+  /** The day's slot on the calendar, when the roofer has booked one. */
+  scheduled?: KnockDaySchedule;
+  onStart: () => void;
+  onDirections: () => void;
+  onSchedule: () => void;
+}) {
   return (
     <RichCard
       icon="calendar-outline"
       iconTone="purple"
       title={`Day ${day.day}`}
       subtitle={`${day.stops.length} stop${day.stops.length === 1 ? '' : 's'} · ${Math.round(day.totalMiles)} mi · ${fmtMinutes(day.totalMinutes)} · expect ~${Math.round(day.expected)}, at least ${day.atLeast}`}
+      action={{
+        label: scheduled ? `${scheduledDayLabel(scheduled.date)} · ${startClockLabel(scheduled.startTime)}` : 'Schedule',
+        onPress: onSchedule,
+        icon: scheduled ? 'calendar' : 'calendar-outline',
+      }}
     >
       <View style={styles.stops}>
         {day.stops.map((s, i) => (
@@ -587,11 +672,13 @@ const styles = StyleSheet.create({
   rank: { fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.textSubtle },
   areaTitle: { flexShrink: 1, fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.navy },
   areaSub: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  performance: { fontSize: fontSize.bodySm, color: colors.text, fontWeight: fontWeight.semibold },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
   areaBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.md },
   expectBox: { padding: spacing.md, borderRadius: radii.md, backgroundColor: colors.accentSoft, gap: 2 },
   expectTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
   expectSub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  calNote: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18, marginTop: spacing.xs },
   housingLine: { fontSize: fontSize.bodySm, color: colors.textMuted },
   rationale: { fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 21 },
   opener: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', padding: spacing.md, borderRadius: radii.md, backgroundColor: colors.brandSoft },
@@ -619,6 +706,7 @@ const styles = StyleSheet.create({
   nearbyThumb: { width: 56, height: 56, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
   nearbyAddr: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   homeCard: { gap: spacing.sm, padding: spacing.sm, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
+  homeCardMuted: { opacity: 0.62 },
   homeActions: { flexDirection: 'row', gap: spacing.sm },
   homeBtn: { flex: 1, minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.button, backgroundColor: colors.surface },
   homeBtnDone: { backgroundColor: colors.successSoft },

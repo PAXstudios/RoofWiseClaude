@@ -30,6 +30,7 @@ import { LocationField } from '@/components/LocationField';
 import {
   ROOF_MATERIALS,
   ROOF_MATERIAL_LABELS,
+  type RoofAgeSource,
   type RoofCondition,
   type RoofMaterial,
 } from '@/lib/models/types';
@@ -52,6 +53,11 @@ export type CustomerDetailsResult = {
   condition?: RoofCondition;
   /** Only when the sheet was opened with `roof` and the roofer touched the age. */
   ageYears?: number;
+  /**
+   * Where `ageYears` came from: the hint's source when the roofer took the
+   * property record's offer and left it, absent (→ inspector) otherwise.
+   */
+  ageSource?: RoofAgeSource;
 };
 
 /** A real place from a geocoder — what the caller's GPS lookup produced. */
@@ -77,7 +83,7 @@ type Props = {
   /** Show the roof material + condition pickers (jobs). */
   roof?: boolean;
   /** What the property record suggests for roof age — offered as a chip, never applied silently. */
-  ageHint?: { ageYears: number; note: string } | null;
+  ageHint?: { ageYears: number; note: string; source?: RoofAgeSource } | null;
   /** The caller is still resolving a GPS fix into an address. */
   locating?: boolean;
   /** A resolved address to drop into an EMPTY address field — never over one the roofer typed. */
@@ -125,6 +131,8 @@ export function CustomerDetailsSheet({
   const [material, setMaterial] = useState<RoofMaterial | undefined>();
   const [condition, setCondition] = useState<RoofCondition | undefined>();
   const [ageYears, setAgeYears] = useState<number | undefined>();
+  // Set when the age chip was taken; cleared by the stepper (the inspector's number wins).
+  const [ageSource, setAgeSource] = useState<RoofAgeSource | undefined>();
   const [autoFilled, setAutoFilled] = useState(false);
 
   // Fresh draft every time the sheet opens; placeholders come in as blanks so
@@ -141,6 +149,7 @@ export function CustomerDetailsSheet({
     setMaterial(initial.material);
     setCondition(initial.condition);
     setAgeYears(initial.ageYears);
+    setAgeSource(undefined);
     setAutoFilled(false);
     // The initial object is rebuilt each render by callers; keying on its
     // members keeps the reset to the moment the sheet opens.
@@ -173,7 +182,7 @@ export function CustomerDetailsSheet({
       address: address.trim(),
       lat,
       lng,
-      ...(roof ? { material, condition, ageYears } : {}),
+      ...(roof ? { material, condition, ageYears, ...(ageSource ? { ageSource } : {}) } : {}),
     });
   };
 
@@ -304,7 +313,10 @@ export function CustomerDetailsSheet({
                 <PressableScale
                   style={styles.stepperBtn}
                   pressedScale={0.94}
-                  onPress={() => setAgeYears(Math.max(0, (ageYears ?? 0) - 1))}
+                  onPress={() => {
+                    setAgeYears(Math.max(0, (ageYears ?? 0) - 1));
+                    setAgeSource(undefined);
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel="Roof age minus one year"
                 >
@@ -314,7 +326,10 @@ export function CustomerDetailsSheet({
                 <PressableScale
                   style={styles.stepperBtn}
                   pressedScale={0.94}
-                  onPress={() => setAgeYears((ageYears ?? 0) + 1)}
+                  onPress={() => {
+                    setAgeYears((ageYears ?? 0) + 1);
+                    setAgeSource(undefined);
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel="Roof age plus one year"
                 >
@@ -324,7 +339,10 @@ export function CustomerDetailsSheet({
               {ageHint ? (
                 <PressableScale
                   style={styles.hintChip}
-                  onPress={() => setAgeYears(ageHint.ageYears)}
+                  onPress={() => {
+                    setAgeYears(ageHint.ageYears);
+                    setAgeSource(ageHint.source);
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={`Use ${ageHint.ageYears} years from the property record`}
                 >

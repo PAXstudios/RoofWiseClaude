@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
+import { recordFactsLine, recordRoofLine, recordStatusBadge } from '@/lib/services/propertyRecord';
+import type { PropertyRecord } from '@/lib/models/types';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
@@ -54,6 +56,29 @@ export default function NewLead() {
   const [lat, setLat] = useState<number | undefined>();
   const [lng, setLng] = useState<number | undefined>();
   const [followUpDays, setFollowUpDays] = useState<number | null>(null);
+  // What Zillow knows about the picked address — the house's facts and its
+  // roof ("New roof · 2024"), shown before Save. Cache-first, and the same
+  // lookup Save would make, so it costs nothing extra.
+  const [record, setRecord] = useState<PropertyRecord | null>(null);
+  useEffect(() => {
+    if (lat == null || lng == null || address.trim().length < 8) {
+      setRecord(null);
+      return;
+    }
+    let cancelled = false;
+    void lookupRecord(address.trim()).then((rec) => {
+      if (!cancelled) setRecord(rec);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Keyed on the resolved coordinates: typing clears them, picking a place sets them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lng]);
+  const nowYear = new Date().getFullYear();
+  const roofLine = recordRoofLine(record ?? undefined, nowYear);
+  const factsLine = recordFactsLine(record ?? undefined);
+  const badge = recordStatusBadge(record ?? undefined);
 
   const canSave =
     customerName.trim().length > 0 && address.trim().length > 0;
@@ -77,7 +102,9 @@ export default function NewLead() {
     });
     // The house's own photo and facts for the board (cache-first — a job at
     // the same address later costs nothing more).
-    if (address.trim().length >= 8) {
+    if (record && record.status !== 'not_configured') {
+      setLeadRecord(lead.id, record);
+    } else if (address.trim().length >= 8) {
       void lookupRecord(address.trim()).then((rec) => setLeadRecord(lead.id, rec));
     }
     logActivity({
@@ -193,6 +220,17 @@ export default function NewLead() {
                 setLng(loc.lng);
               }}
             />
+            {record?.status === 'found' && (factsLine || roofLine) ? (
+              <View style={styles.recordCard}>
+                <View style={styles.recordHead}>
+                  <IconChip name="business-outline" tone="green" size="sm" />
+                  <Text style={styles.recordTitle}>Property record (Zillow)</Text>
+                  {badge ? <Text style={styles.recordBadge}>{badge.label}</Text> : null}
+                </View>
+                {factsLine ? <Text style={styles.recordLine}>{factsLine}</Text> : null}
+                {roofLine ? <Text style={styles.recordRoof}>{roofLine} — confirm on the roof.</Text> : null}
+              </View>
+            ) : null}
           </FadeSlideIn>
 
           <FadeSlideIn index={2}>
@@ -335,6 +373,12 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
+  recordCard: { marginTop: spacing.md, gap: spacing.xs, padding: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
+  recordHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  recordTitle: { flex: 1, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
+  recordBadge: { fontSize: fontSize.caption, fontWeight: fontWeight.semibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+  recordLine: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  recordRoof: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
   sectionHeaderSpacing: { marginBottom: spacing.sm },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {

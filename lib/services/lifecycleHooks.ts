@@ -8,6 +8,7 @@ import { checkStormWatch } from './stormWatch';
 import { syncCorrections } from './correctionsSync';
 import { syncLeads } from './leadSync';
 import { syncInspections, startInspectionWatcher } from './inspectionSync';
+import { syncKnocks, startKnockSyncWatcher } from './knockSync';
 import { runPhotoSync } from './photoSync';
 import { drainAnalysisQueue } from './analysisQueue';
 import { useServiceAreaStore } from '../stores/serviceAreaStore';
@@ -17,6 +18,7 @@ const STORM_INTERVAL_MS = 30 * 60 * 1000;       // 30 minutes
 const CORRECTIONS_INTERVAL_MS = 5 * 60 * 1000;  // 5 minutes
 const LEADS_INTERVAL_MS = 5 * 60 * 1000;        // 5 minutes
 const INSPECTIONS_INTERVAL_MS = 5 * 60 * 1000;  // 5 minutes
+const KNOCKS_INTERVAL_MS = 5 * 60 * 1000;       // 5 minutes — sessions, doors, plans, do-not-knock
 const PHOTOS_INTERVAL_MS = 2 * 60 * 1000;       // 2 minutes — uploads drain on their own clock
 
 export function useBackgroundJobs() {
@@ -24,10 +26,15 @@ export function useBackgroundJobs() {
   const lastSync = useRef(0);
   const lastLeadsSync = useRef(0);
   const lastInspectionsSync = useRef(0);
+  const lastKnocksSync = useRef(0);
   const lastPhotosSync = useRef(0);
 
   useEffect(() => {
     startInspectionWatcher();
+    // Watches the knock-session, planner and do-not-knock stores: a route
+    // end, a logged door or a plan change schedules a sync (20 s debounce),
+    // and a plan or entry removed here is remembered as a soft-delete.
+    startKnockSyncWatcher();
 
     const handle = (next: AppStateStatus) => {
       if (next === 'active') {
@@ -56,6 +63,15 @@ export function useBackgroundJobs() {
         ) {
           lastInspectionsSync.current = now;
           syncInspections().catch(() => {});
+        }
+        // Knocking data: unchanged rows are hash-skipped, so the cadence is
+        // cheap; the run is a no-op without a session.
+        if (
+          useAuthStore.getState().session &&
+          now - lastKnocksSync.current > KNOCKS_INTERVAL_MS
+        ) {
+          lastKnocksSync.current = now;
+          syncKnocks({ reason: 'foreground' }).catch(() => {});
         }
         // Photo uploads used to run only on the tail of an inspection sync,
         // so a 40-photo job trickled up 8 per app-open. They drain on their

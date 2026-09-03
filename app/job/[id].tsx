@@ -54,7 +54,7 @@ import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
 import { CoverPhotoSheet } from '@/components/sheets/CoverPhotoSheet';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
 import { totalSquares as intelTotalSquares } from '@/lib/services/propertyIntel';
-import { coverPhotoUri, recordFactsLine, recordStatusBadge, roofAgePrefill, roofSizePlausibility } from '@/lib/services/propertyRecord';
+import { coverPhotoUri, recordFactsLine, recordRoofLine, recordStatusBadge, roofAgePrefill, roofSizePlausibility } from '@/lib/services/propertyRecord';
 import { openMail, openPhone } from '@/components/pipeline/contact';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
@@ -117,7 +117,9 @@ function roofSystemLine(ins: Inspection): string {
       ? `≤${ins.ageYears} yr (from build year)`
       : ins.ageSource === 'listing'
         ? `${ins.ageYears} yr (listing)`
-        : `${ins.ageYears} yr`;
+        : ins.ageSource === 'listing_new_roof'
+          ? `${ins.ageYears} yr (new roof per listing)`
+          : `${ins.ageYears} yr`;
   return [ins.geometry, age, ins.condition]
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
     .join(' · ');
@@ -1308,7 +1310,8 @@ export default function JobDetail() {
           ...(d.material ? { material: d.material } : {}),
           ...(d.condition ? { condition: d.condition } : {}),
           // The inspector's number, with its provenance — it beats any prefill.
-          ...(d.ageYears != null && d.ageYears !== inspection.ageYears ? { ageYears: d.ageYears, ageSource: 'inspector' as const } : {}),
+          // A number taken from the record's chip keeps the record's source.
+          ...(d.ageYears != null && d.ageYears !== inspection.ageYears ? { ageYears: d.ageYears, ageSource: d.ageSource ?? ('inspector' as const) } : {}),
         });
         setDetailsSheet(false);
         toast({ tone: 'success', title: 'Details saved', body: d.customerName });
@@ -1398,7 +1401,9 @@ function PropertyRecordCard({
 }) {
   const rec = inspection.propertyRecord;
   const facts = recordFactsLine(rec);
-  const prefill = roofAgePrefill(rec, new Date().getFullYear());
+  const nowYear = new Date().getFullYear();
+  const prefill = roofAgePrefill(rec, nowYear);
+  const roofLine = recordRoofLine(rec, nowYear);
   const badge = recordStatusBadge(rec);
   const fit = roofSizePlausibility(rec, intelTotalSquares(inspection) ?? undefined);
   if (!rec || rec.status === 'not_configured') {
@@ -1448,6 +1453,7 @@ function PropertyRecordCard({
           ) : null}
           {rec.lotSizeSqFt ? <Text style={styles.recordLine}>Lot {Math.round(rec.lotSizeSqFt).toLocaleString()} sq ft{rec.propertyType ? ` · ${rec.propertyType.replace(/_/g, ' ').toLowerCase()}` : ''}</Text> : null}
           {rec.zestimate ? <Text style={styles.recordLine}>Zestimate ${rec.zestimate.toLocaleString()}{rec.lastSoldPrice ? ` · last sold $${rec.lastSoldPrice.toLocaleString()}` : ''}</Text> : null}
+          {roofLine ? <Text style={styles.recordLine}>{roofLine}</Text> : null}
           {rec.roofHints?.length ? <Text style={styles.recordHint}>Listing on the roof: "{rec.roofHints[0].text}"</Text> : null}
           {prefill ? (
             <Text style={styles.recordHint}>

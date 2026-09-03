@@ -12,10 +12,14 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FinderStep, KnockFinderResult } from '../services/knockFinder';
-import type { HousingProfile } from '../services/knockOpportunities';
+import { DEFAULT_SEARCH_RADIUS_MILES, clampRadiusMiles, type HousingProfile, type TripDay } from '../services/knockOpportunities';
+import type { DoNotKnockExclusions } from '../services/doNotKnock';
+import type { RunHistoryEntry } from '../services/knockRunEstimate';
 
 const HOUSING_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_PLANS = 40;
+/** Runs remembered for the time estimate. */
+const MAX_RUN_HISTORY = 10;
 
 /** What the roofer did about an area of a plan — set from the plan page. */
 export type AreaStatus = 'planned' | 'knocked' | 'scheduled' | 'skipped' | 'done';
@@ -28,6 +32,18 @@ export const AREA_STATUS_LABELS: Record<AreaStatus, string> = {
   done: 'Done',
 };
 
+/** A trip day put on the calendar — the Plan tab lists these as knock days. */
+export type KnockDaySchedule = {
+  /** `TripDay.day` inside the plan's trip. */
+  day: number;
+  /** YYYY-MM-DD, local. */
+  date: string;
+  /** HH:mm, local — the hour the first drive starts. */
+  startTime: string;
+  /** expo-notifications id of the day-of reminder, when one was scheduled. */
+  reminderId?: string;
+};
+
 export type KnockPlan = {
   id: string;
   createdAt: string;
@@ -37,6 +53,12 @@ export type KnockPlan = {
   areaStatus: Record<string, AreaStatus>;
   /** Free notes the roofer adds on the plan page. */
   notes?: string;
+  /** The Storm Watch alert that queued this plan, when one did (one plan per alert). */
+  stormAlertId?: string;
+  /** Days the roofer put on the calendar (see `scheduleDay`). */
+  schedule?: KnockDaySchedule[];
+  /** What the do-not-knock list removed or discounted when this plan was saved. */
+  exclusions?: DoNotKnockExclusions;
 };
 
 export type ActiveRun = {
@@ -46,7 +68,18 @@ export type ActiveRun = {
   step: FinderStep;
   /** The latest partial result (ranked areas first, enrichment later). */
   partial: KnockFinderResult | null;
+  /** Set when a Storm Watch alert queued the run — the alert screen shows "Planning…". */
+  stormAlertId?: string;
+  /** Search radius this run uses. Absent on runs begun before the dial existed. */
+  radiusMiles?: number;
+  /** ISO — when `step` began; the time estimate subtracts it. */
+  stepStartedAt?: string;
+  /** Seconds each finished step took — filled as the run moves on. */
+  stepSeconds?: Partial<Record<FinderStep, number>>;
 };
+
+/** One scheduled knock day with the plan and the trip day it belongs to. */
+export type ScheduledKnockDay = { plan: KnockPlan; day: TripDay; schedule: KnockDaySchedule };
 
 let counter = 0;
 const newId = () => `plan_${Date.now()}_${counter++}`;
@@ -57,11 +90,32 @@ type KnockFinderState = {
   /** Kept for older screens; always the newest plan's result. */
   lastResult: KnockFinderResult | null;
   housingCache: Record<string, { profile: HousingProfile; fetchedAt: string }>;
+  /** The roofer's last search radius (the dial). */
+  radiusMiles: number;
+  /** The last MAX_RUN_HISTORY runs — what the time estimate learns from. */
+  runHistory: RunHistoryEntry[];
 
   beginRun: (run: Omit<ActiveRun, 'partial'> & { partial?: KnockFinderResult | null }) => void;
-  updateRun: (patch: Partial<Pick<ActiveRun, 'step' | 'partial'>>) => void;
+  updateRun: (patch: Partial<Pick<ActiveRun, 'step' | 'partial' | 'stepStartedAt' | 'stepSeconds' | 'baseLabel'>>) => void;
+  /** Move the run to `step`, timing the one that just finished. */
+  advanceRunStep: (step: FinderStep, now?: Date) => void;
   endRun: () => void;
-  savePlan: (result: KnockFinderResult, title: string) => KnockPlan;
+  setRadiusMiles: (radiusMiles: number) => void;
+  recordRun: (entry: RunHistoryEntry) => void;
+  savePlan: (
+    result: KnockFinderResult,
+    title: string,
+    extra?: { stormAlertId?: string; exclusions?: DoNotKnockExclusions },
+  ) => KnockPlan;
+  /** The plan a Storm Watch alert produced, if any (one plan per alert). */
+  planForAlert: (alertId: string) => KnockPlan | undefined;
+  /** Put a trip day on the calendar (replaces an earlier schedule for that day). */
+  scheduleDay: (planId: string, day: number, date: string, startTime: string, reminderId?: string) => void;
+  unscheduleDay: (planId: string, day: number) => void;
+  /** Record (or clear) the day-of reminder id after it is scheduled. */
+  setDayReminder: (planId: string, day: number, reminderId: string | undefined) => void;
+  /** Every scheduled day across plans, soonest first. Prefer `scheduledDaysFrom` inside components. */
+  scheduledDays: () => ScheduledKnockDay[];
   setAreaStatus: (planId: string, areaKey: string, status: AreaStatus) => void;
   setPlanNotes: (planId: string, notes: string) => void;
   renamePlan: (planId: string, title: string) => void;
@@ -80,16 +134,81 @@ export const useKnockFinderStore = create<KnockFinderState>()(
       activeRun: null,
       lastResult: null,
       housingCache: {},
+      radiusMiles: DEFAULT_SEARCH_RADIUS_MILES,
+      runHistory: [],
 
-      beginRun: (run) => set({ activeRun: { ...run, partial: run.partial ?? null } }),
+      beginRun: (run) => set({ activeRun: { ...run, partial: run.partial ?? null, stepStartedAt: run.stepStartedAt ?? run.startedAt, stepSeconds: run.stepSeconds ?? {} } }),
       updateRun: (patch) => set((s) => (s.activeRun ? { activeRun: { ...s.activeRun, ...patch } } : s)),
+      advanceRunStep: (step, now = new Date()) =>
+        set((s) => {
+          const run = s.activeRun;
+          if (!run) return s;
+          if (run.step === step) return s;
+          const startedMs = new Date(run.stepStartedAt ?? run.startedAt).getTime();
+          const took = Number.isNaN(startedMs) ? undefined : Math.max(0, (now.getTime() - startedMs) / 1000);
+          return {
+            activeRun: {
+              ...run,
+              step,
+              stepStartedAt: now.toISOString(),
+              stepSeconds: took == null ? run.stepSeconds : { ...(run.stepSeconds ?? {}), [run.step]: Math.round(took * 10) / 10 },
+            },
+          };
+        }),
       endRun: () => set({ activeRun: null }),
+      setRadiusMiles: (radiusMiles) => set({ radiusMiles: clampRadiusMiles(radiusMiles) }),
+      recordRun: (entry) => set((s) => ({ runHistory: [entry, ...s.runHistory].slice(0, MAX_RUN_HISTORY) })),
 
-      savePlan: (result, title) => {
-        const plan: KnockPlan = { id: newId(), createdAt: result.generatedAt, title, result, areaStatus: {} };
+      savePlan: (result, title, extra) => {
+        const plan: KnockPlan = {
+          id: newId(),
+          createdAt: result.generatedAt,
+          title,
+          result,
+          areaStatus: {},
+          ...(extra?.stormAlertId ? { stormAlertId: extra.stormAlertId } : null),
+          ...(extra?.exclusions ? { exclusions: extra.exclusions } : null),
+        };
         set((s) => ({ plans: [plan, ...s.plans].slice(0, MAX_PLANS), lastResult: result }));
         return plan;
       },
+
+      planForAlert: (alertId) => get().plans.find((p) => p.stormAlertId === alertId),
+
+      scheduleDay: (planId, day, date, startTime, reminderId) =>
+        set((s) => ({
+          plans: s.plans.map((p) =>
+            p.id === planId
+              ? {
+                  ...p,
+                  schedule: [
+                    ...(p.schedule ?? []).filter((d) => d.day !== day),
+                    { day, date, startTime, ...(reminderId ? { reminderId } : null) },
+                  ],
+                }
+              : p,
+          ),
+        })),
+
+      unscheduleDay: (planId, day) =>
+        set((s) => ({
+          plans: s.plans.map((p) => {
+            if (p.id !== planId) return p;
+            const rest = (p.schedule ?? []).filter((d) => d.day !== day);
+            return { ...p, schedule: rest.length > 0 ? rest : undefined };
+          }),
+        })),
+
+      setDayReminder: (planId, day, reminderId) =>
+        set((s) => ({
+          plans: s.plans.map((p) =>
+            p.id === planId
+              ? { ...p, schedule: (p.schedule ?? []).map((d) => (d.day === day ? { ...d, reminderId } : d)) }
+              : p,
+          ),
+        })),
+
+      scheduledDays: () => scheduledDaysFrom(get().plans),
 
       setAreaStatus: (planId, areaKey, status) =>
         set((s) => ({
@@ -119,7 +238,7 @@ export const useKnockFinderStore = create<KnockFinderState>()(
       name: 'roofwise.knockFinder.v1',
       version: 2,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ plans: s.plans, lastResult: s.lastResult, housingCache: s.housingCache }),
+      partialize: (s) => ({ plans: s.plans, lastResult: s.lastResult, housingCache: s.housingCache, radiusMiles: s.radiusMiles, runHistory: s.runHistory }),
       // v1 stored only `lastResult`; turn it into the first saved plan so
       // nothing the roofer generated before this existed is lost.
       migrate: (persisted, version) => {
@@ -136,8 +255,33 @@ export const useKnockFinderStore = create<KnockFinderState>()(
   ),
 );
 
-/** "Plano, TX · Jun 14, 2026" */
-export function planTitleFor(result: KnockFinderResult): string {
+/**
+ * Every scheduled day across the given plans, soonest first (date, then
+ * start time, then the older plan). Pure — use it under `useMemo` on the
+ * `plans` slice so a component never re-renders on a fresh array identity.
+ */
+export function scheduledDaysFrom(plans: readonly KnockPlan[]): ScheduledKnockDay[] {
+  const out: ScheduledKnockDay[] = [];
+  for (const plan of plans) {
+    for (const schedule of plan.schedule ?? []) {
+      const day = plan.result.plan.days.find((d) => d.day === schedule.day);
+      if (!day) continue;
+      out.push({ plan, day, schedule });
+    }
+  }
+  out.sort(
+    (a, b) =>
+      `${a.schedule.date}T${a.schedule.startTime}`.localeCompare(`${b.schedule.date}T${b.schedule.startTime}`) ||
+      a.plan.createdAt.localeCompare(b.plan.createdAt) ||
+      a.day.day - b.day.day,
+  );
+  return out;
+}
+
+/** "Plano, TX · Jun 14, 2026" — neighbours mode: "Neighbours · Jun 14, 2026". */
+export function planTitleFor(result: Pick<KnockFinderResult, 'generatedAt' | 'base' | 'mode'>): string {
   const d = new Date(result.generatedAt);
-  return `${result.base.label} · ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  const day = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  if (result.mode === 'neighbours') return `Neighbours · ${day}`;
+  return `${result.base.label} · ${day}`;
 }

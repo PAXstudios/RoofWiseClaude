@@ -68,6 +68,64 @@ export async function scheduleFollowUpReminder(args: {
   });
 }
 
+/**
+ * How long before a scheduled knock day's start the reminder fires. An hour
+ * is enough to load the truck and drive; owner decision pending (Wave H).
+ */
+export const KNOCK_DAY_REMINDER_LEAD_MS = 60 * 60 * 1000;
+
+/** "9:00 AM" from "09:00". */
+function clockLabel(startTime: string): string {
+  const [h, m] = startTime.split(':').map(Number);
+  if (!Number.isFinite(h)) return startTime;
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(Number.isFinite(m) ? m : 0).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+/**
+ * Day-of reminder for a scheduled knock day ("Knock day 1 starts at 9:00 AM
+ * — 3 stops · first: Frisco"), an hour before the start. The tap opens the
+ * plan (`knock_plan` routes in app/_layout.tsx). Returns the scheduled id
+ * for `cancelKnockDayReminder`, or null when the day has already started or
+ * push permission was refused.
+ */
+export async function scheduleKnockDayReminder(args: {
+  planId: string;
+  day: number;
+  /** YYYY-MM-DD, local. */
+  date: string;
+  /** HH:mm, local. */
+  startTime: string;
+  stops: number;
+  first: string;
+}): Promise<string | null> {
+  const [y, mo, d] = args.date.split('-').map(Number);
+  const [hh, mm] = args.startTime.split(':').map(Number);
+  if (![y, mo, d, hh].every(Number.isFinite)) return null;
+  const startAt = new Date(y, mo - 1, d, hh, Number.isFinite(mm) ? mm : 0, 0, 0);
+  if (startAt.getTime() <= Date.now()) return null;
+  const granted = await requestPushPermission();
+  if (!granted) return null;
+  const fireAt = new Date(startAt.getTime() - KNOCK_DAY_REMINDER_LEAD_MS);
+  if (fireAt.getTime() <= Date.now()) fireAt.setTime(Date.now() + 60 * 1000);
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: `Knock day ${args.day} starts at ${clockLabel(args.startTime)}`,
+      body: `${args.stops} stop${args.stops === 1 ? '' : 's'} · first: ${args.first}`,
+      data: { kind: 'knock_plan', planId: args.planId },
+    },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireAt },
+  });
+}
+
+export async function cancelKnockDayReminder(id: string): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(id);
+  } catch {
+    // Already fired or never existed — nothing to cancel.
+  }
+}
+
 /** Schedule a weekly calibration push (every Monday 9am). */
 export async function scheduleWeeklyCalibrationPush(): Promise<void> {
   // Wipe any previously-scheduled calibration push so we don't stack them.

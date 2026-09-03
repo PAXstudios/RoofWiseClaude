@@ -1,6 +1,6 @@
 # Where should I knock? — the opportunity formula
 
-`lib/services/knockOpportunities.ts` (pure) · `lib/services/knockFinder.ts` (I/O) · `lib/services/censusHousing.ts` · `lib/services/opportunityBrief.ts` · `app/knock-finder.tsx`
+`lib/services/knockOpportunities.ts` (pure) · `lib/services/knockCalibration.ts` (pure) · `lib/services/knockFinder.ts` (I/O) · `lib/services/censusHousing.ts` · `lib/services/opportunityBrief.ts` · `lib/services/knockRunEstimate.ts` (pure) · `app/knock-finder.tsx`
 
 One button. The roofer should not have to think about where to go. This
 document is the authority on the formula, its constants, and why each one
@@ -10,9 +10,16 @@ is what it is. Change the code and this file together.
 
 ## 1. What it answers
 
-> Within 100 miles of my base, which neighbourhoods are most likely to have
-> hail- or wind-damaged roofs right now, why, how many claim-grade roofs
-> should I expect to find if I knock there, and in what order should I drive?
+> Within the radius I chose (3–50 miles, default 25) of my base, which
+> neighbourhoods are most likely to have hail- or wind-damaged roofs right
+> now, why, how many claim-grade roofs should I expect to find if I knock
+> there, and in what order should I drive?
+
+Two modes (`FinderMode`):
+
+- **Storm-hit streets** (default) — every 3-mile cell an NWS report landed in.
+- **Neighbours of my jobs** — every cell one of the roofer's own jobs sits
+  in, scored with the same storm evidence when there is any (§2.7).
 
 Output per area (a ~3-mile cell):
 
@@ -38,7 +45,10 @@ up to three days.
 ### 2.1 Storm reports
 
 NWS Local Storm Reports via the IEM per-point service (`lib/noaa.ts`), radius
-100 mi, look-back 24 months, hail + wind. Each report is a point; hail falls
+as chosen (`DEFAULT_SEARCH_RADIUS_MILES` 25, `MIN` 3 = one cell, `MAX` 50 —
+owner: "toggle the mileage from 0–50 miles"; the roofer's last choice is
+remembered in `knockFinderStore.radiusMiles`), look-back 24 months, hail +
+wind. Each report is a point; hail falls
 in swaths, so a report contributes weight 1.0 to its own cell and 0.4 to each
 of the 8 neighbours (`ADJACENT_SPREAD`). **Only cells a report actually landed
 in are ranked** — a halo of report-less cells around every storm would put
@@ -130,12 +140,17 @@ build year (Drift #5).
 
 ### 2.5 Access and footprint
 
-- `accessFactor`: 1.0 within 25 mi, falling linearly to 0.6 at 100 mi. A
-  100-mile drive is a committed day.
+- `accessFactor(distance, radius)`: 1.0 within the nearest quarter of the
+  chosen radius, falling linearly to 0.6 at its edge. It scales with the
+  dial so "nearer is better" holds whether the roofer picked 10 mi or 50;
+  at the old fixed 100 mi it is the same curve as before (free within 25,
+  0.6 at 100).
 - `canvassedFactor`: 1 − 0.0075 × (your knocks in this cell in the last 60
   days), floor 0.7. Ground you covered last month is worth less this month.
 - `ownJobsFactor`: 1.05 when you already have a job in the cell — a yard
-  sign and a referral base.
+  sign and a referral base (storm mode).
+- `referralFactor`: neighbours mode replaces `ownJobsFactor` with ×1.6 when
+  a **signed** job is in the cell, ×1.25 for any job (§2.7).
 
 ### 2.6 Knock Score
 
@@ -152,6 +167,42 @@ street from a fair one there is the **worst hail and how long ago** (p),
 then how broad the exposure was (storm), then the housing. A weighted
 geometric mean: a perfect neighbourhood with no storm is not a lead, and a
 monster storm over apartment blocks is a weaker one.
+
+**Cost of the ranking.** The cheap part of the score (a handful of
+multiplications) runs for every candidate cell; the binomial statements
+and the rationale run only for the top ten (`rankAreasDetailed`). The
+binomial tail is one running log-binomial term walked from the short side
+of k, and "doors for 5" is an exponential-then-binary search memoised by p
+to three decimals. The first build did the O(n²) tail for every cell to
+n = 600, twice — ~5.8 s of blocked JS per pass on a desktop CPU for 1,200
+cells, and the minute-long freeze the owner hit on the phone. Now: 707
+direct cells within 50 mi rank in ~35 ms, and the finder yields to the
+event loop between phases so Back keeps working.
+
+### 2.7 Neighbours of my jobs (`mode: 'neighbours'`)
+
+The population is the set of cells the roofer's geocoded jobs sit in
+(`OwnActivity.jobs`, each with `signed` — a signed proposal, the homeowner's
+signature on the inspection, or the linked lead at or past Approved / Signed
+— `isSignedJob` in `knockFinder.ts`). Each cell is scored with the same
+storm evidence as storm mode when a report landed in or next to it (a
+signed job in a hail cell is the best street in the county), and with
+`EMPTY_EVIDENCE` otherwise:
+
+- storm factor floors at `NEIGHBOUR_STORM_FLOOR` = 0.1 so the geometric
+  mean does not zero a referral street; `p` sits at the 0.01 floor, so the
+  card honestly expects ~0 claim-grade roofs per 40 doors and the rationale
+  says *"No NWS hail or wind report on file here … a referral street, not a
+  claim street."*
+- `referralFactor` (×1.6 signed / ×1.25 any) replaces `ownJobsFactor`.
+- the card leads with the anchor job (signed first, then newest):
+  *"Your signed job at 1420 Oak St (Jun) — lead with the yard sign"*;
+  `landmark` is the job's street and `name` its city.
+- the plan title is *"Neighbours · Sep 3, 2026"*.
+
+A storm-service failure in this mode does not fail the run: the streets
+are ranked by the jobs alone and the notes say so. No jobs with
+coordinates → the mode is disabled on the screen with a plain note.
 
 ---
 
@@ -186,12 +237,19 @@ monster storm over apartment blocks is a weaker one.
 ### 4.1 Per-roof probability
 
 ```
-p = base(worst hail in cell) × roofAge × (direct ? 1 : 0.6) × remaining(months) , clamped [0.01, 0.75]
+p = base(worst hail in cell) × roofAge × (direct ? 1 : 0.6) × remaining(months) × newRoof(share) , clamped [0.01, 0.75]
 ```
 
-**Base rate by worst reported hail** (`baseHitProbability`) — the share of
-asphalt roofs under that hail that carry claim-grade damage (8+ functional
-hits per test square):
+`base` is the table below **or the roofer's calibrated rate for that hail
+class when they have one** (§8). `newRoof` is §4.5. The product of the
+factors after `base` is the street's *modifier* (`hitModifier`) — the
+calibration weighs doors by it.
+
+**Base rate by worst reported hail** (`DEFAULT_BASE_RATES`, bucketed by
+`hailClassOf` in `knockCalibration.ts`; `baseHitProbability` reads the
+table through the same buckets so the two can never disagree) — the share
+of asphalt roofs under that hail that carry claim-grade damage (8+
+functional hits per test square):
 
 | Worst hail | base p |
 |---|---|
@@ -224,6 +282,32 @@ the cell: `p = 0.65 × 1.0 × 1 × 0.94 ≈ 0.61` → 40 doors: expect ~25, at l
 22 at 80 %, P(≥ 5) ≈ 1, 10 doors for 5. And 0.75" hail twenty months ago on
 national-prior housing: `p = 0.10 × 0.9 × 1 × 0.58 ≈ 0.05` → expect ~2, at
 least 0 at 80 %, P(≥ 5) ≈ 5 %.
+
+### 4.5 Known new roofs (`newRoofFactor`)
+
+A home whose roof is at least as new as the strongest storm is not a claim
+candidate. The app knows a roof year for a house when a cached Zillow
+record (`propertyRecordStore`, filled by jobs, leads, the pin sheet and the
+plan's recently-sold list) carries one — `roofYearFromRecord`: a stated
+listing year ("new roof 2021"), a listing that says "new roof" with no
+year (dated to the year the listing went up — `newRoofFromListing`,
+evidence `listing_new_roof`), or a build year (a house built after the
+storm has a roof newer than the storm). Per cell:
+
+```
+share    = roofs with roofYear ≥ year(strongest storm day) ÷ known roofs in the cell
+newRoof  = 1 − 0.8 × share        (1 when fewer than MIN_KNOWN_ROOFS = 3 records)
+```
+
+Never to zero — a handful of listings is a sample of the street, not the
+street. The card says *"2 of 5 homes on file here (Zillow) have a roof at
+least as new as the storm — fewer claim candidates, 32 % off the per-roof
+odds."* On the plan page the recently-sold list marks each such home
+*New roof · 2024* / *New build · 2026*, mutes it and sorts it last, with a
+line *"2 of 5 have a new roof since the storm"*. The same year autofills
+roof age on a new job, the details sheet, the job's record card and the
+lead's record card (`roofAgePrefill`, source `listing_new_roof`; a stated
+year still wins, and an inspector's non-zero entry is never overwritten).
 
 ### 4.4 Why 40 doors and why 5
 
@@ -275,7 +359,11 @@ the rule-based bullets, labelled *"AI brief is not set up on this build."*
 
 | Missing | Behaviour |
 |---|---|
-| Storm service unreachable | "Storm history not available" — no list. |
+| Storm service unreachable | "Storm history not available" — no list (neighbours mode: the jobs are ranked alone and the notes say so). |
+| No jobs with coordinates (neighbours mode) | The mode is disabled on the screen with a plain note; the runner answers `unavailable` with the reason. |
+| Base with no name (a dropped pin) | Reverse-geocoded once in the runner; last resort "Pinned spot · 33.02, −96.70". |
+| No calibration data | The table, and the plan says so. |
+| Fewer than 3 cached records in a cell | No new-roof factor; the card says nothing about new roofs. |
 | No reports in a rankable cell | "No qualifying storms" with the report count. |
 | No Census key / API down | National prior, reason on every card, note in the summary. |
 | No Google key | Areas named by the reporting town; no street landmark. |
@@ -286,9 +374,88 @@ missing.
 
 ---
 
-## 8. Calibration (next)
+## 8. Calibration — the roofer's doors refit the base rates
 
-Log `expected` vs `found` per stop from the knock session (interested /
-damage-confirmed outcomes) and refit §4.1's base rates per hail class —
-the learning loop already stores corrections; this is the same pattern.
-Until then, the base rates are assumptions, stated as such here.
+`lib/services/knockCalibration.ts` (pure) · `lib/stores/knockCalibrationStore.ts`
+(persisted `roofwise.knockCalibration.v1`).
+
+Owner: "doors, contacts, leads and signed per area feed back into the base
+rates." Every plan is a prediction; every door knocked inside a planned
+area is evidence about it.
+
+**What is counted.** For each saved plan × each of its areas, the knocks
+made after the plan was created within the area's 3-mile ring
+(`areaPerformance` — the same counter the plan page's *Performance: 38
+doors · 12 answered · 3 leads · 1 signed* line uses). A knock is attributed
+to exactly one plan-area — the newest plan made before it that has an area
+within the ring, and the nearest such area — because plans for the same
+base repeat the same cells run after run and a Wednesday door must not
+count for Monday's plan and again for Tuesday's (`attributeKnocks`).
+Records are rebuilt wholesale from the live plans and sessions at every
+Find (`refreshFromStores`); deleting a plan drops its records.
+
+**What is a find.** `isFind`: `damageNoted === true` is a find whatever the
+outcome (the roofer looked); `damageNoted === false` is not, whatever the
+outcome (the strongest "no" there is); otherwise an outcome that means
+someone said yes to a conversation about damage — interested, booked,
+inspected, signed (`isWin`) — counts, and no answer / vacant / renter / not
+interested / has a roofer / do not knock do not. Doors are every outcome
+that `countsAsDoor` (all of them today).
+
+**The posterior.** Per hail class (§4.1's buckets, `hailClassOf`):
+
+```
+posterior = (table × 20 + finds) / (20 + doors_w)      clamped [0.01, 0.75]
+doors_w   = Σ doors × modifier                          modifier = the street's roofAge × direct × remaining × newRoof
+```
+
+A Beta-binomial posterior mean with the table worth 20 doors
+(`PRIOR_STRENGTH_DOORS`): at 0 doors the table holds; 200 doors with 60
+finds under 2.00" hail moves 0.65 to 0.33. Doors are weighted by the
+modifier the formula applied on that street so a slow street after an old
+storm (modifier 0.5) does not drag the base rate for a fresh one — the same
+200/60 on a 0.5-modifier street gives 0.61, not 0.33.
+
+**The market ratio.** Overall, found ÷ expected (expected = Σ doors × the p
+each plan promised), shrunk toward 1 with the same 20-door prior and
+clamped 0.4–2.0: *"your market runs 0.8× the table"*.
+
+**Which rate a class uses** (`calibrateBaseRates` → `CalibratedRates`):
+
+| Class has | Rate | Card says |
+|---|---|---|
+| ≥ 20 weighted doors | its posterior | *Your data: 0.33 per roof (200 doors under 2.00"+ hail) vs table 0.65.* |
+| < 20 doors, roofer has data | table × market ratio | *Your market runs 0.8× the table — 0.18 vs 0.22 (7 doors in this class so far).* |
+| no data at all | the table | *(nothing — the table is the table)* |
+
+`confidence` per class = doors ÷ (doors + 20). The finder reads the
+snapshot at ranking time (`calibrationForRun`), passes it to
+`rankAreas` / `roofHitProbability`, stamps every area with
+`calibration: { hailClass, tableRate, usedRate, doors, method, note }`, adds
+the note to the rule rationale when a calibrated rate was used, and the
+plan's notes say *"Base rates calibrated from 207 doors on 2 plans"* or
+*"Base rates are the table — calibration starts after your first plan is
+knocked."* The planner screen's *Your calibration* card lists table → yours
+per class with doors, and **Reset** (confirm sheet) goes back to the table
+and starts the count over from that moment (`resetAt` — earlier knocks no
+longer feed it; plans and knocks themselves stay).
+
+Every record also keeps contacts, damage seen, leads, appointments and
+signed per area (`AreaPerformance`) — the conversion funnel behind the
+posterior, for the next thing the owner asks.
+
+---
+
+## 9. Estimated time (`knockRunEstimate.ts`)
+
+Owner: "some sort of estimated time on the screen as the app is looking for
+doors." The runner times every step (`activeRun.stepStartedAt`,
+`stepSeconds`) and records the last 10 runs (`knockFinderStore.runHistory`).
+`estimateRemainingSeconds` = the rest of the current step (typical − elapsed,
+never below a quarter of typical) + every step still to come, where a
+step's typical seconds is the median of successful history normalised to
+25 mi — storm pull and scoring scale with the area of the circle
+(radius²), housing with the areas enriched (cap 6), naming flat, the brief
+capped at its 20 s timeout — or, with no history, the defaults 4 / 1 / 3 /
+2 / 8 s labelled *"first run, a guess"*. The screen prints *"About 30 s
+left"* under the step list.

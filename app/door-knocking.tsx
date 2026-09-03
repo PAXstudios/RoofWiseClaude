@@ -1,32 +1,38 @@
-// Door knocking — the mini-app. A SalesRabbit-class canvass map:
+// Door knocking — the mini-app. A SalesRabbit-class canvass map on the shared
+// map control system (components/map/controls):
 //
 //   • tap any house (or "Pin here" at the phone) → the pin sheet: address,
 //     one-tap house lookup, a colour-coded outcome, follow-up, contact, note;
-//   • every knock is a coloured pin; a legend strip filters by group; the
-//     last 30 days of earlier routes can be shown alongside; a second visit
-//     upgrades the pin and keeps the first visit in its history;
+//   • every knock is a coloured pin; the Layers & filters sheet (rail button
+//     or the top-left summary chip) filters by group and shows the last 30
+//     days of earlier routes alongside; a second visit upgrades the pin and
+//     keeps the first visit in its history;
 //   • a live mileage trip runs with the route (foreground — the native build
 //     is what unlocks background tracking), drawn as the walked path, with
-//     doors / answered / miles / time pinned above the controls;
+//     doors / answered / miles / time in the drawer's header;
+//   • the drawer lists every pin on this route (tap → its sheet) — the list
+//     SalesRabbit users expect — and, raised, the earlier routes' pins;
 //   • multi-stop routes from the knock planner: each stop is a ring, the
-//     current one accented, "Next stop" recentres and advances.
+//     current one accented, "Next" in the drawer header recentres and
+//     advances; the rail's flag recentres on the stop.
+//   • ONE primary CTA in the thumb zone at every detent: Start route → Pin
+//     here. Wrapping the route is a quiet button in the drawer header.
 //
 // Everything is a sheet, nothing is an Alert (Drift #1). Nothing here invents
 // a position, a street, or a house (Drift #5): no fix → "waiting", no
 // geocoder → "GPS only", no record → the reason.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Linking,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -37,14 +43,28 @@ import {
   MapPolyline,
   regionForLatLon,
   type MapCoordinate,
-  type MapImageryType,
   type Region,
 } from '@/components/map/Map';
+import {
+  ControlRail,
+  LayersSheet,
+  LegendStrip,
+  MapDrawer,
+  SummaryChip,
+  useMapPanTuck,
+  type LayersSection,
+  type LegendItem,
+  type RailItem,
+} from '@/components/map/controls';
 import { ConfirmSheet } from '@/components/sheets/ConfirmSheet';
 import { Pill } from '@/components/ui/Pill';
+import { SectionHeader } from '@/components/ui/SectionHeader';
 import { PressableScale } from '@/components/PressableScale';
+import { DoNotKnockLayer } from '@/components/knock/DoNotKnockLayer';
 import { EndSessionSheet } from '@/components/knock/EndSessionSheet';
 import { KnockPinMarker } from '@/components/knock/KnockPinMarker';
+import { syncKnocksSoon } from '@/lib/services/knockSync';
+import { outcomeColor, outcomeIcon } from '@/components/knock/outcomeStyle';
 import { PinSheet, type PinSheetMode } from '@/components/knock/PinSheet';
 import { SessionStatsBar } from '@/components/knock/SessionStatsBar';
 import type { SaveKnockResult } from '@/components/knock/saveKnock';
@@ -60,6 +80,7 @@ import {
 } from '@/components/knock/sessionTracker';
 import type { Knock, KnockRouteTarget } from '@/lib/models/types';
 import {
+  KNOCK_OUTCOMES,
   OUTCOME_FILTERS,
   knocksSince,
   matchesFilter,
@@ -71,6 +92,7 @@ import {
 import { formatMiles } from '@/lib/services/knockTrip';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+import { useMapChrome } from '@/lib/stores/mapChromeStore';
 import { useMileageStore } from '@/lib/stores/mileageStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useToastStore } from '@/lib/stores/toastStore';
@@ -78,12 +100,18 @@ import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } fr
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ARCHIVE_WINDOW_MS = 30 * DAY_MS;
-/** A region change inside this many ms of our own animateToRegion is ours, not a pan. */
-const AUTO_MOVE_GRACE_MS = 1500;
 const MILES_TO_METERS = 1609.34;
+
+/** Every outcome in its pin colour — the key the rail's legend button shows. */
+const KNOCK_LEGEND: LegendItem[] = KNOCK_OUTCOMES.map((m) => ({
+  label: m.short,
+  color: outcomeColor(m.id),
+  icon: outcomeIcon(m.id),
+}));
 
 export default function DoorKnockingScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const activeSession = useKnockSessionStore((s) => s.activeSession);
   const archive = useKnockSessionStore((s) => s.archive);
   const knockNear = useKnockSessionStore((s) => s.knockNear);
@@ -101,23 +129,29 @@ export default function DoorKnockingScreen() {
   const gate = useLocationGate();
 
   const mapRef = useRef<MapView>(null);
-  const lastAutoMoveAt = useRef(0);
   const deltaRef = useRef(0.008);
 
-  const [mapType, setMapType] = useState<MapImageryType>('standard');
+  // Chrome memory: rail tucked, drawer detent, satellite — per screen.
+  const chrome = useMapChrome('knock');
+  const panTuck = useMapPanTuck(chrome.tucked, chrome.setTucked);
+
   // A session aimed at a storm core opens on the TARGET (the whole point of
   // "add the area to my route" is to look at where the hail fell before
-  // driving there); following the phone is one tap away. Otherwise the map
+  // driving there); following the phone is one hold away. Otherwise the map
   // rides along from the first fix.
   const [follow, setFollow] = useState(() => !useKnockSessionStore.getState().activeSession?.routeTarget);
   const [showArchive, setShowArchive] = useState(false);
   const [filter, setFilter] = useState<OutcomeFilter>('all');
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<PinSheetMode | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<Knock | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [mapHeight, setMapHeight] = useState(0);
+  const [drawerHeight, setDrawerHeight] = useState(0);
 
   // The tracker outlives this screen while a route runs; it stops on unmount
   // only when no route is active.
@@ -138,23 +172,30 @@ export default function DoorKnockingScreen() {
   // Follow mode: the map rides along with the fix at the zoom the roofer set.
   useEffect(() => {
     if (!follow || !fix || !mapRef.current) return;
-    lastAutoMoveAt.current = Date.now();
+    panTuck.markAutoMove();
     mapRef.current.animateToRegion(regionForLatLon(fix.lat, fix.lng, deltaRef.current), 400);
-  }, [fix, follow]);
+  }, [fix, follow, panTuck]);
 
   const onRegionChangeComplete = useCallback(
     (region: Region) => {
       deltaRef.current = region.latitudeDelta;
-      // A pan the roofer made (not one we animated) turns follow off.
-      if (follow && Date.now() - lastAutoMoveAt.current > AUTO_MOVE_GRACE_MS) setFollow(false);
+      // A pan the roofer made (not one we animated) turns follow off and
+      // tucks the rail out of the way.
+      if (!panTuck.isAutoMove()) {
+        if (follow) setFollow(false);
+        panTuck.onUserRegionSettled();
+      }
     },
-    [follow],
+    [follow, panTuck],
   );
 
-  const flyTo = useCallback((lat: number, lng: number, delta?: number) => {
-    lastAutoMoveAt.current = Date.now();
-    mapRef.current?.animateToRegion(regionForLatLon(lat, lng, delta ?? deltaRef.current), 450);
-  }, []);
+  const flyTo = useCallback(
+    (lat: number, lng: number, delta?: number) => {
+      panTuck.markAutoMove();
+      mapRef.current?.animateToRegion(regionForLatLon(lat, lng, delta ?? deltaRef.current), 450);
+    },
+    [panTuck],
+  );
 
   // ---- data -----------------------------------------------------------
 
@@ -174,6 +215,11 @@ export default function DoorKnockingScreen() {
     if (!showArchive) return [];
     return knocksSince(archive, Date.now() - ARCHIVE_WINDOW_MS).filter((k) => matchesFilter(k.outcome, filter));
   }, [archive, showArchive, filter]);
+  // The drawer's list: newest first, so the door just knocked is at the top.
+  const listedKnocks = useMemo(
+    () => [...activeKnocks].sort((a, b) => Date.parse(b.updatedAt ?? b.createdAt) - Date.parse(a.updatedAt ?? a.createdAt)),
+    [activeKnocks],
+  );
 
   const stats = useMemo(() => (activeSession ? sessionStats(activeSession, now) : null), [activeSession, now]);
   // `tripMiles` is only read to subscribe; the helper reads the store itself.
@@ -224,6 +270,8 @@ export default function DoorKnockingScreen() {
   const onEndConfirm = () => {
     const ended = endRoute();
     if (!ended) return;
+    // A finished route is worth backing up now, not at the next 5-minute tick.
+    syncKnocksSoon('route_end');
     const s = sessionStats(ended);
     logActivity({
       kind: 'route_completed',
@@ -273,6 +321,15 @@ export default function DoorKnockingScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     setSelectedId(result.knock.id);
     const label = outcomeLabel(result.knock.outcome);
+    if (result.blockedBy) {
+      // Saved anyway — the roofer decides — but said out loud.
+      toast({
+        tone: 'warn',
+        title: `${label} saved · on your do-not-knock list`,
+        body: `${result.blockedBy.label}${result.blockedBy.kind === 'zone' ? ' (zone)' : ''}. Skip this door next time unless they asked you back.`,
+      });
+      return;
+    }
     if (result.leadCreated && result.gpsOnly) {
       toast({
         tone: 'warn',
@@ -304,8 +361,17 @@ export default function DoorKnockingScreen() {
 
   const toggleFollow = () => {
     const next = !follow;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setFollow(next);
     if (next && fix) flyTo(fix.lat, fix.lng);
+  };
+
+  const goToMyLocation = () => {
+    if (!fix) {
+      toast({ tone: 'warn', title: 'Waiting for GPS', body: 'The map frames your position as soon as the phone has a fix.' });
+      return;
+    }
+    flyTo(fix.lat, fix.lng);
   };
 
   const openSettings = () => {
@@ -316,9 +382,152 @@ export default function DoorKnockingScreen() {
 
   const locationDenied = gate === 'denied' || gate === 'denied_forever' || gate === 'unavailable';
   const pinCount = activeKnocks.length + archivedKnocks.length;
+  const lastStop = hasPlan && stopIndex >= stops.length - 1;
+
+  // ---- chrome: summary, rail, sheet ------------------------------------
+
+  const filterLabel = OUTCOME_FILTERS.find((f) => f.id === filter)?.label ?? 'All';
+  const summary =
+    `${filter === 'all' ? 'All pins' : filterLabel}` +
+    (showArchive ? ' · 30 days' : '') +
+    (follow ? ' · Following' : '');
+  const activeFilterCount = (filter !== 'all' ? 1 : 0) + (showArchive ? 1 : 0) + (chrome.satellite ? 1 : 0);
+
+  const rail: RailItem[] = [
+    {
+      key: 'locate',
+      icon: follow ? 'navigate' : 'locate',
+      label: 'Go to my location',
+      longPressHint: follow ? 'Hold to stop following your location' : 'Hold to follow your location',
+      onPress: goToMyLocation,
+      onLongPress: toggleFollow,
+      active: follow,
+    },
+  ];
+  if (currentStop) {
+    rail.push({ key: 'route', icon: 'flag-outline', label: 'Recentre on the route', onPress: recentreRoute });
+  }
+  rail.push(
+    {
+      key: 'layers',
+      icon: 'layers-outline',
+      label: 'Layers and filters',
+      badge: activeFilterCount,
+      onPress: () => setLayersOpen(true),
+    },
+    {
+      key: 'legend',
+      icon: 'information-circle-outline',
+      label: legendOpen ? 'Hide the legend' : 'Show the legend',
+      active: legendOpen,
+      onPress: () => setLegendOpen((v) => !v),
+    },
+    {
+      key: 'satellite',
+      icon: chrome.satellite ? 'map-outline' : 'earth-outline',
+      label: chrome.satellite ? 'Switch to the road map' : 'Switch to satellite',
+      active: chrome.satellite,
+      onPress: () => chrome.setSatellite(!chrome.satellite),
+    },
+  );
+
+  const sections: LayersSection[] = [
+    {
+      key: 'pins',
+      title: 'Pins',
+      rows: [
+        {
+          kind: 'choice',
+          key: 'filter',
+          options: OUTCOME_FILTERS.map((f) => ({ id: f.id, label: f.label, a11yLabel: `Show ${f.label}` })),
+          value: filter,
+          onChange: (id) => setFilter(id as OutcomeFilter),
+        },
+      ],
+    },
+    {
+      key: 'history',
+      title: 'History',
+      rows: [
+        {
+          kind: 'toggle',
+          key: 'archive',
+          label: 'Earlier routes',
+          hint: 'Knocks from the last 30 days, muted',
+          icon: 'time-outline',
+          value: showArchive,
+          onChange: setShowArchive,
+          a11yOn: 'Show knocks from the last 30 days',
+          a11yOff: 'Hide knocks from the last 30 days',
+        },
+      ],
+    },
+    {
+      key: 'map',
+      title: 'Map',
+      rows: [
+        {
+          kind: 'toggle',
+          key: 'follow',
+          label: 'Follow my location',
+          hint: 'The map rides along with you',
+          icon: 'navigate-outline',
+          value: follow,
+          onChange: () => toggleFollow(),
+          a11yOn: 'Follow my location',
+          a11yOff: 'Stop following my location',
+        },
+        {
+          kind: 'toggle',
+          key: 'satellite',
+          label: 'Satellite imagery',
+          hint: 'Aerial photos — see the roofs',
+          icon: 'earth-outline',
+          value: chrome.satellite,
+          onChange: chrome.setSatellite,
+          a11yOn: 'Switch to satellite',
+          a11yOff: 'Switch to the road map',
+        },
+        {
+          kind: 'toggle',
+          key: 'legend',
+          label: 'Legend',
+          hint: 'Every pin colour',
+          icon: 'information-circle-outline',
+          value: legendOpen,
+          onChange: setLegendOpen,
+          a11yOn: 'Show the legend',
+          a11yOff: 'Hide the legend',
+        },
+      ],
+    },
+    {
+      key: 'zones',
+      title: 'Zones',
+      rows: [
+        {
+          // INTEGRATION: the do-not-knock wave owns the /do-not-knock screen.
+          kind: 'link',
+          key: 'do-not-knock',
+          label: 'Do-not-knock zones',
+          hint: 'Homes and areas kept off every route',
+          icon: 'ban-outline',
+          onPress: () => {
+            setLayersOpen(false);
+            router.push('/do-not-knock');
+          },
+        },
+      ],
+    },
+  ];
+
+  const metaLine =
+    `${pinCount} pin${pinCount === 1 ? '' : 's'}` +
+    (archivedKnocks.length > 0 ? ` · ${archivedKnocks.length} earlier` : '') +
+    (currentStop && !hasPlan ? ` · Aimed at ${currentStop.label}` : '');
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <Pressable
@@ -340,59 +549,59 @@ export default function DoorKnockingScreen() {
               : 'Start a route, then tap any house'}
           </Text>
         </View>
-        {activeSession ? (
-          <PressableScale
-            style={styles.endBtn}
-            onPress={() => setEndOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Wrap the route"
-          >
-            <Ionicons name="flag-outline" size={18} color={colors.navy} />
-            <Text style={styles.endBtnText}>End</Text>
-          </PressableScale>
-        ) : null}
       </View>
 
-      <View style={styles.mapWrap}>
+      <View style={styles.mapWrap} onLayout={(e) => setMapHeight(Math.round(e.nativeEvent.layout.height))}>
         {initialRegion ? (
-          <Map
-            ref={mapRef}
-            initialRegion={initialRegion}
-            mapType={mapType}
-            // The walked path and the stop rings ARE the information here;
-            // in Expo Go on iOS the Google tile layer would sit above them.
-            googleImagery={false}
-            onPress={onMapPress}
-            onRegionChangeComplete={onRegionChangeComplete}
-            attributionInset={{ bottom: spacing.xxxl + spacing.md }}
+          <View
+            style={StyleSheet.absoluteFill}
+            onTouchStart={panTuck.onTouchStart}
+            onTouchMove={panTuck.onTouchMove}
+            onTouchEnd={panTuck.onTouchEnd}
+            onTouchCancel={panTuck.onTouchEnd}
           >
-            {stops.map((s, i) => {
-              const current = i === stopIndex;
-              return (
-                <MapCircle
-                  key={`${s.lat},${s.lng},${i}`}
-                  center={{ latitude: s.lat, longitude: s.lng }}
-                  radius={s.radiusMiles * MILES_TO_METERS}
-                  strokeColor={current ? colors.stormHail : colors.slate}
-                  strokeWidth={current ? 2 : 1}
-                  fillColor={current ? colors.stormHailFill : colors.fillQuiet}
+            <Map
+              ref={mapRef}
+              initialRegion={initialRegion}
+              mapType={chrome.satellite ? 'satellite' : 'standard'}
+              // The walked path and the stop rings ARE the information here;
+              // in Expo Go on iOS the Google tile layer would sit above them.
+              googleImagery={false}
+              onPress={onMapPress}
+              onRegionChangeComplete={onRegionChangeComplete}
+              attributionInset={{ bottom: drawerHeight + spacing.sm }}
+            >
+              {stops.map((s, i) => {
+                const current = i === stopIndex;
+                return (
+                  <MapCircle
+                    key={`${s.lat},${s.lng},${i}`}
+                    center={{ latitude: s.lat, longitude: s.lng }}
+                    radius={s.radiusMiles * MILES_TO_METERS}
+                    strokeColor={current ? colors.stormHail : colors.slate}
+                    strokeWidth={current ? 2 : 1}
+                    fillColor={current ? colors.stormHailFill : colors.fillQuiet}
+                  />
+                );
+              })}
+              {track.length >= 2 ? (
+                <MapPolyline
+                  coordinates={track.map((p) => ({ latitude: p.lat, longitude: p.lng }))}
+                  strokeColor={colors.brand}
+                  strokeWidth={4}
                 />
-              );
-            })}
-            {track.length >= 2 ? (
-              <MapPolyline
-                coordinates={track.map((p) => ({ latitude: p.lat, longitude: p.lng }))}
-                strokeColor={colors.brand}
-                strokeWidth={4}
-              />
-            ) : null}
-            {archivedKnocks.map((k) => (
-              <KnockPinMarker key={`a_${k.id}`} knock={k} muted selected={k.id === selectedId} onPress={onArchivedPinPress} />
-            ))}
-            {activeKnocks.map((k) => (
-              <KnockPinMarker key={k.id} knock={k} selected={k.id === selectedId} onPress={onActivePinPress} />
-            ))}
-          </Map>
+              ) : null}
+              {/* Do-not-knock zones and homes, under the pins so the outcome
+                  discs stay on top. */}
+              <DoNotKnockLayer />
+              {archivedKnocks.map((k) => (
+                <KnockPinMarker key={`a_${k.id}`} knock={k} muted selected={k.id === selectedId} onPress={onArchivedPinPress} />
+              ))}
+              {activeKnocks.map((k) => (
+                <KnockPinMarker key={k.id} knock={k} selected={k.id === selectedId} onPress={onActivePinPress} />
+              ))}
+            </Map>
+          </View>
         ) : (
           <View style={styles.waiting}>
             {!locationDenied && <ActivityIndicator color={colors.textMuted} />}
@@ -406,170 +615,207 @@ export default function DoorKnockingScreen() {
         )}
 
         {initialRegion ? (
-          <>
-            {/* Legend / filter strip — 56pt chips (Drift #1). */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.legend}
-              contentContainerStyle={styles.legendContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              {OUTCOME_FILTERS.map((f) => {
-                const active = filter === f.id;
-                return (
-                  <PressableScale
-                    key={f.id}
-                    pressedScale={0.96}
-                    style={[styles.legendChip, active && styles.legendChipActive]}
-                    onPress={() => setFilter(f.id)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Show ${f.label}`}
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={[styles.legendText, active && styles.legendTextActive]}>{f.label}</Text>
-                  </PressableScale>
-                );
-              })}
-              <PressableScale
-                pressedScale={0.96}
-                style={[styles.legendChip, showArchive && styles.legendChipActive]}
-                onPress={() => setShowArchive((v) => !v)}
-                accessibilityRole="button"
-                accessibilityLabel="Show knocks from the last 30 days"
-                accessibilityState={{ selected: showArchive }}
-              >
-                <Ionicons name="time-outline" size={16} color={showArchive ? colors.textInverse : colors.text} />
-                <Text style={[styles.legendText, showArchive && styles.legendTextActive]}>30 days</Text>
-              </PressableScale>
-            </ScrollView>
-
-            {/* Map controls — 56pt each. */}
-            <View style={styles.controls}>
-              <MapControl
-                icon={follow ? 'navigate' : 'navigate-outline'}
-                label={follow ? 'Stop following my location' : 'Follow my location'}
-                active={follow}
-                onPress={toggleFollow}
+          <View style={styles.overlayTop} pointerEvents="box-none">
+            <View style={styles.overlayLeft} pointerEvents="box-none">
+              <SummaryChip
+                icon="color-filter-outline"
+                text={summary}
+                onPress={() => setLayersOpen(true)}
+                testID="knock-summary"
               />
-              {currentStop ? (
-                <MapControl icon="flag-outline" label="Recentre on the route" onPress={recentreRoute} />
-              ) : null}
-              <MapControl
-                icon={mapType === 'satellite' ? 'map-outline' : 'earth-outline'}
-                label={mapType === 'satellite' ? 'Switch to the road map' : 'Switch to satellite'}
-                onPress={() => setMapType((m) => (m === 'satellite' ? 'standard' : 'satellite'))}
-              />
-            </View>
-
-            <View style={styles.badgeRow} pointerEvents="none">
-              <Pill label={`${pinCount} pin${pinCount === 1 ? '' : 's'}`} tone="neutral" size="sm" icon="location-outline" />
               {!fix && !locationDenied ? (
-                <View style={styles.locating}>
+                <View style={styles.locating} pointerEvents="none">
                   <ActivityIndicator size="small" color={colors.textInverse} />
                   <Text style={styles.locatingText}>Locating…</Text>
                 </View>
               ) : null}
+              {legendOpen ? <LegendStrip title="Knock pins" items={KNOCK_LEGEND} testID="knock-legend" /> : null}
             </View>
-          </>
+            <ControlRail
+              items={rail}
+              tucked={chrome.tucked}
+              onTuckedChange={chrome.setTucked}
+              hidden={chrome.detent !== 'peek'}
+              testID="knock-rail"
+            />
+          </View>
         ) : null}
+
+        <MapDrawer
+          detent={chrome.detent}
+          onDetentChange={chrome.setDetent}
+          containerHeight={mapHeight}
+          bottomInset={insets.bottom}
+          onHeightChange={setDrawerHeight}
+          accessibilityLabel="Route panel"
+          testID="knock-drawer"
+          header={
+            <View style={styles.drawerHead}>
+              {activeSession && stats ? (
+                <SessionStatsBar
+                  stats={stats}
+                  miles={liveMiles}
+                  elapsedMs={elapsedMs}
+                  stop={hasPlan && currentStop ? { index: stopIndex, total: stops.length, label: currentStop.label } : null}
+                />
+              ) : (
+                <Text style={styles.headHint}>
+                  {locationDenied ? 'Location is off' : 'Start a route, then tap any house'}
+                </Text>
+              )}
+              {activeSession ? (
+                <View style={styles.headRow}>
+                  <Text style={styles.headMeta} numberOfLines={1} testID="knock-meta">
+                    {metaLine}
+                  </Text>
+                  {hasPlan ? (
+                    <PressableScale
+                      style={[styles.headBtn, styles.headBtnNext, lastStop && styles.btnBusy]}
+                      onPress={onNextStop}
+                      disabled={lastStop}
+                      accessibilityRole="button"
+                      accessibilityLabel="Next stop"
+                      accessibilityHint={lastStop ? 'This is the last stop' : `Recentres on ${stops[stopIndex + 1]?.label ?? 'the next stop'}`}
+                    >
+                      <Text style={styles.headBtnNextText}>{lastStop ? 'Last stop' : 'Next'}</Text>
+                      <Ionicons name="arrow-forward" size={18} color={colors.brand} />
+                    </PressableScale>
+                  ) : null}
+                  <PressableScale
+                    style={styles.headBtn}
+                    onPress={() => setEndOpen(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Wrap the route"
+                  >
+                    <Ionicons name="flag-outline" size={18} color={colors.navy} />
+                    <Text style={styles.headBtnText}>Wrap</Text>
+                  </PressableScale>
+                </View>
+              ) : null}
+            </View>
+          }
+          footer={
+            !activeSession ? (
+              locationDenied ? (
+                <View style={styles.deniedCard}>
+                  <View style={styles.deniedHead}>
+                    <Ionicons name="location-outline" size={22} color={colors.danger} />
+                    <Text style={styles.deniedTitle}>Location is off</Text>
+                  </View>
+                  <Text style={styles.deniedBody}>
+                    Door knocking needs your location to place pins where you stand and to count the miles you
+                    walk.
+                  </Text>
+                  <View style={styles.deniedRow}>
+                    {gate === 'denied' ? (
+                      <PressableScale
+                        style={styles.deniedBtn}
+                        onPress={() => {
+                          requestLocationAccess()
+                            .then((g) => {
+                              if (g === 'granted') startWatching().catch(() => {});
+                            })
+                            .catch(() => {});
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Ask for location again"
+                      >
+                        <Text style={styles.deniedBtnText}>Try again</Text>
+                      </PressableScale>
+                    ) : null}
+                    {Platform.OS !== 'web' ? (
+                      <PressableScale
+                        style={[styles.deniedBtn, styles.deniedBtnPrimary]}
+                        onPress={openSettings}
+                        accessibilityRole="button"
+                        accessibilityLabel="Open Settings"
+                      >
+                        <Text style={[styles.deniedBtnText, styles.deniedBtnPrimaryText]}>Open Settings</Text>
+                      </PressableScale>
+                    ) : null}
+                  </View>
+                </View>
+              ) : (
+                <PressableScale
+                  style={[styles.cta, starting && styles.btnBusy]}
+                  onPress={onStart}
+                  disabled={starting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Start route"
+                >
+                  {starting ? (
+                    <ActivityIndicator color={colors.textInverse} />
+                  ) : (
+                    <>
+                      <Ionicons name="walk-outline" size={24} color={colors.textInverse} />
+                      <Text style={styles.ctaText}>Start route</Text>
+                    </>
+                  )}
+                </PressableScale>
+              )
+            ) : (
+              <PressableScale
+                style={styles.cta}
+                onPress={onPinHere}
+                accessibilityRole="button"
+                accessibilityLabel="Drop a pin at my location"
+              >
+                <Ionicons name="location" size={24} color={colors.textInverse} />
+                <Text style={styles.ctaText}>Pin here</Text>
+              </PressableScale>
+            )
+          }
+        >
+          {activeSession ? (
+            <>
+              <SectionHeader title={`This route · ${listedKnocks.length}`} />
+              {listedKnocks.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  {filter === 'all'
+                    ? 'No pins yet — tap a house on the map, or Pin here.'
+                    : `No ${filterLabel.toLowerCase()} pins on this route yet.`}
+                </Text>
+              ) : (
+                <View style={styles.pinList}>
+                  {listedKnocks.map((k, i) => (
+                    <PinRow key={k.id} knock={k} first={i === 0} selected={k.id === selectedId} onPress={onActivePinPress} />
+                  ))}
+                </View>
+              )}
+              {showArchive ? (
+                <>
+                  <SectionHeader title={`Earlier routes · ${archivedKnocks.length}`} style={styles.archiveHead} />
+                  {archivedKnocks.length === 0 ? (
+                    <Text style={styles.emptyText}>Nothing knocked here in the last 30 days.</Text>
+                  ) : (
+                    <View style={styles.pinList}>
+                      {archivedKnocks.map((k, i) => (
+                        <PinRow key={`a_${k.id}`} knock={k} first={i === 0} muted selected={k.id === selectedId} onPress={onArchivedPinPress} />
+                      ))}
+                    </View>
+                  )}
+                </>
+              ) : null}
+            </>
+          ) : (
+            <Text style={styles.emptyText}>
+              Pins are logged against a route. Start one, then every house you tap gets a colour-coded pin and
+              the miles count as you walk.
+            </Text>
+          )}
+        </MapDrawer>
       </View>
 
-      <View style={styles.dock}>
-        {!activeSession ? (
-          locationDenied ? (
-            <View style={styles.deniedCard}>
-              <View style={styles.deniedHead}>
-                <Ionicons name="location-outline" size={22} color={colors.danger} />
-                <Text style={styles.deniedTitle}>Location is off</Text>
-              </View>
-              <Text style={styles.deniedBody}>
-                Door knocking needs your location to place pins where you stand and to count the miles you
-                walk.
-              </Text>
-              <View style={styles.deniedRow}>
-                {gate === 'denied' ? (
-                  <PressableScale
-                    style={styles.deniedBtn}
-                    onPress={() => {
-                      requestLocationAccess()
-                        .then((g) => {
-                          if (g === 'granted') startWatching().catch(() => {});
-                        })
-                        .catch(() => {});
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Ask for location again"
-                  >
-                    <Text style={styles.deniedBtnText}>Try again</Text>
-                  </PressableScale>
-                ) : null}
-                {Platform.OS !== 'web' ? (
-                  <PressableScale
-                    style={[styles.deniedBtn, styles.deniedBtnPrimary]}
-                    onPress={openSettings}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open Settings"
-                  >
-                    <Text style={[styles.deniedBtnText, styles.deniedBtnPrimaryText]}>Open Settings</Text>
-                  </PressableScale>
-                ) : null}
-              </View>
-            </View>
-          ) : (
-            <PressableScale
-              style={[styles.startBtn, starting && styles.btnBusy]}
-              onPress={onStart}
-              disabled={starting}
-              accessibilityRole="button"
-              accessibilityLabel="Start route"
-            >
-              {starting ? (
-                <ActivityIndicator color={colors.textInverse} />
-              ) : (
-                <>
-                  <Ionicons name="walk-outline" size={22} color={colors.textInverse} />
-                  <Text style={styles.startBtnText}>Start route</Text>
-                </>
-              )}
-            </PressableScale>
-          )
-        ) : (
-          <>
-            {stats ? (
-              <SessionStatsBar
-                stats={stats}
-                miles={liveMiles}
-                elapsedMs={elapsedMs}
-                stop={hasPlan && currentStop ? { index: stopIndex, total: stops.length, label: currentStop.label } : null}
-              />
-            ) : null}
-            {hasPlan ? (
-              <PressableScale
-                style={[styles.nextStopBtn, stopIndex >= stops.length - 1 && styles.btnBusy]}
-                onPress={onNextStop}
-                disabled={stopIndex >= stops.length - 1}
-                accessibilityRole="button"
-                accessibilityLabel="Next stop"
-              >
-                <Text style={styles.nextStopText}>
-                  {stopIndex >= stops.length - 1 ? 'Last stop' : `Next stop → ${stops[stopIndex + 1].label}`}
-                </Text>
-                <Ionicons name="arrow-forward" size={20} color={colors.brand} />
-              </PressableScale>
-            ) : null}
-            <PressableScale
-              style={styles.startBtn}
-              onPress={onPinHere}
-              accessibilityRole="button"
-              accessibilityLabel="Drop a pin at my location"
-            >
-              <Ionicons name="location" size={22} color={colors.textInverse} />
-              <Text style={styles.startBtnText}>Pin here</Text>
-            </PressableScale>
-          </>
-        )}
-      </View>
+      <LayersSheet
+        visible={layersOpen}
+        onClose={() => setLayersOpen(false)}
+        subtitle={summary}
+        sections={sections}
+        onReset={() => {
+          setFilter('all');
+          setShowArchive(false);
+        }}
+      />
 
       <PinSheet
         visible={sheetOpen}
@@ -608,27 +854,62 @@ export default function DoorKnockingScreen() {
   );
 }
 
-function MapControl({
-  icon,
-  label,
-  active = false,
+/**
+ * One knock in the drawer's list — the same disc as the map pin, the
+ * outcome, where/when, and the follow-up if one is set. Tap → the pin's
+ * sheet, exactly as tapping the pin would.
+ */
+function PinRow({
+  knock,
+  first,
+  muted = false,
+  selected = false,
   onPress,
 }: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  active?: boolean;
-  onPress: () => void;
+  knock: Knock;
+  first: boolean;
+  muted?: boolean;
+  selected?: boolean;
+  onPress: (knock: Knock) => void;
 }) {
+  const color = outcomeColor(knock.outcome);
+  const when = new Date(knock.updatedAt ?? knock.createdAt);
+  const time = when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const where = knock.address ?? (knock.placedBy === 'gps' ? 'Pinned at your location' : 'Pinned on the map');
+  const sub = muted ? `${where} · ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : `${where} · ${time}`;
   return (
-    <PressableScale
-      style={[styles.control, active && styles.controlActive]}
-      onPress={onPress}
+    <Pressable
+      style={({ pressed }) => [styles.pinRow, !first && styles.pinRowDivider, pressed && styles.rowPressed]}
+      onPress={() => onPress(knock)}
       accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
+      accessibilityLabel={`${outcomeLabel(knock.outcome)}${knock.address ? `, ${knock.address}` : ''}. Opens the pin.`}
+      accessibilityState={{ selected }}
+      testID="knock-pin-row"
     >
-      <Ionicons name={icon} size={24} color={active ? colors.textInverse : colors.navy} />
-    </PressableScale>
+      <View style={[styles.pinDisc, { backgroundColor: color }, muted && styles.pinDiscMuted]}>
+        <Ionicons name={outcomeIcon(knock.outcome)} size={14} color={colors.textInverse} />
+      </View>
+      <View style={styles.pinText}>
+        <Text style={[styles.pinTitle, muted && styles.pinTitleMuted]} numberOfLines={1}>
+          {outcomeLabel(knock.outcome)}
+          {knock.contactName ? ` · ${knock.contactName}` : ''}
+        </Text>
+        <Text style={styles.pinSub} numberOfLines={1}>
+          {sub}
+        </Text>
+      </View>
+      {knock.followUpAt ? (
+        <Pill
+          label={new Date(knock.followUpAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+          tone="warn"
+          size="sm"
+          icon="alarm-outline"
+        />
+      ) : knock.createdLeadId ? (
+        <Pill label="Lead" tone="success" size="sm" />
+      ) : null}
+      <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+    </Pressable>
   );
 }
 
@@ -651,65 +932,25 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 },
   title: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
   statsLine: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
-  endBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    minHeight: touchTarget.standard,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.navy,
-  },
-  endBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
 
+  // Full-bleed map under a hairline — the route IS the screen.
   mapWrap: {
     flex: 1,
-    marginHorizontal: spacing.xl,
-    borderRadius: radii.card,
-    overflow: 'hidden',
     backgroundColor: colors.surfaceMuted,
-    ...shadows.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
-  legend: { position: 'absolute', top: spacing.sm, left: 0, right: 0, flexGrow: 0 },
-  legendContent: { paddingHorizontal: spacing.sm, gap: spacing.sm },
-  legendChip: {
+
+  overlayTop: {
+    position: 'absolute',
+    top: spacing.md,
+    left: spacing.md,
+    right: spacing.md,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    minHeight: touchTarget.standard,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
-    backgroundColor: colors.barFill,
-    ...shadows.float,
-  },
-  legendChipActive: { backgroundColor: colors.text },
-  legendText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  legendTextActive: { color: colors.textInverse },
-  controls: {
-    position: 'absolute',
-    right: spacing.sm,
-    top: touchTarget.standard + spacing.sm * 3,
-    gap: spacing.sm,
-  },
-  control: {
-    width: touchTarget.standard,
-    height: touchTarget.standard,
-    borderRadius: radii.pill,
-    backgroundColor: colors.barFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.float,
-  },
-  controlActive: { backgroundColor: colors.brand },
-  badgeRow: {
-    position: 'absolute',
-    left: spacing.sm,
-    bottom: spacing.sm,
-    gap: spacing.xs,
     alignItems: 'flex-start',
+    gap: spacing.md,
   },
+  overlayLeft: { flex: 1, gap: spacing.sm, alignItems: 'flex-start' },
   locating: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -720,6 +961,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.scrim,
   },
   locatingText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
+
   // Honest no-fix state in the map's own frame (Drift #5: never a stand-in city).
   waiting: {
     flex: 1,
@@ -727,38 +969,71 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     padding: spacing.xxl,
+    paddingBottom: touchTarget.sticky * 2,
   },
   waitingTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.text },
   waitingBody: { fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center' },
 
-  dock: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
+  // Drawer header: stats, then the meta line with Next / Wrap (56pt each).
+  drawerHead: { gap: spacing.sm },
+  headHint: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, paddingVertical: spacing.xs },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headMeta: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  headBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
   },
-  startBtn: {
+  headBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodySm },
+  headBtnNext: { backgroundColor: colors.brandSoft },
+  headBtnNextText: { color: colors.brand, fontWeight: fontWeight.semibold, fontSize: fontSize.bodySm },
+
+  // The one primary CTA — 88pt, burnt, in the thumb zone at every detent.
+  cta: {
     flexDirection: 'row',
     gap: spacing.sm,
     height: touchTarget.sticky,
-    borderRadius: radii.pill,
+    borderRadius: radii.lg,
     backgroundColor: colors.orange,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.card,
   },
-  startBtnText: { color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
+  ctaText: { color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
   btnBusy: { opacity: 0.6 },
-  nextStopBtn: {
+
+  // The pins list.
+  pinList: { borderRadius: radii.card, backgroundColor: colors.fillQuiet, overflow: 'hidden' },
+  pinRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
+    gap: spacing.md,
     minHeight: touchTarget.standard,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.button,
-    backgroundColor: colors.brandSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  nextStopText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.brand },
+  pinRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
+  rowPressed: { opacity: 0.7 },
+  pinDisc: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  pinDiscMuted: { opacity: 0.75 },
+  pinText: { flex: 1, gap: 1 },
+  pinTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  pinTitleMuted: { color: colors.textMuted },
+  pinSub: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  archiveHead: { marginTop: spacing.sm },
+  emptyText: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 19, paddingVertical: spacing.xs },
 
   deniedCard: {
     backgroundColor: colors.surface,

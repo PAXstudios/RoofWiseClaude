@@ -21,6 +21,7 @@ import { useLeadStore } from '../stores/leadStore';
 import { sendLocalNotification } from './pushNotifications';
 import { qualifiesForValidation, MATCH_RADIUS_MILES } from './stormMatch';
 import { describeWhere } from './stormWhere';
+import { ownActivityNow, startKnockPlan, type PlanRunOutcome } from './knockPlanRunner';
 import type { Lead, StormAlert } from '../models/types';
 
 // Real-time alert scan window. Unrelated to the 4-year storm-history lookback
@@ -372,9 +373,41 @@ export async function checkStormWatch(): Promise<StormWatchResult> {
         ' · Tap to add the area to your knock route.',
       data: { kind: 'storm_alert', alertId: alert.id },
     }).catch(() => {});
+
+    // A damaging storm gets its knock plan queued right away (Storm Watch
+    // setting, default on). The runner is detached: it rings the bell with
+    // "Plan ready for the Jun 14 storm" and the alert screen shows progress.
+    if (severity === 'damaging' && core && useServiceAreaStore.getState().autoPlanDamagingStorms) {
+      queueStormPlan(alert, { stormDay: core.occurredAt });
+    }
   }
 
   return { scanned, newAlerts, clusters, unavailableAreas };
+}
+
+/**
+ * Queue a Knock Planner run on an alert's storm core: base = the core, title
+ * "<Town> · Jun 14 storm", one plan per alert (the runner dedups and queues
+ * behind a run in flight). Returns null when the alert carries no core — we
+ * never plan around a guessed point. `stormDay` defaults to the alert's
+ * `firedAt` (the scan window is 24 h, so it is the storm's day or the next).
+ */
+export function queueStormPlan(
+  alert: StormAlert,
+  opts: { stormDay?: string } = {},
+): Promise<PlanRunOutcome> | null {
+  if (typeof alert.coreLat !== 'number' || typeof alert.coreLng !== 'number') return null;
+  if (!Number.isFinite(alert.coreLat) || !Number.isFinite(alert.coreLng)) return null;
+  const stormDay = opts.stormDay ?? alert.firedAt;
+  const day = monthDayLabel(stormDay);
+  const stormLabel = day ? `${day} storm` : 'storm';
+  const town = alert.coreCity ?? alert.areaLabel;
+  return startKnockPlan({
+    base: { lat: alert.coreLat, lng: alert.coreLng, label: alert.coreCity ?? `${stormLabel} core` },
+    own: ownActivityNow(),
+    trigger: { kind: 'storm_alert', alertId: alert.id, stormDay },
+    title: `${town} · ${stormLabel}`,
+  });
 }
 
 /**

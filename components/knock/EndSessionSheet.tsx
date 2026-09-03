@@ -1,12 +1,13 @@
 // "Wrap this route?" — the end-of-session summary as the app's bottom sheet
 // (same Keep / Confirm pair as ConfirmSheet, with the route's numbers in
 // front of the decision). Ending is not destructive — nothing is lost — but
-// it is final for the trip, so it asks.
+// it is final for the trip, so it asks. Reached from the drawer header's
+// Wrap button in Knock mode.
 
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheet } from '@/components/ui/BottomSheet';
-import type { IoniconName } from '@/components/ui/IconChip';
+import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { PressableScale } from '@/components/PressableScale';
 import type { KnockSession } from '@/lib/models/types';
 import { sessionStats } from '@/lib/services/knockOutcomes';
@@ -43,13 +44,24 @@ export function EndSessionSheet({ visible, session, miles, onKeepGoing, onConfir
     >
       {stats ? (
         <View style={styles.grid}>
-          <Tile icon="home-outline" value={String(stats.doors)} label="Doors" />
-          <Tile icon="chatbubble-ellipses-outline" value={`${stats.contactRate}%`} label={`Answered · ${stats.contacts}`} />
-          <Tile icon="person-add-outline" value={String(stats.leads)} label={stats.leads === 1 ? 'Lead' : 'Leads'} />
-          <Tile icon="car-outline" value={formatMiles(miles)} label="Miles" />
-          <Tile icon="time-outline" value={formatElapsed(elapsed)} label="On route" />
+          <Tile icon="home-outline" tone="blue" value={String(stats.doors)} label="Doors" />
+          <Tile
+            icon="chatbubble-ellipses-outline"
+            tone="green"
+            value={`${stats.contactRate}%`}
+            label={`Answered · ${stats.contacts}`}
+          />
+          <Tile
+            icon="person-add-outline"
+            tone="purple"
+            value={String(stats.leads)}
+            label={stats.leads === 1 ? 'Lead' : 'Leads'}
+          />
+          <Tile icon="car-outline" tone="orange" value={formatMiles(miles)} label="Miles" />
+          <Tile icon="time-outline" tone="quiet" value={formatElapsed(elapsed)} label="On route" />
           <Tile
             icon="alarm-outline"
+            tone="orange"
             value={String(stats.followUps + stats.appointments)}
             label="Follow-ups"
           />
@@ -78,14 +90,18 @@ export function EndSessionSheet({ visible, session, miles, onKeepGoing, onConfir
   );
 }
 
-function Tile({ icon, value, label }: { icon: IoniconName; value: string; label: string }) {
+function Tile({ icon, tone, value, label }: { icon: IoniconName; tone: ChipTone; value: string; label: string }) {
   return (
     <View style={styles.tile}>
-      <Ionicons name={icon} size={18} color={colors.textMuted} />
-      <Text style={styles.tileValue}>{value}</Text>
-      <Text style={styles.tileLabel} numberOfLines={1}>
-        {label}
-      </Text>
+      <IconChip name={icon} tone={tone} size="sm" />
+      <View style={styles.tileText}>
+        <Text style={styles.tileValue} numberOfLines={1}>
+          {value}
+        </Text>
+        <Text style={styles.tileLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -93,17 +109,24 @@ function Tile({ icon, value, label }: { icon: IoniconName; value: string; label:
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tile: {
-    flexBasis: '30%',
+    flexBasis: '47%',
     flexGrow: 1,
     minHeight: touchTarget.preferred,
-    borderRadius: radii.md,
+    borderRadius: radii.card,
     backgroundColor: colors.fillQuiet,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.sm,
-    gap: 2,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  tileValue: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
+  tileText: { flex: 1, gap: 1 },
+  tileValue: {
+    fontSize: fontSize.titleMd,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
   tileLabel: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: fontWeight.semibold },
   note: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   noteText: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },

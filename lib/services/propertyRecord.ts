@@ -119,20 +119,120 @@ export type RoofAgePrefill = {
 };
 
 /**
+ * Does a roof sentence say the roof is NEW? The "new" word has to sit within
+ * a few words of "roof" — "NEW PRICE! Home has a 15 year old roof" must not
+ * read as a new roof — and a sentence that says the roof NEEDS replacing, or
+ * is original, never does. Pure.
+ */
+const NEW_BEFORE_ROOF = /\b(brand[- ]new|new|newer|replaced|re-?roofed|updated|upgraded|recently replaced|newly installed)\b(?:\W+\w+){0,4}?\W+roof(?:ing|s)?\b/i;
+const NEW_AFTER_ROOF = /\broof(?:ing|s)?\b(?:\W+\w+){0,5}?\W+(replaced|new|updated|upgraded|installed|re-?done|redone)\b/i;
+const NEW_SHINGLES = /\bnew (?:architectural |composition |asphalt )?shingles\b/i;
+const NOT_NEW = /\b(needs?|will need|due for|should be|must be|requires?)\b(?:\W+\w+){0,4}?\W+(roof|replac)|\broof (?:is|was) original\b|\boriginal roof\b|\bas[- ]is\b|\broof (?:replacement|repair) (?:needed|required|credit|allowance)\b|\bno new roof\b/i;
+
+export function roofHintReadsNew(text: string | null | undefined): boolean {
+  if (!text) return false;
+  if (NOT_NEW.test(text)) return false;
+  return NEW_BEFORE_ROOF.test(text) || NEW_AFTER_ROOF.test(text) || NEW_SHINGLES.test(text);
+}
+
+/**
+ * The year the listing whose text we read went up. `listedYear` when the
+ * record carries it; otherwise re-derived from the fields older cached
+ * records do have — the last "Listed for sale" date, the scrape date minus
+ * days on Zillow, or the sale date (a sold listing's text was written just
+ * before the sale). Pure.
+ */
+export function listingYearOf(record: Pick<PropertyRecord, 'listedYear' | 'listedDate' | 'scrapedAt' | 'daysOnZillow' | 'lastSoldDate' | 'homeStatus'> | undefined): number | undefined {
+  if (!record) return undefined;
+  if (record.listedYear != null && record.listedYear > 1900) return record.listedYear;
+  const yearOf = (iso: string | undefined): number | undefined => {
+    if (!iso) return undefined;
+    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00Z` : iso);
+    const y = d.getUTCFullYear();
+    return Number.isNaN(d.getTime()) || y < 1900 ? undefined : y;
+  };
+  const listed = yearOf(record.listedDate);
+  if (listed) return listed;
+  if (record.daysOnZillow != null && record.scrapedAt) {
+    const d = new Date(record.scrapedAt);
+    if (!Number.isNaN(d.getTime())) {
+      d.setUTCDate(d.getUTCDate() - Math.max(0, Math.round(record.daysOnZillow)));
+      return d.getUTCFullYear();
+    }
+  }
+  return yearOf(record.lastSoldDate);
+}
+
+export type NewRoofFromListing = {
+  year: number;
+  ageYears: number;
+  evidence: 'listing_new_roof';
+  /** The sentence that said so. */
+  hint: string;
+  /** "Listing (Mar 2024) says "new roof" — roof from 2024. Confirm on the roof." */
+  note: string;
+};
+
+function listedMonthYear(record: Pick<PropertyRecord, 'listedDate'>, year: number): string {
+  if (record.listedDate) {
+    const d = new Date(`${record.listedDate}T12:00:00Z`);
+    if (!Number.isNaN(d.getTime()) && d.getUTCFullYear() === year) {
+      return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+    }
+  }
+  return String(year);
+}
+
+/**
+ * A listing that says the roof is new but gives no year dates the roof to
+ * the year the listing went up. A hint that states its own year is handled
+ * by `roofAgePrefill` (a stated year wins); a hint whose only year is the
+ * house's build year ("Built in 1998, new roof and HVAC") is treated as
+ * having no roof year. Null when the listing says nothing of the kind, or
+ * when there is no listing year to pin it to. Pure.
+ */
+export function newRoofFromListing(record: PropertyRecord | undefined, nowYear: number): NewRoofFromListing | null {
+  if (!record || record.status !== 'found') return null;
+  const listedYear = listingYearOf(record);
+  if (!listedYear || listedYear > nowYear) return null;
+  const hint = record.roofHints?.find((h) => {
+    if (!roofHintReadsNew(h.text)) return false;
+    if (h.year == null) return true;
+    return h.year === record.yearBuilt && listedYear > h.year;
+  });
+  if (!hint) return null;
+  const short = hint.text.length > 90 ? `${hint.text.slice(0, 87).trimEnd()}…` : hint.text;
+  return {
+    year: listedYear,
+    ageYears: Math.max(0, nowYear - listedYear),
+    evidence: 'listing_new_roof',
+    hint: hint.text,
+    note: `Listing (${listedMonthYear(record, listedYear)}) says "${short}" — roof from ${listedYear}. Confirm on the roof.`,
+  };
+}
+
+/**
  * What the record can say about roof age, for PREFILL ONLY. A listing that
- * states a roof year beats the build year; the build year is an upper bound
- * (the roof is at most as old as the house). Never applied over an
- * inspector's non-zero entry — see `inspectionStore.setPropertyRecord`.
+ * states a roof year beats a listing that only says "new roof" (dated to the
+ * listing year), which beats the build year — an upper bound (the roof is at
+ * most as old as the house). Never applied over an inspector's non-zero
+ * entry — see `inspectionStore.setPropertyRecord`.
  */
 export function roofAgePrefill(record: PropertyRecord | undefined, nowYear: number): RoofAgePrefill | null {
   if (!record || record.status !== 'found') return null;
-  const stated = record.roofHints?.find((h) => h.year != null && h.year <= nowYear);
+  const newRoof = newRoofFromListing(record, nowYear);
+  const stated = record.roofHints?.find(
+    (h) => h.year != null && h.year <= nowYear && !(newRoof && h.year === record.yearBuilt && newRoof.year > h.year),
+  );
   if (stated?.year != null) {
     return {
       ageYears: Math.max(0, nowYear - stated.year),
       source: 'listing',
       note: `Listing says "${stated.text}" — roof from ${stated.year}. Confirm on the roof.`,
     };
+  }
+  if (newRoof) {
+    return { ageYears: newRoof.ageYears, source: 'listing_new_roof', note: newRoof.note };
   }
   if (record.yearBuilt != null && record.yearBuilt > 1800 && record.yearBuilt <= nowYear) {
     return {
@@ -142,6 +242,45 @@ export function roofAgePrefill(record: PropertyRecord | undefined, nowYear: numb
     };
   }
   return null;
+}
+
+export type RoofYearKnown = {
+  /** A LOWER bound on the roof's year — the roof is at least this new. */
+  year: number;
+  source: Exclude<RoofAgeSource, 'inspector'>;
+};
+
+/**
+ * The best-known roof year for the knock calculus: a stated listing year, a
+ * "new roof" listing dated to its year, else the build year (a house built
+ * after the storm has a roof newer than the storm). Null when the record
+ * says nothing. Pure.
+ */
+export function roofYearFromRecord(record: PropertyRecord | undefined, nowYear: number): RoofYearKnown | null {
+  const prefill = roofAgePrefill(record, nowYear);
+  if (!prefill || prefill.source === 'inspector') return null;
+  return { year: nowYear - prefill.ageYears, source: prefill.source };
+}
+
+/**
+ * One line about the roof for a card or the pin sheet: "New roof · 2024
+ * (listing Aug 2024)", "Roof from 2021 (listing)", "New build · 2026",
+ * "Roof: Composition · built 2002 (≤ 24 yrs)". Undefined when the record
+ * has nothing on the roof. Pure.
+ */
+export function recordRoofLine(record: PropertyRecord | undefined, nowYear: number): string | undefined {
+  if (!record || record.status !== 'found') return undefined;
+  const parts: string[] = [];
+  const newRoof = newRoofFromListing(record, nowYear);
+  const stated = record.roofHints?.find((h) => h.year != null && h.year <= nowYear && !(newRoof && h.year === record.yearBuilt && newRoof.year > h.year));
+  if (stated?.year != null) parts.push(`Roof from ${stated.year} (listing)`);
+  else if (newRoof) parts.push(`New roof · ${newRoof.year} (listing ${listedMonthYear(record, newRoof.year)})`);
+  else if (record.yearBuilt != null && nowYear - record.yearBuilt <= 2) parts.push(`New build · ${record.yearBuilt}`);
+  if (record.roofFact) parts.push(`Roof: ${record.roofFact}`);
+  if (record.yearBuilt != null && !(nowYear - record.yearBuilt <= 2 && !stated && !newRoof)) {
+    parts.push(`built ${record.yearBuilt} (roof ≤ ${Math.max(0, nowYear - record.yearBuilt)} yrs)`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
 /** One line of facts for a card: "Built 2002 · 2,137 sq ft · sold Sep 2026". Pure. */
@@ -234,6 +373,16 @@ export function mapApillowProperty(p: Record<string, unknown>, fetchedAt: string
       return listed ? str(listed.date) : undefined;
     })(),
   };
+}
+
+/**
+ * `mapApillowProperty` plus the derived `listedYear`, so every record that
+ * enters the cache carries the year its listing text dates from. Pure.
+ */
+export function mapApillowRecord(p: Record<string, unknown>, fetchedAt: string): PropertyRecord {
+  const record = mapApillowProperty(p, fetchedAt);
+  const listedYear = listingYearOf(record);
+  return listedYear ? { ...record, listedYear } : record;
 }
 
 /**
@@ -378,7 +527,7 @@ export async function fetchPropertyRecord(input: { address: string; signal?: Abo
     if (status === 'complete') {
       const results: any[] = Array.isArray(poll.json?.results) ? poll.json.results : [];
       const hit = results.find((r) => r && r.success === true && r.property && typeof r.property === 'object');
-      if (hit) return mapApillowProperty(hit.property, fetchedAt);
+      if (hit) return mapApillowRecord(hit.property, fetchedAt);
       const errs: any[] = Array.isArray(poll.json?.errors) ? poll.json.errors : [];
       const failed = results.find((r) => r && r.success === false);
       const msg = String(failed?.error ?? errs[0]?.error ?? '');
@@ -453,7 +602,7 @@ export async function fetchNearbyHomes(input: {
     const results: any[] = Array.isArray(poll.json?.results) ? poll.json.results : [];
     const homes = results
       .filter((r) => r && r.success === true && r.property && typeof r.property === 'object')
-      .map((r) => mapApillowProperty(r.property, fetchedAt));
+      .map((r) => mapApillowRecord(r.property, fetchedAt));
     return { status: 'ok', homes };
   }
   return { status: 'unavailable', reason: 'Property search is taking too long — try again in a minute.' };

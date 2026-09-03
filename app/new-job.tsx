@@ -42,6 +42,7 @@ import {
   type InspectionKind,
   type InsuranceCarrier,
   type PolicyType,
+  type RoofAgeSource,
   type RoofGeometry,
   type RoofCondition,
   type RoofMaterial,
@@ -62,7 +63,7 @@ import {
 } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
-import { homeValueOffer, roofAgePrefill } from '@/lib/services/propertyRecord';
+import { homeValueOffer, roofAgePrefill, type RoofAgePrefill } from '@/lib/services/propertyRecord';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { nextStageFor } from '@/components/pipeline/chain';
 import { useActivityStore } from '@/lib/stores/activityStore';
@@ -111,7 +112,7 @@ type Draft = {
   material: RoofMaterial | null;
   ageYears: number;
   /** Set when the age was taken from the property record's offer. */
-  ageSource?: 'inspector' | 'year_built' | 'listing';
+  ageSource?: RoofAgeSource;
   geometry: RoofGeometry | null;
   condition: RoofCondition | null;
   brittlenessTest: BrittlenessTest;
@@ -294,7 +295,7 @@ export default function NewJobWizard() {
   const setPropertyRecord = useInspectionStore((s) => s.setPropertyRecord);
   const lookupRecord = usePropertyRecordStore((s) => s.lookup);
   // What Zillow said about the address the roofer picked — an offer, never a silent write.
-  const [ageHint, setAgeHint] = useState<{ ageYears: number; note: string } | null>(null);
+  const [ageHint, setAgeHint] = useState<RoofAgePrefill | null>(null);
   const [homeValueHint, setHomeValueHint] = useState<{ value: number; note: string } | null>(null);
 
   const setEvent = useInspectionStore((s) => s.setEvent);
@@ -1413,7 +1414,7 @@ function RoofStep({
   draft: Draft;
   setDraft: (d: Draft) => void;
   /** The property record's roof-age offer (top-level lookup), or null. */
-  ageHint?: { ageYears: number; note: string } | null;
+  ageHint?: RoofAgePrefill | null;
 }) {
   return (
     <View style={styles.stepBody}>
@@ -1454,7 +1455,7 @@ function RoofStep({
         {ageHint ? (
           <Pressable
             style={styles.ageHint}
-            onPress={() => setDraft({ ...draft, ageYears: ageHint.ageYears, ageSource: ageHint.note.startsWith('Listing') ? 'listing' : 'year_built' })}
+            onPress={() => setDraft({ ...draft, ageYears: ageHint.ageYears, ageSource: ageHint.source })}
             accessibilityRole="button"
             accessibilityLabel={`Use ${ageHint.ageYears} years from the property record`}
           >

@@ -1,14 +1,18 @@
 import { formatDateTime } from '@/lib/format/date';
 import { useMemo } from 'react';
-import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+import { useKnockFinderStore } from '@/lib/stores/knockFinderStore';
 import { useToastStore } from '@/lib/stores/toastStore';
-import { AREA_ALERT_RADIUS_MILES, KNOCK_ROUTE_RADIUS_MILES } from '@/lib/services/stormWatch';
+import { AREA_ALERT_RADIUS_MILES, KNOCK_ROUTE_RADIUS_MILES, queueStormPlan } from '@/lib/services/stormWatch';
+import { pendingStormAlertId, stormLabelFor } from '@/lib/services/knockPlanRunner';
+import { FINDER_STEPS } from '@/lib/services/knockFinder';
+import { PressableScale } from '@/components/PressableScale';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { IconChip } from '@/components/ui/IconChip';
@@ -33,6 +37,9 @@ export default function StormAlertDetail() {
   const startSession = useKnockSessionStore((s) => s.start);
   const setRouteTarget = useKnockSessionStore((s) => s.setRouteTarget);
   const toast = useToastStore((s) => s.show);
+  // The knock plan this alert queued (one per alert), or the run making it.
+  const alertPlan = useKnockFinderStore((s) => s.plans.find((p) => p.stormAlertId === id));
+  const activeRun = useKnockFinderStore((s) => s.activeRun);
 
   const inAreaInspections = useMemo(() => {
     if (!alert) return [];
@@ -70,6 +77,27 @@ export default function StormAlertDetail() {
   };
 
   const hasCore = typeof alert.coreLat === 'number' && typeof alert.coreLng === 'number';
+
+  const planning = activeRun?.stormAlertId === alert.id;
+  const queued = !planning && !alertPlan && pendingStormAlertId() === alert.id;
+  const planStep = planning ? FINDER_STEPS.find((s) => s.id === activeRun?.step)?.label ?? 'Working' : '';
+  const stormLabel = stormLabelFor({ kind: 'storm_alert', alertId: alert.id, stormDay: alert.firedAt });
+  const alertTop = alertPlan?.result.areas[0];
+
+  const onMakePlan = () => {
+    const run = queueStormPlan(alert);
+    if (!run) {
+      toast({ tone: 'warn', title: 'No storm core on this alert', body: 'The planner needs a point to search from.' });
+      return;
+    }
+    toast({ tone: 'info', title: `Planning the ${stormLabel}…`, body: 'You can leave — the bell rings when the plan is ready.' });
+  };
+
+  const onPlanRow = () => {
+    if (alertPlan) router.push(`/knock-plan/${alertPlan.id}` as any);
+    else if (planning || queued) router.push('/knock-finder');
+    else onMakePlan();
+  };
 
   const onAct = () => {
     markActedOn(alert.id);
@@ -179,6 +207,57 @@ export default function StormAlertDetail() {
                 : 'Damaging hail — at or above the 1 in NWS severe criterion. Expect functional hits on asphalt.'
               : 'Validated storm below the damaging floor — worth a look, not a sprint.'}
           </Text>
+        </RichCard>
+
+        {/* The knock plan for this storm: queued by Storm Watch on a damaging
+            alert (Settings → Auto-plan damaging storms), or made here. */}
+        <SectionHeader title="Knock plan" />
+        <RichCard padded={false}>
+          <PressableScale
+            style={styles.planRow}
+            onPress={onPlanRow}
+            accessibilityRole="button"
+            accessibilityLabel={
+              alertPlan
+                ? `Plan ready for the ${stormLabel}, open it`
+                : planning
+                  ? `Planning the ${stormLabel}, ${planStep}`
+                  : queued
+                    ? `Planning the ${stormLabel} after the current run`
+                    : `Make a knock plan for the ${stormLabel}`
+            }
+          >
+            {planning ? (
+              <View style={styles.planSpinner}>
+                <ActivityIndicator color={colors.brand} />
+              </View>
+            ) : (
+              <IconChip
+                name={alertPlan ? 'compass' : queued ? 'time-outline' : 'compass-outline'}
+                tone={alertPlan ? 'green' : 'orange'}
+                size="sm"
+              />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>
+                {alertPlan ? 'Plan ready' : planning ? 'Planning…' : queued ? 'Queued' : 'Make a plan'}
+              </Text>
+              <Text style={styles.rowSub} numberOfLines={2}>
+                {alertPlan
+                  ? `${alertPlan.result.areas.length} area${alertPlan.result.areas.length === 1 ? '' : 's'}${
+                      alertTop ? ` · best: ${alertTop.name ?? alertTop.storm.town ?? 'area'} (Knock ${alertTop.knockScore})` : ''
+                    } · ${alertPlan.result.plan.days.length} day${alertPlan.result.plan.days.length === 1 ? '' : 's'}`
+                  : planning
+                    ? `${planStep}${activeRun?.partial ? ` · ${activeRun.partial.areas.length} areas ranked so far` : ''}`
+                    : queued
+                      ? 'Starts the moment the current plan finishes.'
+                      : hasCore
+                        ? 'Rank the streets around the core and plan the days. The bell rings when it is ready.'
+                        : 'Not available — this alert has no located core.'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+          </PressableScale>
         </RichCard>
 
         <SectionHeader title="Your properties in the impacted area" />
@@ -294,6 +373,16 @@ const styles = StyleSheet.create({
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
   rowSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  // Knock-plan row — a 56pt target (Drift #1) with a live spinner while planning.
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    minHeight: touchTarget.standard,
+  },
+  planSpinner: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
 
   emptyCardInner: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   emptyCardText: { color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },

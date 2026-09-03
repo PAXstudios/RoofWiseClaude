@@ -26,7 +26,7 @@ import {
 } from '@/lib/services/placeholderDetails';
 import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
-import { recordFactsLine, recordHeroUrl, recordStatusBadge } from '@/lib/services/propertyRecord';
+import { recordFactsLine, recordHeroUrl, recordRoofLine, recordStatusBadge } from '@/lib/services/propertyRecord';
 import { openMail, openPhone } from '@/components/pipeline/contact';
 import {
   LEAD_STAGE_LABELS,
@@ -302,6 +302,9 @@ export default function LeadDetail() {
             >
               {recordStatusBadge(lead.propertyRecord) ? (
                 <Text style={styles.recordHint}>{recordStatusBadge(lead.propertyRecord)!.hint}</Text>
+              ) : null}
+              {recordRoofLine(lead.propertyRecord, new Date().getFullYear()) ? (
+                <Text style={styles.recordHint}>{recordRoofLine(lead.propertyRecord, new Date().getFullYear())} — confirm on the roof.</Text>
               ) : null}
               {lead.propertyRecord.listingAgent ? (
                 <View style={styles.agentRow}>

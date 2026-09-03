@@ -14,13 +14,35 @@
 
 import type { StormEvent } from '../noaa';
 import { bearingBetween, haversineMilesBetween, type Bearing } from './stormWhere';
+import {
+  DEFAULT_BASE_RATES,
+  NO_EVIDENCE_BASE_RATE,
+  calibratedBaseRate,
+  hailClassOf,
+  type AreaCalibration,
+  type CalibratedRates,
+} from './knockCalibration';
 
 // ---------------------------------------------------------------------------
 // Constants (see docs/KNOCK_OPPORTUNITIES.md §2 for provenance)
 // ---------------------------------------------------------------------------
 
-/** How far from base the finder looks. Owner: "within a 100 mile radius". */
-export const SEARCH_RADIUS_MILES = 100;
+/**
+ * How far from base the finder looks — the roofer picks it (owner: "toggle
+ * the mileage from 0–50 miles"). One cell is the floor; 50 is a full day out
+ * and back. The default is a morning's drive.
+ */
+export const DEFAULT_SEARCH_RADIUS_MILES = 25;
+export const MIN_SEARCH_RADIUS_MILES = 3;
+export const MAX_SEARCH_RADIUS_MILES = 50;
+/** Legacy alias of the default — older call sites read it as "the radius". */
+export const SEARCH_RADIUS_MILES = DEFAULT_SEARCH_RADIUS_MILES;
+
+/** The radius the finder will actually use for a requested value. */
+export function clampRadiusMiles(radiusMiles: number | null | undefined): number {
+  if (radiusMiles == null || !Number.isFinite(radiusMiles)) return DEFAULT_SEARCH_RADIUS_MILES;
+  return Math.min(MAX_SEARCH_RADIUS_MILES, Math.max(MIN_SEARCH_RADIUS_MILES, Math.round(radiusMiles)));
+}
 /** Owner: "if there was a hail storm there in the past 2 years". */
 export const LOOKBACK_MONTHS = 24;
 /** Scoring cell edge — matches the 3-mi canvass radius a knock route uses. */
@@ -44,6 +66,14 @@ const MONTH_MS = 30.44 * 24 * 60 * 60 * 1000;
 const ADJACENT_SPREAD = 0.4;
 /** Saturation constant for the storm score: exposure 1.5 → 63, 3 → 86. */
 const STORM_SATURATION = 1.5;
+/**
+ * Neighbours mode: a cell with one of the roofer's jobs and no storm on file
+ * still scores — the storm factor floors here so the weighted geometric mean
+ * does not zero a referral street. 0.1 keeps it under every real storm cell.
+ */
+export const NEIGHBOUR_STORM_FLOOR = 0.1;
+/** Known new roofs (docs §4.5): fewer than this many records in a cell says nothing. */
+export const MIN_KNOWN_ROOFS = 3;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,11 +81,62 @@ const STORM_SATURATION = 1.5;
 
 export type BasePoint = { lat: number; lng: number; label: string };
 
+/**
+ * 'storm'      — rank every cell a storm report landed in (the default).
+ * 'neighbours' — rank the cells the roofer's own jobs sit in: lead with the
+ *                yard sign, and score with the same storm evidence when there
+ *                is any (a signed job in a hail cell is the best street in
+ *                the county).
+ */
+export type FinderMode = 'storm' | 'neighbours';
+
+export type OwnJob = {
+  lat: number;
+  lng: number;
+  /** Pipeline stage of the linked lead, when there is one. */
+  stage?: string;
+  /** A signed proposal, a homeowner signature, or a lead at/after Approved / Signed. */
+  signed?: boolean;
+  address?: string;
+  customerName?: string;
+  /** ISO — when the job was created; the card says "(Jun)". */
+  at?: string;
+};
+
 export type OwnActivity = {
   /** The roofer's knocks (any outcome) — recent ones lower the score. */
   knocks: { lat: number; lng: number; at: string }[];
   /** The roofer's jobs — a yard sign and a referral base. */
-  jobs: { lat: number; lng: number }[];
+  jobs: OwnJob[];
+};
+
+/**
+ * A house whose roof year the app knows from a cached Zillow record — a stated
+ * "new roof 2021", a listing that says "new roof" (dated to the listing), or
+ * a build year after the storm. `roofYear` is a LOWER bound on the roof's
+ * year: the roof is at least that new.
+ */
+export type KnownRoof = { lat: number; lng: number; roofYear: number };
+
+export type NewRoofSummary = {
+  /** Cached records with a known roof year inside the cell. */
+  known: number;
+  /** Of those, roofs at least as new as the strongest storm. */
+  newSinceStorm: number;
+  /** newSinceStorm ÷ known, 0 when fewer than MIN_KNOWN_ROOFS. */
+  share: number;
+  /** 1 − 0.8 × share; 1 when the sample is too thin to say. */
+  factor: number;
+};
+
+/** The job a neighbours-mode card leads with. */
+export type AnchorJob = {
+  address?: string;
+  /** "1420 Oak St" — the first line of the address. */
+  street?: string;
+  customerName?: string;
+  at?: string;
+  signed: boolean;
 };
 
 export type HousingSource = 'acs' | 'national_prior';
@@ -150,6 +231,20 @@ export type ScoredArea = {
   recentKnocks: number;
   /** Rule-based rationale — what the AI brief is asked to phrase, never invent. */
   reasons: string[];
+  /**
+   * Which base rate the per-roof p started from — the table or the roofer's
+   * own calibrated rate — so the card can say "Your data: 0.58 (123 doors)
+   * vs table 0.65". Absent on plans made before calibration existed.
+   */
+  calibration?: AreaCalibration;
+  /** Known new roofs in the cell from cached Zillow records (docs §4.5). Absent when none are cached. */
+  newRoofs?: NewRoofSummary;
+  /** Neighbours mode: how many of the roofer's jobs here are signed. */
+  ownSignedJobs?: number;
+  /** Neighbours mode: the job the card leads with (signed first, then newest). */
+  anchorJob?: AnchorJob;
+  /** Absent on plans made before neighbours mode existed → 'storm'. */
+  mode?: FinderMode;
 };
 
 export type TripStop = {
@@ -237,10 +332,16 @@ export function singleFamilyFactor(share: number | null): number {
   return 0.3 + 0.7 * (share ?? 0.62);
 }
 
-/** Within 25 mi costs nothing; a 100-mi drive is a committed day. */
-export function accessFactor(distanceMiles: number): number {
-  if (distanceMiles <= 25) return 1.0;
-  const t = Math.min(1, (distanceMiles - 25) / (SEARCH_RADIUS_MILES - 25));
+/**
+ * Drive cost inside the radius the roofer chose: the nearest quarter of it
+ * costs nothing; the edge costs 40 %. Scales with the radius so "nearer is
+ * better" holds whether the dial says 10 mi or 50 (docs §2.5).
+ */
+export function accessFactor(distanceMiles: number, radiusMiles: number = DEFAULT_SEARCH_RADIUS_MILES): number {
+  const r = Math.max(MIN_SEARCH_RADIUS_MILES, radiusMiles);
+  const free = r / 4;
+  if (distanceMiles <= free) return 1.0;
+  const t = Math.min(1, (distanceMiles - free) / (r - free));
   return 1.0 - 0.4 * t;
 }
 
@@ -252,6 +353,45 @@ export function canvassedFactor(recentKnocks: number): number {
 
 export function ownJobsFactor(jobs: number): number {
   return jobs > 0 ? 1.05 : 1.0;
+}
+
+/**
+ * Neighbours mode leads with the referral: a signed job in the cell is a
+ * yard sign and a homeowner who will vouch (×1.6); any job is a truck the
+ * street has seen (×1.25). Replaces `ownJobsFactor` in that mode (docs §2.7).
+ */
+export function referralFactor(signedJobs: number, anyJobs: number): number {
+  if (signedJobs > 0) return 1.6;
+  if (anyJobs > 0) return 1.25;
+  return 1.0;
+}
+
+/**
+ * Known new roofs (docs §4.5): a roof at least as new as the strongest storm
+ * is not a claim candidate. With a share s of the cell's known roofs new
+ * since the storm, p is scaled by 1 − 0.8·s — never to zero, because the
+ * sample is a handful of listings, not the street.
+ */
+export function newRoofFactor(newRoofShare: number): number {
+  const s = Math.min(1, Math.max(0, newRoofShare));
+  return 1 - 0.8 * s;
+}
+
+/** Year of a YYYY-MM-DD storm day, or null. */
+export function stormYearOf(storm: Pick<StormEvidence, 'strongest'>): number | null {
+  const d = storm.strongest?.day;
+  if (!d) return null;
+  const y = Number(d.slice(0, 4));
+  return Number.isFinite(y) ? y : null;
+}
+
+/** New-roof share of a cell from the cached records inside it. Pure. */
+export function newRoofSummary(roofs: readonly KnownRoof[], stormYear: number | null): NewRoofSummary {
+  const known = roofs.length;
+  if (known < MIN_KNOWN_ROOFS || stormYear == null) return { known, newSinceStorm: 0, share: 0, factor: 1 };
+  const newSinceStorm = roofs.filter((r) => r.roofYear >= stormYear).length;
+  const share = newSinceStorm / known;
+  return { known, newSinceStorm, share, factor: newRoofFactor(share) };
 }
 
 /** 0–100 from summed exposure — saturating so one huge storm cannot dwarf the field. */
@@ -466,25 +606,14 @@ export function stormEvidenceByCell(
 // Hit rate — binomial statements (docs §4)
 // ---------------------------------------------------------------------------
 
-/** Base per-roof probability of claim-grade damage by the area's worst hail. */
+/**
+ * Base per-roof probability of claim-grade damage by the area's worst hail —
+ * the §4.1 table (`DEFAULT_BASE_RATES`, bucketed by `hailClassOf` so the
+ * calibration and the formula can never disagree on a class).
+ */
 export function baseHitProbability(s: Pick<StormEvidence, 'maxHailInches' | 'maxWindMph' | 'hailReports' | 'windReports'>): number {
-  const h = s.maxHailInches;
-  if (h != null) {
-    if (h >= 2.0) return 0.65;
-    if (h >= 1.5) return 0.5;
-    if (h >= 1.25) return 0.35;
-    if (h >= 1.0) return 0.22;
-    if (h >= 0.75) return 0.1;
-    return 0.03;
-  }
-  if (s.hailReports > 0) return 0.1; // hail reported, size unknown
-  const w = s.maxWindMph;
-  if (w != null) {
-    if (w >= 86) return 0.16;
-    if (w >= 70) return 0.1;
-    return 0.06;
-  }
-  return s.windReports > 0 ? 0.06 : 0.01;
+  const c = hailClassOf(s);
+  return c ? DEFAULT_BASE_RATES[c] : NO_EVIDENCE_BASE_RATE;
 }
 
 /** Roofs already replaced since the storm: the market moves (docs §4.2). */
@@ -493,50 +622,116 @@ export function remainingFactor(monthsSinceStrongest: number | null): number {
   return Math.max(0.5, 1 - 0.5 * (monthsSinceStrongest / LOOKBACK_MONTHS));
 }
 
-export function roofHitProbability(storm: StormEvidence, housing: HousingProfile, nowYear: number): number {
-  const p =
-    baseHitProbability(storm) *
-    roofAgeFactor(housing.medianYearBuilt, nowYear) *
-    (storm.direct ? 1 : 0.6) *
-    remainingFactor(storm.monthsSinceStrongest);
+/**
+ * The street's modifier on the base rate: roof age, whether a report landed
+ * in the cell, roofs already replaced, and known new roofs. Exposed so the
+ * calibration can weigh doors by it (docs §8).
+ */
+export function hitModifier(storm: StormEvidence, housing: HousingProfile, nowYear: number, newRoofShare = 0): number {
+  return roofAgeFactor(housing.medianYearBuilt, nowYear) * (storm.direct ? 1 : 0.6) * remainingFactor(storm.monthsSinceStrongest) * newRoofFactor(newRoofShare);
+}
+
+/**
+ * Per-roof probability (docs §4.1). With a calibration the base rate is the
+ * roofer's own posterior for the cell's hail class instead of the table;
+ * `newRoofShare` is the cell's share of cached records with a roof at least
+ * as new as the storm (0 when unknown).
+ */
+export function roofHitProbability(
+  storm: StormEvidence,
+  housing: HousingProfile,
+  nowYear: number,
+  calibration?: CalibratedRates | null,
+  newRoofShare = 0,
+): number {
+  const base = calibration ? calibratedBaseRate(storm, calibration).usedRate : baseHitProbability(storm);
+  const p = base * hitModifier(storm, housing, nowYear, newRoofShare);
   return Math.min(0.75, Math.max(0.01, p));
 }
 
-function logChoose(n: number, k: number): number {
-  let r = 0;
-  for (let i = 1; i <= k; i += 1) r += Math.log(n - k + i) - Math.log(i);
-  return r;
-}
-
-/** P(X ≥ k) for X ~ Binomial(n, p). */
+/**
+ * P(X ≥ k) for X ~ Binomial(n, p). One running log-binomial term walked from
+ * the short side of k — the lower tail Σ_{i<k} when k is small (the usual
+ * "at least 5" question costs five terms whatever n is), the upper tail
+ * otherwise. The earlier version rebuilt log C(n, i) from scratch for every
+ * term (O(n²) per call); with `doorsToFind` walking n to 600 for every one of
+ * ~1,000 cells that was the seconds-long freeze in the Knock Planner.
+ */
 export function binomialAtLeast(n: number, p: number, k: number): number {
   if (k <= 0) return 1;
   if (k > n) return 0;
   if (p <= 0) return 0;
   if (p >= 1) return 1;
+  const logP = Math.log(p);
+  const logQ = Math.log(1 - p);
+  if (k <= n / 2) {
+    // 1 − P(X < k): start at P(X = 0) = q^n and step up in log space.
+    let logTerm = n * logQ;
+    let lower = 0;
+    for (let i = 0; i < k; i += 1) {
+      lower += Math.exp(logTerm);
+      logTerm += Math.log(n - i) - Math.log(i + 1) + logP - logQ;
+    }
+    return Math.max(0, Math.min(1, 1 - lower));
+  }
+  // Upper tail: start at P(X = k) and step up.
+  let logTerm = k * logP + (n - k) * logQ;
+  for (let i = 1; i <= k; i += 1) logTerm += Math.log(n - k + i) - Math.log(i);
   let tail = 0;
   for (let i = k; i <= n; i += 1) {
-    tail += Math.exp(logChoose(n, i) + i * Math.log(p) + (n - i) * Math.log(1 - p));
+    tail += Math.exp(logTerm);
+    logTerm += Math.log(n - i) - Math.log(i + 1) + logP - logQ;
   }
-  return Math.min(1, tail);
+  return Math.max(0, Math.min(1, tail));
 }
 
-/** Largest m with P(X ≥ m) ≥ conf. */
+/** Largest m with P(X ≥ m) ≥ conf — binary search on the decreasing tail. */
 export function atLeastWithConfidence(n: number, p: number, conf = CONFIDENCE): number {
-  let m = 0;
-  for (let k = 1; k <= n; k += 1) {
-    if (binomialAtLeast(n, p, k) >= conf) m = k;
-    else break;
+  let lo = 0; // P(X ≥ 0) = 1 ≥ conf always
+  let hi = n + 1; // P(X ≥ n + 1) = 0 < conf
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (binomialAtLeast(n, p, mid) >= conf) lo = mid;
+    else hi = mid;
   }
-  return m;
+  return lo;
 }
 
-/** Smallest n (≤ 600) with P(X ≥ k) ≥ conf; null when it would take more. */
+/** The search cap for "doors for 5" — beyond this the answer is "not on this street". */
+export const DOORS_SEARCH_CAP = 600;
+
+const doorsMemo = new Map<string, number | null>();
+
+/**
+ * Smallest n (≤ DOORS_SEARCH_CAP) with P(X ≥ k) ≥ conf; null when it would
+ * take more. P(X ≥ k) rises with n, so this is an exponential probe then a
+ * binary search (~12 evaluations of a k-term sum). Memoised by p to three
+ * decimals — a planner run only ever sees a few hundred distinct values.
+ */
 export function doorsToFind(k: number, p: number, conf = CONFIDENCE): number | null {
-  for (let n = k; n <= 600; n += 1) {
-    if (binomialAtLeast(n, p, k) >= conf) return n;
+  const key = `${k}:${p.toFixed(3)}:${conf}`;
+  const hit = doorsMemo.get(key);
+  if (hit !== undefined) return hit;
+  let out: number | null;
+  if (binomialAtLeast(DOORS_SEARCH_CAP, p, k) < conf) {
+    out = null;
+  } else {
+    let lo = k - 1; // fails (P(X ≥ k) over k−1 doors is 0)
+    let hi = k;
+    while (hi < DOORS_SEARCH_CAP && binomialAtLeast(hi, p, k) < conf) {
+      lo = hi;
+      hi = Math.min(DOORS_SEARCH_CAP, hi * 2);
+    }
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (binomialAtLeast(mid, p, k) >= conf) hi = mid;
+      else lo = mid;
+    }
+    out = hi;
   }
-  return null;
+  if (doorsMemo.size > 5000) doorsMemo.clear();
+  doorsMemo.set(key, out);
+  return out;
 }
 
 export function hitRateFor(perRoof: number, doors = DOORS_PER_STOP): HitRate {
@@ -587,7 +782,58 @@ export type RankInput = {
   /** Housing profile per cell key; missing keys use the national prior. */
   housing?: ReadonlyMap<string, HousingProfile>;
   limit?: number;
+  /** Default 'storm'. */
+  mode?: FinderMode;
+  /** The roofer's calibrated base rates (docs §8); null/absent → the table. */
+  calibration?: CalibratedRates | null;
+  /** Cached Zillow records with a known roof year — the known-new-roofs factor (docs §4.5). */
+  knownRoofs?: readonly KnownRoof[];
+  /** Search radius from base; clamped to [MIN, MAX], default DEFAULT_SEARCH_RADIUS_MILES. */
+  radiusMiles?: number;
 };
+
+/** A cell with no report in it or next to it — neighbours mode only. */
+export const EMPTY_EVIDENCE: StormEvidence = {
+  hailReports: 0,
+  windReports: 0,
+  maxHailInches: null,
+  maxWindMph: null,
+  strongest: null,
+  monthsSinceStrongest: null,
+  days: [],
+  direct: false,
+  exposure: 0,
+  stormScore: 0,
+};
+
+/** "1420 Oak St, Plano, TX 75024, USA" → "1420 Oak St". */
+export function streetOf(address: string | undefined): string | undefined {
+  const s = address?.split(',')[0]?.trim();
+  return s && s.length > 0 ? s : undefined;
+}
+
+/** "1420 Oak St, Plano, TX 75024, USA" → "Plano". */
+export function cityOf(address: string | undefined): string | undefined {
+  const parts = (address ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return undefined;
+  const c = parts[1];
+  return /^[A-Z]{2}\b/.test(c) ? undefined : c;
+}
+
+function monthName(iso: string | undefined): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleDateString('en-US', { month: 'short' });
+}
+
+/** The job a neighbours card leads with: signed first, then the newest. Pure. */
+export function anchorJobOf(jobs: readonly OwnJob[]): AnchorJob | undefined {
+  if (jobs.length === 0) return undefined;
+  const sorted = [...jobs].sort((a, b) => Number(!!b.signed) - Number(!!a.signed) || (b.at ?? '').localeCompare(a.at ?? ''));
+  const j = sorted[0];
+  return { address: j.address, street: streetOf(j.address), customerName: j.customerName, at: j.at, signed: !!j.signed };
+}
 
 function monthsAgo(iso: string, now: Date): number {
   return (now.getTime() - new Date(iso).getTime()) / MONTH_MS;
@@ -615,6 +861,25 @@ function pct(x: number | null): string {
 export function ruleRationale(a: Omit<ScoredArea, 'reasons'>, now: Date): string[] {
   const r: string[] = [];
   const s = a.storm;
+  if (a.mode === 'neighbours') {
+    const j = a.anchorJob;
+    const signed = a.ownSignedJobs ?? 0;
+    if (j) {
+      const when = monthName(j.at);
+      const where = j.street ? ` at ${j.street}` : '';
+      r.push(
+        j.signed
+          ? `Your signed job${where}${when ? ` (${when})` : ''} — lead with the yard sign and the neighbour who can vouch for you.`
+          : `Your job${where}${when ? ` (${when})` : ''} — a street that has seen your truck.`,
+      );
+    }
+    if (a.ownJobs > 1) {
+      r.push(`${a.ownJobs} of your jobs are here${signed > 0 ? ` (${signed} signed)` : ''}.`);
+    }
+    if (!s.strongest) {
+      r.push(`No NWS hail or wind report on file here in the last ${LOOKBACK_MONTHS} months — a referral street, not a claim street. Look for soft-metal dents before promising a claim.`);
+    }
+  }
   if (s.strongest) {
     const d = s.strongest;
     const what =
@@ -657,7 +922,18 @@ export function ruleRationale(a: Omit<ScoredArea, 'reasons'>, now: Date): string
   }
   r.push(`${Math.round(a.distanceMiles)} mi ${a.bearing} of base — about ${Math.round(a.driveMinutes)} min drive.`);
   if (a.recentKnocks > 0) r.push(`You knocked ${a.recentKnocks} door${a.recentKnocks === 1 ? '' : 's'} here in the last 60 days.`);
-  if (a.ownJobs > 0) r.push(`${a.ownJobs} of your job${a.ownJobs === 1 ? ' is' : 's are'} here — a yard sign and a referral base.`);
+  if (a.mode !== 'neighbours' && a.ownJobs > 0) {
+    r.push(`${a.ownJobs} of your job${a.ownJobs === 1 ? ' is' : 's are'} here — a yard sign and a referral base.`);
+  }
+  const nr = a.newRoofs;
+  if (nr && nr.known >= MIN_KNOWN_ROOFS && nr.newSinceStorm > 0) {
+    r.push(
+      `${nr.newSinceStorm} of ${nr.known} homes on file here (Zillow) have a roof at least as new as the storm — fewer claim candidates, ${Math.round(
+        (1 - nr.factor) * 100,
+      )}% off the per-roof odds.`,
+    );
+  }
+  if (a.calibration && a.calibration.method !== 'table') r.push(a.calibration.note);
   const hr = a.hitRate;
   r.push(
     `Knock ${hr.doors} doors: expect ~${Math.round(hr.expected)} claim-grade roofs, at least ${hr.atLeast} (${Math.round(
@@ -667,66 +943,169 @@ export function ruleRationale(a: Omit<ScoredArea, 'reasons'>, now: Date): string
   return r;
 }
 
-export function rankAreas(input: RankInput): ScoredArea[] {
+const byScore = (a: { knockScore: number; perRoof: number; distanceMiles: number }, b: typeof a) =>
+  b.knockScore - a.knockScore || b.perRoof - a.perRoof || a.distanceMiles - b.distanceMiles;
+
+export type RankOutput = {
+  areas: ScoredArea[];
+  /** Cells that qualified for ranking — storm mode: a report landed in them; neighbours: a job sits in them. */
+  cellCount: number;
+  radiusMiles: number;
+  mode: FinderMode;
+};
+
+/**
+ * Score every qualifying cell, cheaply, and finish only the top `limit`.
+ *
+ * The cheap part (a handful of multiplications per cell) runs for every
+ * cell; the binomial statements and the rationale — the expensive part —
+ * are computed for the cells that will be shown. The first build did the
+ * expensive part for all ~1,000 cells, twice, and froze the JS thread for
+ * the length of the run.
+ */
+export function rankAreasDetailed(input: RankInput): RankOutput {
   const { base, now, events } = input;
+  const mode: FinderMode = input.mode ?? 'storm';
+  const radiusMiles = clampRadiusMiles(input.radiusMiles);
   const nowYear = now.getFullYear();
   const cells = stormEvidenceByCell(events, base, now);
   const sixtyDaysAgo = now.getTime() - 60 * 24 * 60 * 60 * 1000;
   const own = input.own ?? { knocks: [], jobs: [] };
+  const calibration = input.calibration ?? null;
 
-  const scored: ScoredArea[] = [];
-  for (const { ref, evidence } of cells.values()) {
-    if (evidence.exposure <= 0) continue;
-    // Only cells a report actually landed in are ranked. Neighbour spread
-    // still lifts a hit cell that sits inside a wider swath, but a halo of
-    // eight report-less cells around every storm would crowd the list with
-    // nine cards all named after the same town — and the 3-mi canvass
-    // radius already reaches into them from the hit cell.
-    if (!evidence.direct) continue;
+  // Bucket the roofer's footprint and the known roofs once, by cell key.
+  const knocksByCell = new Map<string, number>();
+  for (const k of own.knocks) {
+    if (new Date(k.at).getTime() < sixtyDaysAgo) continue;
+    const key = cellFor(k.lat, k.lng, base.lat).key;
+    knocksByCell.set(key, (knocksByCell.get(key) ?? 0) + 1);
+  }
+  const jobsByCell = new Map<string, OwnJob[]>();
+  for (const j of own.jobs) {
+    const key = cellFor(j.lat, j.lng, base.lat).key;
+    jobsByCell.set(key, [...(jobsByCell.get(key) ?? []), j]);
+  }
+  const roofsByCell = new Map<string, KnownRoof[]>();
+  for (const r of input.knownRoofs ?? []) {
+    const key = cellFor(r.lat, r.lng, base.lat).key;
+    roofsByCell.set(key, [...(roofsByCell.get(key) ?? []), r]);
+  }
+
+  // The population: storm mode ranks the cells a report landed in; neighbours
+  // mode ranks the cells the roofer's jobs sit in, with whatever evidence
+  // those cells have.
+  type Candidate = { ref: CellRef; evidence: StormEvidence };
+  const candidates: Candidate[] = [];
+  if (mode === 'neighbours') {
+    for (const key of jobsByCell.keys()) {
+      const [row, col] = key.split(':').map(Number);
+      candidates.push({ ref: { row, col, key }, evidence: cells.get(key)?.evidence ?? EMPTY_EVIDENCE });
+    }
+  } else {
+    for (const c of cells.values()) {
+      if (c.evidence.exposure <= 0) continue;
+      // Only cells a report actually landed in are ranked. Neighbour spread
+      // still lifts a hit cell that sits inside a wider swath, but a halo of
+      // eight report-less cells around every storm would crowd the list with
+      // nine cards all named after the same town — and the 3-mi canvass
+      // radius already reaches into them from the hit cell.
+      if (!c.evidence.direct) continue;
+      candidates.push(c);
+    }
+  }
+
+  type Cheap = {
+    ref: CellRef;
+    evidence: StormEvidence;
+    center: { lat: number; lng: number };
+    distanceMiles: number;
+    housing: HousingProfile;
+    susceptibility: number;
+    recentKnocks: number;
+    jobs: OwnJob[];
+    newRoofs: NewRoofSummary | undefined;
+    factors: ScoreFactors;
+    perRoof: number;
+    knockScore: number;
+  };
+  const cheap: Cheap[] = [];
+  for (const { ref, evidence } of candidates) {
     const center = cellCenter(ref, base.lat);
     const distanceMiles = haversineMilesBetween(base.lat, base.lng, center.lat, center.lng);
-    if (distanceMiles > SEARCH_RADIUS_MILES) continue;
-
+    if (distanceMiles > radiusMiles) continue;
     const housing = input.housing?.get(ref.key) ?? NATIONAL_HOUSING_PRIOR;
     const susceptibility = susceptibilityScore(housing, nowYear);
-    const recentKnocks = own.knocks.filter(
-      (k) => new Date(k.at).getTime() >= sixtyDaysAgo && cellFor(k.lat, k.lng, base.lat).key === ref.key,
-    ).length;
-    const ownJobs = own.jobs.filter((j) => cellFor(j.lat, j.lng, base.lat).key === ref.key).length;
-
+    const recentKnocks = knocksByCell.get(ref.key) ?? 0;
+    const jobs = jobsByCell.get(ref.key) ?? [];
+    const signed = jobs.filter((j) => j.signed).length;
+    const roofs = roofsByCell.get(ref.key);
+    const newRoofs = roofs && roofs.length > 0 ? newRoofSummary(roofs, stormYearOf(evidence)) : undefined;
     const factors: ScoreFactors = {
-      storm: evidence.stormScore / 100,
+      storm: mode === 'neighbours' ? Math.max(NEIGHBOUR_STORM_FLOOR, evidence.stormScore / 100) : evidence.stormScore / 100,
       housing: susceptibility / 100,
-      access: accessFactor(distanceMiles),
+      access: accessFactor(distanceMiles, radiusMiles),
       canvassed: canvassedFactor(recentKnocks),
-      ownJobs: ownJobsFactor(ownJobs),
+      ownJobs: mode === 'neighbours' ? referralFactor(signed, jobs.length) : ownJobsFactor(jobs.length),
     };
-    const perRoof = roofHitProbability(evidence, housing, nowYear);
-    const knockScore = knockScoreFrom(factors, perRoof);
-    const partial: Omit<ScoredArea, 'reasons'> = {
-      key: ref.key,
-      lat: center.lat,
-      lng: center.lng,
+    const perRoof = roofHitProbability(evidence, housing, nowYear, calibration, newRoofs?.share ?? 0);
+    cheap.push({
+      ref,
+      evidence,
+      center,
       distanceMiles,
-      bearing: bearingBetween(base.lat, base.lng, center.lat, center.lng),
-      driveMinutes: (distanceMiles / DRIVE_MPH) * 60 + 5,
-      storm: evidence,
       housing,
       susceptibility,
-      factors,
-      knockScore,
-      hitRate: hitRateFor(perRoof),
-      ownJobs,
       recentKnocks,
-    };
-    scored.push({ ...partial, reasons: ruleRationale(partial, now) });
+      jobs,
+      newRoofs,
+      factors,
+      perRoof,
+      knockScore: knockScoreFrom(factors, perRoof),
+    });
   }
 
   // Ties (one storm across several cells) go to the nearer cell.
-  scored.sort(
-    (a, b) => b.knockScore - a.knockScore || b.hitRate.perRoof - a.hitRate.perRoof || a.distanceMiles - b.distanceMiles,
-  );
-  return scored.slice(0, input.limit ?? MAX_AREAS);
+  cheap.sort(byScore);
+  const top = cheap.slice(0, input.limit ?? MAX_AREAS);
+
+  const areas: ScoredArea[] = top.map((c) => {
+    const signedJobs = c.jobs.filter((j) => j.signed).length;
+    const anchor = mode === 'neighbours' ? anchorJobOf(c.jobs) : undefined;
+    const partial: Omit<ScoredArea, 'reasons'> = {
+      key: c.ref.key,
+      lat: c.center.lat,
+      lng: c.center.lng,
+      distanceMiles: c.distanceMiles,
+      bearing: bearingBetween(base.lat, base.lng, c.center.lat, c.center.lng),
+      driveMinutes: (c.distanceMiles / DRIVE_MPH) * 60 + 5,
+      storm: c.evidence,
+      housing: c.housing,
+      susceptibility: c.susceptibility,
+      factors: c.factors,
+      knockScore: c.knockScore,
+      hitRate: hitRateFor(c.perRoof),
+      ownJobs: c.jobs.length,
+      recentKnocks: c.recentKnocks,
+      calibration: calibratedBaseRate(c.evidence, calibration),
+      ...(c.newRoofs ? { newRoofs: c.newRoofs } : {}),
+      ...(mode === 'neighbours'
+        ? {
+            mode,
+            ownSignedJobs: signedJobs,
+            ...(anchor ? { anchorJob: anchor } : {}),
+            ...(anchor?.street ? { landmark: anchor.street } : {}),
+            ...(cityOf(anchor?.address) ? { name: cityOf(anchor?.address) } : {}),
+          }
+        : {}),
+    };
+    return { ...partial, reasons: ruleRationale(partial, now) };
+  });
+
+  return { areas, cellCount: cheap.length, radiusMiles, mode };
+}
+
+export function rankAreas(input: RankInput): ScoredArea[] {
+  return rankAreasDetailed(input).areas;
 }
 
 /** Re-score already-ranked areas with housing profiles that arrived later. */
@@ -734,6 +1113,7 @@ export function applyHousing(
   areas: readonly ScoredArea[],
   housing: ReadonlyMap<string, HousingProfile>,
   now: Date,
+  calibration?: CalibratedRates | null,
 ): ScoredArea[] {
   const nowYear = now.getFullYear();
   return areas
@@ -742,7 +1122,7 @@ export function applyHousing(
       if (!h) return a;
       const susceptibility = susceptibilityScore(h, nowYear);
       const factors = { ...a.factors, housing: susceptibility / 100 };
-      const perRoof = roofHitProbability(a.storm, h, nowYear);
+      const perRoof = roofHitProbability(a.storm, h, nowYear, calibration, a.newRoofs?.share ?? 0);
       const knockScore = knockScoreFrom(factors, perRoof);
       const partial: Omit<ScoredArea, 'reasons'> = {
         ...a,
@@ -754,9 +1134,7 @@ export function applyHousing(
       };
       return { ...partial, reasons: ruleRationale(partial, now) };
     })
-    .sort(
-      (a, b) => b.knockScore - a.knockScore || b.hitRate.perRoof - a.hitRate.perRoof || a.distanceMiles - b.distanceMiles,
-    );
+    .sort((a, b) => byScore({ ...a, perRoof: a.hitRate.perRoof }, { ...b, perRoof: b.hitRate.perRoof }));
 }
 
 // ---------------------------------------------------------------------------

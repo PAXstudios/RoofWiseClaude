@@ -1,4 +1,5 @@
 import {
+  Linking,
   ScrollView,
   View,
   Text,
@@ -18,6 +19,15 @@ import Animated, {
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { scheduledDaysFrom, useKnockFinderStore, type ScheduledKnockDay } from '@/lib/stores/knockFinderStore';
+import { useToastStore } from '@/lib/stores/toastStore';
+import { startRoute } from '@/components/knock/sessionTracker';
+import { localYmd, startClockLabel } from '@/components/knock/ScheduleDaySheet';
+import { ConfirmSheet } from '@/components/sheets/ConfirmSheet';
+import { directionsUrl } from '@/lib/services/knockFinder';
+import { fmtMinutes } from '@/lib/services/knockOpportunities';
+import { KNOCK_ROUTE_RADIUS_MILES } from '@/lib/services/stormWatch';
+import { cancelKnockDayReminder } from '@/lib/services/pushNotifications';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Aurora } from '@/components/glass/Aurora';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -36,7 +46,7 @@ import {
   type ScheduleItem,
 } from '@/components/home/todayAgenda';
 import { daysInStage, goingColdLeads } from '@/components/pipeline/chain';
-import type { Inspection } from '@/lib/models/types';
+import type { Inspection, KnockRouteTarget } from '@/lib/models/types';
 import {
   brand,
   colors,
@@ -189,6 +199,16 @@ export default function PlanScreen() {
   // more in their stage. Stalest first — the one that has waited longest is
   // the one to call first. Hidden entirely when there are none.
   const goingCold = useMemo(() => goingColdLeads(leads), [leads]);
+
+  // Knock days the roofer put on the calendar from a plan (today and ahead,
+  // soonest first). A day that slipped past unstarted drops off this list
+  // but stays on its plan page. Section is absent when there are none.
+  const plans = useKnockFinderStore((s) => s.plans);
+  const todayYmd = localYmd(new Date());
+  const knockDays = useMemo(
+    () => scheduledDaysFrom(plans).filter((d) => d.schedule.date >= todayYmd),
+    [plans, todayYmd],
+  );
 
   const todayKnocks = useMemo(() => {
     const startOfDay = new Date();
@@ -382,6 +402,20 @@ export default function PlanScreen() {
         </>
       )}
 
+      {/* Knock days — scheduled trip days from saved knock plans, as stops
+          with a start time. Start route rides the day onto a session exactly
+          as the plan page's "Start this day" does. Absent when none. */}
+      {knockDays.length > 0 && (
+        <Rise index={3}>
+          <Text style={styles.sectionLabel}>Knock days</Text>
+          <View style={styles.knockDays}>
+            {knockDays.map((d) => (
+              <KnockDayCard key={`${d.plan.id}:${d.day.day}`} item={d} isToday={d.schedule.date === todayYmd} />
+            ))}
+          </View>
+        </Rise>
+      )}
+
       {/* Going cold — leads that have sat a week or more in a pre-sale stage
           with nothing on the calendar. Driven by stage age (`stageChangedAt`),
           so it measures the deal, not the last edit. Absent when none. */}
@@ -531,6 +565,141 @@ function PlanStat({
         <Text style={styles.statLabel} numberOfLines={2}>{label}</Text>
       </View>
     </View>
+  );
+}
+
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Today" / "Tomorrow" / "Thu, Sep 5" from a local YYYY-MM-DD. */
+function knockDateLabel(date: string, todayYmd: string): string {
+  if (date === todayYmd) return 'Today';
+  const [y, m, d] = date.split('-').map(Number);
+  const target = new Date(y, m - 1, d);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (date === localYmd(tomorrow)) return 'Tomorrow';
+  return `${WEEKDAYS_SHORT[target.getDay()]}, ${MONTHS_SHORT[target.getMonth()]} ${target.getDate()}`;
+}
+
+/**
+ * One scheduled knock day: the date and start clock, the stops, and the
+ * same Start / Directions / Open plan actions the plan page carries. Start
+ * route mirrors `PlanView.startDay` — permission → GPS watcher → mileage
+ * trip → session; a refused location still creates the session with the
+ * stops on it so nothing chosen is lost.
+ */
+function KnockDayCard({ item, isToday }: { item: ScheduledKnockDay; isToday: boolean }) {
+  const router = useRouter();
+  const { plan, day, schedule } = item;
+  const activeSession = useKnockSessionStore((s) => s.activeSession);
+  const startSession = useKnockSessionStore((s) => s.start);
+  const setRouteStops = useKnockSessionStore((s) => s.setRouteStops);
+  const setAreaStatus = useKnockFinderStore((s) => s.setAreaStatus);
+  const unscheduleDay = useKnockFinderStore((s) => s.unscheduleDay);
+  const toast = useToastStore((s) => s.show);
+  const [confirm, setConfirm] = useState(false);
+
+  const stops = day.stops;
+  const firstName = stops[0] ? stops[0].area.name ?? stops[0].area.storm.town ?? 'Storm area' : '—';
+  const clock = startClockLabel(schedule.startTime);
+  const dateLabel = knockDateLabel(schedule.date, localYmd(new Date()));
+
+  const toTarget = (s: (typeof stops)[number]): KnockRouteTarget => ({
+    lat: s.area.lat,
+    lng: s.area.lng,
+    label: s.area.name ?? s.area.storm.town ?? 'Storm area',
+    radiusMiles: KNOCK_ROUTE_RADIUS_MILES,
+  });
+
+  const beginRoute = async (routeStops: KnockRouteTarget[]) => {
+    const r = await startRoute({ routeStops });
+    if (r.ok) return true;
+    startSession(undefined, routeStops[0], { routeStops });
+    toast({ tone: 'warn', title: 'Location is off', body: 'The route is set. Turn location on in Knock mode to place pins and count miles.' });
+    return false;
+  };
+
+  const onStart = async () => {
+    const routeStops = stops.map(toTarget);
+    if (routeStops.length === 0) return;
+    let ok = true;
+    if (activeSession) setRouteStops(routeStops);
+    else ok = await beginRoute(routeStops);
+    for (const s of stops) if (!plan.areaStatus[s.area.key]) setAreaStatus(plan.id, s.area.key, 'scheduled');
+    if (ok) {
+      toast({
+        tone: 'success',
+        title: `Day ${day.day} started`,
+        body: `${routeStops.length} stop${routeStops.length === 1 ? '' : 's'} on your route · first: ${routeStops[0].label}`,
+      });
+    }
+    router.push('/door-knocking');
+  };
+
+  const onDirections = () => {
+    const url = directionsUrl(plan.result.base, stops.map((s) => ({ lat: s.area.lat, lng: s.area.lng })));
+    if (url) Linking.openURL(url).catch(() => toast({ tone: 'warn', title: 'Could not open Maps' }));
+  };
+
+  const onUnschedule = () => {
+    if (schedule.reminderId) void cancelKnockDayReminder(schedule.reminderId);
+    unscheduleDay(plan.id, day.day);
+    toast({ tone: 'info', title: `Day ${day.day} taken off the calendar`, body: 'The plan still has it.' });
+  };
+
+  return (
+    <>
+      <RichCard
+        icon="calendar-outline"
+        iconTone="orange"
+        title={`${dateLabel} · ${clock}`}
+        subtitle={`Day ${day.day} · ${plan.title}`}
+        headerTrailing={isToday ? <Pill label="Today" tone="accent" size="sm" dot /> : undefined}
+        accessibilityLabel={`Knock day ${day.day}, ${dateLabel} at ${clock}, ${stops.length} stops, first ${firstName}`}
+      >
+        <Text style={styles.knockDayLine}>
+          {stops.length} stop{stops.length === 1 ? '' : 's'} · first: {firstName} · {Math.round(day.totalMiles)} mi ·{' '}
+          {fmtMinutes(day.totalMinutes)} · expect ~{Math.round(day.expected)}, at least {day.atLeast}
+        </Text>
+        <PressableScale
+          style={isToday ? styles.knockStartPrimary : styles.knockStartSecondary}
+          onPress={() => void onStart()}
+          accessibilityRole="button"
+          accessibilityLabel={`Start route for day ${day.day}`}
+        >
+          <Ionicons name="play" size={22} color={isToday ? colors.textInverse : colors.navy} />
+          <Text style={isToday ? styles.knockStartPrimaryText : styles.knockStartSecondaryText}>Start route</Text>
+        </PressableScale>
+        <View style={styles.knockActions}>
+          <PressableScale style={styles.knockBtn} onPress={onDirections} accessibilityRole="button" accessibilityLabel="Directions through every stop">
+            <Ionicons name="navigate-outline" size={18} color={colors.navy} />
+            <Text style={styles.knockBtnText}>Directions</Text>
+          </PressableScale>
+          <PressableScale
+            style={styles.knockBtn}
+            onPress={() => router.push(`/knock-plan/${plan.id}` as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Open the plan"
+          >
+            <Ionicons name="compass-outline" size={18} color={colors.navy} />
+            <Text style={styles.knockBtnText}>Open plan</Text>
+          </PressableScale>
+          <PressableScale style={styles.knockBtn} onPress={() => setConfirm(true)} accessibilityRole="button" accessibilityLabel={`Unschedule day ${day.day}`}>
+            <Ionicons name="calendar-clear-outline" size={18} color={colors.danger} />
+            <Text style={[styles.knockBtnText, styles.knockBtnDanger]}>Unschedule</Text>
+          </PressableScale>
+        </View>
+      </RichCard>
+      <ConfirmSheet
+        visible={confirm}
+        title={`Unschedule day ${day.day}?`}
+        body="It comes off the calendar and the reminder is cancelled. The plan keeps the day."
+        confirmLabel="Unschedule"
+        onConfirm={onUnschedule}
+        onClose={() => setConfirm(false)}
+      />
+    </>
   );
 }
 
@@ -765,6 +934,48 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: fontWeight.medium,
   },
+
+  // Knock days — scheduled trip days from a plan.
+  knockDays: { gap: spacing.md },
+  knockDayLine: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginBottom: spacing.md },
+  // Today's day gets the sticky 88pt primary; a future day a 56pt secondary.
+  knockStartPrimary: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    height: touchTarget.sticky,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  knockStartPrimaryText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  knockStartSecondary: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: touchTarget.standard,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  knockStartSecondaryText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  knockActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  knockBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: touchTarget.standard,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+  },
+  knockBtnText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.navy },
+  knockBtnDanger: { color: colors.danger },
 
   // Compact top-anchored empty — thin icon, 15pt message, no card, no void.
   empty: {

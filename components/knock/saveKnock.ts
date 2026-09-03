@@ -10,6 +10,7 @@
 import { LEAD_STAGE_ORDER, leadStageColumn } from '@/lib/models/types';
 import type {
   ComeBackWhen,
+  DoNotKnockEntry,
   Knock,
   KnockHistoryEntry,
   KnockOutcome,
@@ -18,6 +19,7 @@ import type {
   PropertyRecord,
 } from '@/lib/models/types';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { useDoNotKnockStore } from '@/lib/stores/doNotKnockStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { outcomeLabel, outcomeMeta } from '@/lib/services/knockOutcomes';
@@ -48,6 +50,12 @@ export type SaveKnockResult = {
   leadUpdated: boolean;
   /** The lead exists but the address is a bare GPS pair — say so in the toast. */
   gpsOnly: boolean;
+  /**
+   * The pin sits on the do-not-knock list (a home, or inside an HOA zone).
+   * The save still goes through — the roofer already knocked — but the
+   * sheet should say so. Absent when the outcome IS "Do not knock".
+   */
+  blockedBy?: DoNotKnockEntry;
 };
 
 export type SaveKnockOptions = {
@@ -99,6 +107,9 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
   const activity = useActivityStore.getState();
   const now = new Date().toISOString();
   const gpsOnly = !draft.address;
+  // Read BEFORE this save can add the door itself to the list.
+  const blockedBy =
+    meta.id === 'do_not_knock' ? undefined : useDoNotKnockStore.getState().blockedAt(draft.lat, draft.lng) ?? undefined;
   const addressForLead = draft.address ?? coordinateAddress(draft.lat, draft.lng);
   const contactGiven = !!(draft.contactName?.trim() || draft.contactPhone?.trim());
 
@@ -192,6 +203,22 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
   }
   if (!knock) return null;
 
+  // "Do not knock" is a promise about the door, not just a pin colour: it
+  // goes on the list the planner and Knock mode read from. A door already
+  // listed is updated, not duplicated (doNotKnockStore.add).
+  if (meta.id === 'do_not_knock') {
+    useDoNotKnockStore.getState().add({
+      kind: 'home',
+      source: 'outcome',
+      lat: draft.lat,
+      lng: draft.lng,
+      address: draft.address,
+      label: draft.address ?? coordinateAddress(draft.lat, draft.lng),
+      note: draft.notes?.trim() || undefined,
+      knockId: knock.id,
+    });
+  }
+
   const where = draft.address ?? 'GPS pin';
   activity.log({
     kind: 'knock_logged',
@@ -214,7 +241,7 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
     });
   }
 
-  return { knock, lead, leadCreated, leadUpdated, gpsOnly };
+  return { knock, lead, leadCreated, leadUpdated, gpsOnly, blockedBy };
 }
 
 /** The activity line for an outcome that touched the pipeline. */

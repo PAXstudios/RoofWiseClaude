@@ -7,9 +7,17 @@
 // can down-weight (or drop) an area a no-solicit list covers.
 
 import type { DoNotKnockEntry } from '../models/types';
+import { CELL_MILES, planTrip, type BasePoint, type ScoredArea, type TripPlan } from './knockOpportunities';
 
 /** A house-width: pins closer than this to a home entry are that home. */
 export const HOME_RADIUS_METERS = 25;
+
+/**
+ * An area whose planner cell is at least this much do-not-knock zone is
+ * dropped from the ranking outright; below it the Knock Score is discounted
+ * by the covered share. Owner decision pending — see the Wave H report.
+ */
+export const DROP_SHARE = 0.5;
 
 const EARTH_M = 6371000;
 
@@ -103,7 +111,11 @@ export function parseAddressList(text: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of text.split(/\r?\n|;/)) {
-    const line = raw.replace(/^\s*[-•*\d.)]+\s*/, '').trim();
+    // Strip list numbering ("1. ", "2) ") and bullets — but never a bare
+    // house number ("1500 Elm St") or the leading digits of a coordinate
+    // pair ("33.1500, -96.8200"): a numeral only counts as numbering when a
+    // "." or ")" and whitespace follow it.
+    const line = raw.replace(/^\s*(?:[-•*]+\s*|\d{1,3}[.)]\s+)/, '').trim();
     if (line.length < 5 || !/\d/.test(line)) continue;
     const key = line.toLowerCase();
     if (seen.has(key)) continue;
@@ -111,4 +123,102 @@ export function parseAddressList(text: string): string[] {
     out.push(line);
   }
   return out;
+}
+
+/**
+ * "33.1500, -96.8200" → a coordinate pair, so a roofer can paste a point
+ * from Maps (or a gate's GPS) without a geocoder. Null for anything else —
+ * a street address never looks like two decimals.
+ */
+export function parseLatLng(text: string): { lat: number; lng: number } | null {
+  const m = text.trim().match(/^(-?\d{1,2}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)$/);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+
+// ---------------------------------------------------------------------------
+// Planner exclusions — pure post-processing of a finder result
+// ---------------------------------------------------------------------------
+
+export type DoNotKnockExclusions = {
+  /** Areas removed because ≥ DROP_SHARE of the cell is a no-knock zone. */
+  dropped: { key: string; name: string; share: number; zone: string }[];
+  /** Areas kept with a lowered score (0 < share < DROP_SHARE). */
+  discounted: { key: string; name: string; share: number; from: number; to: number; zone: string }[];
+};
+
+function areaName(a: ScoredArea): string {
+  return a.name ?? a.storm.town ?? 'Area';
+}
+
+/** The zone that covers the most of the cell — the one the note names. */
+function dominantZone(zones: readonly DoNotKnockEntry[], a: ScoredArea): { zone: DoNotKnockEntry; share: number } | null {
+  let best: { zone: DoNotKnockEntry; share: number } | null = null;
+  for (const z of zones) {
+    const share = blockedShare([z], a.lat, a.lng, CELL_MILES);
+    if (share > 0 && (!best || share > best.share)) best = { zone: z, share };
+  }
+  return best;
+}
+
+/**
+ * Apply the do-not-knock list to a ranked result: areas mostly inside a
+ * zone are dropped (and said so in `notes`), partly-covered areas keep a
+ * discounted score with a reason line, the list is re-sorted and the trip
+ * re-planned from base. Homes are single doors and never move a score.
+ * Pure — the runner calls it on every partial and on the final result.
+ */
+export function applyDoNotKnockExclusions<
+  T extends { areas: ScoredArea[]; base: BasePoint; notes: string[]; plan: TripPlan },
+>(result: T, entries: readonly DoNotKnockEntry[]): { result: T; exclusions: DoNotKnockExclusions } {
+  const zones = entries.filter((e) => e.kind === 'zone');
+  const exclusions: DoNotKnockExclusions = { dropped: [], discounted: [] };
+  if (zones.length === 0 || result.areas.length === 0) return { result, exclusions };
+
+  const kept: ScoredArea[] = [];
+  const notes = [...result.notes];
+  for (const a of result.areas) {
+    const share = blockedShare(zones, a.lat, a.lng, CELL_MILES);
+    if (share <= 0) {
+      kept.push(a);
+      continue;
+    }
+    const name = areaName(a);
+    const zone = dominantZone(zones, a)?.zone.label ?? 'a do-not-knock zone';
+    if (share >= DROP_SHARE) {
+      exclusions.dropped.push({ key: a.key, name, share, zone });
+      notes.push(`${name} dropped — inside ${zone} no-solicit zone (${Math.round(share * 100)}% of the area).`);
+      continue;
+    }
+    const to = Math.round(a.knockScore * (1 - share));
+    exclusions.discounted.push({ key: a.key, name, share, from: a.knockScore, to, zone });
+    kept.push({
+      ...a,
+      knockScore: to,
+      reasons: [
+        ...a.reasons,
+        `${Math.round(share * 100)} % of this area is a do-not-knock zone (${zone}) — score lowered from ${a.knockScore} to ${to}.`,
+      ],
+    });
+  }
+
+  if (exclusions.dropped.length === 0 && exclusions.discounted.length === 0) return { result, exclusions };
+
+  kept.sort(
+    (a, b) => b.knockScore - a.knockScore || b.hitRate.perRoof - a.hitRate.perRoof || a.distanceMiles - b.distanceMiles,
+  );
+  if (exclusions.discounted.length > 0) {
+    const n = exclusions.discounted.length;
+    notes.push(`${n} area${n === 1 ? '' : 's'} scored lower for overlapping a do-not-knock zone.`);
+  }
+  if (kept.length === 0) notes.push('Every ranked area sits inside a do-not-knock zone.');
+
+  return {
+    result: { ...result, areas: kept, notes, plan: planTrip(kept, result.base) },
+    exclusions,
+  };
 }

@@ -44,8 +44,10 @@ import {
   outcomeMeta,
 } from '@/lib/services/knockOutcomes';
 import { isCoordinateAddress } from '@/lib/services/placeholderDetails';
-import { recordCardUrl, recordFactsLine, recordStatusBadge } from '@/lib/services/propertyRecord';
+import { recordCardUrl, recordFactsLine, recordRoofLine, recordStatusBadge } from '@/lib/services/propertyRecord';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
+import { useDoNotKnockStore } from '@/lib/stores/doNotKnockStore';
+import { blockedBy } from '@/lib/services/doNotKnock';
 import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 import { outcomeColor, outcomeIcon } from './outcomeStyle';
 import { saveKnock, type SaveKnockResult } from './saveKnock';
@@ -121,6 +123,18 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
   const [lookingUp, setLookingUp] = useState(false);
   const [saving, setSaving] = useState(false);
   const openedRef = useRef(0);
+  // Do-not-knock check for the pin's point (homes 25 m, zones by polygon /
+  // radius) — re-evaluated whenever the point or the list changes.
+  const dnkEntries = useDoNotKnockStore((s) => s.entries);
+  const blockedEntry = useMemo(
+    () => (point ? blockedBy(dnkEntries, point.lat, point.lng) : null),
+    [dnkEntries, point],
+  );
+  // "New roof · 2024 (listing Mar 2024)" — the Zillow listing's roof line.
+  const roofLine = useMemo(
+    () => (record?.status === 'found' ? recordRoofLine(record, new Date().getFullYear()) : null),
+    [record],
+  );
 
   // Fresh draft each time the sheet opens, prefilled from the knock in play.
   useEffect(() => {
@@ -367,6 +381,18 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
                 <Text style={styles.noteText}>That is a coordinate pair, not a street. The pin keeps the GPS point either way.</Text>
               </View>
             ) : null}
+            {/* The roofer's own promise: this door (or this HOA) is on the
+                do-not-knock list. Said before anything is saved — the save
+                is never blocked, the roofer decides. */}
+            {blockedEntry ? (
+              <View style={styles.note}>
+                <Ionicons name="hand-left-outline" size={16} color={colors.danger} />
+                <Text style={[styles.noteText, styles.noteDanger]}>
+                  On your do-not-knock list — {blockedEntry.label}
+                  {blockedEntry.kind === 'zone' ? ' (zone)' : ''}. Skip this door unless they asked you back.
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* The house — one lookup, only on the tap. */}
@@ -377,6 +403,7 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
                 {badge ? <Pill label={badge.label} tone={badge.tone} size="sm" /> : null}
                 {facts ? <Text style={styles.recordFacts}>{facts}</Text> : null}
                 {badge ? <Text style={styles.recordHint}>{badge.hint}</Text> : null}
+                {roofLine ? <Text style={styles.recordHint}>{roofLine}</Text> : null}
                 {badge && record.listingAgent?.phone ? (
                   <Text style={styles.recordHint}>
                     Listing agent: {record.listingAgent.name ?? 'on file'} · {record.listingAgent.phone}
@@ -737,6 +764,7 @@ const styles = StyleSheet.create({
   locatingText: { fontSize: fontSize.bodyLg, color: colors.textMuted },
   note: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   noteText: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  noteDanger: { color: colors.danger, fontWeight: fontWeight.semibold },
 
   nearby: {
     flexDirection: 'row',
