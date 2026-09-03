@@ -2,40 +2,43 @@
 //
 // The run is detached from this screen (lib/services/knockPlanRunner.ts):
 // tap Find, leave, and the Home bell rings when the plan is ready. While it
-// runs, this screen shows the map-search animation, the step list, an
-// estimated time left, and the ranked areas as they land. Each finished run
-// is a saved plan with its own page (app/knock-plan/[id].tsx) — statuses,
-// notes, jobs and leads made from it all live there.
+// runs, this screen shows RunProgress (search animation, step list, an
+// estimated time left, the ranked areas as they land) plus a plain way out —
+// leave, or cancel. Each finished run is a saved plan with its own page
+// (app/knock-plan/[id].tsx) — statuses, notes, jobs and leads made from it
+// all live there.
 //
 // Two modes: storm-hit streets (the default) and the neighbours of the
-// roofer's own jobs. The radius is the roofer's (3–50 mi, remembered). The
-// "Your calibration" card shows how the roofer's own doors have bent the
-// base-rate table (docs/KNOCK_OPPORTUNITIES.md §8).
+// roofer's own jobs. The base is a map pin, device location, address, or a
+// service area (BasePicker); the radius is a 3–50 mi arc dial (RadiusDial),
+// remembered. The "Your calibration" card shows how the roofer's own doors
+// have bent the base-rate table (docs/KNOCK_OPPORTUNITIES.md §8).
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { LocationField, resolveDeviceLocation, type ResolvedLocation } from '@/components/LocationField';
+import { resolveDeviceLocation } from '@/components/LocationField';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Pill } from '@/components/ui/Pill';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion/FadeSlideIn';
-import { SearchAnimation } from '@/components/knock/SearchAnimation';
 import { ConfirmSheet } from '@/components/sheets/ConfirmSheet';
+import { BasePicker, baseDisplayLabel } from '@/components/knock/BasePicker';
+import { RadiusDial } from '@/components/knock/RadiusDial';
+import { RunProgress } from '@/components/knock/RunProgress';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useKnockFinderStore, type KnockPlan } from '@/lib/stores/knockFinderStore';
 import { useCalibration, useKnockCalibrationStore } from '@/lib/stores/knockCalibrationStore';
-import { FINDER_STEPS, finderStepLabel, type FinderMode } from '@/lib/services/knockFinder';
-import { ownActivityNow, startKnockPlan } from '@/lib/services/knockPlanRunner';
-import { estimateRemainingSeconds, remainingLabel } from '@/lib/services/knockRunEstimate';
-import { LOOKBACK_MONTHS, MAX_SEARCH_RADIUS_MILES, type BasePoint } from '@/lib/services/knockOpportunities';
+import type { FinderMode } from '@/lib/services/knockFinder';
+import { ownActivityNow, startKnockPlan, cancelKnockPlan } from '@/lib/services/knockPlanRunner';
+import { LOOKBACK_MONTHS, type BasePoint } from '@/lib/services/knockOpportunities';
 import { formatDate, formatRelative } from '@/lib/format/date';
 import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
@@ -53,7 +56,8 @@ export default function KnockFinderScreen() {
   const toast = useToastStore((s) => s.show);
   const plans = useKnockFinderStore((s) => s.plans);
   const activeRun = useKnockFinderStore((s) => s.activeRun);
-  const radiusMiles = useKnockFinderStore((s) => s.radiusMiles);
+  const storeRadiusMiles = useKnockFinderStore((s) => s.radiusMiles);
+  const setStoreRadiusMiles = useKnockFinderStore((s) => s.setRadiusMiles);
   const runHistory = useKnockFinderStore((s) => s.runHistory);
   const calibration = useCalibration();
   const calibrationRecords = useKnockCalibrationStore((s) => s.records);
@@ -74,24 +78,32 @@ export default function KnockFinderScreen() {
     refreshCalibration();
   }, [refreshCalibration, plans.length, archive.length, activeSession?.knocks.length]);
 
-  // Default base: the first service area with a centroid, else the newest
-  // plan's base, else the phone's location (resolved below).
-  const defaultBase = useMemo<BasePoint | null>(() => {
+  // The radius dial: a local "draft" that follows every mile of the drag
+  // live (so the map ring above it redraws with no round trip), committed
+  // to the store — and persisted — only when the finger lifts or a ± button
+  // is pressed. Re-synced whenever the store changes from elsewhere (the
+  // persisted value hydrating after mount, a run committing its own radius).
+  const [radiusMiles, setRadiusMiles] = useState(storeRadiusMiles);
+  useEffect(() => setRadiusMiles(storeRadiusMiles), [storeRadiusMiles]);
+
+  // The first service area with a centroid — offered as its own chip on the
+  // base picker, and the top of the default-base chain below.
+  const serviceAreaBase = useMemo<BasePoint | null>(() => {
     const withCentroid = areas.find((a) => typeof a.centroidLat === 'number' && typeof a.centroidLng === 'number');
-    if (withCentroid) return { lat: withCentroid.centroidLat as number, lng: withCentroid.centroidLng as number, label: withCentroid.label };
-    return plans[0]?.result.base ?? null;
-  }, [areas, plans]);
+    return withCentroid ? { lat: withCentroid.centroidLat as number, lng: withCentroid.centroidLng as number, label: withCentroid.label } : null;
+  }, [areas]);
+
+  // Default base: the service area above, else the newest plan's base, else
+  // the phone's location (resolved below) — "most people don't know
+  // addresses" (the owner), so the map and My-location come before typing.
+  const defaultBase = useMemo<BasePoint | null>(() => serviceAreaBase ?? plans[0]?.result.base ?? null, [serviceAreaBase, plans]);
 
   const [base, setBase] = useState<BasePoint | null>(defaultBase);
-  const [baseText, setBaseText] = useState(defaultBase?.label ?? '');
   useEffect(() => {
-    if (!base && defaultBase) {
-      setBase(defaultBase);
-      setBaseText(defaultBase.label);
-    }
+    if (!base && defaultBase) setBase(defaultBase);
   }, [base, defaultBase]);
 
-  // Nothing to go on → find the phone, so the button is never dead.
+  // Nothing to go on → find the phone, so the map and the button are never dead.
   const [locating, setLocating] = useState(false);
   useEffect(() => {
     if (base || defaultBase || locating) return;
@@ -103,7 +115,6 @@ export default function KnockFinderScreen() {
         const loc = r.location;
         const label = loc.city ? `${loc.city}${loc.stateCode ? `, ${loc.stateCode}` : ''}` : loc.address;
         setBase({ lat: loc.lat, lng: loc.lng, label });
-        setBaseText(loc.address);
       })
       .finally(() => {
         if (!cancelled) setLocating(false);
@@ -114,31 +125,6 @@ export default function KnockFinderScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Elapsed seconds while a run is live (the run may have started before
-  // this screen mounted — it is the store's clock, not ours).
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    if (!activeRun) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [activeRun]);
-  const elapsed = activeRun ? Math.max(0, Math.round((now - new Date(activeRun.startedAt).getTime()) / 1000)) : 0;
-  const estimate = activeRun
-    ? estimateRemainingSeconds(
-        { step: activeRun.step, startedAt: activeRun.startedAt, stepStartedAt: activeRun.stepStartedAt, stepSeconds: activeRun.stepSeconds },
-        runHistory,
-        activeRun.radiusMiles ?? radiusMiles,
-        new Date(now),
-        activeRun.partial?.areas.length,
-      )
-    : null;
-
-  const onResolved = useCallback((loc: ResolvedLocation) => {
-    const label = loc.city ? `${loc.city}${loc.stateCode ? `, ${loc.stateCode}` : ''}` : loc.address;
-    setBase({ lat: loc.lat, lng: loc.lng, label });
-    setBaseText(loc.address);
-  }, []);
-
   const run = useCallback(() => {
     if (!base || activeRun) return;
     // Fire and forget: the runner owns the run, saves the plan, rings the bell.
@@ -147,7 +133,7 @@ export default function KnockFinderScreen() {
         toast({ tone: 'success', title: 'Knock plan ready', body: outcome.plan.title });
       } else if (outcome.status === 'no_storms') {
         toast({ tone: 'warn', title: 'No qualifying storms', body: `${outcome.eventCount} reports, none in a rankable area. Try a wider radius.` });
-      } else {
+      } else if (!outcome.cancelled) {
         toast({ tone: 'danger', title: 'Knock Planner could not finish', body: outcome.reason });
       }
     });
@@ -156,9 +142,16 @@ export default function KnockFinderScreen() {
 
   const latest = plans[0];
   const byDay = useMemo(() => groupByDay(plans), [plans]);
-  const stepIdx = activeRun ? FINDER_STEPS.findIndex((x) => x.id === activeRun.step) : -1;
-  const stepLabel = activeRun ? finderStepLabel(activeRun.step, activeRun.radiusMiles ?? radiusMiles, activeRun.partial?.mode ?? mode) : '';
   const calibrationLines = useMemo(() => (calibration ? calibration.lines.filter((l) => l.doors > 0) : []), [calibration]);
+
+  const baseLabel = base ? baseDisplayLabel(base) : '';
+  const findLabel =
+    mode === 'neighbours'
+      ? `Find neighbours of my jobs within ${radiusMiles} mi`
+      : baseLabel
+        ? `Find storm-hit streets within ${radiusMiles} mi of ${baseLabel}`
+        : `Find storm-hit streets within ${radiusMiles} mi`;
+  const runSummaryLabel = activeRun ? `${activeRun.baseLabel || baseLabel || 'Pinned spot'} · ${activeRun.radiusMiles ?? radiusMiles} mi` : '';
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -170,43 +163,31 @@ export default function KnockFinderScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <RichCard icon="navigate-outline" iconTone="blue" title="Search from" subtitle={base ? `${base.label} · ${radiusMiles} mi` : locating ? 'Finding your location…' : 'Your shop, home, or a town you want to work'}>
-          <LocationField value={baseText} onChangeText={setBaseText} onResolved={onResolved} placeholder="Home base, shop, or a town" biasLat={base?.lat} biasLng={base?.lng} />
-        </RichCard>
-
         {activeRun ? (
-          <RichCard padded={false}>
-            <SearchAnimation caption={elapsed >= 15 ? `${stepLabel} · ${elapsed}s — still working; leave if you like, the bell will ring` : stepLabel} />
-            <View style={styles.steps}>
-              {estimate ? (
-                <Text style={styles.eta}>
-                  {remainingLabel(estimate)}
-                  {estimate.basis === 'default' ? ' · first run, a guess' : ''}
+          <>
+            <View style={styles.runSummaryWrap}>
+              <View style={styles.runSummaryPill}>
+                <Ionicons name={mode === 'neighbours' ? 'home' : 'compass'} size={16} color={colors.textInverse} />
+                <Text style={styles.runSummaryText} numberOfLines={1}>
+                  {runSummaryLabel}
                 </Text>
-              ) : null}
-              {FINDER_STEPS.map((s, i) => {
-                const done = i < stepIdx;
-                const active = i === stepIdx;
-                const took = activeRun.stepSeconds?.[s.id];
-                return (
-                  <View key={s.id} style={styles.stepRow}>
-                    {done ? <Ionicons name="checkmark-circle" size={20} color={colors.success} /> : active ? <ActivityIndicator size="small" color={colors.brand} /> : <Ionicons name="ellipse-outline" size={20} color={colors.textSubtle} />}
-                    <Text style={[styles.stepText, done && styles.stepDone, active && styles.stepActive]}>
-                      {finderStepLabel(s.id, activeRun.radiusMiles ?? radiusMiles, activeRun.partial?.mode ?? mode)}
-                      {done && took != null ? ` · ${Math.round(took)}s` : ''}
-                    </Text>
-                  </View>
-                );
-              })}
-              {activeRun.partial ? (
-                <Text style={styles.partialNote}>
-                  {activeRun.partial.areas.length} areas ranked so far — best: {activeRun.partial.areas[0]?.name ?? activeRun.partial.areas[0]?.storm.town ?? '…'} (Knock{' '}
-                  {activeRun.partial.areas[0]?.knockScore}). The page opens the moment it is saved.
-                </Text>
-              ) : null}
+              </View>
             </View>
-          </RichCard>
-        ) : null}
+            <RunProgress
+              run={activeRun}
+              runHistory={runHistory}
+              fallbackRadiusMiles={radiusMiles}
+              fallbackMode={mode}
+              onLeave={() => router.back()}
+              onCancel={() => cancelKnockPlan()}
+            />
+          </>
+        ) : (
+          <>
+            <BasePicker base={base} radiusMiles={radiusMiles} onChangeBase={setBase} locating={locating} serviceArea={serviceAreaBase} />
+            <RadiusDial value={radiusMiles} onChange={setRadiusMiles} onCommit={setStoreRadiusMiles} />
+          </>
+        )}
 
         {latest && !activeRun ? (
           <FadeSlideIn index={0}>
@@ -217,10 +198,10 @@ export default function KnockFinderScreen() {
         {plans.length === 0 && !activeRun ? (
           <RichCard icon="compass-outline" iconTone="orange" title="One tap, a plan for the day">
             <Text style={styles.body}>
-              Pulls every NWS hail and wind report within {radiusMiles} miles (up to {MAX_SEARCH_RADIUS_MILES}) from the last {LOOKBACK_MONTHS} months, scores
-              each neighbourhood by how hard and how recently it was hit, how old its roofs are, and how far it is — then saves a plan you
-              can act on: where to go, why, how many claim-grade roofs to expect, and a route to start knocking. Or rank the streets around
-              your own jobs and lead with the yard sign.
+              Pulls every NWS hail and wind report within your radius (up to 50 mi) from the last {LOOKBACK_MONTHS} months, scores each
+              neighbourhood by how hard and how recently it was hit, how old its roofs are, and how far it is — then saves a plan you can act
+              on: where to go, why, how many claim-grade roofs to expect, and a route to start knocking. Or rank the streets around your own
+              jobs and lead with the yard sign.
             </Text>
           </RichCard>
         ) : null}
@@ -271,50 +252,44 @@ export default function KnockFinderScreen() {
         ) : null}
       </ScrollView>
 
-      <View style={styles.dock}>
-        <View style={styles.modeRow}>
-          {MODES.map((m) => {
-            const on = mode === m.id;
-            const disabled = m.id === 'neighbours' && neighboursOff;
-            return (
-              <PressableScale
-                key={m.id}
-                style={[styles.modeChip, on && styles.modeChipOn, disabled && styles.modeChipOff]}
-                onPress={() => !disabled && setMode(m.id)}
-                disabled={disabled || !!activeRun}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on, disabled }}
-                accessibilityLabel={m.label}
-              >
-                <Ionicons name={m.icon} size={18} color={on ? colors.textInverse : disabled ? colors.textSubtle : colors.text} />
-                <Text style={[styles.modeText, on && styles.modeTextOn, disabled && styles.modeTextOff]} numberOfLines={1}>
-                  {m.label}
-                </Text>
-              </PressableScale>
-            );
-          })}
+      {!activeRun ? (
+        <View style={styles.dock}>
+          <View style={styles.modeRow}>
+            {MODES.map((m) => {
+              const on = mode === m.id;
+              const disabled = m.id === 'neighbours' && neighboursOff;
+              return (
+                <PressableScale
+                  key={m.id}
+                  style={[styles.modeChip, on && styles.modeChipOn, disabled && styles.modeChipOff]}
+                  onPress={() => !disabled && setMode(m.id)}
+                  disabled={disabled}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on, disabled }}
+                  accessibilityLabel={m.label}
+                >
+                  <Ionicons name={m.icon} size={18} color={on ? colors.textInverse : disabled ? colors.textSubtle : colors.text} />
+                  <Text style={[styles.modeText, on && styles.modeTextOn, disabled && styles.modeTextOff]} numberOfLines={1}>
+                    {m.label}
+                  </Text>
+                </PressableScale>
+              );
+            })}
+          </View>
+          {neighboursOff ? <Text style={styles.dockHint}>Neighbours needs a job with an address — none on this phone yet.</Text> : null}
+          <PressableScale
+            style={[styles.primaryBtn, !base && styles.primaryBtnDisabled]}
+            onPress={run}
+            disabled={!base}
+            accessibilityRole="button"
+            accessibilityLabel={findLabel}
+          >
+            <Ionicons name={mode === 'neighbours' ? 'home' : 'compass'} size={22} color={colors.textInverse} />
+            <Text style={styles.primaryBtnText}>{findLabel}</Text>
+          </PressableScale>
+          {!base && !locating ? <Text style={styles.dockHint}>Pick a base first — drop a pin, use your location, or type an address.</Text> : null}
         </View>
-        {neighboursOff && !activeRun ? <Text style={styles.dockHint}>Neighbours needs a job with an address — none on this phone yet.</Text> : null}
-        <PressableScale
-          style={[styles.primaryBtn, (!base || !!activeRun) && styles.primaryBtnDisabled]}
-          onPress={run}
-          disabled={!base || !!activeRun}
-          accessibilityRole="button"
-          accessibilityLabel={mode === 'neighbours' ? 'Find the neighbours of my jobs and make a plan' : 'Find storm-hit streets and make a plan'}
-        >
-          {activeRun ? <ActivityIndicator color={colors.textInverse} /> : <Ionicons name={mode === 'neighbours' ? 'home' : 'compass'} size={22} color={colors.textInverse} />}
-          <Text style={styles.primaryBtnText}>
-            {activeRun
-              ? 'Making your plan…'
-              : mode === 'neighbours'
-                ? `Find neighbours of my jobs within ${radiusMiles} mi`
-                : plans.length > 0
-                  ? `Find storm-hit streets within ${radiusMiles} mi`
-                  : `Find storm-hit streets within ${radiusMiles} mi`}
-          </Text>
-        </PressableScale>
-        {!base && !locating ? <Text style={styles.dockHint}>Pick a base first — type a town or use your location.</Text> : null}
-      </View>
+      ) : null}
 
       <ConfirmSheet
         visible={confirmReset}
@@ -375,13 +350,17 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: touchTarget.sticky * 2 + spacing.xxxl * 2 },
   body: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 21 },
-  steps: { gap: spacing.sm, padding: spacing.lg },
-  eta: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
-  stepRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 28 },
-  stepText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.textSubtle },
-  stepDone: { color: colors.textMuted },
-  stepActive: { color: colors.text, fontWeight: fontWeight.semibold },
-  partialNote: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18, marginTop: spacing.xs },
+  runSummaryWrap: { alignItems: 'center' },
+  runSummaryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 40,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+    backgroundColor: colors.navy,
+  },
+  runSummaryText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
   dayGroup: { gap: spacing.sm },
   dayLabel: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
   calRows: { gap: spacing.sm },
