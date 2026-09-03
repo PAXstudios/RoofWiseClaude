@@ -1,6 +1,9 @@
 # Where the hit-count thresholds actually come from — an owner decision
 
-**Status: OPEN QUESTION FOR THE OWNER. No threshold has been changed.**
+**Status: DECIDED (owner, 2026-09-03) — "do the correct slope threshold that's the
+industry standard for carriers."** Applied as option B: **≥ 8 functional hail hits per
+100 sq ft test square qualifies the slope, for every asphalt family.** §2 and §4 now
+agree on one number. The research below is kept as the record of why.
 
 Raised by the owner (2026-09-03): *"make sure this is accurate according to Haag:
 '6.9 hail hits per 100 sq ft test square' — I thought it was 9 hits constitutes a

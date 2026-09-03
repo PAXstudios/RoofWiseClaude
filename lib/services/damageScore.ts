@@ -185,8 +185,8 @@ type S1Slope = {
  * S1 — how far past its own material's §2 threshold the worst slope is.
  *
  * The denominator is ALWAYS the material rule from haagThresholds.ts. Never
- * hardcode one here: the 3-tab >5 / laminate >8 split is the whole point, and a
- * copied constant is how the thresholds drifted the last time.
+ * hardcode one here — a copied constant is how the thresholds drifted the last
+ * time, and the number has changed once already (docs/THRESHOLD_PROVENANCE.md).
  */
 function s1ForSlope(material: RoofMaterial, s: SlopeInput): S1Slope {
   const rule: MaterialRule = thresholdFor(material).materialRule;
@@ -197,13 +197,13 @@ function s1ForSlope(material: RoofMaterial, s: SlopeInput): S1Slope {
   switch (rule.kind) {
     case 'asphalt': {
       const label = rule.family === 'three_tab' ? '3-tab' : 'laminate/architectural';
-      const limit = rule.hailHitsPerSquareExclusive;
+      const limit = rule.hailHitsPerSquareMin;
       if (obs.hailHitsPerSquare != null && obs.hailHitsPerSquare > 0) {
         candidates.push({
           ratio: obs.hailHitsPerSquare / limit,
           citation:
             `${fmt(obs.hailHitsPerSquare)} hail hits per 100 sq ft test square against the ` +
-            `${label} threshold of more than ${limit} (${fmt(obs.hailHitsPerSquare / limit)}×)`,
+            `${label} threshold of ${limit} or more (${fmt(obs.hailHitsPerSquare / limit)}×)`,
         });
       }
       break;

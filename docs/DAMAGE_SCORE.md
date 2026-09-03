@@ -52,9 +52,10 @@ Also load-bearing:
 - **Age drives repairability, not damage**: roofs <10 yrs repair cleanly; 15–25 yrs commonly
   fail matching and brittleness; >25 yrs are often replacement cases. This enters the score
   through the §3 repairability gates, never as a hidden deduction (see "Age" below).
-- **Carrier norms** cluster at 6–10 functional hits/square (IBHS 8; Allstate 10) — context
-  only. `docs/HAAG_DECISION_ENGINE.md` §2 thresholds (3-tab **>5**, architectural **>8**)
-  are the authority and are stricter.
+- **The hit count is a carrier convention, not a HAAG figure** — HAAG publishes none
+  (`docs/THRESHOLD_PROVENANCE.md`). `docs/HAAG_DECISION_ENGINE.md` §2 now carries the
+  carrier standard, **≥ 8 functional hits per test square for every asphalt family**, by
+  owner decision (2026-09-03).
 - **§1**: `functional_damage_present` / `cosmetic_only` are authoritative booleans —
   the score MUST consume them, never re-derive them from counts.
 
@@ -135,7 +136,7 @@ from thin evidence** (Drift #5).
 { score: 22,
   band: 'Failed — full replacement indicated',
   deductions: [
-    { points: 39, rule: '§2/§4', reason: 'Hail 6.9 hits per test square exceeds the 3-tab >5 threshold (1.4×)' },
+    { points: 39, rule: '§2/§4', reason: 'Hail 9.6 hits per test square meets the asphalt threshold of 8 or more (1.2×)' },
     { points: 25, rule: '§4',    reason: 'Functional damage on 3 of 4 documented slopes' },
     { points: 14, rule: '§3',    reason: 'Brittleness BORDERLINE — repairs not feasible' },
   ],

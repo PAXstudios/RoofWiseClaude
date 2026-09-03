@@ -4,12 +4,19 @@
 // material"). Anything here that contradicts that document is a bug. Do not
 // "simplify" these thresholds — they are what carriers argue against.
 //
-// Correction notice (§2): an earlier implementation used 8 hits for 3-tab and
-// 10 for architectural. Both were wrong. The correct values are >5 and >8.
+// PROVENANCE OF THE ASPHALT HIT COUNT (owner decision, 2026-09-03 — see
+// docs/THRESHOLD_PROVENANCE.md, with sources): HAAG publishes NO hit-count
+// threshold. Its test square exists to count damaged units for the
+// D x U x R x A extrapolation, and its damage test is qualitative (punctures,
+// tears, mat fractures). The number a slope is judged against is a CARRIER
+// convention — 8 is the figure most commonly cited, 7-10 the working range —
+// and the owner chose to align the app to it: 8 or more functional hits per
+// 100 sq ft test square qualifies the slope, for every asphalt family.
 //
-// Carrier-norm context: insurers often *ask for* 8–12 impacts per square.
-// That is report-language context ONLY (see CARRIER_IMPACT_NORM_NOTE in
-// decisionEngine.ts) and must NEVER be used as a threshold in this file.
+// History: the code once used 8 (3-tab) / 10 (laminate); a later "correction"
+// moved them to >5 / >8, which was stricter than any carrier and told roofers
+// they had a case at counts adjusters reject. Do not lower these again without
+// a sourced reason.
 
 import type { RoofMaterial } from '../models/types';
 
@@ -33,8 +40,11 @@ export type MaterialRule =
   | {
       kind: 'asphalt';
       family: AsphaltFamily;
-      /** Hail hits per 100 sq ft test square must EXCEED this (spec ">5" / ">8"). */
-      hailHitsPerSquareExclusive: number;
+      /**
+       * Hail hits per 100 sq ft test square at or above this qualify the slope
+       * (carrier convention: "8 hits"). Inclusive — the rate is compared with >=.
+       */
+      hailHitsPerSquareMin: number;
       /** Wind-damaged shingles on the slope must EXCEED this percent (spec ">5%"). */
       windDamagedShinglePercentExclusive: number;
       /** §2 additional asphalt trigger: multiple creased courses → replacement. */
@@ -77,10 +87,9 @@ export type MaterialRule =
 export type HaagThreshold = {
   /**
    * Legacy-compatible field: the minimum hail-hit count per 10×10' test square
-   * that qualifies under `count >= hitsPerTestSquare` semantics. Derived from
-   * the spec's thresholds — spec ">5" ⇒ 6, ">8" ⇒ 9, wood "≥5" ⇒ 5, clay
-   * "≥1 broken per square" ⇒ 1. 0 means the material's rule is
-   * qualitative / percent-based; use `materialRule` (and
+   * that qualifies under `count >= hitsPerTestSquare` semantics. Asphalt (all
+   * families) 8, wood 5, clay "≥1 broken per square" ⇒ 1. 0 means the
+   * material's rule is qualitative / percent-based; use `materialRule` (and
    * `evaluateMaterialThreshold`) instead of a raw count.
    */
   hitsPerTestSquare: number;
@@ -90,10 +99,13 @@ export type HaagThreshold = {
   materialRule: MaterialRule;
 };
 
+// Both asphalt families carry the same hit count: the carrier norm does not
+// distinguish 3-tab from laminate. The family is kept for report language —
+// an adjuster reads "3-tab" and "architectural" as different roofs.
 const ASPHALT_THREE_TAB_RULE: MaterialRule = {
   kind: 'asphalt',
   family: 'three_tab',
-  hailHitsPerSquareExclusive: 5,
+  hailHitsPerSquareMin: 8,
   windDamagedShinglePercentExclusive: 5,
   multipleCreasedCoursesTrigger: true,
   widespreadDiscontinuityTrigger: true,
@@ -102,7 +114,7 @@ const ASPHALT_THREE_TAB_RULE: MaterialRule = {
 const ASPHALT_LAMINATE_RULE: MaterialRule = {
   kind: 'asphalt',
   family: 'laminate',
-  hailHitsPerSquareExclusive: 8,
+  hailHitsPerSquareMin: 8,
   windDamagedShinglePercentExclusive: 5,
   multipleCreasedCoursesTrigger: true,
   widespreadDiscontinuityTrigger: true,
@@ -144,25 +156,25 @@ const MEMBRANE_RULE: MaterialRule = {
 
 export const HAAG_THRESHOLDS: Record<RoofMaterial, HaagThreshold> = {
   three_tab_asphalt: {
-    hitsPerTestSquare: 6, // spec: > 5 hits ⇒ 6 is the minimum qualifying count
+    hitsPerTestSquare: 8, // carrier norm: 8 or more functional hits qualifies
     rule:
-      'HAAG §2 (3-tab asphalt): more than 5 hail hits per 100 sq ft test square, ' +
+      'HAAG §2 (3-tab asphalt): 8 or more functional hail hits per 100 sq ft test square, ' +
       'or more than 5% of shingles wind-damaged on the slope, triggers replacement. ' +
       'Multiple creased courses or widespread discontinuity also trigger replacement.',
     materialRule: ASPHALT_THREE_TAB_RULE,
   },
   architectural_asphalt: {
-    hitsPerTestSquare: 9, // spec: > 8 hits ⇒ 9 is the minimum qualifying count
+    hitsPerTestSquare: 8, // carrier norm: 8 or more functional hits qualifies
     rule:
-      'HAAG §2 (laminate/architectural asphalt): more than 8 hail hits per 100 sq ft test square, ' +
+      'HAAG §2 (laminate/architectural asphalt): 8 or more functional hail hits per 100 sq ft test square, ' +
       'or more than 5% of shingles wind-damaged on the slope, triggers replacement. ' +
       'Multiple creased courses or widespread discontinuity also trigger replacement.',
     materialRule: ASPHALT_LAMINATE_RULE,
   },
   luxury_asphalt: {
-    hitsPerTestSquare: 9,
+    hitsPerTestSquare: 8,
     rule:
-      'HAAG §2 (luxury asphalt, assessed under the laminate/architectural rule): more than 8 hail hits ' +
+      'HAAG §2 (luxury asphalt, assessed under the laminate/architectural rule): 8 or more functional hail hits ' +
       'per 100 sq ft test square, or more than 5% of shingles wind-damaged on the slope, triggers replacement. ' +
       'Multiple creased courses or widespread discontinuity also trigger replacement.',
     materialRule: ASPHALT_LAMINATE_RULE,
@@ -221,9 +233,9 @@ export const HAAG_THRESHOLDS: Record<RoofMaterial, HaagThreshold> = {
     materialRule: TILE_RULE,
   },
   composite: {
-    hitsPerTestSquare: 9,
+    hitsPerTestSquare: 8,
     rule:
-      'HAAG §2 (composite, assessed under the laminate/architectural asphalt rule): more than 8 hail hits ' +
+      'HAAG §2 (composite, assessed under the laminate/architectural asphalt rule): 8 or more functional hail hits ' +
       'per 100 sq ft test square, or more than 5% of shingles wind-damaged on the slope, triggers replacement.',
     materialRule: ASPHALT_LAMINATE_RULE,
   },
@@ -308,10 +320,10 @@ export function evaluateMaterialThreshold(
   switch (rule.kind) {
     case 'asphalt': {
       const label = rule.family === 'three_tab' ? '3-tab asphalt' : 'laminate/architectural asphalt';
-      if (obs.hailHitsPerSquare != null && obs.hailHitsPerSquare > rule.hailHitsPerSquareExclusive) {
+      if (obs.hailHitsPerSquare != null && obs.hailHitsPerSquare >= rule.hailHitsPerSquareMin) {
         triggeredRules.push(
-          `${roundRate(obs.hailHitsPerSquare)} hail hits per 100 sq ft test square exceeds the ${label} ` +
-            `threshold of more than ${rule.hailHitsPerSquareExclusive} (HAAG §2).`,
+          `${roundRate(obs.hailHitsPerSquare)} hail hits per 100 sq ft test square meets the ${label} ` +
+            `threshold of ${rule.hailHitsPerSquareMin} or more (HAAG §2).`,
         );
       }
       if (

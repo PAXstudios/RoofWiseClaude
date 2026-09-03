@@ -227,16 +227,17 @@ export type HaagEngineResult = {
 };
 
 /**
- * REPORT LANGUAGE CONTEXT ONLY — never a threshold. Carriers often informally
- * look for 8–12 impacts per square; the HAAG replacement thresholds are lower
- * (>5 for 3-tab, >8 for laminate/architectural — §2, correction notice).
- * Report layers may cite this to preempt adjuster pushback. It must never
- * enter the decision tree in this file.
+ * REPORT LANGUAGE — states where the number this report applies comes from.
+ * HAAG publishes no hit count (docs/THRESHOLD_PROVENANCE.md); the 8-per-square
+ * bar is the carrier convention the owner chose to align to, and a report
+ * should say so rather than present it as a HAAG figure. It must never enter
+ * the decision tree in this file — the tree reads haagThresholds.ts.
  */
 export const CARRIER_IMPACT_NORM_NOTE =
-  'Note: many carriers informally look for 8–12 impacts per test square. The HAAG ' +
-  'functional-damage thresholds applied in this report are more-than-5 hits (3-tab) and ' +
-  'more-than-8 hits (laminate/architectural) per 100 sq ft test square.';
+  'Note: HAAG defines functional hail damage qualitatively (punctures, tears, or fractures ' +
+  'in the shingle mat) and publishes no hit count. The 8-or-more functional hits per 100 sq ft ' +
+  'test square applied in this report is the threshold most carriers use; some ask for 8–10, ' +
+  'and several require it on at least two slopes.';
 
 // -----------------------------------------------------------------------------
 // 2. RC cost math (§5) — RC = D × U × R × A, computed once and stored.

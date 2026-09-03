@@ -41,8 +41,8 @@ from raw counts at report time.
 
 | Material | Threshold for replacement |
 |---|---|
-| **Asphalt — laminate / architectural** | **> 8 hail hits per 100 sq ft test square** |
-| **Asphalt — 3-tab** | **> 5 hits per 100 sq ft test square** |
+| **Asphalt — laminate / architectural** | **≥ 8 functional hail hits per 100 sq ft test square** |
+| **Asphalt — 3-tab** | **≥ 8 functional hail hits per 100 sq ft test square** |
 | **Asphalt (any) — wind** | **> 5% of shingles wind-damaged on the slope** |
 | **Wood shake / shingle** | ≥ 5 hits per square, or ≥ 3 broken shakes |
 | **Metal panel** | **> 25% of panels dented**, or seam disengagement. Cosmetic dents: note only |
@@ -52,8 +52,19 @@ from raw counts at report time.
 Additional asphalt triggers: multiple creased courses, or widespread
 discontinuity → replacement.
 
-> ⚠️ **Correction notice.** An earlier implementation used 8 hits for 3-tab and
-> 10 for architectural. Both were wrong. The correct values are **5** and **8**.
+> **Provenance of the asphalt hit count (owner decision, 2026-09-03).** HAAG
+> publishes **no** hit-count threshold: its test square counts damaged units for
+> the `D × U × R × A` extrapolation (§5), and its damage test is qualitative —
+> punctures, tears, or fractures in the shingle mat. The number a slope is judged
+> against is a **carrier convention**: 8 is the figure most commonly cited, 7–10
+> the working range, and several carriers want 8–10 on at least two slopes. The
+> owner chose to align the app to that standard — **8 or more functional hits
+> qualifies the slope, for every asphalt family** — so the packet argues the bar
+> the adjuster actually holds. Full research and sources:
+> `docs/THRESHOLD_PROVENANCE.md`. (Earlier revisions of this table carried
+> > 5 / > 8; those were stricter than any carrier and are superseded.) This also
+> makes §2 and §4 agree: the tree's `hail_hits_per_square >= 8` and the material
+> rule are now one number.
 
 ---
 

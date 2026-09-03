@@ -81,7 +81,7 @@ The following constraints are hardened and **must not silently drift**. If a pro
 4. **Storm Alert hero hides when there is no active alert.** Never show a stale "Severe Hail" placeholder.
 5. **No mocks, no seeded sample data.** App boots to an empty state. When a service can't reach its API, show a friendly "Not available" state — never synthesize fake data.
 6. **Damage taxonomy is 13 canonical categories** per `docs/SPEC.md` "13-Category AI Damage Taxonomy": Hail Hits, Bruising, Granule Loss, Wind Damage, Wind Creasing, Blistering, Cracking, Flashing Damage, Algae/Moss, Missing Shingles, Splitting, Lifted Shingles, Structural Sagging. Each finding has severity (None/Minor/Moderate/Severe) and confidence (0-100).
-7. **HAAG functional-damage thresholds are material-specific.** Lookup table in `lib/services/haagThresholds.ts`. 3-tab asphalt = 8 hits per test square; architectural = 10; metal = penetration only; tile = any crack qualifies; etc.
+7. **HAAG functional-damage thresholds are material-specific.** Lookup table in `lib/services/haagThresholds.ts`, defined by `docs/HAAG_DECISION_ENGINE.md` §2. Asphalt (every family) = **≥ 8 functional hail hits per 100 sq ft test square** — the **carrier standard**, set by owner decision 2026-09-03 after research showed HAAG publishes no hit count at all (`docs/THRESHOLD_PROVENANCE.md`); never lower it without a sourced reason. Wood ≥5/sq or ≥3 broken; metal >25% panels dented or seam disengagement (cosmetic dents note-only); tile >10% broken or underlayment exposure (clay ≥1/sq); membrane displacement/punctures or >12% density. Repairability gates (§3) override hit counts. *(History: this line originally said 8/10; a later "correction" moved code and CLAUDE.md to >5/>8 without updating it here — so the two contracts disagreed for months, and the log, which wins, had the number closer to practice.)*
 8. **Decision Engine is pure logic.** Given a populated Inspection, it returns per-slope + roof-level verdict + reasoning. No I/O.
 9. **Gemini model:** `gemini-2.5-pro` via Google AI Studio direct REST call (upgraded from `gemini-2.5-flash` with explicit user approval, entry #29). **There is no `gemini-3-flash` / `gemini-3.5-flash`** (neither exists; prior attempt was a hallucination). Do not change the model or provider without an explicit prompt that acknowledges this constraint.
 10. **No LiDAR / ARKit in v1.** Camera-only Quick Inspection. Live AR overlay parked until a custom native module is justified by user need (and Android equivalents are sorted).
@@ -2533,3 +2533,53 @@ Position *within* the band comes from five weighted, rule-cited severity compone
 **Gates:** typecheck, lint, `expo export --platform web` all green; headless boot of every tab plus `/inspections`, `/processing`, `/estimator`, `/reports` with zero page errors; the job screen rendered end-to-end from a seeded record with the card and its expanded breakdown correct.
 
 **Files touched:** `lib/services/damageScore.ts` (new), `components/DamageScoreCard.tsx` (new), `docs/DAMAGE_SCORE.md`, `lib/services/decisionEngine.ts`, `lib/services/haagPdf.ts`, `lib/services/longReport.ts`, `components/DamageScoreBar.tsx`, `app/job/[id].tsx`, `lib/models/types.ts`, `PROMPT_LOG.md`, `BACKLOG.md`.
+
+---
+
+### [2026-09-03] #67 — Property intelligence: every job measures its own roof, and the whole app reads one number
+
+**Prompt:**
+> "I want to be sure every part of the app is talking to other. Meaning for example when you do an inspection, the app should've done research on the property and know how many squares it is and more so that it informs the report."
+
+**What was actually wrong.** `solar.ts` had measured roofs from aerial imagery all along (Google Solar `buildingInsights`, used for geometry — verified live on the owner's key: a Plano address returns 29.3 squares, 5 faces, imagery 2023-12-10). Only the standalone estimator ever called it. Every inspection therefore carried `areaSquares: 0` on every slope, which zeroed everything downstream: HAAG §5 `RC = D × U × R × A` computed to **0**; the proposal floored the roof at `Math.max(1, …)` and priced a **one-square roof in silence** (a ~$400 quote); the report never stated the roof's size.
+
+**Built.** `lib/services/propertyIntel.ts` runs the research once on job creation (same background pattern as the storm match) and persists a `PropertyIntel` record on the Inspection — failures included, with their plain-English reason (Drift #5). Every consumer reads area through it: engine `square_footage` + per-slope `area_squares`, proposal, estimator, and a new "Roof area" row in the report that states imagery date and quality (a bare square count with no provenance gets struck). New `PropertyIntelCard` on the job screen with a manual re-measure. An unmeasured roof now says so **in the proposal** rather than quoting a placeholder.
+
+**Real data exposed an accuracy bug, fixed.** The imagery segments a roof by pitch AND azimuth, so one physical slope arrives as several facets. That Plano house's south slope came back as 37.9° at azimuth 203.25 and 14.7° at 201.03 — two degrees apart, straddling the S/SW octant boundary at 202.5° — so a naive per-facet mapping reported the south slope as **2.9 squares instead of 6.9**. `roofPlanes()` clusters facets by azimuth proximity (area-weighted circular mean, 30° tolerance) before assigning a direction, and keeps near-flat facets apart (that house reports a 0.15° facet carrying 60% of its area — the footprint, not a slope). Area is conserved: planes sum exactly to the whole-roof figure.
+
+Also fixed on sight: the roof-system card rendered "undefined · 12 yr · undefined" for absent fields.
+
+**Files touched:** `lib/services/propertyIntel.ts` (new), `components/PropertyIntelCard.tsx` (new), `lib/models/types.ts`, `lib/stores/inspectionStore.ts`, `lib/services/{decisionEngine,haagPdf,proposalGenerator}.ts`, `app/new-job.tsx`, `app/job/[id].tsx`.
+
+---
+
+### [2026-09-03] #68 — "Next" without waiting on the analysis, plus the double-count it exposed
+
+**Prompt (with a screenshot of the Analyze slope screen mid-run):**
+> "There needs to be the ability to move on to 'next' without having to wait for the photo uploads. It should go into the job/inspection screen of the new job that was created or the existing one."
+
+There was no exit. Once a pass started, the primary button became a spinner, "Re-analyze all" and "Queue for auto-run" disabled themselves on `running`, and back returned to the camera. "Next" is now always live; unanalyzed photos are handed to the background queue on the way out (Processing screen + queue chip show them finishing) and it lands on `/job/[id]` — the same destination for a new job and for one being added to.
+
+**The hazard underneath, fixed.** `analyzeSlope` had **no in-flight guard**, and leaving mid-run makes two passes on one slope the normal case: the screen's pass keeps going while the queue starts its own; both run `onlyNew`, both see the same indices, both attach markers — **doubling the hail count HAAG §2 decides on**. A second call now joins the pass already running. Protects every caller. Verified end to end in the browser: 16 photos / 11 analyzed → "Next — finish 5 in the background" → queues them → `/job/demo1`, zero page errors.
+
+**Files touched:** `app/analyze.tsx`, `lib/services/analyzeSlope.ts`.
+
+---
+
+### [2026-09-03] #69 — The asphalt hit threshold is a carrier convention, not HAAG's — researched, then set to the carrier standard on the owner's decision
+
+**Prompts:**
+> "make sure this is accurate according to Haag: '6.9 hail hits per 100 sq ft test square' — I thought it was 9 hits constitutes a damaged slope. Also if all four slopes are damaged by the threshold number of hail hits, then it needs a full replacement, I think, check this."
+> then, on the findings: "Okay do the correct slope threshold that's the industry standards for Carriers. Then continue."
+
+**Research (primary sources, `docs/THRESHOLD_PROVENANCE.md`).** HAAG publishes **no** hit-count threshold. Its Test Square Method draws a 10×10 on each directional slope and counts damaged units in order to **extrapolate through `D × U × R × A`** — the §5 formula this app implements. Its damage test is qualitative: punctures, tears, or fractures (bruises) in the shingle mat. The numbers everyone quotes — **8 most commonly, 7–10 the working range, often 8–10 on at least two slopes** — are **carrier conventions**. The owner's "9" sits inside that band.
+
+**Consequences.** The §2/§4 mismatch flagged in #65 was two provenances colliding: §4's `>= 8` matched the carrier norm; §2's 3-tab `> 5` matched nothing sourceable. And `> 5` was **stricter than every carrier** — the app told roofers they had a case at 6 hits when the adjuster wanted 8–10. That is the expensive direction for this product.
+
+**Decision applied (owner).** **≥ 8 functional hail hits per 100 sq ft test square qualifies the slope, for every asphalt family.** `haagThresholds.ts` field is now `hailHitsPerSquareMin: 8` (inclusive, `>=`); `hitsPerTestSquare: 8`; rule strings read "8 or more functional hail hits"; `CARRIER_IMPACT_NORM_NOTE` now states where the number comes from instead of presenting it as HAAG's. §2 table and its provenance notice rewritten; Drift Warning #7 updated in `CLAUDE.md` and here. §2 and §4 now agree on one number.
+
+**Verified.** Worked examples re-run: 7/sq → PARTIAL (47, Compromised), 8/sq → FULL (16, Failed) — a real cliff at the carrier bar, inclusive at exactly 8 (1×); 3-tab and architectural score identically at equal inputs; the owner's 62/9 = 6.9/sq case now reads "against the 3-tab threshold of 8 or more (0.9×)" and lands PARTIAL via the §4 4–7 band. Every invariant holds across six materials. Typecheck + lint green.
+
+**On "all four slopes":** already the behaviour (§4 escalates above 2 slopes). Stronger, sourced, and NOT yet built: carriers frequently approve the whole roof off a **single** qualifying slope because shingles must match and warranties bar partial replacement on matched planes. The engine has that gate — `§3 appearance_match_impossible` — and nothing in the app sets it. Backlogged.
+
+**Files touched:** `lib/services/{haagThresholds,decisionEngine,damageScore}.ts`, `docs/{HAAG_DECISION_ENGINE,DAMAGE_SCORE,THRESHOLD_PROVENANCE,PRODUCT_SYNTHESIS}.md`, `CLAUDE.md`, `PROMPT_LOG.md`, `BACKLOG.md`.

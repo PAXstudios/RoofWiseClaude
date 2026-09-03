@@ -15,7 +15,7 @@
 >
 > **One correction to the machine synthesis is baked in below:** the original
 > ledger marked the HAAG engine "BUILT." Verified against source: it is not —
-> `haagThresholds.ts` still has 3-tab at 8 (spec: >5) and architectural at 10
+> `haagThresholds.ts` still has 3-tab at 8 (spec then: >5 — SUPERSEDED 2026-09-03, see docs/THRESHOLD_PROVENANCE.md: the carrier standard ≥ 8 is now the rule) and architectural at 10
 > (spec: >8), and `decisionEngine.ts` contains no Claim Viability engine, no
 > Safety engine, and no repairability gates. The engine rewrite is priority #2.
 
@@ -167,7 +167,7 @@
 ### HAAG engine & claims
 | Feature | Source | Status |
 |---|---|---|
-| Material-specific thresholds per HAAG_DECISION_ENGINE.md | Established | **WRONG IN CODE** — `haagThresholds.ts` has 3-tab 8 (spec >5), architectural 10 (spec >8); wood/metal/tile/flat rules missing (BACKLOG Now #1) |
+| Material-specific thresholds per HAAG_DECISION_ENGINE.md | Established | Resolved — asphalt is ≥ 8 per test square (carrier standard, owner decision 2026-09-03, `docs/THRESHOLD_PROVENANCE.md`); wood/metal/tile/flat rules present in `haagThresholds.ts` |
 | Repairability gates (discontinued / brittleness / layers) | Established | **MISSING** from `decisionEngine.ts` (BACKLOG Now #1) |
 | Claim Viability engine (HIGH/MEDIUM/LOW) | Established | **MISSING** (BACKLOG Now #2 — replaces invented `damageScore()` weights) |
 | Safety engine (SAFE/USE_CAUTION/UNSAFE) | Established | **MISSING** (BACKLOG Now #3) |
