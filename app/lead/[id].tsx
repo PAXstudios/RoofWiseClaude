@@ -2,14 +2,16 @@ import { PressableScale } from '@/components/PressableScale';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { FadeSlideIn } from '@/components/motion';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { Pill } from '@/components/ui/Pill';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { formatDateShort } from '@/lib/format/date';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ScrollView, View, Text, StyleSheet, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
@@ -19,9 +21,13 @@ import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
 import {
   describeMissingDetails,
   isCoordinateAddress,
+  isPlaceholderAddress,
   missingLeadDetails,
 } from '@/lib/services/placeholderDetails';
 import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
+import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
+import { recordFactsLine, recordHeroUrl, recordStatusBadge } from '@/lib/services/propertyRecord';
+import { openMail, openPhone } from '@/components/pipeline/contact';
 import {
   LEAD_STAGE_LABELS,
   LEAD_STAGE_ORDER,
@@ -56,7 +62,21 @@ export default function LeadDetail() {
   const setStage = useLeadStore((s) => s.setStage);
   const setFollowUp = useLeadStore((s) => s.setFollowUp);
   const updateDetails = useLeadStore((s) => s.updateDetails);
+  const setLeadRecord = useLeadStore((s) => s.setPropertyRecord);
+  const lookupRecord = usePropertyRecordStore((s) => s.lookup);
   const remove = useLeadStore((s) => s.remove);
+  // The house's own photo and facts (cache-first). Older leads and knock
+  // leads that just got a street address pick it up here.
+  useEffect(() => {
+    if (!lead || lead.propertyRecord || isPlaceholderAddress(lead.address) || lead.address.trim().length < 8) return;
+    let cancelled = false;
+    void lookupRecord(lead.address).then((rec) => {
+      if (!cancelled) setLeadRecord(lead.id, rec);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [lead?.id, lead?.address, lead?.propertyRecord, lookupRecord, setLeadRecord, lead]);
   const setPrefill = useWizardPrefillStore((s) => s.set);
   const toast = useToastStore((s) => s.show);
   // Name / phone / email / address editor — the way a door-knock lead
@@ -252,6 +272,61 @@ export default function LeadDetail() {
           </FadeSlideIn>
         )}
 
+        {/* The house — the Zillow photo and what the market says about it.
+            Every line attributed; absent when there is no record. */}
+        {recordHeroUrl(lead.propertyRecord) ? (
+          <FadeSlideIn index={0}>
+            <Image
+              source={{ uri: recordHeroUrl(lead.propertyRecord) }}
+              style={styles.housePhoto}
+              contentFit="cover"
+              transition={200}
+              accessibilityLabel="Property photo from the Zillow listing"
+            />
+          </FadeSlideIn>
+        ) : null}
+        {lead.propertyRecord?.status === 'found' ? (
+          <FadeSlideIn index={0}>
+            <RichCard
+              icon="business-outline"
+              iconTone="green"
+              title="Property record (Zillow)"
+              subtitle={recordFactsLine(lead.propertyRecord) ?? lead.propertyRecord.streetAddress}
+              headerTrailing={
+                recordStatusBadge(lead.propertyRecord) ? (
+                  <Pill label={recordStatusBadge(lead.propertyRecord)!.label} tone={recordStatusBadge(lead.propertyRecord)!.tone} size="sm" />
+                ) : undefined
+              }
+            >
+              {recordStatusBadge(lead.propertyRecord) ? (
+                <Text style={styles.recordHint}>{recordStatusBadge(lead.propertyRecord)!.hint}</Text>
+              ) : null}
+              {lead.propertyRecord.listingAgent ? (
+                <View style={styles.agentRow}>
+                  <Text style={styles.recordHint}>
+                    Listing agent: {lead.propertyRecord.listingAgent.name ?? 'on file'}
+                    {lead.propertyRecord.listingAgent.company ? ` · ${lead.propertyRecord.listingAgent.company}` : ''}
+                  </Text>
+                  <View style={styles.agentBtns}>
+                    {lead.propertyRecord.listingAgent.phone ? (
+                      <PressableScale style={styles.agentBtn} onPress={() => openPhone(lead.propertyRecord!.listingAgent!.phone!)} accessibilityRole="button" accessibilityLabel="Call the listing agent">
+                        <Ionicons name="call-outline" size={18} color={colors.text} />
+                        <Text style={styles.agentBtnText}>Call agent</Text>
+                      </PressableScale>
+                    ) : null}
+                    {lead.propertyRecord.listingAgent.email ? (
+                      <PressableScale style={styles.agentBtn} onPress={() => openMail(lead.propertyRecord!.listingAgent!.email!)} accessibilityRole="button" accessibilityLabel="Email the listing agent">
+                        <Ionicons name="mail-outline" size={18} color={colors.text} />
+                        <Text style={styles.agentBtnText}>Email agent</Text>
+                      </PressableScale>
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
+            </RichCard>
+          </FadeSlideIn>
+        ) : null}
+
         {/* Contact actions — colour-chipped so each action reads before the label does. */}
         <FadeSlideIn index={0} style={styles.actionsRow}>
           <ActionButton
@@ -413,6 +488,10 @@ export default function LeadDetail() {
           lng: lead.lng,
         }}
         onSave={(d) => {
+          // A new street address is a new house: fetch its record (cache-first).
+          if (d.address.trim().length >= 8 && d.address.trim() !== lead.address.trim()) {
+            void lookupRecord(d.address).then((rec) => setLeadRecord(lead.id, rec));
+          }
           updateDetails(lead.id, {
             customerName: d.customerName,
             customerPhone: d.customerPhone,
@@ -495,6 +574,12 @@ function DetailRow({
 }
 
 const styles = StyleSheet.create({
+  housePhoto: { width: '100%', height: 190, borderRadius: radii.card, backgroundColor: colors.surfaceMuted },
+  recordHint: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  agentRow: { gap: spacing.sm, marginTop: spacing.sm },
+  agentBtns: { flexDirection: 'row', gap: spacing.sm },
+  agentBtn: { flex: 1, minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
+  agentBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   root: { flex: 1, backgroundColor: colors.bg },
 
   deleteBtn: {

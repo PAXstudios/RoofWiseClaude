@@ -133,6 +133,8 @@ export type ScoredArea = {
   name?: string;
   /** "near 1200 Legacy Dr" — a street the roofer can drive to. */
   landmark?: string;
+  /** ZIP of the cell centre (reverse geocode) — the key for "homes recently sold here". */
+  zip?: string;
   distanceMiles: number;
   bearing: Bearing;
   driveMinutes: number;

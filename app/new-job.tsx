@@ -62,7 +62,7 @@ import {
 } from '@/lib/models/types';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
-import { roofAgePrefill } from '@/lib/services/propertyRecord';
+import { homeValueOffer, roofAgePrefill } from '@/lib/services/propertyRecord';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { nextStageFor } from '@/components/pipeline/chain';
 import { useActivityStore } from '@/lib/stores/activityStore';
@@ -295,6 +295,7 @@ export default function NewJobWizard() {
   const lookupRecord = usePropertyRecordStore((s) => s.lookup);
   // What Zillow said about the address the roofer picked — an offer, never a silent write.
   const [ageHint, setAgeHint] = useState<{ ageYears: number; note: string } | null>(null);
+  const [homeValueHint, setHomeValueHint] = useState<{ value: number; note: string } | null>(null);
 
   const setEvent = useInspectionStore((s) => s.setEvent);
   const setStormSearchOutcome = useInspectionStore((s) => s.setStormSearchOutcome);
@@ -313,11 +314,13 @@ export default function NewJobWizard() {
   useEffect(() => {
     if (draft.addressLat == null || draft.addressLng == null || draft.address.trim().length < 8) {
       setAgeHint(null);
+      setHomeValueHint(null);
       return;
     }
     let cancelled = false;
     void lookupRecord(draft.address).then((rec) => {
       if (!cancelled) setAgeHint(roofAgePrefill(rec, new Date().getFullYear()));
+      if (!cancelled) setHomeValueHint(homeValueOffer(rec));
     });
     return () => {
       cancelled = true;
@@ -680,7 +683,7 @@ export default function NewJobWizard() {
               {stepKey === 'customer' && <CustomerStep draft={draft} setDraft={setDraft} />}
               {stepKey === 'insurance' && <InsuranceStep draft={draft} setDraft={setDraft} />}
               {stepKey === 'claim' && (
-                <ClaimStep draft={draft} setDraft={setDraft} stormLookup={stormLookup} />
+                <ClaimStep draft={draft} setDraft={setDraft} stormLookup={stormLookup} homeValueHint={homeValueHint} />
               )}
               {stepKey === 'roof' && <RoofStep draft={draft} setDraft={setDraft} ageHint={ageHint} />}
               {stepKey === 'evidence' && <EvidenceStep draft={draft} setDraft={setDraft} />}
@@ -1220,10 +1223,13 @@ function ClaimStep({
   draft,
   setDraft,
   stormLookup,
+  homeValueHint,
 }: {
   draft: Draft;
   setDraft: (d: Draft) => void;
   stormLookup: StormLookup | null;
+  /** Zillow's value for the deductible-vs-value check — an offer, never a silent write. */
+  homeValueHint?: { value: number; note: string } | null;
 }) {
   const deductible = parseMoney(draft.deductible);
   const homeValue = parseMoney(draft.homeValue);
@@ -1300,6 +1306,17 @@ function ClaimStep({
         keyboardType="number-pad"
         placeholder="350000"
       />
+      {homeValueHint && !draft.homeValue.trim() ? (
+        <Pressable
+          style={styles.ageHint}
+          onPress={() => setDraft({ ...draft, homeValue: String(homeValueHint.value) })}
+          accessibilityRole="button"
+          accessibilityLabel={`Use ${homeValueHint.value.toLocaleString()} dollars from Zillow`}
+        >
+          <Ionicons name="sparkles-outline" size={16} color={colors.brand} />
+          <Text style={styles.ageHintText}>Use ${homeValueHint.value.toLocaleString()} — {homeValueHint.note}</Text>
+        </Pressable>
+      ) : null}
       {highDeductible === true && (
         <View style={styles.warnBox}>
           <Ionicons name="alert-circle" size={20} color={colors.warn} />

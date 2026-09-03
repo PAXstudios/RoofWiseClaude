@@ -53,7 +53,9 @@ import { describeMissingDetails, missingJobDetails } from '@/lib/services/placeh
 import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
 import { CoverPhotoSheet } from '@/components/sheets/CoverPhotoSheet';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
-import { coverPhotoUri, recordFactsLine, roofAgePrefill } from '@/lib/services/propertyRecord';
+import { totalSquares as intelTotalSquares } from '@/lib/services/propertyIntel';
+import { coverPhotoUri, recordFactsLine, recordStatusBadge, roofAgePrefill, roofSizePlausibility } from '@/lib/services/propertyRecord';
+import { openMail, openPhone } from '@/components/pipeline/contact';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
@@ -1397,6 +1399,8 @@ function PropertyRecordCard({
   const rec = inspection.propertyRecord;
   const facts = recordFactsLine(rec);
   const prefill = roofAgePrefill(rec, new Date().getFullYear());
+  const badge = recordStatusBadge(rec);
+  const fit = roofSizePlausibility(rec, intelTotalSquares(inspection) ?? undefined);
   if (!rec || rec.status === 'not_configured') {
     return (
       <RichCard
@@ -1415,9 +1419,33 @@ function PropertyRecordCard({
       title={rec.status === 'found' ? 'Property record (Zillow)' : 'Property record'}
       subtitle={rec.status === 'found' ? facts ?? rec.streetAddress : rec.reason}
       action={{ label: busy ? 'Refreshing…' : 'Refresh', onPress: () => onLookup(true), icon: 'refresh-outline' }}
+      headerTrailing={badge ? <Pill label={badge.label} tone={badge.tone} size="sm" /> : undefined}
     >
       {rec.status === 'found' ? (
         <View style={{ gap: spacing.xs }}>
+          {badge ? <Text style={styles.recordHint}>{badge.hint}</Text> : null}
+          {fit ? <Text style={[styles.recordHint, !fit.ok && { color: colors.warn }]}>{fit.note}</Text> : null}
+          {rec.listingAgent ? (
+            <View style={styles.agentRow}>
+              <Text style={styles.recordLine}>
+                Listing agent: {rec.listingAgent.name ?? 'on file'}{rec.listingAgent.company ? ` · ${rec.listingAgent.company}` : ''}
+              </Text>
+              <View style={styles.agentBtns}>
+                {rec.listingAgent.phone ? (
+                  <PressableScale style={styles.agentBtn} onPress={() => openPhone(rec.listingAgent!.phone!)} accessibilityRole="button" accessibilityLabel="Call the listing agent">
+                    <Ionicons name="call-outline" size={18} color={colors.text} />
+                    <Text style={styles.agentBtnText}>Call agent</Text>
+                  </PressableScale>
+                ) : null}
+                {rec.listingAgent.email ? (
+                  <PressableScale style={styles.agentBtn} onPress={() => openMail(rec.listingAgent!.email!)} accessibilityRole="button" accessibilityLabel="Email the listing agent">
+                    <Ionicons name="mail-outline" size={18} color={colors.text} />
+                    <Text style={styles.agentBtnText}>Email agent</Text>
+                  </PressableScale>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
           {rec.lotSizeSqFt ? <Text style={styles.recordLine}>Lot {Math.round(rec.lotSizeSqFt).toLocaleString()} sq ft{rec.propertyType ? ` · ${rec.propertyType.replace(/_/g, ' ').toLowerCase()}` : ''}</Text> : null}
           {rec.zestimate ? <Text style={styles.recordLine}>Zestimate ${rec.zestimate.toLocaleString()}{rec.lastSoldPrice ? ` · last sold $${rec.lastSoldPrice.toLocaleString()}` : ''}</Text> : null}
           {rec.roofHints?.length ? <Text style={styles.recordHint}>Listing on the roof: "{rec.roofHints[0].text}"</Text> : null}
@@ -1769,6 +1797,10 @@ const styles = StyleSheet.create({
 
   // ── Hero ──────────────────────────────────────────────────────────────
   recordLine: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  agentRow: { gap: spacing.xs, marginTop: spacing.xs },
+  agentBtns: { flexDirection: 'row', gap: spacing.sm },
+  agentBtn: { flex: 1, minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
+  agentBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   recordHint: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
   recordFoot: { fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 16 },
   heroShell: { borderRadius: radii.xl },

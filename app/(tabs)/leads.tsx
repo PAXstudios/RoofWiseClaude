@@ -29,6 +29,7 @@ import { resolveEngineResult } from '@/lib/services/storedEngine';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Aurora } from '@/components/glass/Aurora';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { Image } from 'expo-image';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
 import { IconChip, CHIP_TONES, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
@@ -38,6 +39,7 @@ import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
 import { QuickActions } from '@/components/pipeline/QuickActions';
 import { FOLLOW_UP_OPTIONS, FollowUpSheet } from '@/components/pipeline/FollowUpSheet';
 import { JOB_STATUS_META, JobPipelineCard } from '@/components/pipeline/JobPipelineCard';
+import { recordCardUrl, recordStatusBadge } from '@/lib/services/propertyRecord';
 import { daysInStage, findLinkedLead } from '@/components/pipeline/chain';
 import { formatDateShort } from '@/lib/format/date';
 import type { Inspection, InspectionStatus, InsuranceCarrier, Lead, LeadStage } from '@/lib/models/types';
@@ -262,21 +264,31 @@ export default function LeadsScreen() {
                         LEAD_STAGE_LABELS[leadStageColumn(lead.stage)]
                       }${lead.lastStormMatch ? ', storm matched' : ''}`}
                     >
-                      <View
-                        style={[
-                          styles.initialDisc,
-                          { backgroundColor: CHIP_TONES[avatarTone(lead.id)].bg },
-                        ]}
-                      >
-                        <Text
+                      {recordCardUrl(lead.propertyRecord) ? (
+                        <Image
+                          source={{ uri: recordCardUrl(lead.propertyRecord) }}
+                          style={styles.leadThumb}
+                          contentFit="cover"
+                          transition={120}
+                          accessibilityLabel="Property photo"
+                        />
+                      ) : (
+                        <View
                           style={[
-                            styles.initialText,
-                            { color: CHIP_TONES[avatarTone(lead.id)].fg },
+                            styles.initialDisc,
+                            { backgroundColor: CHIP_TONES[avatarTone(lead.id)].bg },
                           ]}
                         >
-                          {leadInitial(lead.customerName)}
-                        </Text>
-                      </View>
+                          <Text
+                            style={[
+                              styles.initialText,
+                              { color: CHIP_TONES[avatarTone(lead.id)].fg },
+                            ]}
+                          >
+                            {leadInitial(lead.customerName)}
+                          </Text>
+                        </View>
+                      )}
                       <View style={styles.leadRowBody}>
                         <View style={styles.leadNameRow}>
                           <Text style={styles.leadName} numberOfLines={1}>
@@ -284,6 +296,9 @@ export default function LeadsScreen() {
                           </Text>
                           {lead.lastStormMatch && (
                             <Pill label="Storm" tone="accent" size="sm" icon="thunderstorm-outline" />
+                          )}
+                          {recordStatusBadge(lead.propertyRecord) && (
+                            <Pill label={recordStatusBadge(lead.propertyRecord)!.label} tone={recordStatusBadge(lead.propertyRecord)!.tone} size="sm" />
                           )}
                         </View>
                         <View style={styles.leadMetaRow}>
@@ -1228,6 +1243,15 @@ function ColumnPage({
                 style={[styles.boardCardAccent, { backgroundColor: stageAccent(stage) }]}
               />
               <View style={styles.boardCardBody}>
+                {recordCardUrl(lead.propertyRecord) ? (
+                  <Image
+                    source={{ uri: recordCardUrl(lead.propertyRecord) }}
+                    style={styles.boardCardPhoto}
+                    contentFit="cover"
+                    transition={120}
+                    accessibilityLabel="Property photo"
+                  />
+                ) : null}
                 <View style={styles.boardCardTop}>
                   <Text style={styles.boardCardName} numberOfLines={1}>
                     {lead.customerName}
@@ -1239,6 +1263,14 @@ function ColumnPage({
                 <Text style={styles.boardCardAddress} numberOfLines={2}>
                   {lead.address}
                 </Text>
+                {recordStatusBadge(lead.propertyRecord) && (
+                  <Pill
+                    label={recordStatusBadge(lead.propertyRecord)!.label}
+                    tone={recordStatusBadge(lead.propertyRecord)!.tone}
+                    size="sm"
+                    style={styles.boardCardFollowUp}
+                  />
+                )}
                 {lead.followUpAt && (
                   <Pill
                     label={`Follow-up ${formatDateShort(lead.followUpAt)}`}
@@ -1469,6 +1501,8 @@ const styles = StyleSheet.create({
     marginLeft: spacing.lg + 40 + spacing.md,
   },
   // Tone comes from `avatarTone(lead.id)` — deterministic, not a flat grey disc.
+  leadThumb: { width: 44, height: 44, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
+  boardCardPhoto: { width: '100%', height: 96, borderRadius: radii.md, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
   initialDisc: {
     width: 40,
     height: 40,

@@ -14,6 +14,7 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
@@ -41,6 +42,8 @@ const MODAL_SCREEN_OPTIONS = { headerShown: false, presentation: 'modal' } as co
 export default function NewLead() {
   const router = useRouter();
   const createLead = useLeadStore((s) => s.create);
+  const setLeadRecord = useLeadStore((s) => s.setPropertyRecord);
+  const lookupRecord = usePropertyRecordStore((s) => s.lookup);
   const logActivity = useActivityStore((s) => s.log);
   const toast = useToastStore((s) => s.show);
 
@@ -72,6 +75,11 @@ export default function NewLead() {
       source: 'manual',
       followUpAt,
     });
+    // The house's own photo and facts for the board (cache-first — a job at
+    // the same address later costs nothing more).
+    if (address.trim().length >= 8) {
+      void lookupRecord(address.trim()).then((rec) => setLeadRecord(lead.id, rec));
+    }
     logActivity({
       kind: 'lead_created',
       leadId: lead.id,

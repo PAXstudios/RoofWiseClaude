@@ -892,6 +892,14 @@ export type PropertyRecord = {
   roofHints?: { text: string; year?: number }[];
   /** When Zillow's page was read, per the service. */
   scrapedAt?: string;
+  /** Asking price while listed (0/absent otherwise). */
+  listPrice?: number;
+  daysOnZillow?: number;
+  rentZestimate?: number;
+  /** The listing agent — a real contact when the house is on the market. */
+  listingAgent?: { name?: string; phone?: string; email?: string; company?: string };
+  /** Last "Listed for sale" / "Sold" event dates from the price history. */
+  listedDate?: string;
 };
 
 /** The photo that fronts a job: chosen by the inspector or taken from the record. */
@@ -1082,6 +1090,8 @@ export type Lead = {
     hailInches?: number;
     matchedAt: string;
   };
+  /** Zillow record for the address (APIllow) — the house photo on the board, badges, facts. */
+  propertyRecord?: PropertyRecord;
 };
 
 export type JobStatus = 'scheduled' | 'in_progress' | 'awaiting_adjuster' | 'done' | 'lost';

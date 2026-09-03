@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Lead, LeadStage } from '../models/types';
+import type {
+  Lead,
+  LeadStage,
+  PropertyRecord,
+} from '../models/types';
 import { LEAD_STAGE_ORDER } from '../models/types';
 
 let counter = 0;
@@ -31,6 +35,8 @@ type LeadStoreState = {
    * like every other mutator so the next push carries it.
    */
   updateDetails: (id: string, patch: LeadDetailsPatch) => void;
+  /** Attach the Zillow record (does not touch updatedAt — it is not the roofer's edit). */
+  setPropertyRecord: (id: string, record: PropertyRecord) => void;
   setFollowUp: (id: string, followUpAt: string | undefined) => void;
   setStormMatch: (id: string, match: Lead['lastStormMatch']) => void;
   /**
@@ -124,6 +130,9 @@ export const useLeadStore = create<LeadStoreState>()(
               : l,
           ),
         })),
+
+      setPropertyRecord: (id, record) =>
+        set((s) => ({ leads: s.leads.map((l) => (l.id === id ? { ...l, propertyRecord: record } : l)) })),
 
       updateDetails: (id, patch) =>
         set((s) => ({

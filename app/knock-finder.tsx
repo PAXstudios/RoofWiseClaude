@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,11 +21,16 @@ import { Pill } from '@/components/ui/Pill';
 import { IconChip } from '@/components/ui/IconChip';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion/FadeSlideIn';
+import { SearchAnimation } from '@/components/knock/SearchAnimation';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useKnockFinderStore } from '@/lib/stores/knockFinderStore';
+import { useLeadStore } from '@/lib/stores/leadStore';
+import { fetchNearbyHomes, recordCardUrl, recordFactsLine } from '@/lib/services/propertyRecord';
+import { isApillowConfigured } from '@/lib/env';
+import type { PropertyRecord } from '@/lib/models/types';
 import {
   FINDER_STEPS,
   directionsUrl,
@@ -308,9 +314,12 @@ export default function KnockFinderScreen() {
 
 function ProgressCard({ step }: { step: FinderStep }) {
   const idx = FINDER_STEPS.findIndex((s) => s.id === step);
+  const current = FINDER_STEPS[idx]?.label;
   return (
-    <RichCard icon="hourglass-outline" iconTone="blue" title="Working on it">
-      <View style={styles.steps}>
+    <RichCard padded={false}>
+      {/* The map being searched — what the finder is doing, not a spinner. */}
+      <SearchAnimation caption={current} />
+      <View style={[styles.steps, styles.stepsPad]}>
         {FINDER_STEPS.map((s, i) => {
           const done = i < idx;
           const active = i === idx;
@@ -444,6 +453,8 @@ function AreaCard({
             </View>
           )}
 
+          {area.zip && isApillowConfigured ? <NearbyHomes zip={area.zip} areaName={name} /> : null}
+
           <View style={styles.actions}>
             <PressableScale style={styles.secondaryBtn} onPress={onMap} accessibilityRole="button" accessibilityLabel="Show on Storm Tracer">
               <Ionicons name="map-outline" size={20} color={colors.navy} />
@@ -457,6 +468,121 @@ function AreaCard({
         </View>
       ) : null}
     </RichCard>
+  );
+}
+
+/**
+ * The doors behind an area: homes recently sold in its ZIP (Zillow via
+ * APIllow). A recent sale is a new owner, a new policy and often an inherited
+ * roof — the warmest door on the street. Costs 5 of the month's 50 free
+ * lookups, so it is a button that says so, never automatic. Each home can
+ * become a lead with the house photo already on it.
+ */
+function NearbyHomes({ zip, areaName }: { zip: string; areaName: string }) {
+  const [state, setState] = useState<{ status: 'idle' } | { status: 'busy' } | { status: 'ok'; homes: PropertyRecord[] } | { status: 'error'; reason: string }>({ status: 'idle' });
+  const [added, setAdded] = useState<Record<string, string>>({});
+  const createLead = useLeadStore((s) => s.create);
+  const setLeadRecord = useLeadStore((s) => s.setPropertyRecord);
+  const leads = useLeadStore((s) => s.leads);
+  const toast = useToastStore((s) => s.show);
+
+  const run = async () => {
+    setState({ status: 'busy' });
+    const res = await fetchNearbyHomes({ zip, kind: 'sold', max: 5 });
+    if (res.status === 'ok') setState({ status: 'ok', homes: res.homes });
+    else setState({ status: 'error', reason: res.reason });
+  };
+
+  const addLead = (h: PropertyRecord) => {
+    const address = [h.streetAddress, h.city, h.state ? `${h.state} ${h.zipcode ?? ''}`.trim() : undefined].filter(Boolean).join(', ');
+    if (!address) return;
+    const existing = leads.find((l) => l.address.trim().toLowerCase() === address.toLowerCase());
+    if (existing) {
+      setAdded((m) => ({ ...m, [address]: existing.id }));
+      toast({ tone: 'info', title: 'Already a lead', body: existing.customerName });
+      return;
+    }
+    const lead = createLead({
+      customerName: `Homeowner at ${h.streetAddress ?? address}`,
+      address,
+      lat: h.lat,
+      lng: h.lng,
+      stage: 'new',
+      source: 'zillow',
+    });
+    setLeadRecord(lead.id, h);
+    setAdded((m) => ({ ...m, [address]: lead.id }));
+    toast({ tone: 'success', title: 'Lead created', body: `${address} · recently sold` });
+  };
+
+  if (state.status === 'idle') {
+    return (
+      <PressableScale style={styles.nearbyBtn} onPress={run} accessibilityRole="button" accessibilityLabel={`Find 5 recently sold homes in ${zip}`}>
+        <Ionicons name="home-outline" size={20} color={colors.brand} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.nearbyTitle}>Find 5 recently sold homes here</Text>
+          <Text style={styles.nearbySub}>ZIP {zip} · new owners, new policies · uses 5 of your 50 monthly property lookups</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+      </PressableScale>
+    );
+  }
+  if (state.status === 'busy') {
+    return (
+      <View style={styles.nearbyBtn}>
+        <ActivityIndicator color={colors.brand} />
+        <Text style={styles.nearbySub}>Asking Zillow for recent sales in {zip}…</Text>
+      </View>
+    );
+  }
+  if (state.status === 'error') {
+    return (
+      <View style={styles.nearbyBtn}>
+        <Ionicons name="cloud-offline-outline" size={20} color={colors.warn} />
+        <Text style={[styles.nearbySub, { flex: 1 }]}>{state.reason}</Text>
+      </View>
+    );
+  }
+  if (state.homes.length === 0) {
+    return (
+      <View style={styles.nearbyBtn}>
+        <Ionicons name="home-outline" size={20} color={colors.textSubtle} />
+        <Text style={[styles.nearbySub, { flex: 1 }]}>Zillow shows no recent sales in {zip}.</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.nearbyList}>
+      <Text style={styles.nearbyTitle}>Recently sold in {areaName}</Text>
+      {state.homes.map((h, i) => {
+        const address = [h.streetAddress, h.city].filter(Boolean).join(', ');
+        const key = [h.streetAddress, h.city, h.state ? `${h.state} ${h.zipcode ?? ''}`.trim() : undefined].filter(Boolean).join(', ');
+        const leadId = added[key];
+        return (
+          <View key={h.zpid ?? i} style={styles.nearbyRow}>
+            {recordCardUrl(h) ? (
+              <Image source={{ uri: recordCardUrl(h) }} style={styles.nearbyThumb} contentFit="cover" transition={120} />
+            ) : (
+              <View style={[styles.nearbyThumb, { alignItems: 'center', justifyContent: 'center' }]}>
+                <Ionicons name="home-outline" size={20} color={colors.textSubtle} />
+              </View>
+            )}
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.nearbyAddr} numberOfLines={1}>{address || 'Address withheld'}</Text>
+              <Text style={styles.nearbySub} numberOfLines={2}>{recordFactsLine(h) ?? 'Recently sold'}</Text>
+            </View>
+            <PressableScale
+              style={[styles.nearbyAdd, leadId ? styles.nearbyAdded : null]}
+              onPress={() => addLead(h)}
+              accessibilityRole="button"
+              accessibilityLabel={leadId ? 'Lead created' : `Create a lead for ${address}`}
+            >
+              <Ionicons name={leadId ? 'checkmark' : 'person-add-outline'} size={18} color={leadId ? colors.success : colors.textInverse} />
+            </PressableScale>
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -511,6 +637,7 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: fontSize.caption, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
 
   steps: { gap: spacing.sm },
+  stepsPad: { padding: spacing.lg },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 28 },
   stepText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.textSubtle },
   stepDone: { color: colors.textMuted },
@@ -549,6 +676,15 @@ const styles = StyleSheet.create({
   bulletText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 20 },
 
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  nearbyBtn: { minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radii.md, backgroundColor: colors.brandSoft },
+  nearbyTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  nearbySub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 17 },
+  nearbyList: { gap: spacing.sm },
+  nearbyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: touchTarget.standard },
+  nearbyThumb: { width: 56, height: 56, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
+  nearbyAddr: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  nearbyAdd: { width: touchTarget.standard, height: touchTarget.standard, borderRadius: touchTarget.standard / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  nearbyAdded: { backgroundColor: colors.successSoft },
   secondaryBtn: {
     flex: 1,
     flexDirection: 'row',

@@ -218,7 +218,85 @@ export function mapApillowProperty(p: Record<string, unknown>, fetchedAt: string
       return hints.length > 0 ? hints : undefined;
     })(),
     scrapedAt: str(p.scraped_at),
+    listPrice: num(p.price),
+    daysOnZillow: typeof p.days_on_zillow === 'number' ? p.days_on_zillow : undefined,
+    rentZestimate: num(p.rent_zestimate),
+    listingAgent: (() => {
+      const a = p.listing_agent;
+      if (!a || typeof a !== 'object') return undefined;
+      const o = a as Record<string, unknown>;
+      const agent = { name: str(o.name), phone: str(o.phone), email: str(o.email), company: str(o.company) ?? str(p.listing_broker) };
+      return agent.name || agent.phone || agent.email ? agent : undefined;
+    })(),
+    listedDate: (() => {
+      const hist = Array.isArray(p.price_history) ? (p.price_history as Record<string, unknown>[]) : [];
+      const listed = hist.find((h) => typeof h?.event === 'string' && /listed for sale/i.test(h.event as string));
+      return listed ? str(listed.date) : undefined;
+    })(),
   };
+}
+
+/**
+ * What the house's market status means at the door. Pure.
+ *   FOR_SALE      → the seller needs a roof that passes inspection before closing;
+ *                   the listing agent is the fastest decision-maker to reach.
+ *   RECENTLY_SOLD → a new owner, a new policy, and often an inherited roof.
+ *   FOR_RENT      → the person at the door is a tenant — find the owner.
+ */
+export type RecordBadge = { label: string; tone: 'info' | 'success' | 'warn' | 'neutral'; hint: string };
+
+export function recordStatusBadge(record: PropertyRecord | undefined): RecordBadge | null {
+  if (!record || record.status !== 'found') return null;
+  const st = (record.homeStatus ?? '').toUpperCase();
+  if (st === 'FOR_SALE' || st === 'PENDING') {
+    const days = record.daysOnZillow != null ? ` · ${record.daysOnZillow} days on market` : '';
+    return { label: 'For sale', tone: 'info', hint: `Listed${record.listPrice ? ` at $${record.listPrice.toLocaleString()}` : ''}${days}. Roof must pass the buyer's inspection — the listing agent is the decision-maker to call.` };
+  }
+  if (st === 'RECENTLY_SOLD' || st === 'SOLD') {
+    const when = record.lastSoldDate ? ` ${new Date(`${record.lastSoldDate}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })}` : '';
+    return { label: `Sold${when}`, tone: 'success', hint: 'New owner, new policy — and an inherited roof. Ask when the seller last replaced it.' };
+  }
+  if (st === 'FOR_RENT' || (record.rentZestimate != null && record.zestimate == null)) {
+    return { label: 'Rental', tone: 'warn', hint: 'The person at the door is likely a tenant. The owner files the claim — ask for a contact.' };
+  }
+  return null;
+}
+
+/**
+ * Does the aerial roof measurement fit the house? Pure. A 2-story home's
+ * footprint is roughly living area ÷ stories; asphalt roofs run ~1.15–1.6×
+ * the footprint with pitch, overhangs and porches. Far outside that band the
+ * measurement (or the address) deserves a second look before it prices a
+ * proposal. Returns null when there is not enough to compare.
+ */
+export function roofSizePlausibility(
+  record: PropertyRecord | undefined,
+  totalSquares: number | undefined,
+): { ok: boolean; note: string; expectedLow: number; expectedHigh: number } | null {
+  if (!record || record.status !== 'found' || !record.livingAreaSqFt || totalSquares == null) return null;
+  const stories = record.stories && record.stories >= 1 ? Math.min(record.stories, 3) : record.livingAreaSqFt > 2600 ? 2 : 1;
+  const footprint = record.livingAreaSqFt / stories;
+  const low = (footprint * 1.1) / 100;
+  const high = (footprint * 1.7) / 100;
+  const ok = totalSquares >= low * 0.8 && totalSquares <= high * 1.25;
+  const s1 = Math.round(low), s2 = Math.round(high);
+  return {
+    ok,
+    expectedLow: low,
+    expectedHigh: high,
+    note: ok
+      ? `${totalSquares.toFixed(1)} sq fits a ${record.livingAreaSqFt.toLocaleString()} sq ft, ${stories}-story home (expect ~${s1}–${s2} sq).`
+      : `${totalSquares.toFixed(1)} sq looks ${totalSquares > high ? 'large' : 'small'} for a ${record.livingAreaSqFt.toLocaleString()} sq ft, ${stories}-story home (expect ~${s1}–${s2} sq) — check the measurement or the address before pricing.`,
+  };
+}
+
+/** Zestimate as a home-value offer for the claim wizard (deductible-vs-value check). Pure. */
+export function homeValueOffer(record: PropertyRecord | undefined): { value: number; note: string } | null {
+  if (!record || record.status !== 'found') return null;
+  const v = record.zestimate ?? record.listPrice ?? record.taxAssessedValue;
+  if (!v) return null;
+  const basis = record.zestimate ? 'Zestimate' : record.listPrice ? 'asking price' : 'tax-assessed value';
+  return { value: Math.round(v), note: `${basis} from Zillow — the policy's dwelling coverage is the real number.` };
 }
 
 // ---------------------------------------------------------------------------
@@ -330,4 +408,53 @@ export async function fetchApillowUsage(): Promise<ApillowUsage | null> {
   } catch {
     return null;
   }
+}
+
+export type NearbyHomesKind = 'sold' | 'sale';
+
+/**
+ * Homes recently sold or for sale in a ZIP — the doors behind a knock-finder
+ * area. Costs `max` lookups against the monthly quota (free tier: 5 per
+ * request, 50 a month), so the UI states the price before the tap and this
+ * is never called automatically.
+ */
+export async function fetchNearbyHomes(input: {
+  zip: string;
+  kind: NearbyHomesKind;
+  max?: number;
+}): Promise<{ status: 'ok'; homes: PropertyRecord[] } | { status: 'unavailable' | 'not_configured'; reason: string }> {
+  if (!isApillowConfigured) return { status: 'not_configured', reason: 'Property records are not set up on this build.' };
+  const zip = Number(input.zip);
+  if (!Number.isInteger(zip) || zip < 501) return { status: 'unavailable', reason: 'No ZIP code for this area.' };
+  const max = Math.max(1, Math.min(5, input.max ?? 5));
+  const fetchedAt = new Date().toISOString();
+  let submit: { status: number; json: any };
+  try {
+    submit = await apillow('/properties', {
+      method: 'POST',
+      body: JSON.stringify({ zipcodes: [zip], type: input.kind, property_type: 'house', max_items: max }),
+    });
+  } catch {
+    return { status: 'unavailable', reason: 'Property record service unreachable.' };
+  }
+  if (submit.status === 429) return { status: 'unavailable', reason: 'Property record quota for this month is used up (free tier: 50 lookups).' };
+  if (submit.status !== 200 || typeof submit.json?.job_id !== 'string') return { status: 'unavailable', reason: `Property record service answered ${submit.status}.` };
+  const jobId: string = submit.json.job_id;
+  for (let i = 0; i < POLL_MAX; i += 1) {
+    await sleep(POLL_INTERVAL_MS);
+    let poll: { status: number; json: any };
+    try {
+      poll = await apillow(`/results/${encodeURIComponent(jobId)}`);
+    } catch {
+      continue;
+    }
+    if (poll.json?.status === 'processing') continue;
+    if (poll.json?.status === 'failed') return { status: 'unavailable', reason: 'Property search failed at the service.' };
+    const results: any[] = Array.isArray(poll.json?.results) ? poll.json.results : [];
+    const homes = results
+      .filter((r) => r && r.success === true && r.property && typeof r.property === 'object')
+      .map((r) => mapApillowProperty(r.property, fetchedAt));
+    return { status: 'ok', homes };
+  }
+  return { status: 'unavailable', reason: 'Property search is taking too long — try again in a minute.' };
 }

@@ -146,7 +146,7 @@ export async function findKnockOpportunities(args: {
         const name = city ? `${city}${g.stateCode ? `, ${g.stateCode}` : ''}` : g.formattedAddress;
         const street = g.formattedAddress.split(',')[0]?.trim();
         const landmark = street && street !== city ? `near ${street}` : undefined;
-        return { ...a, name, landmark };
+        return { ...a, name, landmark, zip: g.postalCode };
       } catch {
         return { ...a, name: a.storm.town };
       }
