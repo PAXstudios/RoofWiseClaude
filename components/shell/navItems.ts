@@ -23,7 +23,9 @@ export type NavItem = {
 // screen (app/index.tsx), which would push a blank screen onto the root stack.
 export const navItems: NavItem[] = [
   { name: 'index', label: 'Home', href: '/(tabs)', icon: 'home-outline' },
-  { name: 'leads', label: 'Leads', href: '/(tabs)/leads', icon: 'people-outline' },
+  // "Leads" tab is renamed Pipeline (docs/PIPELINE.md) — leads and jobs on
+  // one Kanban board. Route name/href stay `leads` (Drift #2: five tabs).
+  { name: 'leads', label: 'Pipeline', href: '/(tabs)/leads', icon: 'albums-outline' },
   { name: 'map', label: 'Map', href: '/(tabs)/map', icon: 'map-outline' },
   { name: 'plan', label: 'Plan', href: '/(tabs)/plan', icon: 'calendar-outline' },
   { name: 'train', label: 'Train', href: '/(tabs)/train', icon: 'school-outline' },

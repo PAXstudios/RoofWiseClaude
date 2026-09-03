@@ -75,7 +75,8 @@ export default function TabsLayout() {
       >
         {/* Drift #2 order: Home / Leads / Map / Plan / Train. */}
         <Tabs.Screen name="index" options={{ title: 'Home' }} />
-        <Tabs.Screen name="leads" options={{ title: 'Leads' }} />
+        {/* Leads tab renamed Pipeline — leads and jobs on one board (docs/PIPELINE.md). */}
+        <Tabs.Screen name="leads" options={{ title: 'Pipeline' }} />
         <Tabs.Screen name="map" options={{ title: 'Map' }} />
         <Tabs.Screen name="plan" options={{ title: 'Plan' }} />
         <Tabs.Screen name="train" options={{ title: 'Train' }} />

@@ -1,8 +1,14 @@
+// Pipeline — leads and jobs on ONE board (docs/PIPELINE.md). Replaces the old
+// Leads | Jobs segmented screen: every `PipelineItem` from
+// `lib/services/pipeline.ts` is either a lead, a job, or a linked pair shown
+// as a single card, in Board (Kanban) or List form.
+
 import {
   ScrollView,
   View,
   Text,
   Pressable,
+  TextInput,
   StyleSheet,
   Modal,
   useWindowDimensions,
@@ -18,14 +24,18 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
+  runOnJS,
+  useReducedMotion,
 } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
-import { useActivityStore } from '@/lib/stores/activityStore';
+import { useProposalStore } from '@/lib/stores/proposalStore';
+import { useEstimateStore } from '@/lib/stores/estimateStore';
+import { useTaskStore } from '@/lib/stores/taskStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
-import { damageScoreFromEngine, type DamageScoreResult } from '@/lib/services/damageScore';
-import { resolveEngineResult } from '@/lib/services/storedEngine';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Aurora } from '@/components/glass/Aurora';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -33,22 +43,33 @@ import { Image } from 'expo-image';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
 import { IconChip, CHIP_TONES, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
-import { Pill, type PillTone } from '@/components/ui/Pill';
-import { ProgressBar, type ProgressTone } from '@/components/ui/ProgressBar';
+import { Pill } from '@/components/ui/Pill';
 import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
+import { ConfirmSheet } from '@/components/sheets/ConfirmSheet';
 import { QuickActions } from '@/components/pipeline/QuickActions';
 import { FOLLOW_UP_OPTIONS, FollowUpSheet } from '@/components/pipeline/FollowUpSheet';
-import { JOB_STATUS_META, JobPipelineCard } from '@/components/pipeline/JobPipelineCard';
-import { recordCardUrl, recordStatusBadge } from '@/lib/services/propertyRecord';
-import { daysInStage, findLinkedLead } from '@/components/pipeline/chain';
+import { recordStatusBadge } from '@/lib/services/propertyRecord';
 import { formatDateShort } from '@/lib/format/date';
-import type { Inspection, InspectionStatus, InsuranceCarrier, Lead, LeadStage } from '@/lib/models/types';
+import type { LeadStage } from '@/lib/models/types';
+import { leadStageColumn } from '@/lib/models/types';
 import {
-  INSURANCE_CARRIER_LABELS,
-  LEAD_STAGE_LABELS,
-  LEAD_STAGE_ORDER,
-  leadStageColumn,
-} from '@/lib/models/types';
+  buildPipeline,
+  ensureLeadForInspection,
+  columnSummary,
+  summarizePipeline,
+  matchesFilter,
+  sortItems,
+  stageLabel,
+  stageAgeTone,
+  formatMoneyShort,
+  BOARD_COLUMNS,
+  PIPELINE_GROUPS,
+  PIPELINE_GROUP_LABELS,
+  PIPELINE_SORT_LABELS,
+  type PipelineItem,
+  type PipelineFilter,
+  type PipelineSort,
+} from '@/lib/services/pipeline';
 import {
   brand,
   colors,
@@ -63,115 +84,156 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-/**
- * List-view filter chips. Built from the same column set the Pipeline board
- * uses so the two views can never disagree about which stages exist — a
- * hand-written subset is how leads in the newer stages became reachable only
- * under "All".
- */
-const STAGES: { id: LeadStage | 'all'; label: string }[] = [
-  { id: 'all', label: 'All' },
-  ...[...LEAD_STAGE_ORDER, 'lost' as LeadStage].map((id) => ({
-    id,
-    label: LEAD_STAGE_LABELS[id],
-  })),
-];
+/** How far (px) a long-pressed card must travel to commit a column move. */
+const DRAG_COMMIT_PX = 96;
 
-/** Which object the tab is showing. Jobs are pipeline cards too — the home the audit said they never had. */
-type Segment = 'leads' | 'jobs';
-/** How the Leads segment lays its leads out. */
-type ViewMode = 'list' | 'board';
-
-const SEGMENT_OPTIONS = [
-  { id: 'leads', label: 'Leads' },
-  { id: 'jobs', label: 'Jobs' },
-] as const;
+type ViewMode = 'board' | 'list';
 
 const VIEW_OPTIONS = [
-  { id: 'list', label: 'List' },
   { id: 'board', label: 'Board' },
+  { id: 'list', label: 'List' },
 ] as const;
 
-/**
- * Board columns, in order. `LEAD_STAGE_ORDER` is the 11 live pipeline stages
- * (Kanban PRD); `lost` is terminal so it rides at the end as a muted trailing
- * column rather than sitting inline in the happy path.
- */
-const BOARD_COLUMNS: LeadStage[] = [...LEAD_STAGE_ORDER, 'lost'];
+/** List-view filter chips: All, the seven stage groups, Storm. */
+const FILTER_CHIPS: { id: PipelineFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  ...PIPELINE_GROUPS.map((g) => ({ id: g as PipelineFilter, label: PIPELINE_GROUP_LABELS[g] })),
+  { id: 'storm', label: 'Storm' },
+];
+
+const SORT_CYCLE: PipelineSort[] = ['updated', 'days', 'amount'];
 
 /** Stable identity so an empty column never remounts its page on re-render. */
-const EMPTY_COLUMN: Lead[] = [];
+const EMPTY_COLUMN: PipelineItem[] = [];
 
-export default function LeadsScreen() {
+export default function PipelineScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ segment?: string; at?: string }>();
+  const params = useLocalSearchParams<{
+    segment?: string;
+    at?: string;
+    filter?: string;
+    focus?: string;
+  }>();
+
   const leads = useLeadStore((s) => s.leads);
   const inspections = useInspectionStore((s) => s.inspections);
+  const proposals = useProposalStore((s) => s.proposals);
+  const estimates = useEstimateStore((s) => s.estimates);
+  const tasks = useTaskStore((s) => s.tasks);
   const setStageOnLead = useLeadStore((s) => s.setStage);
-  const [segment, setSegment] = useState<Segment>(params.segment === 'jobs' ? 'jobs' : 'leads');
-  const [stage, setStage] = useState<(typeof STAGES)[number]['id']>('all');
-  const [view, setView] = useState<ViewMode>('list');
+  const toast = useToastStore((s) => s.show);
 
-  // Deep link from Plan / Home: `?segment=jobs` lands on the Jobs segment.
-  // `at` is a nonce so a second push with the same segment still fires —
-  // tab params persist, and a bare `segment` dependency would go stale after
-  // the roofer flipped back to Leads by hand.
-  useEffect(() => {
-    if (params.segment === 'jobs' || params.segment === 'leads') setSegment(params.segment);
-  }, [params.segment, params.at]);
-
-  // Compared through `leadStageColumn` for the same reason the board buckets
-  // that way: a lead persisted under the legacy `proposal_sent` spelling has
-  // to answer to the `estimate_sent` chip, not vanish from both.
-  const filtered = useMemo(
-    () => (stage === 'all' ? leads : leads.filter((l) => leadStageColumn(l.stage) === stage)),
-    [leads, stage],
+  const items = useMemo(
+    () => buildPipeline({ leads, inspections, proposals, estimates, tasks }),
+    [leads, inspections, proposals, estimates, tasks],
   );
 
-  // Real counts per chip — chip language everywhere shows honest tabular-nums
-  // counts sourced from the store, never a placeholder.
-  const stageCounts = useMemo(() => {
-    const map = new Map<LeadStage, number>();
-    for (const l of leads) {
-      const col = leadStageColumn(l.stage);
-      map.set(col, (map.get(col) ?? 0) + 1);
+  const [view, setView] = useState<ViewMode>('board');
+  const [filter, setFilter] = useState<PipelineFilter>('all');
+  const [sort, setSort] = useState<PipelineSort>('updated');
+  const [query, setQuery] = useState('');
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<PipelineItem | null>(null);
+  const [confirmLost, setConfirmLost] = useState<{ item: PipelineItem; stage: LeadStage } | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const book = useBookFollowUp();
+
+  // Deep link presets: `?filter=` wins outright; `?segment=jobs|leads` maps
+  // onto the closest group. `at` is a nonce so a second push with the same
+  // value still fires (tab params persist across visits).
+  useEffect(() => {
+    if (params.filter) {
+      setFilter(params.filter as PipelineFilter);
+    } else if (params.segment === 'jobs') {
+      setFilter('jobs');
+    } else if (params.segment === 'leads') {
+      setFilter('leads');
     }
-    return map;
-  }, [leads]);
+  }, [params.filter, params.segment, params.at]);
 
-  const switchView = (next: ViewMode) => {
-    if (next === view) return;
-    Haptics.selectionAsync().catch(() => {});
-    setView(next);
-  };
+  // `?focus=<itemId>` (a storm-cluster tap, a notification) briefly rings the
+  // matching card so the roofer's eye lands on the right one.
+  useEffect(() => {
+    if (!params.focus) return;
+    setHighlightId(params.focus);
+    const t = setTimeout(() => setHighlightId(null), 2600);
+    return () => clearTimeout(t);
+  }, [params.focus, params.at]);
 
-  const switchSegment = (next: Segment) => {
-    if (next === segment) return;
-    Haptics.selectionAsync().catch(() => {});
-    setSegment(next);
-  };
+  const filtered = useMemo(() => {
+    let out = items.filter((it) => matchesFilter(it, filter));
+    const q = query.trim().toLowerCase();
+    if (q) out = out.filter((it) => `${it.customerName} ${it.address}`.toLowerCase().includes(q));
+    return sortItems(out, sort);
+  }, [items, filter, query, sort]);
 
-  const openJobs = inspections.filter((i) => i.status !== 'complete').length;
+  const summary = useMemo(() => summarizePipeline(items), [items]);
+
+  const openItem = useCallback(
+    (item: PipelineItem) => {
+      if (item.leadId) router.push(`/lead/${item.leadId}` as any);
+      else if (item.inspectionId) router.push(`/job/${item.inspectionId}` as any);
+    },
+    [router],
+  );
+
+  const applyMove = useCallback(
+    (item: PipelineItem, stage: LeadStage) => {
+      if (leadStageColumn(item.stage) === stage) return;
+      let leadId = item.leadId;
+      if (!leadId && item.inspectionId) {
+        leadId = ensureLeadForInspection(item.inspectionId, stage)?.id;
+      }
+      if (!leadId) return;
+      setStageOnLead(leadId, stage);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      toast({
+        tone: stage === 'lost' ? 'info' : 'success',
+        title: `Moved to ${stageLabel(stage)}`,
+        body: item.customerName,
+      });
+    },
+    [setStageOnLead, toast],
+  );
+
+  const requestMove = useCallback(
+    (item: PipelineItem, stage: LeadStage) => {
+      setMoveTarget(null);
+      if (leadStageColumn(item.stage) === stage) return;
+      // The one destructive move on the board — asks first (Drift #1).
+      if (stage === 'lost') {
+        setConfirmLost({ item, stage });
+        return;
+      }
+      applyMove(item, stage);
+    },
+    [applyMove],
+  );
+
+  const onContacted = useCallback(
+    (item: PipelineItem) => {
+      if (item.leadId && leadStageColumn(item.stage) === 'new') {
+        setStageOnLead(item.leadId, 'contacted');
+      }
+    },
+    [setStageOnLead],
+  );
 
   return (
     <View style={styles.root}>
       <ScreenHeader
-        title={segment === 'jobs' ? 'Jobs' : 'Leads'}
-        subtitle={
-          segment === 'jobs'
-            ? `${inspections.length} total · ${openJobs} open`
-            : `${leads.length} total`
-        }
+        title="Pipeline"
+        subtitle={`${items.length} total · ${summary.activeCount} active`}
         right={
           <View style={styles.headerActions}>
             <SettingsAffordance />
             <PressableScale
               style={styles.fab}
               pressedScale={0.92}
-              onPress={() => router.push(segment === 'jobs' ? '/new-job' : '/new-lead')}
+              onPress={() => setNewMenuOpen(true)}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel={segment === 'jobs' ? 'New job' : 'Add lead'}
+              accessibilityLabel="New lead or job"
             >
               <Ionicons name="add" size={26} color={colors.textInverse} />
             </PressableScale>
@@ -179,456 +241,37 @@ export default function LeadsScreen() {
         }
       />
 
-      {/* Leads | Jobs — the pipeline's two objects, one tab. */}
-      <Segmented options={SEGMENT_OPTIONS} value={segment} onChange={switchSegment} />
+      <PipelineSummaryHero summary={summary} />
 
-      {segment === 'jobs' ? (
-        <JobsPipeline inspections={inspections} leads={leads} />
+      <Segmented options={VIEW_OPTIONS} value={view} onChange={setView} />
+
+      {view === 'board' ? (
+        <BoardView
+          items={items}
+          onOpen={openItem}
+          onRequestMove={setMoveTarget}
+          onDragMove={requestMove}
+          onBook={book.open}
+          onContacted={onContacted}
+          highlightId={highlightId}
+        />
       ) : (
-        <>
-          {/* Always mounted, including at zero. Gating the header on
-              `leads.length > 0` meant the screen's designated cinematic moment
-              was missing in exactly the state a new user opens it in, leaving a
-              grey void under the filter chips. Real zeros in the branded frame
-              are honest AND give the screen a top. */}
-          <PipelineSummary leads={leads} />
-
-          <Segmented options={VIEW_OPTIONS} value={view} onChange={switchView} />
-
-          {view === 'list' ? (
-        <>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipScroll}
-            contentContainerStyle={styles.chipScrollContent}
-          >
-            {STAGES.map((s) => {
-              const active = stage === s.id;
-              const count = s.id === 'all' ? leads.length : stageCounts.get(s.id) ?? 0;
-              return (
-                <PressableScale
-                  key={s.id}
-                  pressedScale={0.96}
-                  style={[styles.chip, active && styles.chipActive]}
-                  onPress={() => setStage(s.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={`${s.label}, ${count} ${count === 1 ? 'lead' : 'leads'}`}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {s.label}
-                  </Text>
-                  <Text style={[styles.chipCount, active && styles.chipCountActive]}>
-                    {count}
-                  </Text>
-                </PressableScale>
-              );
-            })}
-          </ScrollView>
-
-          <ScrollView contentContainerStyle={styles.content}>
-            {filtered.length === 0 ? (
-              <FadeSlideIn style={styles.empty}>
-                <Ionicons name="people-outline" size={28} color={colors.textSubtle} />
-                <Text style={styles.emptyTitle}>
-                  {leads.length === 0 ? 'No leads yet' : 'No leads in this stage'}
-                </Text>
-                <Text style={styles.emptyBody}>
-                  {leads.length === 0
-                    ? 'Leads from door knocks, inspections, or manual entry will appear here.'
-                    : 'Try a different stage filter.'}
-                </Text>
-                {leads.length === 0 && (
-                  // Matches the segment's FAB: the Leads segment adds a LEAD.
-                  <PressableScale
-                    style={styles.emptyBtn}
-                    onPress={() => router.push('/new-lead')}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.emptyBtnText}>Add a lead</Text>
-                  </PressableScale>
-                )}
-              </FadeSlideIn>
-            ) : (
-              <FadeSlideIn style={styles.listGroup}>
-                {filtered.map((lead, i) => (
-                  <View key={lead.id}>
-                    {i > 0 && <View style={styles.rowSeparator} />}
-                    <PressableScale
-                      style={styles.leadRow}
-                      pressedScale={0.98}
-                      onPress={() => router.push(`/lead/${lead.id}` as any)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${lead.customerName}, ${lead.address}, ${
-                        LEAD_STAGE_LABELS[leadStageColumn(lead.stage)]
-                      }${lead.lastStormMatch ? ', storm matched' : ''}`}
-                    >
-                      {recordCardUrl(lead.propertyRecord) ? (
-                        <Image
-                          source={{ uri: recordCardUrl(lead.propertyRecord) }}
-                          style={styles.leadThumb}
-                          contentFit="cover"
-                          transition={120}
-                          accessibilityLabel="Property photo"
-                        />
-                      ) : (
-                        <View
-                          style={[
-                            styles.initialDisc,
-                            { backgroundColor: CHIP_TONES[avatarTone(lead.id)].bg },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.initialText,
-                              { color: CHIP_TONES[avatarTone(lead.id)].fg },
-                            ]}
-                          >
-                            {leadInitial(lead.customerName)}
-                          </Text>
-                        </View>
-                      )}
-                      <View style={styles.leadRowBody}>
-                        <View style={styles.leadNameRow}>
-                          <Text style={styles.leadName} numberOfLines={1}>
-                            {lead.customerName}
-                          </Text>
-                          {lead.lastStormMatch && (
-                            <Pill label="Storm" tone="accent" size="sm" icon="thunderstorm-outline" />
-                          )}
-                          {recordStatusBadge(lead.propertyRecord) && (
-                            <Pill label={recordStatusBadge(lead.propertyRecord)!.label} tone={recordStatusBadge(lead.propertyRecord)!.tone} size="sm" />
-                          )}
-                        </View>
-                        <View style={styles.leadMetaRow}>
-                          <Text style={styles.leadAddress} numberOfLines={1}>
-                            {lead.address}
-                          </Text>
-                          {stageAgeLabel(lead) && (
-                            <>
-                              <Text style={styles.metaDot}>·</Text>
-                              <Text style={styles.metaDays} numberOfLines={1}>
-                                {stageAgeLabel(lead)}
-                              </Text>
-                            </>
-                          )}
-                        </View>
-                      </View>
-                      <Pill
-                        label={LEAD_STAGE_LABELS[leadStageColumn(lead.stage)]}
-                        tone={stagePillTone(leadStageColumn(lead.stage))}
-                        size="sm"
-                      />
-                      <Ionicons name="chevron-forward" size={16} color={colors.textSubtle} />
-                    </PressableScale>
-                  </View>
-                ))}
-              </FadeSlideIn>
-            )}
-          </ScrollView>
-        </>
-      ) : (
-        <PipelineBoard leads={leads} onMove={setStageOnLead} />
+        <ListView
+          items={filtered}
+          total={items.length}
+          filter={filter}
+          onFilter={setFilter}
+          sort={sort}
+          onSort={setSort}
+          query={query}
+          onQuery={setQuery}
+          onOpen={openItem}
+          onRequestMove={setMoveTarget}
+          onBook={book.open}
+          onContacted={onContacted}
+          highlightId={highlightId}
+        />
       )}
-        </>
-      )}
-    </View>
-  );
-}
-
-// -----------------------------------------------------------------------------
-// Book — the follow-up sheet any card can open
-// -----------------------------------------------------------------------------
-
-/**
- * One follow-up flow for every card on this tab. Writes `followUpAt` through
- * the lead store, schedules the local reminder the lead screen schedules,
- * and says what it did. `null` clears.
- */
-function useBookFollowUp() {
-  const setFollowUp = useLeadStore((s) => s.setFollowUp);
-  const toast = useToastStore((s) => s.show);
-  const [target, setTarget] = useState<Lead | null>(null);
-
-  const commit = useCallback(
-    (lead: Lead, when: Date | null) => {
-      setTarget(null);
-      if (!when) {
-        setFollowUp(lead.id, undefined);
-        toast({ tone: 'info', title: 'Follow-up cleared', body: lead.customerName });
-        return;
-      }
-      setFollowUp(lead.id, when.toISOString());
-      scheduleFollowUpReminder({ leadId: lead.id, customerName: lead.customerName, date: when }).catch(
-        () => {},
-      );
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      toast({
-        tone: 'success',
-        title: 'Follow-up set',
-        body: `${formatDateShort(when)} · ${lead.customerName}`,
-      });
-    },
-    [setFollowUp, toast],
-  );
-
-  return { target, open: setTarget, close: () => setTarget(null), commit };
-}
-
-// -----------------------------------------------------------------------------
-// Jobs segment — every inspection as a pipeline card
-// -----------------------------------------------------------------------------
-
-type JobStageFilter = 'all' | InspectionStatus;
-type JobSort = 'newest' | 'followup' | 'score';
-
-const JOB_STAGE_CHIPS: { id: JobStageFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  ...(['in_progress', 'scheduled', 'complete', 'lead'] as InspectionStatus[]).map((id) => ({
-    id,
-    label: JOB_STATUS_META[id].label,
-  })),
-];
-
-const SORT_CYCLE: JobSort[] = ['newest', 'followup', 'score'];
-const SORT_LABEL: Record<JobSort, string> = {
-  newest: 'Newest',
-  followup: 'Follow-up due',
-  score: 'Most damage',
-};
-
-/** Parse-safe epoch — unparseable dates sort to the bottom rather than throwing the order. */
-function epoch(iso: string | undefined): number {
-  const t = iso ? Date.parse(iso) : NaN;
-  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
-}
-
-function JobsPipeline({ inspections, leads }: { inspections: Inspection[]; leads: Lead[] }) {
-  const router = useRouter();
-  const events = useActivityStore((s) => s.events);
-  const setStageOnLead = useLeadStore((s) => s.setStage);
-  const book = useBookFollowUp();
-  const [stage, setStage] = useState<JobStageFilter>('all');
-  const [carrier, setCarrier] = useState<InsuranceCarrier | 'all'>('all');
-  const [withFollowUp, setWithFollowUp] = useState(false);
-  const [sort, setSort] = useState<JobSort>('newest');
-
-  // The lead behind each job, by explicit link only (see `findLinkedLead`).
-  const leadByJob = useMemo(() => {
-    const map = new Map<string, Lead>();
-    for (const ins of inspections) {
-      const lead = findLinkedLead(ins, leads);
-      if (lead) map.set(ins.id, lead);
-    }
-    return map;
-  }, [inspections, leads]);
-
-  // Newest event per job. The feed is stored newest-first, so the first hit wins.
-  const lastActivityByJob = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const evt of events) {
-      if (evt.inspectionId && !map.has(evt.inspectionId)) map.set(evt.inspectionId, evt.createdAt);
-    }
-    return map;
-  }, [events]);
-
-  // Same read path as the job screen: the stored determination when it still
-  // speaks for the current inputs, `honorFreeze: false` because a list
-  // describes jobs as they stand.
-  const scoreByJob = useMemo(() => {
-    const map = new Map<string, DamageScoreResult>();
-    const now = Date.now();
-    for (const ins of inspections) {
-      const { haag } = resolveEngineResult(ins, now, { honorFreeze: false });
-      map.set(ins.id, damageScoreFromEngine(ins, haag));
-    }
-    return map;
-  }, [inspections]);
-
-  // Only carriers that actually appear on a job get a chip (Drift #5).
-  const carriers = useMemo(() => {
-    const seen = new Set<InsuranceCarrier>();
-    for (const ins of inspections) if (ins.carrier) seen.add(ins.carrier);
-    return [...seen];
-  }, [inspections]);
-
-  const stageCounts = useMemo(() => {
-    const map = new Map<InspectionStatus, number>();
-    for (const ins of inspections) map.set(ins.status, (map.get(ins.status) ?? 0) + 1);
-    return map;
-  }, [inspections]);
-
-  const filtered = useMemo(() => {
-    let out = inspections;
-    if (stage !== 'all') out = out.filter((i) => i.status === stage);
-    if (carrier !== 'all') out = out.filter((i) => i.carrier === carrier);
-    if (withFollowUp) out = out.filter((i) => Boolean(leadByJob.get(i.id)?.followUpAt));
-    const sorted = [...out];
-    if (sort === 'newest') {
-      sorted.sort((a, b) => epoch(b.createdAt) - epoch(a.createdAt));
-    } else if (sort === 'followup') {
-      // Soonest follow-up first; jobs with none sink.
-      sorted.sort(
-        (a, b) => epoch(leadByJob.get(a.id)?.followUpAt) - epoch(leadByJob.get(b.id)?.followUpAt),
-      );
-    } else {
-      // 100 = sound, so the LOWEST score is the most damage — the job worth
-      // the most to a carrier conversation. Unassessed roofs sink.
-      const scoreOf = (ins: Inspection) => {
-        const s = scoreByJob.get(ins.id);
-        return s?.assessed ? s.score : Number.POSITIVE_INFINITY;
-      };
-      sorted.sort((a, b) => scoreOf(a) - scoreOf(b));
-    }
-    return sorted;
-  }, [inspections, stage, carrier, withFollowUp, sort, leadByJob, scoreByJob]);
-
-  const filtersActive = stage !== 'all' || carrier !== 'all' || withFollowUp;
-
-  const cycleSort = () => {
-    Haptics.selectionAsync().catch(() => {});
-    setSort((s) => SORT_CYCLE[(SORT_CYCLE.indexOf(s) + 1) % SORT_CYCLE.length]);
-  };
-
-  return (
-    <View style={styles.boardRoot}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipScroll}
-        contentContainerStyle={styles.chipScrollContent}
-      >
-        {JOB_STAGE_CHIPS.map((s) => {
-          const active = stage === s.id;
-          const count = s.id === 'all' ? inspections.length : stageCounts.get(s.id) ?? 0;
-          return (
-            <PressableScale
-              key={s.id}
-              pressedScale={0.96}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => setStage(s.id)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`${s.label}, ${count} ${count === 1 ? 'job' : 'jobs'}`}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
-              <Text style={[styles.chipCount, active && styles.chipCountActive]}>{count}</Text>
-            </PressableScale>
-          );
-        })}
-      </ScrollView>
-
-      {/* Sort + the two secondary filters. Sort is a cycling chip rather
-          than a menu — one thumb, no precision. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipScroll}
-        contentContainerStyle={styles.chipScrollContent}
-      >
-        <PressableScale
-          pressedScale={0.96}
-          style={styles.chip}
-          onPress={cycleSort}
-          accessibilityRole="button"
-          accessibilityLabel={`Sorted by ${SORT_LABEL[sort]}. Tap to change.`}
-        >
-          <Ionicons name="swap-vertical-outline" size={16} color={colors.text} />
-          <Text style={styles.chipText}>{SORT_LABEL[sort]}</Text>
-        </PressableScale>
-        <PressableScale
-          pressedScale={0.96}
-          style={[styles.chip, withFollowUp && styles.chipActive]}
-          onPress={() => setWithFollowUp((v) => !v)}
-          accessibilityRole="button"
-          accessibilityState={{ selected: withFollowUp }}
-          accessibilityLabel="Only jobs with a follow-up set"
-        >
-          <Ionicons
-            name="alarm-outline"
-            size={16}
-            color={withFollowUp ? colors.textInverse : colors.text}
-          />
-          <Text style={[styles.chipText, withFollowUp && styles.chipTextActive]}>Follow-up set</Text>
-        </PressableScale>
-        {carriers.map((c) => {
-          const active = carrier === c;
-          return (
-            <PressableScale
-              key={c}
-              pressedScale={0.96}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => setCarrier(active ? 'all' : c)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`Carrier ${INSURANCE_CARRIER_LABELS[c]}`}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {INSURANCE_CARRIER_LABELS[c]}
-              </Text>
-            </PressableScale>
-          );
-        })}
-      </ScrollView>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        {filtered.length === 0 ? (
-          <FadeSlideIn style={styles.empty}>
-            <Ionicons name="briefcase-outline" size={28} color={colors.textSubtle} />
-            <Text style={styles.emptyTitle}>
-              {inspections.length === 0 ? 'No jobs yet' : 'No jobs match these filters'}
-            </Text>
-            <Text style={styles.emptyBody}>
-              {inspections.length === 0
-                ? 'A job is created by New Job or by a Quick Inspection. Each one shows up here as a pipeline card.'
-                : 'Clear a filter to see the rest.'}
-            </Text>
-            {inspections.length === 0 ? (
-              <PressableScale
-                style={styles.emptyBtn}
-                onPress={() => router.push('/new-job')}
-                accessibilityRole="button"
-              >
-                <Text style={styles.emptyBtnText}>Start a new job</Text>
-              </PressableScale>
-            ) : filtersActive ? (
-              <PressableScale
-                style={styles.emptyBtn}
-                onPress={() => {
-                  setStage('all');
-                  setCarrier('all');
-                  setWithFollowUp(false);
-                }}
-                accessibilityRole="button"
-              >
-                <Text style={styles.emptyBtnText}>Clear filters</Text>
-              </PressableScale>
-            ) : null}
-          </FadeSlideIn>
-        ) : (
-          filtered.map((ins, i) => {
-            const lead = leadByJob.get(ins.id);
-            return (
-              <FadeSlideIn key={ins.id} index={Math.min(i, 6)}>
-                <JobPipelineCard
-                  inspection={ins}
-                  lead={lead}
-                  lastActivityAt={lastActivityByJob.get(ins.id)}
-                  score={scoreByJob.get(ins.id)}
-                  onOpen={() => router.push(`/job/${ins.id}` as any)}
-                  onBook={lead ? () => book.open(lead) : undefined}
-                  onContacted={
-                    lead && lead.stage === 'new'
-                      ? () => setStageOnLead(lead.id, 'contacted')
-                      : undefined
-                  }
-                />
-              </FadeSlideIn>
-            );
-          })
-        )}
-      </ScrollView>
 
       <FollowUpSheet
         visible={book.target !== null}
@@ -639,123 +282,71 @@ function JobsPipeline({ inspections, leads }: { inspections: Inspection[]; leads
         onPick={(when) => book.target && book.commit(book.target, when)}
         onClose={book.close}
       />
+
+      <MoveSheet item={moveTarget} onPick={requestMove} onClose={() => setMoveTarget(null)} />
+
+      <ConfirmSheet
+        visible={confirmLost !== null}
+        title="Mark this lost?"
+        body={confirmLost ? `${confirmLost.item.customerName} moves to Lost. You can bring it back any time.` : undefined}
+        confirmLabel="Mark lost"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={() => confirmLost && applyMove(confirmLost.item, confirmLost.stage)}
+        onClose={() => setConfirmLost(null)}
+      />
+
+      <NewMenu visible={newMenuOpen} onClose={() => setNewMenuOpen(false)} />
     </View>
   );
 }
 
-function leadInitial(name: string): string {
-  const c = name.trim().charAt(0);
-  return c ? c.toUpperCase() : '?';
-}
+// -----------------------------------------------------------------------------
+// Follow-up sheet — one flow for every card
+// -----------------------------------------------------------------------------
 
-/** Rotation of tile hues for the avatar disc — deterministic, not random. */
-const AVATAR_TONES: ChipTone[] = ['blue', 'green', 'orange', 'purple'];
+function useBookFollowUp() {
+  const setFollowUp = useLeadStore((s) => s.setFollowUp);
+  const toast = useToastStore((s) => s.show);
+  const [target, setTarget] = useState<PipelineItem | null>(null);
 
-/**
- * Picks one of the four tile tones from the lead's id, so every disc has a
- * stable colour across renders/sessions without a `color` field in the model.
- * A simple string hash, not `Math.random()` — the same lead is always the
- * same colour.
- */
-function avatarTone(id: string): ChipTone {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-  }
-  return AVATAR_TONES[hash % AVATAR_TONES.length];
-}
-
-/** Stage → Pill tone, grouped the same way `stageAccent` groups colours. */
-function stagePillTone(stage: LeadStage): PillTone {
-  switch (stage) {
-    case 'inspection_scheduled':
-    case 'inspected':
-      return 'info';
-    case 'proposal_sent':
-    case 'estimate_sent':
-    case 'invoiced':
-      return 'warn';
-    case 'install_scheduled':
-    case 'in_progress':
-      return 'accent';
-    case 'signed':
-    case 'completed':
-    case 'paid':
-      return 'success';
-    case 'lost':
-      return 'danger';
-    case 'new':
-    case 'contacted':
-    default:
-      return 'neutral';
-  }
-}
-
-/** Stage → ProgressBar tone, for the pipeline board's per-column strip. */
-function stageProgressTone(stage: LeadStage): ProgressTone {
-  switch (stage) {
-    case 'inspection_scheduled':
-    case 'inspected':
-      return 'brand';
-    case 'proposal_sent':
-    case 'estimate_sent':
-    case 'invoiced':
-      return 'warn';
-    case 'install_scheduled':
-    case 'in_progress':
-      return 'accent';
-    case 'signed':
-    case 'completed':
-    case 'paid':
-      return 'success';
-    case 'lost':
-      return 'danger';
-    case 'new':
-    case 'contacted':
-    default:
-      return 'quiet';
-  }
-}
-
-/** "$128.4K" / "$950" — compact, tabular-friendly currency for tight rows. */
-function formatShort(amount: number): string {
-  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K`;
-  return String(Math.round(amount));
-}
-
-/** "4d in stage" / "New today" — null when the stage-change date is unknown. */
-function stageAgeLabel(lead: Lead): string | null {
-  const days = daysInStage(lead);
-  if (days === null) return null;
-  return days === 0 ? 'New today' : `${days}d in stage`;
-}
-
-/**
- * Compact pipeline header — the screen's one cinematic moment. Real
- * aggregate counts only: pipeline value is entirely omitted (not shown as
- * $0) when no lead in the pipeline carries a `value` (Drift #5).
- */
-function PipelineSummary({ leads }: { leads: Lead[] }) {
-  const active = useMemo(
-    () => leads.filter((l) => leadStageColumn(l.stage) !== 'lost'),
-    [leads],
+  const commit = useCallback(
+    (item: PipelineItem, when: Date | null) => {
+      setTarget(null);
+      if (!item.leadId) return;
+      if (!when) {
+        setFollowUp(item.leadId, undefined);
+        toast({ tone: 'info', title: 'Follow-up cleared', body: item.customerName });
+        return;
+      }
+      setFollowUp(item.leadId, when.toISOString());
+      scheduleFollowUpReminder({ leadId: item.leadId, customerName: item.customerName, date: when }).catch(
+        () => {},
+      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      toast({
+        tone: 'success',
+        title: 'Follow-up set',
+        body: `${formatDateShort(when)} · ${item.customerName}`,
+      });
+    },
+    [setFollowUp, toast],
   );
-  const totalValue = useMemo(
-    () => active.reduce((sum, l) => sum + (l.value ?? 0), 0),
-    [active],
-  );
-  const dueFollowUps = useMemo(() => {
-    const now = Date.now();
-    return leads.filter((l) => l.followUpAt && new Date(l.followUpAt).getTime() <= now).length;
-  }, [leads]);
+
+  return { target, open: setTarget, close: () => setTarget(null), commit };
+}
+
+// -----------------------------------------------------------------------------
+// Summary hero
+// -----------------------------------------------------------------------------
+
+function PipelineSummaryHero({ summary }: { summary: ReturnType<typeof summarizePipeline> }) {
+  const groupLine = PIPELINE_GROUPS.filter((g) => g !== 'lost')
+    .map((g) => `${summary.counts[g]} ${PIPELINE_GROUP_LABELS[g]}`)
+    .join(' · ');
 
   return (
     <FadeSlideIn style={styles.summaryWrap}>
-      {/* The screen's one cinematic moment, in the onboarding's language:
-          the brand sky (`gradients.stormNight`) with the same drifting
-          `Aurora` the welcome flow uses, rather than another white cell on
-          grey. One per screen — the list below stays light and quiet. */}
       <View style={styles.summaryHero}>
         <LinearGradient
           colors={gradients.stormNight}
@@ -765,31 +356,31 @@ function PipelineSummary({ leads }: { leads: Lead[] }) {
         />
         <Aurora transparent />
         <View style={styles.summaryRow}>
-          <SummaryStat
-            icon="people-outline"
-            tone="blue"
-            value={String(active.length)}
-            label="Active leads"
-          />
+          <SummaryStat icon="layers-outline" tone="blue" value={String(summary.activeCount)} label="Active" />
           <View style={styles.summaryDivider} />
           <SummaryStat
-            icon="alarm-outline"
-            tone="orange"
-            value={String(dueFollowUps)}
-            label="Follow-ups due"
+            icon="trophy-outline"
+            tone="green"
+            value={String(summary.signedThisMonth.count)}
+            label="Signed this month"
           />
-          {totalValue > 0 && (
+          {summary.pipelineValue > 0 && (
             <>
               <View style={styles.summaryDivider} />
               <SummaryStat
                 icon="cash-outline"
-                tone="green"
-                value={`$${formatShort(totalValue)}`}
+                tone="orange"
+                value={`$${formatMoneyShort(summary.pipelineValue).replace('$', '')}`}
                 label="Pipeline value"
               />
             </>
           )}
         </View>
+        {groupLine.length > 0 && (
+          <Text style={styles.summaryGroupLine} numberOfLines={1}>
+            {groupLine}
+          </Text>
+        )}
       </View>
     </FadeSlideIn>
   );
@@ -822,16 +413,702 @@ function SummaryStat({
 }
 
 // -----------------------------------------------------------------------------
-// iOS-17 segmented control — fillQuiet track, white thumb sliding on the
-// snappy spring. The wrapper keeps the ≥56pt glove target; the track itself
-// is 40pt inside vertical padding, and segments extend the hit area with
-// hitSlop so the effective target never shrinks.
+// List view
 // -----------------------------------------------------------------------------
 
-/** iOS inset between the track edge and the thumb. */
+function ListView({
+  items,
+  total,
+  filter,
+  onFilter,
+  sort,
+  onSort,
+  query,
+  onQuery,
+  onOpen,
+  onRequestMove,
+  onBook,
+  onContacted,
+  highlightId,
+}: {
+  items: PipelineItem[];
+  total: number;
+  filter: PipelineFilter;
+  onFilter: (f: PipelineFilter) => void;
+  sort: PipelineSort;
+  onSort: (s: PipelineSort) => void;
+  query: string;
+  onQuery: (q: string) => void;
+  onOpen: (item: PipelineItem) => void;
+  onRequestMove: (item: PipelineItem) => void;
+  onBook: (item: PipelineItem) => void;
+  onContacted: (item: PipelineItem) => void;
+  highlightId: string | null;
+}) {
+  const router = useRouter();
+
+  const cycleSort = () => {
+    Haptics.selectionAsync().catch(() => {});
+    onSort(SORT_CYCLE[(SORT_CYCLE.indexOf(sort) + 1) % SORT_CYCLE.length]);
+  };
+
+  return (
+    <View style={styles.boardRoot}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
+        contentContainerStyle={styles.chipScrollContent}
+      >
+        {FILTER_CHIPS.map((f) => {
+          const active = filter === f.id;
+          return (
+            <PressableScale
+              key={f.id}
+              pressedScale={0.96}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => onFilter(f.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={f.label}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+            </PressableScale>
+          );
+        })}
+      </ScrollView>
+
+      <View style={styles.searchRow}>
+        <View style={styles.search}>
+          <Ionicons name="search" size={18} color={colors.textSubtle} />
+          <TextInput
+            value={query}
+            onChangeText={onQuery}
+            placeholder="Name or address"
+            placeholderTextColor={colors.textSubtle}
+            style={styles.searchInput}
+            autoCorrect={false}
+          />
+        </View>
+        <PressableScale
+          pressedScale={0.96}
+          style={styles.sortChip}
+          onPress={cycleSort}
+          accessibilityRole="button"
+          accessibilityLabel={`Sorted by ${PIPELINE_SORT_LABELS[sort]}. Tap to change.`}
+        >
+          <Ionicons name="swap-vertical-outline" size={16} color={colors.text} />
+          <Text style={styles.chipText}>{PIPELINE_SORT_LABELS[sort]}</Text>
+        </PressableScale>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content}>
+        {items.length === 0 ? (
+          <FadeSlideIn style={styles.empty}>
+            <Ionicons name="people-outline" size={28} color={colors.textSubtle} />
+            <Text style={styles.emptyTitle}>{total === 0 ? 'Nothing in the pipeline yet' : 'Nothing matches'}</Text>
+            <Text style={styles.emptyBody}>
+              {total === 0
+                ? 'Leads from door knocks, storms, or manual entry — and jobs from New Job — will appear here.'
+                : 'Try a different filter or clear the search.'}
+            </Text>
+            {total === 0 && (
+              <PressableScale style={styles.emptyBtn} onPress={() => router.push('/new-lead')} accessibilityRole="button">
+                <Text style={styles.emptyBtnText}>Add a lead</Text>
+              </PressableScale>
+            )}
+          </FadeSlideIn>
+        ) : (
+          <FadeSlideIn style={styles.listGap}>
+            {items.map((item, i) => (
+              <PipelineCard
+                key={item.id}
+                item={item}
+                index={i}
+                onOpen={() => onOpen(item)}
+                onRequestMove={() => onRequestMove(item)}
+                onBook={item.leadId ? () => onBook(item) : undefined}
+                onContacted={() => onContacted(item)}
+                highlighted={highlightId === item.id}
+              />
+            ))}
+          </FadeSlideIn>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Board view — a column per stage, swipe or chip to move between them
+// -----------------------------------------------------------------------------
+
+function BoardView({
+  items,
+  onOpen,
+  onRequestMove,
+  onDragMove,
+  onBook,
+  onContacted,
+  highlightId,
+}: {
+  items: PipelineItem[];
+  onOpen: (item: PipelineItem) => void;
+  onRequestMove: (item: PipelineItem) => void;
+  onDragMove: (item: PipelineItem, stage: LeadStage) => void;
+  onBook: (item: PipelineItem) => void;
+  onContacted: (item: PipelineItem) => void;
+  highlightId: string | null;
+}) {
+  const { width } = useWindowDimensions();
+  const pagerRef = useRef<ScrollView>(null);
+  const chipsRef = useRef<ScrollView>(null);
+  const chipOffsets = useRef<(number | undefined)[]>([]);
+  const [columnIndex, setColumnIndex] = useState(0);
+
+  const byColumn = useMemo(() => {
+    const map = new Map<LeadStage, PipelineItem[]>();
+    for (const c of BOARD_COLUMNS) map.set(c, []);
+    for (const it of items) map.get(leadStageColumn(it.stage))?.push(it);
+    return map;
+  }, [items]);
+
+  const summaries = useMemo(() => columnSummary(items), [items]);
+
+  // Jump to the highlighted item's column, if any.
+  useEffect(() => {
+    if (!highlightId) return;
+    const hit = items.find((it) => it.id === highlightId);
+    if (!hit) return;
+    const idx = BOARD_COLUMNS.indexOf(leadStageColumn(hit.stage));
+    if (idx >= 0) {
+      setColumnIndex(idx);
+      pagerRef.current?.scrollTo({ x: idx * width, animated: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId]);
+
+  const goToColumn = useCallback(
+    (i: number) => {
+      if (i < 0 || i >= BOARD_COLUMNS.length) return;
+      const adjacent = Math.abs(i - columnIndex) === 1;
+      setColumnIndex(i);
+      pagerRef.current?.scrollTo({ x: i * width, animated: adjacent });
+    },
+    [width, columnIndex],
+  );
+
+  useEffect(() => {
+    const x = chipOffsets.current[columnIndex];
+    if (x === undefined) return;
+    chipsRef.current?.scrollTo({ x: Math.max(0, x - spacing.xl), animated: true });
+  }, [columnIndex]);
+
+  useEffect(() => {
+    pagerRef.current?.scrollTo({ x: columnIndex * width, animated: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width]);
+
+  const onPagerSettled = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (width <= 0) return;
+    const next = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (next !== columnIndex && next >= 0 && next < BOARD_COLUMNS.length) {
+      setColumnIndex(next);
+      Haptics.selectionAsync().catch(() => {});
+    }
+  };
+
+  return (
+    <View style={styles.boardRoot}>
+      <ScrollView
+        ref={chipsRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.stageStrip}
+        contentContainerStyle={styles.stageStripContent}
+      >
+        {BOARD_COLUMNS.map((col, i) => {
+          const active = i === columnIndex;
+          const muted = col === 'lost';
+          const s = summaries.get(col)!;
+          return (
+            <PressableScale
+              key={col}
+              pressedScale={0.96}
+              onLayout={(e) => {
+                chipOffsets.current[i] = e.nativeEvent.layout.x;
+              }}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => goToColumn(i)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`${stageLabel(col)}, ${s.count} ${s.count === 1 ? 'item' : 'items'}`}
+            >
+              <View style={[styles.stageChipDot, { backgroundColor: stageAccent(col) }]} />
+              <Text
+                numberOfLines={1}
+                style={[styles.chipText, muted && !active && styles.chipTextMuted, active && styles.chipTextActive]}
+              >
+                {stageLabel(col)}
+              </Text>
+              <Text style={[styles.chipCount, active && styles.chipCountActive]}>{s.count}</Text>
+            </PressableScale>
+          );
+        })}
+      </ScrollView>
+
+      <ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={onPagerSettled}
+        style={styles.pager}
+      >
+        {BOARD_COLUMNS.map((col, i) => (
+          <View key={col} style={{ width }}>
+            {Math.abs(i - columnIndex) <= 1 ? (
+              <ColumnPage
+                stage={col}
+                columnIndex={i}
+                columnItems={byColumn.get(col) ?? EMPTY_COLUMN}
+                summary={summaries.get(col)!}
+                onOpen={onOpen}
+                onRequestMove={onRequestMove}
+                onDragMove={onDragMove}
+                onBook={onBook}
+                onContacted={onContacted}
+                highlightId={highlightId}
+              />
+            ) : null}
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function ColumnPage({
+  stage,
+  columnIndex,
+  columnItems,
+  summary,
+  onOpen,
+  onRequestMove,
+  onDragMove,
+  onBook,
+  onContacted,
+  highlightId,
+}: {
+  stage: LeadStage;
+  columnIndex: number;
+  columnItems: PipelineItem[];
+  summary: { count: number; total: number };
+  onOpen: (item: PipelineItem) => void;
+  onRequestMove: (item: PipelineItem) => void;
+  onDragMove: (item: PipelineItem, stage: LeadStage) => void;
+  onBook: (item: PipelineItem) => void;
+  onContacted: (item: PipelineItem) => void;
+  highlightId: string | null;
+}) {
+  const router = useRouter();
+
+  const enter = useSharedValue(0);
+  useEffect(() => {
+    enter.value = withSpring(1, motion.snappy);
+  }, [enter]);
+  const enterStyle = useAnimatedStyle(() => ({
+    opacity: enter.value,
+    transform: [{ translateX: (1 - enter.value) * spacing.lg }],
+  }));
+
+  const commitDrag = useCallback(
+    (item: PipelineItem, dir: 1 | -1) => {
+      const nextIdx = columnIndex + dir;
+      if (nextIdx < 0 || nextIdx >= BOARD_COLUMNS.length) return;
+      onDragMove(item, BOARD_COLUMNS[nextIdx]);
+    },
+    [columnIndex, onDragMove],
+  );
+
+  if (columnItems.length === 0) {
+    return (
+      <Animated.View style={[styles.columnEmpty, enterStyle]}>
+        <Ionicons name="people-outline" size={28} color={colors.textSubtle} />
+        <Text style={styles.columnEmptyText}>Nothing in {stageLabel(stage)}.</Text>
+        <Text style={styles.columnEmptyHint}>Swipe for the next stage.</Text>
+        <PressableScale style={styles.emptyBtn} onPress={() => router.push('/new-lead')} accessibilityRole="button">
+          <Text style={styles.emptyBtnText}>Add a lead</Text>
+        </PressableScale>
+      </Animated.View>
+    );
+  }
+
+  return (
+    <Animated.View style={[styles.columnFill, enterStyle]}>
+      <View style={styles.stageSummary}>
+        <View style={styles.stageSummaryRow}>
+          <Text style={styles.stageSummaryCount}>
+            {summary.count} {summary.count === 1 ? 'item' : 'items'}
+          </Text>
+          {summary.total > 0 && <Text style={styles.stageSummaryValue}>{formatMoneyShort(summary.total)}</Text>}
+        </View>
+      </View>
+      <ScrollView style={styles.columnScroll} contentContainerStyle={styles.columnContent}>
+        {columnItems.map((item, i) => (
+          <FadeSlideIn key={item.id} index={Math.min(i, 6)}>
+            <BoardCard
+              item={item}
+              accent={stageAccent(stage)}
+              onOpen={() => onOpen(item)}
+              onRequestMove={() => onRequestMove(item)}
+              onDragCommit={(dir) => commitDrag(item, dir)}
+              onBook={item.leadId ? () => onBook(item) : undefined}
+              onContacted={() => onContacted(item)}
+              highlighted={highlightId === item.id}
+            />
+          </FadeSlideIn>
+        ))}
+      </ScrollView>
+    </Animated.View>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Board card — draggable between adjacent columns, or the "Move →" button
+// -----------------------------------------------------------------------------
+
+function BoardCard({
+  item,
+  accent,
+  onOpen,
+  onRequestMove,
+  onDragCommit,
+  onBook,
+  onContacted,
+  highlighted,
+}: {
+  item: PipelineItem;
+  accent: string;
+  onOpen: () => void;
+  onRequestMove: () => void;
+  onDragCommit: (dir: 1 | -1) => void;
+  onBook?: () => void;
+  onContacted: () => void;
+  highlighted: boolean;
+}) {
+  const reducedMotion = useReducedMotion();
+  const dragX = useSharedValue(0);
+  const lift = useSharedValue(0);
+
+  const fireHaptic = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  }, []);
+
+  const pan = Gesture.Pan()
+    .enabled(!reducedMotion)
+    .activateAfterLongPress(350)
+    .onStart(() => {
+      'worklet';
+      lift.value = withSpring(1, motion.snappy);
+      runOnJS(fireHaptic)();
+    })
+    .onUpdate((e) => {
+      'worklet';
+      dragX.value = e.translationX;
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (e.translationX > DRAG_COMMIT_PX) runOnJS(onDragCommit)(1);
+      else if (e.translationX < -DRAG_COMMIT_PX) runOnJS(onDragCommit)(-1);
+      dragX.value = withSpring(0, motion.snappy);
+      lift.value = withSpring(0, motion.snappy);
+    });
+
+  const dragStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dragX.value }, { scale: 1 + lift.value * 0.03 }],
+    zIndex: lift.value > 0.05 ? 10 : 0,
+  }));
+
+  const card = (
+    <Animated.View style={dragStyle}>
+      <PipelineCard
+        item={item}
+        variant="board"
+        accent={accent}
+        onOpen={onOpen}
+        onRequestMove={onRequestMove}
+        onBook={onBook}
+        onContacted={onContacted}
+        highlighted={highlighted}
+      />
+    </Animated.View>
+  );
+
+  if (reducedMotion) return card;
+  return <GestureDetector gesture={pan}>{card}</GestureDetector>;
+}
+
+// -----------------------------------------------------------------------------
+// The card — one design for board and list
+// -----------------------------------------------------------------------------
+
+function PipelineCard({
+  item,
+  index,
+  variant = 'list',
+  accent,
+  onOpen,
+  onRequestMove,
+  onBook,
+  onContacted,
+  highlighted,
+}: {
+  item: PipelineItem;
+  index?: number;
+  variant?: 'board' | 'list';
+  accent?: string;
+  onOpen: () => void;
+  onRequestMove: () => void;
+  onBook?: () => void;
+  onContacted: () => void;
+  highlighted?: boolean;
+}) {
+  const glow = useSharedValue(0);
+  useEffect(() => {
+    if (highlighted) {
+      glow.value = withTiming(1, { duration: 200 });
+      const t = setTimeout(() => {
+        glow.value = withTiming(0, { duration: 400 });
+      }, 1400);
+      return () => clearTimeout(t);
+    }
+    glow.value = withTiming(0, { duration: 200 });
+  }, [highlighted, glow]);
+  const glowStyle = useAnimatedStyle(() => ({
+    borderColor: glow.value > 0.5 ? colors.brand : colors.hairline,
+    borderWidth: glow.value > 0.5 ? 2 : StyleSheet.hairlineWidth,
+  }));
+
+  const tone = stageAgeTone(item);
+  const badge = recordStatusBadge(item.propertyRecord);
+
+  return (
+    <Animated.View style={[styles.card, glowStyle]}>
+      {variant === 'board' && accent ? <View style={[styles.cardAccent, { backgroundColor: accent }]} /> : null}
+      <PressableScale
+        style={styles.cardBody}
+        pressedScale={0.98}
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.customerName}, ${item.address}`}
+      >
+        <View style={styles.cardTopRow}>
+          {item.coverUri ? (
+            <Image source={{ uri: item.coverUri }} style={styles.cardThumb} contentFit="cover" transition={120} />
+          ) : (
+            <View style={[styles.initialDisc, { backgroundColor: CHIP_TONES[avatarTone(item.id)].bg }]}>
+              <Text style={[styles.initialText, { color: CHIP_TONES[avatarTone(item.id)].fg }]}>
+                {item.customerName.trim().charAt(0).toUpperCase() || '?'}
+              </Text>
+            </View>
+          )}
+          <View style={styles.cardMain}>
+            <View style={styles.cardNameRow}>
+              <Text style={styles.cardName} numberOfLines={1}>
+                {item.customerName}
+              </Text>
+              {item.amount != null && <Text style={styles.cardAmount}>{formatMoneyShort(item.amount)}</Text>}
+            </View>
+            <Text style={styles.cardAddress} numberOfLines={1}>
+              {item.address || 'Address pending'}
+            </Text>
+            <Text style={styles.cardNextAction} numberOfLines={1}>
+              {item.nextAction}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.cardBadgeRow}>
+          {item.daysInStage != null && (
+            <Pill
+              label={item.daysInStage === 0 ? 'New today' : `${item.daysInStage}d in stage`}
+              tone={tone === 'red' ? 'danger' : tone === 'amber' ? 'warn' : 'neutral'}
+              size="sm"
+            />
+          )}
+          {item.tasks.total > 0 && (
+            <View style={styles.metaChip}>
+              <Ionicons name="checkbox-outline" size={13} color={colors.textMuted} />
+              <Text style={styles.metaChipText}>
+                {item.tasks.done}/{item.tasks.total}
+              </Text>
+            </View>
+          )}
+          {item.photoCount > 0 && (
+            <View style={styles.metaChip}>
+              <Ionicons name="camera-outline" size={13} color={colors.textMuted} />
+              <Text style={styles.metaChipText}>{item.photoCount}</Text>
+            </View>
+          )}
+          {item.storm && <Pill label="Storm" tone="accent" size="sm" icon="thunderstorm-outline" />}
+          {badge && <Pill label={badge.label} tone={badge.tone} size="sm" />}
+        </View>
+
+        <QuickActions
+          name={item.customerName}
+          phone={item.phone}
+          email={item.email}
+          address={item.address}
+          coords={{ lat: item.lat, lng: item.lng }}
+          onBook={onBook}
+          onContacted={onContacted}
+          style={styles.cardActions}
+        />
+
+        <PressableScale
+          pressedScale={0.96}
+          style={styles.moveBtn}
+          onPress={onRequestMove}
+          accessibilityRole="button"
+          accessibilityLabel={`Move ${item.customerName} to another stage`}
+        >
+          <Text style={styles.moveBtnText}>Move</Text>
+          <Ionicons name="arrow-forward" size={16} color={colors.text} />
+        </PressableScale>
+      </PressableScale>
+    </Animated.View>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Move sheet — every board column, reachable with one thumb
+// -----------------------------------------------------------------------------
+
+function MoveSheet({
+  item,
+  onPick,
+  onClose,
+}: {
+  item: PipelineItem | null;
+  onPick: (item: PipelineItem, stage: LeadStage) => void;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal visible={item !== null} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheetRoot}>
+        <PressableScale
+          pressedScale={1}
+          style={styles.sheetBackdrop}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>Move to…</Text>
+          {item && (
+            <Text style={styles.sheetSubtitle} numberOfLines={1}>
+              {item.customerName}
+            </Text>
+          )}
+          <ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetScrollContent}>
+            {BOARD_COLUMNS.map((col) => {
+              const current = item !== null && leadStageColumn(item.stage) === col;
+              const muted = col === 'lost';
+              return (
+                <PressableScale
+                  key={col}
+                  pressedScale={current ? 1 : 0.97}
+                  disabled={current}
+                  style={[styles.sheetRow, current && styles.sheetRowCurrent]}
+                  onPress={() => item && onPick(item, col)}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: current, selected: current }}
+                  accessibilityLabel={current ? `${stageLabel(col)}, current stage` : `Move to ${stageLabel(col)}`}
+                >
+                  <View style={[styles.sheetRowDot, { backgroundColor: stageAccent(col) }]} />
+                  <Text
+                    style={[styles.sheetRowText, muted && styles.sheetRowTextMuted, current && styles.sheetRowTextCurrent]}
+                    numberOfLines={1}
+                  >
+                    {stageLabel(col)}
+                  </Text>
+                  {current && <Text style={styles.sheetRowTag}>Current</Text>}
+                </PressableScale>
+              );
+            })}
+          </ScrollView>
+          <PressableScale style={styles.sheetCancel} onPress={onClose} accessibilityRole="button" accessibilityLabel="Cancel">
+            <Text style={styles.sheetCancelText}>Cancel</Text>
+          </PressableScale>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// New lead / New job menu
+// -----------------------------------------------------------------------------
+
+function NewMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  const go = (href: '/new-lead' | '/new-job') => {
+    onClose();
+    router.push(href);
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheetRoot}>
+        <PressableScale
+          pressedScale={1}
+          style={styles.sheetBackdrop}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>Add to the pipeline</Text>
+          <View style={styles.newMenuOptions}>
+            <PressableScale style={styles.newMenuOption} onPress={() => go('/new-lead')} accessibilityRole="button">
+              <IconChip name="person-add-outline" tone="blue" size="md" />
+              <View style={styles.newMenuOptionBody}>
+                <Text style={styles.newMenuOptionTitle}>New lead</Text>
+                <Text style={styles.newMenuOptionSub}>A prospect to contact and follow up on.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
+            </PressableScale>
+            <PressableScale style={styles.newMenuOption} onPress={() => go('/new-job')} accessibilityRole="button">
+              <IconChip name="briefcase-outline" tone="green" size="md" />
+              <View style={styles.newMenuOptionBody}>
+                <Text style={styles.newMenuOptionTitle}>New job</Text>
+                <Text style={styles.newMenuOptionSub}>Start an inspection right away.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textSubtle} />
+            </PressableScale>
+          </View>
+          <PressableScale style={styles.sheetCancel} onPress={onClose} accessibilityRole="button" accessibilityLabel="Cancel">
+            <Text style={styles.sheetCancelText}>Cancel</Text>
+          </PressableScale>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// iOS-17 segmented control (Board | List)
+// -----------------------------------------------------------------------------
+
 const TRACK_INSET = 2;
 
-/** Generic over the option id so Leads|Jobs and List|Board share one control. */
 function Segmented<T extends string>({
   options,
   value,
@@ -854,17 +1131,16 @@ function Segmented<T extends string>({
     transform: [{ translateX: x.value }],
   }));
 
+  const change = (v: T) => {
+    if (v === value) return;
+    Haptics.selectionAsync().catch(() => {});
+    onChange(v);
+  };
+
   return (
     <View style={styles.segmentedWrap}>
-      <View
-        style={styles.segmentedTrack}
-        onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-      >
-        {trackWidth > 0 && (
-          <Animated.View
-            style={[styles.segmentedThumb, { width: segmentWidth }, thumbStyle]}
-          />
-        )}
+      <View style={styles.segmentedTrack} onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}>
+        {trackWidth > 0 && <Animated.View style={[styles.segmentedThumb, { width: segmentWidth }, thumbStyle]} />}
         {options.map((s) => {
           const active = value === s.id;
           return (
@@ -872,14 +1148,12 @@ function Segmented<T extends string>({
               key={s.id}
               style={styles.segment}
               hitSlop={{ top: 10, bottom: 10 }}
-              onPress={() => onChange(s.id)}
+              onPress={() => change(s.id)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
               accessibilityLabel={`${s.label} view`}
             >
-              <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-                {s.label}
-              </Text>
+              <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{s.label}</Text>
             </Pressable>
           );
         })}
@@ -889,439 +1163,18 @@ function Segmented<T extends string>({
 }
 
 // -----------------------------------------------------------------------------
-// Pipeline board — glove-first column picker
-//
-// The Kanban PRD's desktop board (drag-to-change-status, hover states, 12px
-// type) is unusable in gloves on a roof, so this is the PRD's own mobile
-// section: ONE column on screen at a time, a chip strip to pick the column,
-// horizontal swipe between columns, and an explicit "Move to…" sheet in place
-// of drag-and-drop. No precision gestures anywhere.
+// Small helpers
 // -----------------------------------------------------------------------------
 
-function PipelineBoard({
-  leads,
-  onMove,
-}: {
-  leads: Lead[];
-  onMove: (id: string, stage: LeadStage) => void;
-}) {
-  const router = useRouter();
-  const toast = useToastStore((s) => s.show);
-  const { width } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+const AVATAR_TONES: ChipTone[] = ['blue', 'green', 'orange', 'purple'];
 
-  const pagerRef = useRef<ScrollView>(null);
-  const chipsRef = useRef<ScrollView>(null);
-  const chipOffsets = useRef<(number | undefined)[]>([]);
-  const [columnIndex, setColumnIndex] = useState(0);
-  const [moveTarget, setMoveTarget] = useState<Lead | null>(null);
-  const book = useBookFollowUp();
-
-  /**
-   * Leads bucketed by board column. `leadStageColumn` folds the legacy
-   * `proposal_sent` spelling into `estimate_sent` so no lead falls off the
-   * board after the stage-set was extended.
-   */
-  const byColumn = useMemo(() => {
-    const map = new Map<LeadStage, Lead[]>();
-    for (const c of BOARD_COLUMNS) map.set(c, []);
-    // `?.push` drops any lead whose persisted stage is not a board column —
-    // better a missing card than a card filed under a stage it isn't in.
-    for (const l of leads) map.get(leadStageColumn(l.stage))?.push(l);
-    // Stalest first: the lead that has sat longest is the one that needs a
-    // call today. Unparseable dates sink to the bottom.
-    map.forEach((bucket) => {
-      bucket.sort((a, b) => (daysInStage(b) ?? -1) - (daysInStage(a) ?? -1));
-    });
-    return map;
-  }, [leads]);
-
-  const goToColumn = useCallback(
-    (i: number) => {
-      if (i < 0 || i >= BOARD_COLUMNS.length) return;
-      // Adjacent taps animate natively (the neighbour page is mounted); far
-      // jumps land instantly and let the fresh column's slide+fade entrance
-      // carry the transition — animating through unmounted pages would flash
-      // blank. Swipes still animate natively.
-      const adjacent = Math.abs(i - columnIndex) === 1;
-      setColumnIndex(i);
-      pagerRef.current?.scrollTo({ x: i * width, animated: adjacent });
-    },
-    [width, columnIndex],
-  );
-
-  // Keep the active chip on screen as the column changes (tap or swipe).
-  useEffect(() => {
-    const x = chipOffsets.current[columnIndex];
-    if (x === undefined) return;
-    chipsRef.current?.scrollTo({ x: Math.max(0, x - spacing.xl), animated: true });
-  }, [columnIndex]);
-
-  // Rotation / split-view: re-anchor the pager on the current column.
-  useEffect(() => {
-    pagerRef.current?.scrollTo({ x: columnIndex * width, animated: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width]);
-
-  const onPagerSettled = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (width <= 0) return;
-    const next = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (next !== columnIndex && next >= 0 && next < BOARD_COLUMNS.length) {
-      setColumnIndex(next);
-      Haptics.selectionAsync().catch(() => {});
-    }
-  };
-
-  const commitMove = (lead: Lead, next: LeadStage) => {
-    setMoveTarget(null);
-    if (leadStageColumn(lead.stage) === next) return;
-    onMove(lead.id, next);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    toast({
-      tone: next === 'lost' ? 'info' : 'success',
-      title: `Moved to ${LEAD_STAGE_LABELS[next]}`,
-      body: lead.customerName,
-    });
-  };
-
-  return (
-    <View style={styles.boardRoot}>
-      <ScrollView
-        ref={chipsRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.stageStrip}
-        contentContainerStyle={styles.stageStripContent}
-      >
-        {BOARD_COLUMNS.map((col, i) => {
-          const active = i === columnIndex;
-          const muted = col === 'lost';
-          const count = (byColumn.get(col) ?? EMPTY_COLUMN).length;
-          return (
-            <PressableScale
-              key={col}
-              pressedScale={0.96}
-              onLayout={(e) => {
-                chipOffsets.current[i] = e.nativeEvent.layout.x;
-              }}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => goToColumn(i)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`${LEAD_STAGE_LABELS[col]}, ${count} ${
-                count === 1 ? 'lead' : 'leads'
-              }`}
-            >
-              <View
-                style={[styles.stageChipDot, { backgroundColor: stageAccent(col) }]}
-              />
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.chipText,
-                  muted && !active && styles.chipTextMuted,
-                  active && styles.chipTextActive,
-                ]}
-              >
-                {LEAD_STAGE_LABELS[col]}
-              </Text>
-              <Text style={[styles.chipCount, active && styles.chipCountActive]}>
-                {count}
-              </Text>
-            </PressableScale>
-          );
-        })}
-      </ScrollView>
-
-      <ScrollView
-        ref={pagerRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={onPagerSettled}
-        style={styles.pager}
-      >
-        {BOARD_COLUMNS.map((col, i) => (
-          <View key={col} style={{ width }}>
-            {Math.abs(i - columnIndex) <= 1 ? (
-              <ColumnPage
-                stage={col}
-                columnLeads={byColumn.get(col) ?? EMPTY_COLUMN}
-                totalLeads={leads.length}
-                onOpen={(id) => router.push(`/lead/${id}` as any)}
-                onRequestMove={setMoveTarget}
-                onBook={book.open}
-                // A call or text from the board is contact — the same
-                // new→contacted move the lead screen makes.
-                onContacted={(lead) => {
-                  if (lead.stage === 'new') onMove(lead.id, 'contacted');
-                }}
-              />
-            ) : null}
-          </View>
-        ))}
-      </ScrollView>
-
-      <FollowUpSheet
-        visible={book.target !== null}
-        title="Set follow-up"
-        subtitle={book.target?.customerName}
-        options={FOLLOW_UP_OPTIONS}
-        clearLabel={book.target?.followUpAt ? 'Clear follow-up' : undefined}
-        onPick={(when) => book.target && book.commit(book.target, when)}
-        onClose={book.close}
-      />
-
-      <Modal
-        visible={moveTarget !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setMoveTarget(null)}
-      >
-        <View style={styles.sheetRoot}>
-          <PressableScale
-            pressedScale={1}
-            style={styles.sheetBackdrop}
-            onPress={() => setMoveTarget(null)}
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss"
-          />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Move to…</Text>
-            {moveTarget && (
-              <Text style={styles.sheetSubtitle} numberOfLines={1}>
-                {moveTarget.customerName}
-              </Text>
-            )}
-            <ScrollView
-              style={styles.sheetScroll}
-              contentContainerStyle={styles.sheetScrollContent}
-            >
-              {BOARD_COLUMNS.map((col) => {
-                const current =
-                  moveTarget !== null && leadStageColumn(moveTarget.stage) === col;
-                const muted = col === 'lost';
-                return (
-                  <PressableScale
-                    key={col}
-                    pressedScale={current ? 1 : 0.97}
-                    disabled={current}
-                    style={[styles.sheetRow, current && styles.sheetRowCurrent]}
-                    onPress={() => moveTarget && commitMove(moveTarget, col)}
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: current, selected: current }}
-                    accessibilityLabel={
-                      current
-                        ? `${LEAD_STAGE_LABELS[col]}, current stage`
-                        : `Move to ${LEAD_STAGE_LABELS[col]}`
-                    }
-                  >
-                    <View
-                      style={[styles.sheetRowDot, { backgroundColor: stageAccent(col) }]}
-                    />
-                    <Text
-                      style={[
-                        styles.sheetRowText,
-                        muted && styles.sheetRowTextMuted,
-                        current && styles.sheetRowTextCurrent,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {LEAD_STAGE_LABELS[col]}
-                    </Text>
-                    {current && <Text style={styles.sheetRowTag}>Current</Text>}
-                  </PressableScale>
-                );
-              })}
-            </ScrollView>
-            <PressableScale
-              style={styles.sheetCancel}
-              onPress={() => setMoveTarget(null)}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel"
-            >
-              <Text style={styles.sheetCancelText}>Cancel</Text>
-            </PressableScale>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
+function avatarTone(id: string): ChipTone {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_TONES[hash % AVATAR_TONES.length];
 }
 
-function ColumnPage({
-  stage,
-  columnLeads,
-  totalLeads,
-  onOpen,
-  onRequestMove,
-  onBook,
-  onContacted,
-}: {
-  stage: LeadStage;
-  columnLeads: Lead[];
-  totalLeads: number;
-  onOpen: (id: string) => void;
-  onRequestMove: (lead: Lead) => void;
-  onBook: (lead: Lead) => void;
-  onContacted: (lead: Lead) => void;
-}) {
-  const router = useRouter();
-
-  // Column-change transition: pages mount fresh when the window shifts (chip
-  // tap across the board), so a mount-time slide+fade on the snappy spring
-  // reads as the column sliding into place. Adjacent moves animate natively
-  // in the pager, so this only fires where the pager can't help.
-  const enter = useSharedValue(0);
-  useEffect(() => {
-    enter.value = withSpring(1, motion.snappy);
-  }, [enter]);
-  const enterStyle = useAnimatedStyle(() => ({
-    opacity: enter.value,
-    transform: [{ translateX: (1 - enter.value) * spacing.lg }],
-  }));
-
-  if (columnLeads.length === 0) {
-    // Density: an empty column hugs its content right under the chip strip —
-    // never a full-height blank page. Same compact panel language as the List
-    // empty state (thin icon, ink message, one quiet action) so the two views
-    // of this tab speak one empty-state dialect.
-    return (
-      <Animated.View style={[styles.columnEmpty, enterStyle]}>
-        <Ionicons name="people-outline" size={28} color={colors.textSubtle} />
-        <Text style={styles.columnEmptyText}>
-          Nothing in {LEAD_STAGE_LABELS[stage]}.
-        </Text>
-        <Text style={styles.columnEmptyHint}>Swipe for the next stage.</Text>
-        {/* A board column holds leads, so its empty action adds a lead —
-            the same thing the segment's FAB does. */}
-        <PressableScale
-          style={styles.emptyBtn}
-          onPress={() => router.push('/new-lead')}
-          accessibilityRole="button"
-        >
-          <Text style={styles.emptyBtnText}>Add a lead</Text>
-        </PressableScale>
-      </Animated.View>
-    );
-  }
-
-  // Per-stage summary strip — real count + value for this column, plus a
-  // progress bar showing this stage's share of the whole pipeline.
-  const columnValue = columnLeads.reduce((sum, l) => sum + (l.value ?? 0), 0);
-  const columnProgress = totalLeads > 0 ? columnLeads.length / totalLeads : 0;
-
-  return (
-    <Animated.View style={[styles.columnFill, enterStyle]}>
-      <View style={styles.stageSummary}>
-        <View style={styles.stageSummaryRow}>
-          <Text style={styles.stageSummaryCount}>
-            {columnLeads.length} {columnLeads.length === 1 ? 'lead' : 'leads'}
-          </Text>
-          {columnValue > 0 && (
-            <Text style={styles.stageSummaryValue}>${formatShort(columnValue)}</Text>
-          )}
-        </View>
-        <ProgressBar
-          progress={columnProgress}
-          tone={stageProgressTone(stage)}
-          height={6}
-          accessibilityLabel={`${LEAD_STAGE_LABELS[stage]}, ${columnLeads.length} of ${totalLeads} leads in the pipeline`}
-        />
-      </View>
-      <ScrollView style={styles.columnScroll} contentContainerStyle={styles.columnContent}>
-        {columnLeads.map((lead, i) => (
-          <FadeSlideIn key={lead.id} index={Math.min(i, 6)}>
-            <PressableScale
-              style={styles.boardCard}
-              onPress={() => onOpen(lead.id)}
-              accessibilityRole="button"
-              accessibilityLabel={`${lead.customerName}, ${lead.address}`}
-            >
-              <View
-                style={[styles.boardCardAccent, { backgroundColor: stageAccent(stage) }]}
-              />
-              <View style={styles.boardCardBody}>
-                {recordCardUrl(lead.propertyRecord) ? (
-                  <Image
-                    source={{ uri: recordCardUrl(lead.propertyRecord) }}
-                    style={styles.boardCardPhoto}
-                    contentFit="cover"
-                    transition={120}
-                    accessibilityLabel="Property photo"
-                  />
-                ) : null}
-                <View style={styles.boardCardTop}>
-                  <Text style={styles.boardCardName} numberOfLines={1}>
-                    {lead.customerName}
-                  </Text>
-                  <View style={styles.agePill}>
-                    <Text style={styles.agePillText}>{formatAge(lead)}</Text>
-                  </View>
-                </View>
-                <Text style={styles.boardCardAddress} numberOfLines={2}>
-                  {lead.address}
-                </Text>
-                {recordStatusBadge(lead.propertyRecord) && (
-                  <Pill
-                    label={recordStatusBadge(lead.propertyRecord)!.label}
-                    tone={recordStatusBadge(lead.propertyRecord)!.tone}
-                    size="sm"
-                    style={styles.boardCardFollowUp}
-                  />
-                )}
-                {lead.followUpAt && (
-                  <Pill
-                    label={`Follow-up ${formatDateShort(lead.followUpAt)}`}
-                    tone={new Date(lead.followUpAt).getTime() <= Date.now() ? 'danger' : 'info'}
-                    size="sm"
-                    icon="alarm-outline"
-                    style={styles.boardCardFollowUp}
-                  />
-                )}
-                {/* One-tap contact from the board — Call / Text / Email /
-                    Directions / Book, each only when the lead has the field. */}
-                <QuickActions
-                  name={lead.customerName}
-                  phone={lead.customerPhone}
-                  email={lead.customerEmail}
-                  address={lead.address}
-                  coords={{ lat: lead.lat, lng: lead.lng }}
-                  onBook={() => onBook(lead)}
-                  onContacted={() => onContacted(lead)}
-                  style={styles.boardCardActions}
-                />
-                <PressableScale
-                  pressedScale={0.96}
-                  style={styles.moveBtn}
-                  onPress={() => onRequestMove(lead)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Move ${lead.customerName} to another stage`}
-                >
-                  <Ionicons name="swap-horizontal" size={18} color={colors.text} />
-                  <Text style={styles.moveBtnText}>Move to…</Text>
-                </PressableScale>
-              </View>
-            </PressableScale>
-          </FadeSlideIn>
-        ))}
-      </ScrollView>
-    </Animated.View>
-  );
-}
-
-// `daysInStage` (stageChangedAt → updatedAt → createdAt, null when
-// unparseable) moved to `components/pipeline/chain.ts` so Plan's "Going
-// cold" and Home's Today module measure stage age exactly as the board does.
-
-function formatAge(lead: Lead): string {
-  const d = daysInStage(lead);
-  if (d === null) return '—';
-  return d === 0 ? 'today' : `${d}d`;
-}
-
-/** Board accent per column. Tokens only — never a raw hex. */
+/** Board accent per stage. Tokens only — never a raw hex. */
 function stageAccent(stage: LeadStage): string {
   switch (stage) {
     case 'new':
@@ -1331,6 +1184,8 @@ function stageAccent(stage: LeadStage): string {
     case 'inspection_scheduled':
     case 'inspected':
       return colors.brand;
+    case 'inspecting':
+      return colors.accent;
     case 'proposal_sent':
     case 'estimate_sent':
     case 'invoiced':
@@ -1352,11 +1207,7 @@ function stageAccent(stage: LeadStage): string {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
 
-  // Settings affordance + FAB, 12pt apart (Drift #1 spacing between targets).
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-
-  // 56pt royal-ink FAB with a thin white plus — orange stays reserved for the
-  // screen's real primary CTA.
   fab: {
     width: touchTarget.standard,
     height: touchTarget.standard,
@@ -1367,16 +1218,12 @@ const styles = StyleSheet.create({
     ...shadows.float,
   },
 
-  // --- Pipeline summary (the screen's one cinematic moment) -------------
-  summaryWrap: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.sm,
-  },
+  // --- Summary hero -------------------------------------------------------
+  summaryWrap: { paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
   summaryHero: {
     borderRadius: radii.xl,
     overflow: 'hidden',
     padding: spacing.lg,
-    // Painted under the gradient so the card is never briefly transparent.
     backgroundColor: brand.royalInk,
     ...shadows.hero,
   },
@@ -1403,8 +1250,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
+  summaryGroupLine: {
+    marginTop: spacing.md,
+    fontSize: fontSize.caption,
+    color: colors.brandSoft,
+    fontVariant: ['tabular-nums'],
+  },
 
-  // --- iOS-17 segmented control ----------------------------------------
+  // --- Segmented control ---------------------------------------------------
   segmentedWrap: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.xl,
@@ -1427,19 +1280,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     ...shadows.thumb,
   },
-  segment: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segmentText: {
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.textMuted,
-  },
+  segment: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  segmentText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textMuted },
   segmentTextActive: { color: colors.text },
 
-  // --- Chip language (shared by list filters + board strip) -------------
+  // --- Chip language ---------------------------------------------------
   chipScroll: { flexGrow: 0, flexShrink: 0 },
   chipScrollContent: {
     paddingHorizontal: spacing.xl,
@@ -1457,11 +1302,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   chipActive: { backgroundColor: colors.text },
-  chipText: {
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-  },
+  chipText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   chipTextMuted: { color: colors.textMuted },
   chipTextActive: { color: colors.textInverse },
   chipCount: {
@@ -1473,85 +1314,43 @@ const styles = StyleSheet.create({
   chipCountActive: { color: colors.textInverse, opacity: 0.7 },
   stageChipDot: { width: 8, height: 8, borderRadius: radii.pill },
 
+  searchRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+  },
+  search: {
+    flex: 1,
+    minHeight: touchTarget.standard,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+  },
+  searchInput: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text, paddingVertical: spacing.sm },
+  sortChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+  },
+
   content: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xs,
     paddingBottom: spacing.xxxl,
-    gap: spacing.md,
   },
+  listGap: { gap: spacing.md },
 
-  // --- Lead cells (crafted rows in one inset group) ----------------------
-  listGroup: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    ...shadows.raised,
-  },
-  leadRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: touchTarget.preferred,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  // Separator inset aligns with the text column: 16 padding + 40 disc + 12 gap.
-  rowSeparator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.hairline,
-    marginLeft: spacing.lg + 40 + spacing.md,
-  },
-  // Tone comes from `avatarTone(lead.id)` — deterministic, not a flat grey disc.
-  leadThumb: { width: 44, height: 44, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
-  boardCardPhoto: { width: '100%', height: 96, borderRadius: radii.md, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
-  initialDisc: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  initialText: {
-    fontSize: fontSize.bodyLg,
-    fontWeight: fontWeight.semibold,
-  },
-  leadRowBody: { flex: 1, gap: 3 },
-  leadNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  leadName: {
-    flexShrink: 1,
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-  },
-  leadMetaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  leadAddress: { flexShrink: 1, fontSize: fontSize.bodySm, color: colors.textMuted },
-  metaDot: { fontSize: fontSize.bodySm, color: colors.textSubtle },
-  metaDays: {
-    flexShrink: 0,
-    fontSize: fontSize.bodySm,
-    color: colors.textSubtle,
-    fontVariant: ['tabular-nums'],
-  },
-
-  // --- Empty state: compact, top-anchored, no tinted circle, no card -----
-  empty: {
-    alignItems: 'center',
-    paddingTop: spacing.xl,
-    paddingHorizontal: spacing.xxl,
-    gap: spacing.sm,
-  },
-  emptyTitle: {
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-  },
-  emptyBody: {
-    fontSize: fontSize.bodySm,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-  // Royal fill, per the spec's `brand.royal = primary interactive` rule. The
-  // previous 5%-ink wash was all but invisible against the grey ground, so
-  // the empty state's only action read as decoration.
+  empty: { alignItems: 'center', paddingTop: spacing.xl, paddingHorizontal: spacing.xxl, gap: spacing.sm },
+  emptyTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  emptyBody: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
   emptyBtn: {
     minHeight: touchTarget.standard,
     marginTop: spacing.sm,
@@ -1562,15 +1361,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.raised,
   },
-  emptyBtnText: {
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.textInverse,
-  },
+  emptyBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
 
-  // --- Pipeline board ---------------------------------------------------
+  // --- Board ---------------------------------------------------------------
   boardRoot: { flex: 1 },
-
   stageStrip: { flexGrow: 0, flexShrink: 0 },
   stageStripContent: {
     paddingHorizontal: spacing.xl,
@@ -1578,23 +1372,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     alignItems: 'center',
   },
-
   pager: { flex: 1 },
   columnFill: { flex: 1 },
 
-  // Per-stage summary strip — static header above the scrolling card list,
-  // so a column's count/value/share is visible without scrolling.
   stageSummary: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xs,
     paddingBottom: spacing.sm,
-    gap: spacing.xs,
   },
-  stageSummaryRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
+  stageSummaryRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   stageSummaryCount: {
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
@@ -1616,84 +1402,65 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
   },
 
-  // No `overflow: hidden` here — it would clip the iOS shadow. The accent
-  // bar carries its own left-side radii instead.
-  boardCard: {
+  columnEmpty: { alignItems: 'center', paddingTop: spacing.xl, paddingHorizontal: spacing.xxl, gap: spacing.sm },
+  columnEmptyText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, textAlign: 'center' },
+  columnEmptyHint: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
+
+  // --- The card --------------------------------------------------------
+  card: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     ...shadows.raised,
   },
-  boardCardAccent: {
-    width: 4,
-    borderTopLeftRadius: radii.card,
-    borderBottomLeftRadius: radii.card,
+  cardAccent: { width: 4, borderTopLeftRadius: radii.card, borderBottomLeftRadius: radii.card },
+  cardBody: { flex: 1, padding: spacing.lg, gap: spacing.sm },
+  cardTopRow: { flexDirection: 'row', gap: spacing.md },
+  cardThumb: { width: 52, height: 52, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
+  initialDisc: { width: 52, height: 52, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center' },
+  initialText: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  cardMain: { flex: 1, gap: 2, justifyContent: 'center' },
+  cardNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  cardName: { flexShrink: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  cardAmount: {
+    fontSize: fontSize.bodySm,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
   },
-  boardCardBody: { flex: 1, padding: spacing.lg, gap: spacing.xs },
-  boardCardTop: {
+  cardAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  cardNextAction: { fontSize: fontSize.bodySm, color: colors.brand, fontWeight: fontWeight.medium },
+  cardBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' },
+  metaChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  boardCardName: {
-    flex: 1,
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-  },
-  boardCardAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  agePill: {
+    gap: 3,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radii.pill,
     backgroundColor: colors.fillQuiet,
   },
-  agePillText: {
+  metaChipText: {
     fontSize: fontSize.caption,
     fontWeight: fontWeight.semibold,
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
-  boardCardFollowUp: { marginTop: spacing.xs },
-  boardCardActions: { marginTop: spacing.sm },
+  cardActions: { marginTop: spacing.xs },
   moveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
     height: touchTarget.standard,
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
-    marginTop: spacing.md,
   },
-  moveBtnText: {
-    color: colors.text,
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-  },
+  moveBtnText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
-  // Mirrors `empty` (List view) — one empty-state language for the tab, and
-  // copy dark enough to survive sunlight (no textSubtle body text).
-  columnEmpty: {
-    alignItems: 'center',
-    paddingTop: spacing.xl,
-    paddingHorizontal: spacing.xxl,
-    gap: spacing.sm,
-  },
-  columnEmptyText: {
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-    textAlign: 'center',
-  },
-  columnEmptyHint: {
-    fontSize: fontSize.bodySm,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-
-  // --- Move sheet -------------------------------------------------------
+  // --- Sheets ------------------------------------------------------------
   sheetRoot: { flex: 1, justifyContent: 'flex-end' },
   sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
   sheet: {
@@ -1705,7 +1472,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     maxHeight: '85%',
   },
-  // iOS grabber: 36×5 pill in the hairline tone.
   sheetHandle: {
     alignSelf: 'center',
     width: 36,
@@ -1714,11 +1480,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.hairline,
     marginBottom: spacing.md,
   },
-  sheetTitle: {
-    fontSize: fontSize.bodyLg,
-    fontWeight: fontWeight.bold,
-    color: colors.text,
-  },
+  sheetTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
   sheetSubtitle: { fontSize: fontSize.bodySm, color: colors.textMuted },
   sheetScroll: { marginTop: spacing.md },
   sheetScrollContent: { gap: spacing.sm, paddingBottom: spacing.md },
@@ -1733,12 +1495,7 @@ const styles = StyleSheet.create({
   },
   sheetRowCurrent: { opacity: 0.5 },
   sheetRowDot: { width: 10, height: 10, borderRadius: radii.pill },
-  sheetRowText: {
-    flex: 1,
-    fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
-    color: colors.text,
-  },
+  sheetRowText: { flex: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   sheetRowTextMuted: { color: colors.textMuted },
   sheetRowTextCurrent: { color: colors.textMuted },
   sheetRowTag: {
@@ -1756,9 +1513,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.sm,
   },
-  sheetCancelText: {
-    color: colors.text,
-    fontSize: fontSize.bodyLg,
-    fontWeight: fontWeight.semibold,
+  sheetCancelText: { color: colors.text, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+
+  newMenuOptions: { gap: spacing.md, marginTop: spacing.md },
+  newMenuOption: {
+    minHeight: touchTarget.sticky,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radii.card,
+    backgroundColor: colors.fillQuiet,
   },
+  newMenuOptionBody: { flex: 1, gap: 2 },
+  newMenuOptionTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
+  newMenuOptionSub: { fontSize: fontSize.bodySm, color: colors.textMuted },
 });

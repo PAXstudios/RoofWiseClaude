@@ -15,6 +15,20 @@ function newId(): string {
 }
 
 /**
+ * Fire a pipeline event without a hard top-level import — `automations.ts`
+ * imports this store, so a static import back would be circular. Lazy
+ * `require` resolves after both modules have finished loading and is a
+ * silent no-op if the automation module is absent (a bare-store Node test).
+ */
+function emitPipeline(e: import('../services/automations').PipelineEvent): void {
+  try {
+    (require('../services/automations') as typeof import('../services/automations')).emitPipelineEvent(e);
+  } catch {
+    // best effort — a store write must never fail because of it
+  }
+}
+
+/**
  * Contact fields editable from the lead screen — what a door-knock lead
  * ("Walk-in lead" at a bare GPS pair) needs before it is a real customer.
  */
@@ -27,7 +41,14 @@ type LeadStoreState = {
 
   create: (input: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'syncStatus'>) => Lead;
   upsert: (lead: Lead) => Lead;
-  setStage: (id: string, stage: LeadStage) => void;
+  /**
+   * Move the stage. `by` says who moved it (default `'roofer'` — every
+   * existing call site is a hand move); the automation engine passes
+   * `'automation'`. A no-op (same stage) writes nothing and emits nothing —
+   * the loop guard docs/PIPELINE.md relies on: a rule's own stage change can
+   * never re-trigger itself through an emitted no-op.
+   */
+  setStage: (id: string, stage: LeadStage, by?: import('../services/automations').StageChangedBy) => void;
   /**
    * Correct name / phone / email / address on an existing lead. Keys present
    * in `patch` are written as given (`undefined` clears an optional field);
@@ -102,6 +123,7 @@ export const useLeadStore = create<LeadStoreState>()(
           syncStatus: 'pending',
         };
         set((s) => ({ leads: [lead, ...s.leads] }));
+        emitPipeline({ type: 'lead_created', leadId: lead.id });
         return lead;
       },
 
@@ -114,7 +136,13 @@ export const useLeadStore = create<LeadStoreState>()(
         return lead;
       },
 
-      setStage: (id, stage) =>
+      setStage: (id, stage, by = 'roofer') => {
+        const current = get().leads.find((l) => l.id === id);
+        // No-op: neither writes nor emits. This is the loop guard's floor —
+        // the automation engine's own forward-only check means a rule that
+        // re-evaluates its own move always lands here.
+        if (!current || current.stage === stage) return;
+        const now = new Date().toISOString();
         set((s) => ({
           leads: s.leads.map((l) =>
             l.id === id
@@ -123,13 +151,15 @@ export const useLeadStore = create<LeadStoreState>()(
                   stage,
                   // Stamped alongside updatedAt so the board can measure time
                   // in stage rather than time since any edit.
-                  stageChangedAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
+                  stageChangedAt: now,
+                  updatedAt: now,
                   syncStatus: 'pending',
                 }
               : l,
           ),
-        })),
+        }));
+        emitPipeline({ type: 'stage_changed', leadId: id, from: current.stage, to: stage, by });
+      },
 
       setPropertyRecord: (id, record) =>
         set((s) => ({ leads: s.leads.map((l) => (l.id === id ? { ...l, propertyRecord: record } : l)) })),
@@ -162,7 +192,7 @@ export const useLeadStore = create<LeadStoreState>()(
           ),
         })),
 
-      setStormMatch: (id, match) =>
+      setStormMatch: (id, match) => {
         set((s) => ({
           leads: s.leads.map((l) =>
             l.id === id
@@ -174,7 +204,11 @@ export const useLeadStore = create<LeadStoreState>()(
                 }
               : l,
           ),
-        })),
+        }));
+        // Only a real match (never a clear) triggers rule 7's "Call about
+        // the storm" task.
+        if (match) emitPipeline({ type: 'storm_matched_lead', leadId: id, match });
+      },
 
       linkInspection: (id, inspectionId) =>
         set((s) => ({

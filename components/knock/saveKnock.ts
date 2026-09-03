@@ -22,6 +22,7 @@ import { useActivityStore } from '@/lib/stores/activityStore';
 import { useDoNotKnockStore } from '@/lib/stores/doNotKnockStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { emitPipelineEvent } from '@/lib/services/automations';
 import { outcomeLabel, outcomeMeta } from '@/lib/services/knockOutcomes';
 import { distanceMeters, SAME_HOUSE_METERS } from '@/lib/services/knockTrip';
 import { PLACEHOLDER_KNOCK_NAME, isPlaceholderAddress, isPlaceholderName } from '@/lib/services/placeholderDetails';
@@ -240,6 +241,17 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
       message: `${leadHeadline(meta.id, draft)} — ${where}`,
     });
   }
+
+  // docs/PIPELINE.md rule 8: a Booked outcome creates the job at Inspection
+  // scheduled, with the appointment date the roofer just picked.
+  emitPipelineEvent({
+    type: 'knock_outcome',
+    knockId: knock.id,
+    outcome: draft.outcome,
+    leadId: lead?.id,
+    followUpAt: common.followUpAt,
+    leadCreated,
+  });
 
   return { knock, lead, leadCreated, leadUpdated, gpsOnly, blockedBy };
 }

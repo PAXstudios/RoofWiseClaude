@@ -45,6 +45,8 @@ import { probePlaces } from '@/lib/services/places';
 import { probeGeocoding } from '@/lib/services/geocoding';
 import { probeSolar } from '@/lib/services/solar';
 import { MapTilesError, createSession, isGoogleTilesConfigured } from '@/lib/services/mapTiles';
+import { AUTOMATION_RULES } from '@/lib/services/automations';
+import { useAutomationStore } from '@/lib/stores/automationStore';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
@@ -117,6 +119,11 @@ export default function SettingsScreen() {
   );
   const [photosSyncing, setPhotosSyncing] = useState(false);
   const pendingCorrections = useCorrectionsStore((s) => s.corrections.filter((c) => c.syncStatus === 'pending').length);
+  const automationEnabledMap = useAutomationStore((s) => s.enabled);
+  const automationsOnCount = useMemo(
+    () => AUTOMATION_RULES.filter((r) => automationEnabledMap[r.id] ?? r.defaultOn).length,
+    [automationEnabledMap],
+  );
   const toast = useToastStore((s) => s.show);
   const [syncing, setSyncing] = useState(false);
 
@@ -278,6 +285,15 @@ export default function SettingsScreen() {
           sub="Revenue, funnel, mileage, AI calibration"
           chevron
           onPress={() => router.push('/reports')}
+        />
+        <Sep />
+        <Row
+          icon="flash-outline"
+          tone={automationsOnCount > 0 ? 'green' : 'quiet'}
+          title="Automations"
+          sub={`${automationsOnCount} of ${AUTOMATION_RULES.length} rules on — leads to jobs, follow-ups, reminders`}
+          chevron
+          onPress={() => router.push('/settings/automations')}
         />
         <Sep />
         <Row

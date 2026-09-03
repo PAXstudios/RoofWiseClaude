@@ -7,6 +7,7 @@ import * as Notifications from 'expo-notifications';
 import { colors } from '@/theme/tokens';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { useBackgroundJobs } from '@/lib/services/lifecycleHooks';
+import { useAutomationTicks } from '@/lib/services/automationHooks';
 import { ToastHost } from '@/components/ToastHost';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { install as installDiagnostics, DiagnosticsGate } from '@/lib/services/diagnostics';
@@ -29,6 +30,10 @@ export default function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
   const router = useRouter();
   useBackgroundJobs();
+  // The pipeline automation engine's daily ticks (idle-7d, follow-up-due) —
+  // the event-driven rules fire from the stores themselves; this drives the
+  // time-based ones. Mounted once, at the root.
+  useAutomationTicks();
 
   useEffect(() => {
     let cancelled = false;

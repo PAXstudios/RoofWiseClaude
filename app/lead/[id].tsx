@@ -28,6 +28,7 @@ import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
 import { recordFactsLine, recordHeroUrl, recordRoofLine, recordStatusBadge } from '@/lib/services/propertyRecord';
 import { openMail, openPhone } from '@/components/pipeline/contact';
+import { TasksCard } from '@/components/pipeline/TasksCard';
 import {
   LEAD_STAGE_LABELS,
   LEAD_STAGE_ORDER,
@@ -430,9 +431,14 @@ export default function LeadDetail() {
           </View>
         </FadeSlideIn>
 
+        <FadeSlideIn index={4}>
+          <SectionHeader title="Tasks" style={styles.sectionHeaderSpacing} />
+          <TasksCard itemIds={[lead.id, linkedInspection?.id]} addToItemId={lead.id} />
+        </FadeSlideIn>
+
         {/* The one accent-gradient moment on this screen. Once the lead has
             become a job, the primary action is that job — not a second one. */}
-        <FadeSlideIn index={4}>
+        <FadeSlideIn index={5}>
           <PressableScale
             style={styles.primaryBtn}
             onPress={

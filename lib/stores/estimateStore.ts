@@ -8,6 +8,20 @@ function newId(): string {
   return `est_${Date.now()}_${counter++}`;
 }
 
+/**
+ * Fire a pipeline event without a hard top-level import — `automations.ts`
+ * imports this store, so a static import back would be circular. Lazy
+ * `require` resolves after both modules have finished loading and is a
+ * silent no-op if the automation module is absent (a bare-store Node test).
+ */
+function emitPipeline(e: import('../services/automations').PipelineEvent): void {
+  try {
+    (require('../services/automations') as typeof import('../services/automations')).emitPipelineEvent(e);
+  } catch {
+    // best effort — a store write must never fail because of it
+  }
+}
+
 type State = {
   estimates: SavedEstimate[];
   save: (input: Omit<SavedEstimate, 'id' | 'createdAt'>) => SavedEstimate;
@@ -29,6 +43,9 @@ export const useEstimateStore = create<State>()(
           createdAt: new Date().toISOString(),
         };
         set((s) => ({ estimates: [est, ...s.estimates].slice(0, 100) }));
+        if (est.address && est.totalMid > 0) {
+          emitPipeline({ type: 'estimate_saved', estimateId: est.id, address: est.address, total: est.totalMid });
+        }
         return est;
       },
 

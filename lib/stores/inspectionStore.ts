@@ -36,6 +36,23 @@ import {
   brittlenessResultToLegacy,
   emptyCollateralEvidence,
 } from '../models/types';
+import { useLeadStore } from './leadStore';
+import { useActivityStore } from './activityStore';
+
+/**
+ * Fire a pipeline event without a hard top-level import — `automations.ts`
+ * imports this store (among most others), so a static import back would be
+ * circular. Lazy `require` resolves after both modules have finished loading
+ * (same defensive pattern `readCompanyName` uses in automations.ts) and is a
+ * silent no-op if the automation module is absent (a bare-store Node test).
+ */
+function emitPipeline(e: import('../services/automations').PipelineEvent): void {
+  try {
+    (require('../services/automations') as typeof import('../services/automations')).emitPipelineEvent(e);
+  } catch {
+    // best effort — a store write must never fail because of it
+  }
+}
 
 let counter = 0;
 
@@ -126,6 +143,15 @@ type CreateDraft = {
   leadId?: string;
   /** Whole-roof Pitch Gauge reading taken in the wizard (degrees). */
   pitchDegrees?: number;
+  /**
+   * Initial status. Default `'in_progress'` (today's behaviour — capture
+   * starts immediately). Pass `'scheduled'` for a booked appointment (a
+   * knock's Booked outcome, via `startInspectionFromLead`) so the automation
+   * engine lands the lead in Inspection Scheduled instead of Inspecting.
+   */
+  status?: InspectionStatus;
+  /** The booked appointment, when `status` is `'scheduled'`. */
+  scheduledAt?: string;
 };
 
 /** Claim detail fields editable after creation (job detail / edit flows). */
@@ -295,6 +321,12 @@ type InspectionStoreState = {
   setRoofPitch: (inspectionId: string, degrees: number) => void;
   /** Link (or unlink with `undefined`) the pipeline lead this job came from. */
   setLeadId: (inspectionId: string, leadId: string | undefined) => void;
+  /**
+   * File the install window (docs/PIPELINE.md). Stamps `installScheduledAt`
+   * to now and emits `install_scheduled` — the automation engine moves the
+   * pipeline to Scheduled for install and sets the day-before reminder.
+   */
+  setInstallDates: (inspectionId: string, startAt: string, endAt?: string) => void;
   setNotes: (id: string, notes: string) => void;
   getById: (id: string) => Inspection | undefined;
   attachPhotos: (inspectionId: string, captures: PhotoCapture[]) => void;
@@ -472,11 +504,15 @@ export const useInspectionStore = create<InspectionStoreState>()(
       create: (d) => {
         const year = new Date().getFullYear();
         const ord = get().nextOrdinal;
+        const now = new Date().toISOString();
+        const status: InspectionStatus = d.status ?? 'in_progress';
         const inspection: Inspection = {
           id: newId(),
           reportId: mintReportId(year, ord),
-          createdAt: new Date().toISOString(),
-          status: 'in_progress',
+          createdAt: now,
+          status,
+          statusChangedAt: now,
+          scheduledAt: d.scheduledAt,
           customerName: d.customerName,
           customerPhone: d.customerPhone,
           customerEmail: d.customerEmail,
@@ -523,16 +559,41 @@ export const useInspectionStore = create<InspectionStoreState>()(
           inspections: [inspection, ...s.inspections],
           nextOrdinal: s.nextOrdinal + 1,
         }));
+        // A lead becomes a job the moment its inspection is created: link
+        // both ends (idempotent — the New Job wizard's own convert code may
+        // already have) so every caller that creates with a `leadId` (the
+        // pipeline's own `startInspectionFromLead`, a knock's Booked
+        // outcome, a standalone capture attached to a lead) gets the link
+        // without repeating this wiring itself.
+        if (d.leadId) {
+          useLeadStore.getState().linkInspection(d.leadId, inspection.id);
+          useActivityStore.getState().log({
+            kind: 'lead_converted',
+            leadId: d.leadId,
+            inspectionId: inspection.id,
+            message: `${inspection.customerName || 'The lead'} became a job — ${inspection.reportId}`,
+          });
+        }
+        // The automation engine reacts (docs/PIPELINE.md rule 1): a fresh
+        // in-progress job moves the lead to Inspecting, a scheduled one to
+        // Inspection scheduled. Emitted last so the engine reads the
+        // inspection (and the lead link above) as already written.
+        emitPipeline({ type: 'inspection_created', inspectionId: inspection.id, leadId: d.leadId });
         return inspection;
       },
 
       remove: (id) =>
         set((s) => ({ inspections: s.inspections.filter((i) => i.id !== id) })),
 
-      setStatus: (id, status) =>
+      setStatus: (id, status) => {
+        const current = get().inspections.find((i) => i.id === id);
+        if (!current || current.status === status) return;
+        const statusChangedAt = new Date().toISOString();
         set((s) => ({
-          inspections: s.inspections.map((i) => (i.id === id ? { ...i, status } : i)),
-        })),
+          inspections: s.inspections.map((i) => (i.id === id ? { ...i, status, statusChangedAt } : i)),
+        }));
+        emitPipeline({ type: 'inspection_status', inspectionId: id, leadId: current.leadId, status });
+      },
 
       setEvent: (id, event) =>
         set((s) => ({
@@ -689,14 +750,17 @@ export const useInspectionStore = create<InspectionStoreState>()(
           }),
         })),
 
-      setReportFinalizedAt: (id, atIso) =>
+      setReportFinalizedAt: (id, atIso) => {
+        const current = get().inspections.find((i) => i.id === id);
         set((s) => ({
           inspections: s.inspections.map((i) =>
             i.id === id
               ? { ...i, reportFinalizedAt: atIso ?? new Date().toISOString() }
               : i,
           ),
-        })),
+        }));
+        emitPipeline({ type: 'report_finalized', inspectionId: id, leadId: current?.leadId });
+      },
 
       clearReportFinalizedAt: (id) =>
         set((s) => ({
@@ -886,6 +950,26 @@ export const useInspectionStore = create<InspectionStoreState>()(
             ins.id === inspectionId ? { ...ins, leadId } : ins,
           ),
         })),
+
+      setInstallDates: (inspectionId, startAt, endAt) => {
+        const current = get().inspections.find((i) => i.id === inspectionId);
+        if (!current) return;
+        const installScheduledAt = new Date().toISOString();
+        set((s) => ({
+          inspections: s.inspections.map((ins) =>
+            ins.id === inspectionId
+              ? { ...ins, installStartAt: startAt, installEndAt: endAt, installScheduledAt }
+              : ins,
+          ),
+        }));
+        emitPipeline({
+          type: 'install_scheduled',
+          inspectionId,
+          leadId: current.leadId,
+          startAt,
+          endAt,
+        });
+      },
 
       getById: (id) => get().inspections.find((i) => i.id === id),
 

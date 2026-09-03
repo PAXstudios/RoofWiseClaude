@@ -9,10 +9,11 @@ import { Pill, type PillTone } from '@/components/ui/Pill';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
-import type { Inspection, Lead } from '@/lib/models/types';
+import { useTaskStore } from '@/lib/stores/taskStore';
+import type { Inspection, Lead, Task } from '@/lib/models/types';
 import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 import { daysInStage, goingColdLeads } from '@/components/pipeline/chain';
-import { followUpsDue, inspectionsToday, dayBounds } from './todayAgenda';
+import { followUpsDue, inspectionsToday, tasksDueToday, dayBounds } from './todayAgenda';
 
 /** How many rows Home shows before handing off to Plan. */
 const MAX_ROWS = 6;
@@ -31,6 +32,7 @@ export type TodayAgenda = {
   inspections: Inspection[];
   followUps: Lead[];
   cold: Lead[];
+  tasksDue: Task[];
   rows: Row[];
   /** Rows beyond `MAX_ROWS`, surfaced as "N more in Plan". */
   overflow: number;
@@ -48,6 +50,7 @@ export function useTodayAgenda(): TodayAgenda {
   const inspections = useInspectionStore((s) => s.inspections);
   const leads = useLeadStore((s) => s.leads);
   const activeRoute = useKnockSessionStore((s) => s.activeSession);
+  const tasks = useTaskStore((s) => s.tasks);
 
   return useMemo(() => {
     const now = new Date();
@@ -55,6 +58,7 @@ export function useTodayAgenda(): TodayAgenda {
     const todays = inspectionsToday(inspections, now);
     const due = followUpsDue(leads, now);
     const cold = goingColdLeads(leads, now.getTime());
+    const dueTasks = tasksDueToday(tasks, now);
 
     const rows: Row[] = [];
     for (const ins of todays) {
@@ -92,17 +96,33 @@ export function useTodayAgenda(): TodayAgenda {
         href: `/lead/${lead.id}`,
       });
     }
+    if (dueTasks.length > 0) {
+      const overdue = dueTasks.some((t) => t.dueAt && new Date(t.dueAt).getTime() < start);
+      const rest = dueTasks.length - 1;
+      rows.push({
+        key: 'tasks_due',
+        icon: 'checkbox-outline',
+        tone: 'purple',
+        title: `${dueTasks.length} task${dueTasks.length === 1 ? '' : 's'} due today`,
+        sub: rest > 0 ? `${dueTasks[0].title} +${rest} more` : dueTasks[0].title,
+        pill: { label: overdue ? 'Overdue' : 'Due today', tone: overdue ? 'danger' : 'info' },
+        // No single tasks screen yet — the Pipeline board is where every
+        // task lives (a card's x/y count, and TasksCard on its lead/job).
+        href: '/(tabs)/leads',
+      });
+    }
 
     return {
       inspections: todays,
       followUps: due,
       cold,
+      tasksDue: dueTasks,
       rows: rows.slice(0, MAX_ROWS),
       overflow: Math.max(0, rows.length - MAX_ROWS),
       routeLive: !!activeRoute,
       hasItems: rows.length > 0 || !!activeRoute,
     };
-  }, [inspections, leads, activeRoute]);
+  }, [inspections, leads, activeRoute, tasks]);
 }
 
 /**
@@ -119,6 +139,7 @@ export function TodayModule({ agenda }: { agenda: TodayAgenda }) {
     agenda.followUps.length > 0 &&
       `${agenda.followUps.length} follow-up${agenda.followUps.length === 1 ? '' : 's'}`,
     agenda.cold.length > 0 && `${agenda.cold.length} going cold`,
+    agenda.tasksDue.length > 0 && `${agenda.tasksDue.length} task${agenda.tasksDue.length === 1 ? '' : 's'} due`,
   ]
     .filter((s): s is string => Boolean(s))
     .join(' · ');

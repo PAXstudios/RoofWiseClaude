@@ -7,7 +7,8 @@
 // Nothing here is invented (Drift #5); "scheduled" means real data, never a
 // filled slot.
 
-import type { Inspection, KnockSession, Lead } from '@/lib/models/types';
+import type { Inspection, KnockSession, Lead, Task } from '@/lib/models/types';
+import { tasksDueBy } from '@/lib/stores/taskStore';
 
 /** One stop on the day's rail. */
 export type ScheduleItem =
@@ -59,6 +60,16 @@ export function inspectionsToday(
 ): Inspection[] {
   const { start, end } = dayBounds(now);
   return inspectionsInWindow(inspections, start, end);
+}
+
+/**
+ * Open tasks due by the end of today, overdue included, soonest first —
+ * `automation`- and roofer-created alike (docs/PIPELINE.md §5). Thin wrapper
+ * over `taskStore.tasksDueBy` so Home and Plan read the exact same list a
+ * pipeline card's "x/y" count is built from.
+ */
+export function tasksDueToday(tasks: readonly Task[], now: Date = new Date()): Task[] {
+  return tasksDueBy(tasks, now);
 }
 
 /** Inspections logged from today through the next seven days. */

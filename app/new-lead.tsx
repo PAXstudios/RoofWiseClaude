@@ -19,7 +19,7 @@ import { useActivityStore } from '@/lib/stores/activityStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
 import { recordFactsLine, recordRoofLine, recordStatusBadge } from '@/lib/services/propertyRecord';
-import type { PropertyRecord } from '@/lib/models/types';
+import { LEAD_SOURCES, LEAD_SOURCE_LABELS, type LeadSource, type PropertyRecord } from '@/lib/models/types';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
@@ -56,6 +56,10 @@ export default function NewLead() {
   const [lat, setLat] = useState<number | undefined>();
   const [lng, setLng] = useState<number | undefined>();
   const [followUpDays, setFollowUpDays] = useState<number | null>(null);
+  // Where the lead came from — feeds the source → signed-rate insight in
+  // Reports. A hand-entered lead defaults to "other"; knock/storm flows set
+  // their own source when they create the lead.
+  const [source, setSource] = useState<LeadSource>('other');
   // What Zillow knows about the picked address — the house's facts and its
   // roof ("New roof · 2024"), shown before Save. Cache-first, and the same
   // lookup Save would make, so it costs nothing extra.
@@ -97,7 +101,7 @@ export default function NewLead() {
       lat,
       lng,
       stage: 'new',
-      source: 'manual',
+      source,
       followUpAt,
     });
     // The house's own photo and facts for the board (cache-first — a job at
@@ -234,6 +238,22 @@ export default function NewLead() {
           </FadeSlideIn>
 
           <FadeSlideIn index={2}>
+            <SectionHeader title="Where did this come from?" style={styles.sectionHeaderSpacing} />
+            <View style={styles.chipRow}>
+              {LEAD_SOURCES.map((s) => (
+                <PressableScale
+                  key={s}
+                  pressedScale={0.96}
+                  style={[styles.chip, source === s && styles.chipActive]}
+                  onPress={() => setSource(s)}
+                  accessibilityRole="button"
+                  accessibilityLabel={LEAD_SOURCE_LABELS[s]}
+                >
+                  <Text style={[styles.chipText, source === s && styles.chipTextActive]}>{LEAD_SOURCE_LABELS[s]}</Text>
+                </PressableScale>
+              ))}
+            </View>
+
             <SectionHeader title="Follow up" style={styles.sectionHeaderSpacing} />
             <View style={styles.chipRow}>
               {([

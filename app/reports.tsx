@@ -13,14 +13,25 @@ import * as Print from 'expo-print';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useProposalStore } from '@/lib/stores/proposalStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
+import { useEstimateStore } from '@/lib/stores/estimateStore';
+import { useTaskStore } from '@/lib/stores/taskStore';
 import { useMileageStore } from '@/lib/stores/mileageStore';
 import { useCorrectionsStore } from '@/lib/stores/correctionsStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
 import { overallAccuracy } from '@/lib/services/learning/localLearningEngine';
 import {
+  buildPipeline,
+  PIPELINE_GROUPS,
+  PIPELINE_GROUP_LABELS,
+} from '@/lib/services/pipeline';
+import {
   DAMAGE_CATEGORY_LABELS,
   INSURANCE_CARRIER_LABELS,
+  LEAD_SOURCE_LABELS,
+  LEAD_STAGE_ORDER,
+  leadStageColumn,
+  normalizeLeadSource,
   type DamageCategory,
   type InsuranceCarrier,
 } from '@/lib/models/types';
@@ -128,6 +139,8 @@ export default function ReportsScreen() {
   const inspections = useInspectionStore((s) => s.inspections);
   const proposals = useProposalStore((s) => s.proposals);
   const leads = useLeadStore((s) => s.leads);
+  const estimates = useEstimateStore((s) => s.estimates);
+  const tasks = useTaskStore((s) => s.tasks);
   const trips = useMileageStore((s) => s.trips);
   const corrections = useCorrectionsStore((s) => s.corrections);
   const toast = useToastStore((s) => s.show);
@@ -165,6 +178,43 @@ export default function ReportsScreen() {
     () => leads.filter((l) => inRange(l.createdAt, start, end)),
     [leads, start, end],
   );
+
+  // ── Pipeline funnel (docs/PIPELINE.md) — a right-now snapshot, same as
+  // "Open pipeline (now)" above: a stage is a state, not a dated event, so
+  // it is never sliced by the date range picker. ──────────────────────────
+  const pipelineItems = useMemo(
+    () => buildPipeline({ leads, inspections, proposals, estimates, tasks }),
+    [leads, inspections, proposals, estimates, tasks],
+  );
+  const funnelByGroup = useMemo(
+    () => PIPELINE_GROUPS.filter((g) => g !== 'lost').map((g) => ({
+      label: PIPELINE_GROUP_LABELS[g],
+      value: pipelineItems.filter((it) => it.group === g).length,
+    })),
+    [pipelineItems],
+  );
+  const avgDaysInStage = useMemo(() => {
+    const active = pipelineItems.filter((it) => !it.lost && it.daysInStage != null);
+    if (active.length === 0) return null;
+    return active.reduce((sum, it) => sum + (it.daysInStage ?? 0), 0) / active.length;
+  }, [pipelineItems]);
+
+  // ── Lead source → signed rate, over the selected range ──────────────────
+  const sourceSignedRate = useMemo(() => {
+    const signedIdx = LEAD_STAGE_ORDER.indexOf('signed');
+    const bySource = new Map<string, { total: number; signed: number }>();
+    for (const l of rangedLeads) {
+      const source = LEAD_SOURCE_LABELS[normalizeLeadSource(l.source)];
+      const entry = bySource.get(source) ?? { total: 0, signed: 0 };
+      entry.total += 1;
+      const col = leadStageColumn(l.stage);
+      if (col !== 'lost' && LEAD_STAGE_ORDER.indexOf(col) >= signedIdx) entry.signed += 1;
+      bySource.set(source, entry);
+    }
+    return [...bySource.entries()]
+      .map(([label, { total, signed }]) => ({ label, value: total === 0 ? 0 : Math.round((signed / total) * 100), total }))
+      .sort((a, b) => b.total - a.total);
+  }, [rangedLeads]);
 
   const stats = useMemo(() => {
     const revenue = rangedProposalsSigned.reduce((sum, p) => sum + p.total, 0);
@@ -378,13 +428,33 @@ export default function ReportsScreen() {
               value={stats.conversionRate === null ? '—' : `${Math.round(stats.conversionRate * 100)}%`}
             />
             <Stat label="Open leads (now)" value={String(stats.openLeads)} />
+            <Stat
+              label="Average days in stage (now)"
+              value={avgDaysInStage === null ? '—' : avgDaysInStage.toFixed(1)}
+            />
           </Section>
 
-          <ChartSection title="Lead source" icon="funnel-outline" tone="blue">
+          <ChartSection title="Pipeline funnel (now)" icon="funnel-outline" tone="blue">
+            <BarChart bars={funnelByGroup} formatValue={(n) => String(n)} color={colors.brand} />
+          </ChartSection>
+
+          <ChartSection title="Lead source" icon="people-outline" tone="blue">
             {leadSourceBreakdown.length === 0 ? (
               <EmptyChartNote text="No leads created in this range yet." />
             ) : (
               <BarChart bars={leadSourceBreakdown} formatValue={(n) => String(n)} color={colors.brand} />
+            )}
+          </ChartSection>
+
+          <ChartSection title="Lead source → signed rate" icon="trending-up-outline" tone="green">
+            {sourceSignedRate.length === 0 ? (
+              <EmptyChartNote text="No leads created in this range yet." />
+            ) : (
+              <BarChart
+                bars={sourceSignedRate}
+                formatValue={(n) => `${n}%`}
+                color={colors.success}
+              />
             )}
           </ChartSection>
 

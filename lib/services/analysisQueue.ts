@@ -13,6 +13,7 @@
 import { useAnalysisQueueStore, type AnalysisJob } from '../stores/analysisQueueStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useActivityStore } from '../stores/activityStore';
+import { useInspectionStore } from '../stores/inspectionStore';
 import type { Inspection } from '../models/types';
 import {
   analyzeSlope,
@@ -24,6 +25,8 @@ import { sendLocalNotification } from './pushNotifications';
 import { describeAnalysisError, isRetryableGeminiError, GeminiAnalysisError } from './gemini';
 import { isGeminiConfigured } from '../env';
 import { mark, measure, clearMark } from './telemetry';
+import { photoProgress } from './pipeline';
+import { emitPipelineEvent } from './automations';
 
 const MAX_ATTEMPTS = 2;
 const RETRY_BACKOFF_MS = 3000;
@@ -143,6 +146,21 @@ export async function drainAnalysisQueue(): Promise<void> {
             (result.failed > 0 ? ` · ${result.failed} failed` : '') +
             (result.modelUsed ? ` · ${result.modelUsed}` : ''),
         });
+        // The pipeline's automation rule 2 ("report finalized or every photo
+        // analyzed → Inspected") reads `allAnalyzed` — computed fresh from
+        // the just-written state, across every slope on the job, not just
+        // this one.
+        {
+          const freshIns = useInspectionStore.getState().getById(job.inspectionId);
+          const progress = photoProgress(freshIns);
+          emitPipelineEvent({
+            type: 'analysis_done',
+            inspectionId: job.inspectionId,
+            leadId: freshIns?.leadId,
+            slopeId: job.slopeId,
+            allAnalyzed: progress.total > 0 && progress.done >= progress.total,
+          });
+        }
         sendLocalNotification({
           title: result.failed > 0 ? 'Analysis finished with failures' : 'Analysis complete',
           body: completionBody(job, result),

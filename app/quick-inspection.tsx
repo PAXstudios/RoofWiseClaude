@@ -75,6 +75,7 @@ import { coachProgress, coachSteps, nextIncompleteStep, zoneForAreaTag } from '@
 import { COMPASS_USABLE_ACCURACY, useCompassHeading } from '@/lib/services/deviceMotion';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
+import { startInspectionFromLead } from '@/lib/services/pipeline';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useCaptureSettingsStore } from '@/lib/stores/captureSettingsStore';
@@ -344,6 +345,19 @@ function QuickInspectionNative() {
     if (choice.kind === 'existing') {
       targetIdRef.current = choice.inspectionId;
       setTargetId(choice.inspectionId);
+      return;
+    }
+    if (choice.kind === 'lead') {
+      // The lead becomes a job right here (docs/PIPELINE.md §3) — the
+      // automation engine moves it to Inspecting the same way any other
+      // job-created path does.
+      const ins = startInspectionFromLead(choice.leadId);
+      if (ins) {
+        targetIdRef.current = ins.id;
+        setTargetId(ins.id);
+      } else {
+        toast({ tone: 'danger', title: "Couldn't start the job", body: 'That lead may have been removed.' });
+      }
       return;
     }
     if (choice.kind === 'new_customer') {
