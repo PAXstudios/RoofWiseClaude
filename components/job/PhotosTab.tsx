@@ -31,7 +31,7 @@ import {
   type SlopeVerdict,
 } from '@/lib/models/types';
 import type { DecisionEngineResult, HaagEngineResult } from '@/lib/services/decisionEngine';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 /** Rates are read by adjusters — print 6.9, never 6.888888888888889. */
 function fmtRate(n: number): string {
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
     ...shadows.raised,
   },
-  captureCtaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  captureCtaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold },
   importCta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  importCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  importCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold },
   pendingStrip: { marginTop: spacing.xs },
 
   placeholderBox: {
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: 14,
   },
-  actionRowText: { flex: 1, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
+  actionRowText: { flex: 1, fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, color: colors.text },
 
   captionInput: {
     minHeight: 96,
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
     marginTop: spacing.sm,
   },
-  saveCaptionText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  saveCaptionText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold },
 
   analyzeBtn: {
     flexDirection: 'row',
@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
     marginTop: spacing.md,
   },
-  analyzeBtnText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  analyzeBtnText: { color: colors.text, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold },
 
   photoTile: {
     width: 140,
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   },
 
   testSquare: { backgroundColor: colors.fillQuiet, borderRadius: radii.control, padding: spacing.md, gap: 2, marginTop: spacing.md },
-  testSquareLabel: { fontSize: fontSize.caption, color: colors.textSubtle, fontWeight: fontWeight.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
+  testSquareLabel: { ...dataLabel, color: colors.textSubtle },
   testSquareLine: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
   functionalYes: { color: colors.danger, fontWeight: fontWeight.semibold },
   testSquareRule: { fontSize: fontSize.bodySm, color: colors.textMuted },

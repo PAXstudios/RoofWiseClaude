@@ -632,6 +632,24 @@ export function formatMoneyShort(amount: number): string {
 }
 
 /**
+ * Signed revenue since Jan 1 of `now`'s year — the same "Year to date" window
+ * `app/reports.tsx`'s own range picker computes (its `rangeBounds('ytd')` +
+ * `rangedProposalsSigned.reduce(...)`). Factored here so Home's header stat
+ * and Reports' YTD headline read the same number from one definition instead
+ * of two independent date-range calculations quietly drifting apart.
+ */
+export function ytdSignedRevenue(proposals: readonly Proposal[], now: number = Date.now()): number {
+  const year = new Date(now).getFullYear();
+  let sum = 0;
+  for (const p of proposals) {
+    if (p.status !== 'signed' || !p.signedAt) continue;
+    const t = isoMs(p.signedAt);
+    if (!Number.isNaN(t) && new Date(t).getFullYear() === year) sum += p.total;
+  }
+  return sum;
+}
+
+/**
  * How loud the days-in-stage chip should be. Leads and Estimating go amber
  * past 7 days and red past 21 — silence loses those deals; the other groups
  * have their own clocks and stay quiet.

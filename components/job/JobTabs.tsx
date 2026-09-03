@@ -6,7 +6,7 @@
 // scrolls, because it isn't inside the thing that scrolls.
 
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { colors, fontSize, fontWeight, radii, shadows, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, radii, shadows, touchTarget } from '@/theme/tokens';
 import type { IoniconName } from '@/components/ui/IconChip';
 
 /** Kept as a literal union (not derived from TAB_DEFS) so a screen can type
@@ -103,10 +103,10 @@ const styles = StyleSheet.create({
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   label: {
     fontSize: fontSize.caption,
-    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.textSubtle,
   },
-  labelActive: { color: colors.brand },
+  labelActive: { color: colors.brand, fontFamily: fontFamily.archivo.bold },
   badge: {
     minWidth: 15,
     height: 15,
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   badgeActive: { backgroundColor: colors.brandSoft },
   badgeText: {
     fontSize: 9,
-    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },

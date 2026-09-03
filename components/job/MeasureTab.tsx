@@ -11,7 +11,7 @@ import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { pitchDegreesToRatio, type Inspection, type PropertyIntel } from '@/lib/models/types';
 import { totalSquares } from '@/lib/services/propertyIntel';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   inspection: Inspection;
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     ...shadows.card,
   },
-  pitchLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  pitchLabel: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, color: colors.text },
   pitchSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 1 },
   body2: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
   estimateBtn: {
@@ -108,5 +108,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
     marginTop: spacing.md,
   },
-  estimateBtnText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  estimateBtnText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold },
 });

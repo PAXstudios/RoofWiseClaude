@@ -53,7 +53,7 @@ import {
   projectedFromProposal,
 } from '@/lib/services/budget';
 import { BUDGET_KIND_LABELS, BUDGET_KINDS, type BudgetKind, type Inspection, type Lead, type Proposal } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 const STATUS_TONE: Record<Proposal['status'], PillTone> = {
   draft: 'neutral',
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
     ...shadows.raised,
   },
-  buildCtaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  buildCtaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold },
 
   placeholderBox: {
     backgroundColor: colors.surface,
@@ -611,9 +611,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.control,
     backgroundColor: colors.fillQuiet,
   },
-  actionBtnText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
+  actionBtnText: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.semibold, color: colors.text },
   previewRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, minHeight: touchTarget.small },
-  previewText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
+  previewText: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.semibold, color: colors.brand },
 
   sigBox: { backgroundColor: colors.fillQuiet, borderRadius: radii.control, padding: spacing.sm },
   cardSub: { fontSize: fontSize.bodyMd, color: colors.textMuted },
@@ -622,11 +622,11 @@ const styles = StyleSheet.create({
 
   budgetBody: { gap: spacing.md },
   bandStrip: { borderRadius: radii.control, padding: spacing.md, gap: 2 },
-  bandValue: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, fontVariant: ['tabular-nums'] },
+  bandValue: { fontSize: fontSize.titleMd, fontFamily: fontFamily.archivo.bold, fontVariant: ['tabular-nums'] },
   bandLabel: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
   budgetRow: { flexDirection: 'row', gap: spacing.md },
   statCell: { flex: 1, gap: 1 },
-  statValue: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
+  statValue: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, color: colors.text, fontVariant: ['tabular-nums'] },
   statLabel: { fontSize: fontSize.caption, color: colors.textSubtle, textTransform: 'uppercase', letterSpacing: 0.4 },
 
   actualsList: { gap: spacing.xs },
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
   removeBtn: { width: touchTarget.small, height: touchTarget.small, alignItems: 'center', justifyContent: 'center' },
 
   addActualBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: touchTarget.standard, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
-  addActualText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.brand },
+  addActualText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, color: colors.brand },
 
   kindRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   kindChip: { minHeight: touchTarget.small, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: colors.fillQuiet, alignItems: 'center', justifyContent: 'center' },
@@ -647,10 +647,10 @@ const styles = StyleSheet.create({
   amountInput: { minHeight: touchTarget.standard, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, padding: spacing.md, backgroundColor: colors.fillQuiet, borderRadius: radii.control },
   labelInput: { minHeight: touchTarget.standard, fontSize: fontSize.bodyMd, color: colors.text, padding: spacing.md, backgroundColor: colors.fillQuiet, borderRadius: radii.control },
   saveActualBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, height: touchTarget.standard, borderRadius: radii.button, backgroundColor: colors.brand },
-  saveActualText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  saveActualText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold },
 
   docRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   docBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: touchTarget.standard, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
-  docBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  docBtnText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, color: colors.text },
   docNote: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: spacing.sm, lineHeight: 15 },
 });

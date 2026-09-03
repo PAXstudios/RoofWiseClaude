@@ -77,9 +77,12 @@ import {
 } from '@/lib/models/types';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import type { ChipTone } from '@/components/ui/IconChip';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import {
   brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -539,9 +542,15 @@ export default function JobDetail() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
+      {/* Mesh header — back / report-id / download / share, per the mock's
+          "04 · Damage report" template (docs/DESIGN_1A.md §6). "Download"
+          is the SAME `runHaagReport` the Overview tab's own PDF button
+          calls (generate + open the share sheet in one action) — a quick
+          access point, not a second code path. */}
       <View style={styles.header}>
-        <PressableScale onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
+        <MeshBackground variant="cool" />
+        <PressableScale onPress={() => router.back()} hitSlop={10} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
+          <Ionicons name="chevron-back" size={24} color={colors.onMesh} />
         </PressableScale>
         <Text style={styles.headerReportId} numberOfLines={1}>
           {inspection.reportId}
@@ -555,11 +564,25 @@ export default function JobDetail() {
             accessibilityRole="button"
             accessibilityLabel={`${pendingHere} photo${pendingHere === 1 ? '' : 's'} analyzing. Open processing.`}
           >
-            <ActivityIndicator size="small" color={colors.brand} />
+            <ActivityIndicator size="small" color={colors.onMesh} />
           </PressableScale>
         )}
-        <PressableScale onPress={onDelete} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="trash-outline" size={22} color={colors.danger} />
+        <PressableScale
+          onPress={() => void runHaagReport()}
+          disabled={generating}
+          hitSlop={10}
+          style={styles.headerBtn}
+          accessibilityRole="button"
+          accessibilityLabel={isClaim ? 'Download HAAG claim packet PDF' : 'Download HAAG report PDF'}
+        >
+          {generating ? (
+            <ActivityIndicator size="small" color={colors.onMesh} />
+          ) : (
+            <Ionicons name="download-outline" size={22} color={colors.onMesh} />
+          )}
+        </PressableScale>
+        <PressableScale onPress={onDelete} hitSlop={10} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Delete job">
+          <Ionicons name="trash-outline" size={22} color={colors.onMesh} />
         </PressableScale>
       </View>
 
@@ -912,13 +935,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    gap: spacing.sm,
-    backgroundColor: colors.barFill,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
+    gap: spacing.xs,
+    overflow: 'hidden',
   },
   headerBtn: { width: touchTarget.small, height: touchTarget.small, alignItems: 'center', justifyContent: 'center' },
-  headerReportId: { fontSize: fontSize.bodySm, color: colors.textSubtle, fontWeight: fontWeight.semibold },
+  // "RW-2841" — the mock's report-id convention (docs/DESIGN_1A.md §3).
+  headerReportId: { ...dataLabel, color: colors.onMesh },
 
   missingBanner: {
     flexDirection: 'row',
@@ -933,12 +955,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.warn,
   },
-  missingTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
+  missingTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, color: colors.text },
   missingBody: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginTop: 2 },
 
   // ── Compact hero ──────────────────────────────────────────────────────────
   heroCard: {
-    margin: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
     marginBottom: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
@@ -968,8 +991,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.scrim,
   },
   heroInfo: { flex: 1, gap: 1 },
-  heroEyebrow: { fontSize: fontSize.caption, color: colors.textSubtle, fontWeight: fontWeight.bold, letterSpacing: 0.6, textTransform: 'uppercase' },
-  heroCustomer: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, letterSpacing: -0.2 },
+  heroEyebrow: { ...dataLabel, color: colors.textSubtle },
+  heroCustomer: { fontSize: fontSize.titleSm, fontFamily: fontFamily.archivo.bold, color: colors.text, letterSpacing: -0.2 },
   heroAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
   heroOneLiner: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 1 },
 
@@ -983,13 +1006,13 @@ const styles = StyleSheet.create({
   },
   stagePillBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: touchTarget.small },
   heroMeta: { flex: 1, fontSize: fontSize.caption, color: colors.textSubtle },
-  heroAmount: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
+  heroAmount: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.bold, color: colors.text, fontVariant: ['tabular-nums'] },
 
   tabsBar: { marginHorizontal: spacing.lg, marginBottom: spacing.sm },
   tabBody: { flex: 1 },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
-  emptyTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.text },
+  emptyTitle: { fontSize: fontSize.titleMd, fontFamily: fontFamily.archivo.semibold, color: colors.text },
   secondaryBtn: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.xxl,

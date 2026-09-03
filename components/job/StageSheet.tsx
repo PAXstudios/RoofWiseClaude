@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { PressableScale } from '@/components/PressableScale';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
-import { colors, fontSize, fontWeight, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, spacing, touchTarget } from '@/theme/tokens';
 
 export type StageRow = {
   key: string;
@@ -78,6 +78,6 @@ const styles = StyleSheet.create({
   },
   rowActive: { backgroundColor: colors.fillQuiet },
   rowBody: { flex: 1 },
-  rowLabel: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
+  rowLabel: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, color: colors.text },
   rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 1 },
 });

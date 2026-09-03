@@ -46,24 +46,30 @@ import { QuickActionsSheet } from '@/components/sheets/QuickActionsSheet';
 import { selectUnreadCount, useNotificationStore } from '@/lib/stores/notificationStore';
 import { coverPhotoUri, recordCardUrl } from '@/lib/services/propertyRecord';
 import { activityHref } from '@/components/home/activityRoute';
-import { Aurora } from '@/components/glass/Aurora';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import { IconChip, CHIP_TONES, type ChipTone } from '@/components/ui/IconChip';
-import { StatCard } from '@/components/ui/StatCard';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Pill, type PillTone } from '@/components/ui/Pill';
+import { useTaskStore } from '@/lib/stores/taskStore';
 import {
-  LEAD_STAGE_LABELS,
-  LEAD_STAGE_ORDER,
+  buildPipeline,
+  PIPELINE_GROUPS,
+  PIPELINE_GROUP_LABELS,
+  summarizePipeline,
+  ytdSignedRevenue,
+  type PipelineGroup,
+} from '@/lib/services/pipeline';
+import {
   ROOF_MATERIAL_LABELS,
-  leadStageColumn,
   type InspectionStatus,
-  type LeadStage,
 } from '@/lib/models/types';
 import {
   brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
@@ -139,9 +145,11 @@ export default function HomeScreen() {
     [alerts],
   );
   const recentActivity = useActivityStore((s) => s.events.slice(0, 5));
-  const estimates = useEstimateStore((s) => s.estimates.slice(0, 4));
+  const allEstimates = useEstimateStore((s) => s.estimates);
+  const estimates = useMemo(() => allEstimates.slice(0, 4), [allEstimates]);
   const proposals = useProposalStore((s) => s.proposals);
   const leads = useLeadStore((s) => s.leads);
+  const tasks = useTaskStore((s) => s.tasks);
   const inspectorName = useInspectorProfileStore((s) => s.profile.fullName);
   const serviceAreaCount = useServiceAreaStore((s) => s.areas.length);
   // Today's real next actions — same helper Plan reads, so the two agree.
@@ -180,25 +188,21 @@ export default function HomeScreen() {
     ],
   }));
 
-  const pipelineValue = useMemo(
-    () =>
-      proposals
-        .filter((p) => p.status === 'sent' || p.status === 'viewed')
-        .reduce((sum, p) => sum + p.total, 0),
-    [proposals],
+  // The one pipeline build for this screen — the stat row's "Pipeline" figure
+  // and the stage strip at the bottom both read off it, so the header number
+  // and the strip's own total can never disagree (lib/services/pipeline.ts —
+  // the same fold Reports and the Pipeline board use).
+  const pipelineItems = useMemo(
+    () => buildPipeline({ leads, inspections, proposals, estimates: allEstimates, tasks }),
+    [leads, inspections, proposals, allEstimates, tasks],
   );
+  const pipelineSummary = useMemo(() => summarizePipeline(pipelineItems), [pipelineItems]);
+  const pipelineValue = pipelineSummary.pipelineValue;
 
-  const revenueYTD = useMemo(() => {
-    const year = new Date().getFullYear();
-    return proposals
-      .filter(
-        (p) =>
-          p.status === 'signed' &&
-          p.signedAt &&
-          new Date(p.signedAt).getFullYear() === year,
-      )
-      .reduce((sum, p) => sum + p.total, 0);
-  }, [proposals]);
+  // Same "Year to date" window app/reports.tsx's own range picker defaults
+  // to — factored into pipeline.ts so the two never drift (see its doc
+  // comment).
+  const revenueYTD = useMemo(() => ytdSignedRevenue(proposals), [proposals]);
 
   const openLeads = useMemo(
     () => leads.filter((l) => l.stage !== 'signed' && l.stage !== 'lost').length,
@@ -241,21 +245,20 @@ export default function HomeScreen() {
     hour < 5 ? 'Up early' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const greeting = firstName ? `${greetingBase}, ${firstName}.` : `${greetingBase}.`;
 
-  // Real per-stage lead counts, folded onto board columns exactly as the Leads
-  // Pipeline board buckets them. Stages with no leads are omitted rather than
-  // rendered as zero cards (Drift #5).
+  // Real stage-GROUP counts — the same fold the Pipeline board's own columns
+  // use (leads / inspecting / estimating / sold / production / done), not a
+  // separate per-screen grouping (docs/DESIGN_1A.md §6). Lost sits outside
+  // the funnel narrative here, same as Reports' `funnelByGroup`. Groups with
+  // nothing in them are omitted rather than rendered as zero cards (Drift #5).
   const pipelineStages = useMemo(() => {
-    const counts = new Map<LeadStage, number>();
-    for (const l of leads) {
-      const column = leadStageColumn(l.stage);
-      counts.set(column, (counts.get(column) ?? 0) + 1);
-    }
-    return LEAD_STAGE_ORDER.filter((s) => (counts.get(s) ?? 0) > 0).map((stage) => ({
-      stage,
-      label: LEAD_STAGE_LABELS[stage],
-      count: counts.get(stage) ?? 0,
+    const counts = new Map<PipelineGroup, number>();
+    for (const it of pipelineItems) counts.set(it.group, (counts.get(it.group) ?? 0) + 1);
+    return PIPELINE_GROUPS.filter((g) => g !== 'lost' && (counts.get(g) ?? 0) > 0).map((group) => ({
+      group,
+      label: PIPELINE_GROUP_LABELS[group],
+      count: counts.get(group) ?? 0,
     }));
-  }, [leads]);
+  }, [pipelineItems]);
   const pipelineTotal = useMemo(
     () => pipelineStages.reduce((sum, s) => sum + s.count, 0),
     [pipelineStages],
@@ -326,22 +329,12 @@ export default function HomeScreen() {
       }
     >
       {/* ── The cinematic moment ────────────────────────────────────────
-          Greeting + WeatherHero are ONE bleed-to-edge dark block, not two
-          modules on the grey ground. This is the congruence fix: the app
-          used to open on #F6F6FA with white cells while onboarding opens on
-          black with a drifting brand aurora, so the two read as different
-          products. Same sky here — `gradients.stormNight` with the SAME
-          `Aurora` component onboarding uses, layered transparent so the
-          gradient ramp survives underneath. One per screen: everything
-          below stays light and quiet. */}
+          Greeting + stat row + WeatherHero are ONE bleed-to-edge mesh block,
+          not three modules on the paper ground — docs/DESIGN_1A.md §6's
+          curved-bottom mesh hero. `MeshBackground` carries the 5-stop ramp
+          and grain on its own; everything below stays light and quiet. */}
       <View style={styles.heroBlock}>
-        <LinearGradient
-          colors={gradients.stormNight}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
-        <Aurora transparent />
+        <MeshBackground variant="home" />
 
         <Rise index={0}>
           <View style={styles.headerRow}>
@@ -369,10 +362,37 @@ export default function HomeScreen() {
           </View>
         </Rise>
 
-        {/* The owner's headline ask — first module under the greeting, per
+        {/* The mock's header stat row — Revenue YTD / Leads / Pipeline, real
+            numbers from lib/services/pipeline.ts (see the useMemo above),
+            not a new invented figure (Drift #5). Each opens Reports, same
+            affordance the old mid-scroll StatCard trio carried. */}
+        <Rise index={1} style={styles.heroStatsRow}>
+          <HeroStat
+            value={`$${formatShort(revenueYTD)}`}
+            label="Revenue YTD"
+            onPress={() => router.push('/reports')}
+            accessibilityLabel={`Revenue year to date $${formatShort(revenueYTD)}. Open reports.`}
+          />
+          <View style={styles.heroStatDivider} />
+          <HeroStat
+            value={String(openLeads)}
+            label="Leads"
+            onPress={() => router.push('/reports')}
+            accessibilityLabel={`${openLeads} open leads. Open reports.`}
+          />
+          <View style={styles.heroStatDivider} />
+          <HeroStat
+            value={`$${formatShort(pipelineValue)}`}
+            label="Pipeline"
+            onPress={() => router.push('/reports')}
+            accessibilityLabel={`Pipeline $${formatShort(pipelineValue)}. Open reports.`}
+          />
+        </Rise>
+
+        {/* The owner's headline ask — first module under the stats, per
             the v3 Home composition. It self-selects among alert / calm /
             checking / unavailable and always renders SOMETHING, so this slot
-            is never an empty gap between the greeting and the stats. */}
+            is never an empty gap between the stats and the tools. */}
         <Rise index={1} style={styles.heroSlot}>
           <Animated.View style={heroParallaxStyle}>
             <WeatherHero scrollY={scrollY} />
@@ -514,39 +534,9 @@ export default function HomeScreen() {
         <AreaActivityCard />
       </Rise>
 
-      {/* Stats — colour-chipped StatCards. Deltas are omitted: nothing in the
-          stores yet tracks a true prior-period comparison, and inventing one
-          would be a mock (Drift #5). Each card opens Reports — the business
-          dashboard used to be two levels deep behind Settings. */}
-      <Rise index={4} style={styles.statsRow}>
-        <StatCard
-          icon="cash-outline"
-          tone="green"
-          value={`$${formatShort(revenueYTD)}`}
-          label="Revenue YTD"
-          style={{ flex: 1 }}
-          onPress={() => router.push('/reports')}
-          accessibilityLabel={`Revenue year to date $${formatShort(revenueYTD)}. Open reports.`}
-        />
-        <StatCard
-          icon="people-outline"
-          tone="blue"
-          value={String(openLeads)}
-          label="Leads"
-          style={{ flex: 1 }}
-          onPress={() => router.push('/reports')}
-          accessibilityLabel={`${openLeads} open leads. Open reports.`}
-        />
-        <StatCard
-          icon="trending-up-outline"
-          tone="purple"
-          value={`$${formatShort(pipelineValue)}`}
-          label="Pipeline"
-          style={{ flex: 1 }}
-          onPress={() => router.push('/reports')}
-          accessibilityLabel={`Pipeline $${formatShort(pipelineValue)}. Open reports.`}
-        />
-      </Rise>
+      {/* Revenue / Leads / Pipeline now live in the header stat row (above,
+          inside the mesh hero) rather than a second copy down here — one
+          number per metric, not two that could drift. */}
 
       {/* Field tools — crafted cells, colour-chipped per tool. */}
 
@@ -700,22 +690,22 @@ export default function HomeScreen() {
         </Rise>
       )}
 
-      {/* Pipeline mini — stage cards with a colour-matched progress bar,
-          occupied stages only (Drift #5). */}
+      {/* Pipeline mini — stage-GROUP cards with a colour-matched progress
+          bar, occupied groups only (Drift #5). */}
       {pipelineStages.length > 0 && (
         <Rise index={8}>
           <SectionHeader title="Pipeline" style={styles.sectionHeaderSpacing} />
           <View style={styles.pipelineRow}>
-            {pipelineStages.map(({ stage, label, count }, i) => {
+            {pipelineStages.map(({ group, label, count }, i) => {
               const tone = PIPELINE_TONES[i % PIPELINE_TONES.length];
               const progress = pipelineTotal > 0 ? count / pipelineTotal : 0;
               return (
-                <View key={stage} style={styles.pipelineCard}>
+                <View key={group} style={styles.pipelineCard}>
                   <AnimatedCounter
                     value={count}
                     style={[styles.pipelineCount, { color: CHIP_TONES[tone].fg }]}
                   />
-                  <Text style={styles.pipelineLabel} numberOfLines={2}>
+                  <Text style={[styles.pipelineLabel, dataLabel]} numberOfLines={2}>
                     {label}
                   </Text>
                   <ProgressBar
@@ -723,7 +713,7 @@ export default function HomeScreen() {
                     tone={tone}
                     height={6}
                     style={styles.pipelineBar}
-                    accessibilityLabel={`${label}, ${count} of ${pipelineTotal} leads`}
+                    accessibilityLabel={`${label}, ${count} of ${pipelineTotal} items`}
                   />
                 </View>
               );
@@ -904,6 +894,40 @@ function HeaderIconButton({
   );
 }
 
+/**
+ * The mesh hero's own stat cell — a big Archivo number over a mono
+ * `dataLabel` caption, both in the hero's paper-tinted "white"
+ * (`colors.onMesh`, never pure white over a gradient — docs/DESIGN_1A.md
+ * §1). No card, no chip: on the mesh the typographic contrast IS the design.
+ */
+function HeroStat({
+  value,
+  label,
+  onPress,
+  accessibilityLabel,
+}: {
+  value: string;
+  label: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) {
+  return (
+    <PressableScale
+      style={styles.heroStat}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <Text style={styles.heroStatValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={[styles.heroStatLabel, dataLabel]} numberOfLines={1}>
+        {label}
+      </Text>
+    </PressableScale>
+  );
+}
+
 /** iOS grouped-list section label — 13/semibold uppercase, textSubtle. Kept
  *  only for the one header ("Get set up") that pairs with a non-actionable
  *  count rather than SectionHeader's pressable trailing action. */
@@ -957,10 +981,12 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
 
-  // ── Dark bleed-to-edge hero block ──────────────────────────────────────
+  // ── Mesh bleed-to-edge hero block ───────────────────────────────────────
   // Negative margins cancel the scroll container's gutter + top pad so the
-  // brand sky runs to all three edges; the bottom keeps a large radius so the
-  // block reads as a pane the light content slides out from under.
+  // mesh runs to all three edges; the bottom keeps a large radius (30 — the
+  // mock's own curved-bottom figure, docs/DESIGN_1A.md §6 — a one-off past
+  // `radii.xl`'s 24, same license as the onboarding hero's one-off 44px type)
+  // so the block reads as a pane the light content slides out from under.
   heroBlock: {
     marginHorizontal: -spacing.xl,
     marginTop: -spacing.md,
@@ -968,14 +994,14 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.xl,
     gap: spacing.lg,
-    borderBottomLeftRadius: radii.xl,
-    borderBottomRightRadius: radii.xl,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
     overflow: 'hidden',
     backgroundColor: brand.royalInk,
   },
   heroSlot: { minHeight: touchTarget.standard },
 
-  // Large-title header, now on the brand sky rather than the grouped ground.
+  // Large-title header, now on the mesh rather than the paper ground.
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -984,15 +1010,16 @@ const styles = StyleSheet.create({
   greeting: {
     flex: 1,
     fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.extrabold,
     // Tight, large, high-contrast — the onboarding display voice, carried
-    // into the app's own titles.
-    color: colors.textInverse,
+    // into the app's own titles. The hero's own "white" (never pure
+    // #FFFFFF over a mesh — docs/DESIGN_1A.md §1).
+    color: colors.onMesh,
     letterSpacing: -0.8,
   },
   headerActions: { flexDirection: 'row' },
   badge: { position: 'absolute', top: -4, right: -6, minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, borderWidth: 2, borderColor: colors.navy },
-  badgeText: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, color: colors.textInverse },
+  badgeText: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.bold, color: colors.textInverse },
   iconBtn: {
     width: touchTarget.standard,
     height: touchTarget.standard,
@@ -1010,8 +1037,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Stats — colour-chipped StatCards in a row.
-  statsRow: { flexDirection: 'row', gap: spacing.md },
+  // The mesh hero's own stat row — REVENUE YTD / LEADS / PIPELINE, typeset
+  // directly on the mesh (no card): a big Archivo number over a mono
+  // `dataLabel` caption is the contrast, per docs/DESIGN_1A.md §3.
+  heroStatsRow: { flexDirection: 'row', alignItems: 'center' },
+  heroStat: { flex: 1, minHeight: touchTarget.small, gap: 2 },
+  heroStatValue: {
+    fontSize: fontSize.titleLg,
+    fontFamily: fontFamily.archivo.bold,
+    color: colors.onMesh,
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
+  },
+  heroStatLabel: { color: 'rgba(242,240,231,0.72)' },
+  heroStatDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: 'rgba(242,240,231,0.22)' },
 
   stack: { gap: spacing.md },
 
@@ -1037,12 +1076,13 @@ const styles = StyleSheet.create({
   },
   heroPrimaryText: {
     fontSize: fontSize.titleMd,
-    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.textInverse,
     lineHeight: 24,
   },
   heroPrimarySub: {
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.textInverse,
     opacity: 0.9,
     marginTop: spacing.xs,
@@ -1050,12 +1090,13 @@ const styles = StyleSheet.create({
   heroQuietContent: { flex: 1, justifyContent: 'space-between' },
   heroQuietText: {
     fontSize: fontSize.titleMd,
-    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.text,
     lineHeight: 24,
   },
   heroQuietSub: {
     fontSize: fontSize.caption,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.textMuted,
     marginTop: spacing.xs,
   },
@@ -1063,7 +1104,7 @@ const styles = StyleSheet.create({
   // iOS grouped-list section headers (the one hand-rolled exception).
   sectionTitle: {
     fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.textSubtle,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -1104,7 +1145,7 @@ const styles = StyleSheet.create({
   },
   groupTitle: {
     fontSize: fontSize.bodyMd,
-    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
   },
   groupSub: {
@@ -1129,11 +1170,11 @@ const styles = StyleSheet.create({
   },
   pipelineCount: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     fontVariant: ['tabular-nums'],
   },
+  // dataLabel supplies the mono/caps/tracking; only colour lives here.
   pipelineLabel: {
-    fontSize: fontSize.caption,
     color: colors.textMuted,
   },
   pipelineBar: { marginTop: spacing.xs },
@@ -1173,8 +1214,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: glass.fill,
   },
-  toolTileTitle: { marginTop: spacing.sm, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.textInverse },
-  toolTileSub: { fontSize: fontSize.bodySm, color: colors.textInverse, opacity: 0.82 },
+  toolTileTitle: { marginTop: spacing.sm, fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, color: colors.textInverse },
+  toolTileSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.textInverse, opacity: 0.82 },
 
   recentRow: { gap: spacing.md, paddingRight: spacing.xl },
   // Shadow on the outer wrapper, clip + fill on the inner PressableScale —
@@ -1197,15 +1238,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  // Report id — the mock's "RW-2841" convention (docs/DESIGN_1A.md §3).
   recentReport: {
-    fontSize: fontSize.caption,
+    ...dataLabel,
     color: colors.textSubtle,
-    fontWeight: fontWeight.semibold,
-    letterSpacing: 0.3,
   },
   recentCustomer: {
     fontSize: fontSize.bodyLg,
-    fontWeight: fontWeight.semibold,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
   },
   recentAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
@@ -1224,7 +1264,7 @@ const styles = StyleSheet.create({
   },
   estimateAmount: {
     fontSize: fontSize.titleMd,
-    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.archivo.bold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },

@@ -18,7 +18,7 @@ import { QuickActions } from '@/components/pipeline/QuickActions';
 import { LinkedLeadCard } from '@/components/pipeline/LinkedLeadCard';
 import { DamageScoreCard } from '@/components/DamageScoreCard';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
-import { DamageDetailSection } from '@/components/DamageDetailSection';
+import { FindingsList } from './FindingsList';
 import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { SignaturePad } from '@/components/SignaturePad';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
@@ -56,6 +56,7 @@ import {
 import type { JobTabKey } from './JobTabs';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   gradients,
@@ -230,6 +231,7 @@ export function OverviewTab({
   };
 
   return (
+    <View style={styles.flex}>
     <ScrollView ref={scrollRef} style={styles.flex} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
       {/* At a Glance — the four stat tiles from the reference apps. Each taps
           through to the tab that has the detail. */}
@@ -326,6 +328,9 @@ export function OverviewTab({
       )}
 
       {inspection.event && (
+        // The "cited storm event" card — the mock's brand-tinted info-card
+        // treatment (docs/DESIGN_1A.md §6), so the corroborating NOAA event
+        // reads as a cited source rather than just another white cell.
         <RichCard
           icon="thunderstorm"
           iconTone="orange"
@@ -339,6 +344,7 @@ export function OverviewTab({
           } · ${inspection.event.source}${
             inspection.event.noaaEventId ? ` · ${inspection.event.noaaEventId}` : ''
           }`}
+          style={styles.citedEventCard}
         />
       )}
 
@@ -354,7 +360,7 @@ export function OverviewTab({
       />
 
       <SectionHeader title="Damage detail" style={styles.sectionSpacing} />
-      <DamageDetailSection inspection={inspection} />
+      <FindingsList inspection={inspection} />
 
       <RichCard
         icon={hasEvidence ? RECOMMENDATION_ICON[haag.roofwise_recommendation] : 'help-circle-outline'}
@@ -513,51 +519,67 @@ export function OverviewTab({
         )}
       </RichCard>
 
-      <PressableScale
-        style={[styles.reportCtaShadow, (generating || missing.any) && styles.reportCtaDisabled]}
-        disabled={generating || missing.any}
-        onPress={onGenerateHaagPress}
-        accessibilityRole="button"
-        accessibilityLabel={isClaim ? 'Generate HAAG claim packet PDF' : 'Generate HAAG report PDF'}
-        accessibilityState={{ disabled: generating || missing.any }}
-      >
-        <View style={styles.reportCtaClip}>
-          <LinearGradient colors={gradients.accent} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-          <View style={styles.reportCtaContent}>
-            <Ionicons name="document-text-outline" size={20} color={colors.textInverse} />
-            <Text style={styles.reportCtaText}>
-              {generating ? 'Generating…' : isClaim ? 'Generate HAAG claim packet (PDF)' : 'Generate HAAG report (PDF)'}
-            </Text>
-          </View>
-        </View>
-      </PressableScale>
-      {missing.any && (
-        <Text style={styles.gateHint}>
-          {describeMissingDetails(missing)} before generating — a packet cannot go to a carrier with placeholder
-          details.
-        </Text>
-      )}
-      {isClaim && brittlenessGap && <Text style={styles.gateHint}>Brittleness evidence is incomplete — the packet will disclose it.</Text>}
-      {inspection.reportFinalizedAt && (
-        <Text style={styles.finalizedHint}>Report last finalized {formatRelative(inspection.reportFinalizedAt)}</Text>
-      )}
-      {engineFreshnessStale && (
-        <Text style={styles.gateHint}>
-          This job changed since that report was finalized. The determination above is current; the signed PDF is
-          not — regenerate it before sending.
-        </Text>
-      )}
-
-      <PressableScale
-        style={[styles.quietCta, (generatingLong || missing.any) && { opacity: 0.5 }]}
-        disabled={generatingLong || missing.any}
-        accessibilityState={{ disabled: generatingLong || missing.any }}
-        onPress={onGenerateLongPress}
-      >
-        <Ionicons name="reader-outline" size={20} color={colors.text} />
-        <Text style={styles.quietCtaText}>{generatingLong ? 'Generating…' : 'Generate Long Report (PDF)'}</Text>
-      </PressableScale>
     </ScrollView>
+
+      {/* Sticky dual-button bar — outline "PDF" report action + primary
+          report action, docs/DESIGN_1A.md §6's "04 Damage report" template.
+          Same two handlers as the old in-flow pair (`onGenerateLongPress` /
+          `onGenerateHaagPress`); only the position and paint changed — it
+          sits below the ScrollView rather than inside it, so it's always
+          reachable without hunting for it at the end of a long scroll. */}
+      <View style={styles.stickyFooter}>
+        {missing.any && (
+          <Text style={styles.gateHint}>
+            {describeMissingDetails(missing)} before generating — a packet cannot go to a carrier with placeholder
+            details.
+          </Text>
+        )}
+        {isClaim && brittlenessGap && <Text style={styles.gateHint}>Brittleness evidence is incomplete — the packet will disclose it.</Text>}
+        {inspection.reportFinalizedAt && (
+          <Text style={styles.finalizedHint}>Report last finalized {formatRelative(inspection.reportFinalizedAt)}</Text>
+        )}
+        {engineFreshnessStale && (
+          <Text style={styles.gateHint}>
+            This job changed since that report was finalized. The determination above is current; the signed PDF is
+            not — regenerate it before sending.
+          </Text>
+        )}
+        <View style={styles.footerRow}>
+          <PressableScale
+            style={[styles.outlineCta, (generatingLong || missing.any) && styles.ctaDisabled]}
+            disabled={generatingLong || missing.any}
+            accessibilityRole="button"
+            accessibilityLabel="Generate Long Report PDF"
+            accessibilityState={{ disabled: generatingLong || missing.any }}
+            onPress={onGenerateLongPress}
+          >
+            <Ionicons name="reader-outline" size={18} color={colors.brand} />
+            <Text style={styles.outlineCtaText} numberOfLines={1}>
+              {generatingLong ? 'Generating…' : 'Long Report'}
+            </Text>
+          </PressableScale>
+
+          <PressableScale
+            style={[styles.reportCtaShadow, (generating || missing.any) && styles.ctaDisabled]}
+            disabled={generating || missing.any}
+            onPress={onGenerateHaagPress}
+            accessibilityRole="button"
+            accessibilityLabel={isClaim ? 'Generate HAAG claim packet PDF' : 'Generate HAAG report PDF'}
+            accessibilityState={{ disabled: generating || missing.any }}
+          >
+            <View style={styles.reportCtaClip}>
+              <LinearGradient colors={gradients.accent} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+              <View style={styles.reportCtaContent}>
+                <Ionicons name="document-text-outline" size={18} color={colors.textInverse} />
+                <Text style={styles.reportCtaText} numberOfLines={1}>
+                  {generating ? 'Generating…' : isClaim ? 'HAAG Packet (PDF)' : 'HAAG Report (PDF)'}
+                </Text>
+              </View>
+            </View>
+          </PressableScale>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -849,24 +871,45 @@ const styles = StyleSheet.create({
   },
   signedBadgeText: { color: colors.success, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
-  reportCtaShadow: { borderRadius: radii.button, ...shadows.raised, marginTop: spacing.sm },
-  reportCtaDisabled: { opacity: 0.5 },
-  reportCtaClip: { height: touchTarget.preferred, borderRadius: radii.button, overflow: 'hidden' },
-  reportCtaContent: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  reportCtaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  // ── Sticky dual-button bar (docs/DESIGN_1A.md §6) ─────────────────────────
+  // Sits below the ScrollView, not inside it — a fixed footer in the tab's
+  // own flex column, so it never scrolls out of reach.
+  stickyFooter: {
+    padding: spacing.lg,
+    paddingTop: spacing.sm,
+    gap: spacing.xs,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+  },
+  footerRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  ctaDisabled: { opacity: 0.5 },
 
-  gateHint: { fontSize: fontSize.bodySm, color: colors.warn, fontWeight: fontWeight.medium, textAlign: 'center', marginTop: spacing.xs },
-  finalizedHint: { fontSize: fontSize.bodySm, color: colors.textSubtle, textAlign: 'center', marginTop: spacing.xs },
-
-  quietCta: {
+  // Outline — the report action that isn't the primary send.
+  outlineCta: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
     height: touchTarget.preferred,
     borderRadius: radii.button,
-    backgroundColor: colors.fillQuiet,
-    marginTop: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.brand,
+    backgroundColor: colors.surface,
   },
-  quietCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  outlineCtaText: { color: colors.brand, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold },
+
+  // Primary — the burnt-gradient CTA, same "one considered pair" as Home's
+  // hero row.
+  reportCtaShadow: { flex: 1, borderRadius: radii.button, ...shadows.raised },
+  reportCtaClip: { height: touchTarget.preferred, borderRadius: radii.button, overflow: 'hidden' },
+  reportCtaContent: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
+  reportCtaText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.bold },
+
+  gateHint: { fontSize: fontSize.bodySm, color: colors.warn, fontWeight: fontWeight.medium, textAlign: 'center' },
+  finalizedHint: { fontSize: fontSize.bodySm, color: colors.textSubtle, textAlign: 'center' },
+
+  // The "cited storm event" info card — brand-tinted ground, per §6.
+  citedEventCard: { backgroundColor: colors.brandSoft, borderColor: colors.brand },
 });
