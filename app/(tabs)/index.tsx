@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   RefreshControl,
-  Alert,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -43,6 +42,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { AnimatedCounter } from '@/components/motion';
 import { AreaActivityCard } from '@/components/home/AreaActivityCard';
 import { TodayModule, useTodayAgenda } from '@/components/home/TodayModule';
+import { QuickActionsSheet } from '@/components/sheets/QuickActionsSheet';
 import { activityHref } from '@/components/home/activityRoute';
 import { Aurora } from '@/components/glass/Aurora';
 import { IconChip, CHIP_TONES, type ChipTone } from '@/components/ui/IconChip';
@@ -213,15 +213,10 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const onQuickAdd = () => {
-    Alert.alert('Add', undefined, [
-      { text: 'Quick Inspection', onPress: () => router.push('/quick-inspection') },
-      { text: 'New Job', onPress: () => router.push('/new-job') },
-      { text: 'New Lead', onPress: () => router.push('/new-lead') },
-      { text: 'Cost Estimate', onPress: () => router.push('/estimator') },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
+  // The "+" opens the Quick Actions sheet (owner's reference app), not a
+  // system Alert — every fast path on one grid, in the thumb zone.
+  const [quickOpen, setQuickOpen] = useState(false);
+  const onQuickAdd = () => setQuickOpen(true);
 
   // Optional first name — null when we genuinely have nothing, so the
   // greeting reads complete either way ("Up early." / "Up early, Dan.").
@@ -796,6 +791,7 @@ export default function HomeScreen() {
         <Ionicons name="add" size={28} color={colors.textInverse} />
       </PressableScale>
     </Rise>
+    <QuickActionsSheet visible={quickOpen} onClose={() => setQuickOpen(false)} />
     </View>
   );
 }

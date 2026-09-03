@@ -40,6 +40,7 @@ const ACTIONS: Action[] = [
     go: (r) => r.push({ pathname: '/(tabs)/map', params: { filter: 'storms' } } as any),
   },
   { id: 'knock', label: 'Knock Route', icon: 'walk-outline', tone: 'purple', go: (r) => r.push('/door-knocking') },
+  { id: 'finder', label: 'Where Should I Knock?', icon: 'compass-outline', tone: 'orange', go: (r) => r.push('/knock-finder') },
   { id: 'plan', label: 'Schedule', icon: 'calendar-outline', tone: 'quiet', go: (r) => r.push('/(tabs)/plan' as any) },
 ];
 

@@ -56,6 +56,10 @@ export const env = {
   // `public.corrections` through lib/services/correctionsSync.ts; the var
   // is gone on purpose — do not reintroduce a second write path.)
   NOAA_USER_AGENT: pick(process.env.EXPO_PUBLIC_NOAA_USER_AGENT, NOAA_USER_AGENT_FALLBACK),
+  // U.S. Census ACS (housing stock for "Where should I knock?"). Free key from
+  // api.census.gov/data/key_signup.html; the API 302s every unkeyed request.
+  // Optional — without it the finder scores storms only and says so.
+  CENSUS_API_KEY: pick(process.env.EXPO_PUBLIC_CENSUS_API_KEY),
 
   // Feature flags
   USE_LIVE_AR: pick(process.env.EXPO_PUBLIC_USE_LIVE_AR, 'false') === 'true',
@@ -71,3 +75,4 @@ export const isGoogleMapsConfigured = env.GOOGLE_MAPS_API_KEY.length > 0;
 export const isGooglePlacesConfigured = env.GOOGLE_PLACES_API_KEY.length > 0;
 export const isGoogleSolarConfigured = env.GOOGLE_SOLAR_API_KEY.length > 0;
 export const isWeatherConfigured = env.GOOGLE_WEATHER_API_KEY.length > 0;
+export const isCensusConfigured = env.CENSUS_API_KEY.length > 0;

@@ -61,6 +61,7 @@ import {
   type Peril,
   type Range,
 } from '@/lib/services/stormRange';
+import { eventsOnDay, stormDayLabel, stormDays } from '@/lib/services/stormDays';
 import {
   isValidLatLon,
   isValidRegion,
@@ -110,6 +111,8 @@ const BROWSE_SETTLE_MS = 700;
 
 /** How far a search / my-location jump zooms in: a neighbourhood. */
 const JUMP_REGION_DELTA = 0.08;
+/** Storm-day chips shown on the scrubber strip (newest first). */
+const STORM_DAY_CHIPS = 12;
 
 /** Statewide-ish first view: the 50-mi browse ring fits on screen. */
 const INITIAL_REGION_DELTA = 2;
@@ -598,9 +601,21 @@ export default function MapScreen() {
 
   // What the controls leave: range crop, peril, magnitude — one place, so the
   // pins, the swaths and the count line always agree.
-  const events = useMemo(
+  const controlledEvents = useMemo(
     () => applyStormControls(browsedEvents(browse), { range, peril, magnitude }),
     [browse, range, peril, magnitude],
+  );
+
+  // Date scrubber (owner: "show me only the storms from June 14"). Storm days
+  // are derived from what the controls leave; a chosen day that the current
+  // controls no longer contain falls back to all days rather than an empty
+  // map that looks like "no storms".
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const days = useMemo(() => stormDays(controlledEvents), [controlledEvents]);
+  const activeDay = selectedDay && days.some((d) => d.day === selectedDay) ? selectedDay : null;
+  const events = useMemo(
+    () => (activeDay ? eventsOnDay(controlledEvents, activeDay) : controlledEvents),
+    [controlledEvents, activeDay],
   );
 
   /** Jump the camera. Search and my-location both land here. */
@@ -966,6 +981,43 @@ export default function MapScreen() {
                       />
                     ))}
                   </ScrollView>
+                  {/* Storm days — isolate one event's footprint. Newest first,
+                      capped so the strip stays a strip; absent when the
+                      controls leave nothing. */}
+                  {days.length > 0 && (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.chipScroll}
+                      contentContainerStyle={styles.chipScrollContent}
+                    >
+                      <GlassChip
+                        active={activeDay == null}
+                        icon="calendar-outline"
+                        label="All days"
+                        accessibilityLabel="Show every storm day"
+                        onPress={() => setSelectedDay(null)}
+                      />
+                      {days.slice(0, STORM_DAY_CHIPS).map((d) => (
+                        <GlassChip
+                          key={d.day}
+                          active={activeDay === d.day}
+                          icon={d.hailCount > 0 ? 'snow-outline' : 'flag-outline'}
+                          label={stormDayLabel(d)}
+                          accessibilityLabel={`Show only ${stormDayLabel(d)}`}
+                          onPress={() => {
+                            if (activeDay === d.day) {
+                              setSelectedDay(null);
+                              return;
+                            }
+                            setSelectedDay(d.day);
+                            setSelectedEvent(null);
+                            jumpTo(d.centerLat, d.centerLon);
+                          }}
+                        />
+                      ))}
+                    </ScrollView>
+                  )}
                   {/* Peril + magnitude + overlays. */}
                   <ScrollView
                     horizontal
@@ -1018,6 +1070,15 @@ export default function MapScreen() {
                       label="Legend"
                       accessibilityLabel={legendOpen ? 'Hide the legend' : 'Show the legend'}
                       onPress={() => setLegendOpen((v) => !v)}
+                    />
+                    {/* The one-button opportunity finder — the map's data,
+                        scored and turned into a day plan. */}
+                    <GlassChip
+                      active={false}
+                      icon="compass-outline"
+                      label="Where to knock?"
+                      accessibilityLabel="Find the best areas to door-knock"
+                      onPress={() => router.push('/knock-finder')}
                     />
                   </ScrollView>
                   {legendOpen && <StormLegend />}
