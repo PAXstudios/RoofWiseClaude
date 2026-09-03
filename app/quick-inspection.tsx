@@ -1,3 +1,18 @@
+// Quick Inspection — the camera.
+//
+// A clean viewfinder by default (the iOS-17-Camera idea): the shutter, the
+// last-shot thumbnail, the slope pill, a close and one chevron. Everything
+// else is secondary chrome — the mode strip (what the frame is for), the
+// tool rail (torch, Live, level, coach, import, pitch, settings) and the
+// instrument cluster — revealed by the chevron or a tap on the roof, tucked
+// away on the next tap, on capture, or after a few idle seconds. The coach
+// drawer rides above the shutter dock with three detents; the thumbnail
+// opens the review drawer where Done lives. See `components/capture/hud/`.
+//
+// Everything below the chrome is unchanged in kind: photos are attached to
+// the inspection the moment they are taken, analysed per slope-batch as you
+// shoot, and the slope tag is never a silent default (SlopePickerSheet).
+
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
@@ -5,10 +20,9 @@ import {
   StyleSheet,
   Platform,
   Pressable,
-  ScrollView,
-  Image,
   Alert,
   AppState,
+  useWindowDimensions,
   type AppStateStatus,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,41 +45,24 @@ import { analyzeSlope, markPhotosQueued } from '@/lib/services/analyzeSlope';
 import { describeAnalysisError } from '@/lib/services/gemini';
 import { isGeminiConfigured } from '@/lib/env';
 import * as Haptics from 'expo-haptics';
-import Animated, {
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import { useReducedMotion } from 'react-native-reanimated';
 import {
   brand,
   colors,
   fontSize,
   fontWeight,
-  glass,
-  motion,
   radii,
-  shadows,
   spacing,
   touchTarget,
 } from '@/theme/tokens';
 import {
-  AREA_TAGS,
+  type AreaTag,
   type CaptureMode,
-  type Inspection,
-  type PhotoAnalysisStatus,
   type SlopeOrientation,
   yawToOrientation,
 } from '@/lib/models/types';
-import {
-  CAPTURE_MODE_OPTIONS,
-  DEFAULT_CAPTURE_MODE,
-  captureModeOption,
-  defaultAreaTagForSlope,
-  shortAreaTag,
-} from '@/lib/services/captureSession';
+import { DEFAULT_CAPTURE_MODE, defaultAreaTagForSlope } from '@/lib/services/captureSession';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
-import { CaptureCoach } from '@/components/capture/CaptureCoach';
 import { AddPhotosToSheet, type AddPhotosChoice } from '@/components/sheets/AddPhotosToSheet';
 import { CustomerDetailsSheet, type AutoLocation } from '@/components/sheets/CustomerDetailsSheet';
 import { resolveDeviceLocation } from '@/components/LocationField';
@@ -75,24 +72,51 @@ import {
   missingJobDetails,
 } from '@/lib/services/placeholderDetails';
 import { coachProgress, coachSteps, nextIncompleteStep, zoneForAreaTag } from '@/lib/services/captureCoach';
-import {
-  COMPASS_USABLE_ACCURACY,
-  useCompassHeading,
-} from '@/lib/services/deviceMotion';
+import { COMPASS_USABLE_ACCURACY, useCompassHeading } from '@/lib/services/deviceMotion';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { useCaptureSettingsStore } from '@/lib/stores/captureSettingsStore';
+import {
+  readChromeSafetySignal,
+  setChromeArmed,
+  useCaptureChromeStore,
+} from '@/lib/stores/captureChromeStore';
 import { CameraHUD } from '@/components/CameraHUD';
-import { LevelGuide, ThirdsGrid, useThrottledMotion } from '@/components/capture/LevelGuide';
+import {
+  LEVEL_TOLERANCE_DEG,
+  LevelGuide,
+  ThirdsGrid,
+  useThrottledMotion,
+} from '@/components/capture/LevelGuide';
 import { LiveOverlay } from '@/components/capture/LiveOverlay';
 import { CaptureSettingsSheet } from '@/components/capture/CaptureSettingsSheet';
-import { Pill, type PillTone } from '@/components/ui/Pill';
+import {
+  CoachDrawer,
+  HudChrome,
+  ModeStrip,
+  RailButton,
+  ReviewDrawer,
+  ShotThumb,
+  Shutter,
+  ToolRail,
+  frameModeOption,
+  summarizeSession,
+  type CapturedPhoto,
+  type FrameMode,
+  type LocalAnalysis,
+  type StripState,
+} from '@/components/capture/hud';
+import { COACH_PEEK_HEIGHT } from '@/components/capture/hud/CoachDrawer';
+import { hudPanel } from '@/components/capture/hud/glass';
 
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
 const INITIAL_SLOPE: SlopeOrientation = 'S';
+
+/** Stable options object — an inline literal re-applies on every render (#63). */
+const SCREEN_OPTIONS = { headerShown: false } as const;
 
 /**
  * How long the compass must sit in a new octant before the auto-tag follows
@@ -110,43 +134,11 @@ function octantDistance(a: SlopeOrientation, b: SlopeOrientation): number {
   return Math.min(d, SLOPES.length - d);
 }
 
-/** Inner inset of the capture-mode segmented track (the thumb slides inside it). */
-const MODE_TRACK_PAD = spacing.xs;
-
-/** The shutter ring — the one control a gloved thumb must never miss. */
-const SHUTTER = 80;
-const SHUTTER_CORE = SHUTTER - 18;
-
 /** How long the shutter waits for the live loop to hand the camera back. */
 const CAMERA_LOCK_WAIT_MS = 3000;
 
-type CapturedPhoto = {
-  uri: string;
-  slope: SlopeOrientation;
-  /** One of AREA_TAGS — the subject the inspector had selected when shooting. */
-  areaTag: string;
-  captureMode: CaptureMode;
-  /** Library imports are flagged so the strip can show where a photo came from. */
-  imported?: boolean;
-  /** Where the photo landed in the store the moment it was taken. */
-  inspectionId: string;
-  slopeId: string;
-  photoIndex: number;
-};
-
-/**
- * Screen-local analysis bookkeeping for photos the store has not (yet)
- * recorded a `photoAnalysis` entry for. The store's record wins whenever it
- * exists — this only fills the gap between "attached" and "analyzeSlope
- * wrote something".
- */
-type LocalAnalysis = { status: 'queued' | 'analyzing' | 'failed'; error?: string };
-
-type StripState = {
-  status: PhotoAnalysisStatus | 'no_ai';
-  findingCount?: number;
-  error?: string;
-};
+/** The crash-safety signal is read once per JS session, not per mount. */
+let safetySignalChecked = false;
 
 export default function QuickInspection() {
   // The capture pipeline (expo-camera viewfinder, HEIC handling, haptics)
@@ -161,7 +153,7 @@ function QuickInspectionWebNotice() {
   const router = useRouter();
   return (
     <SafeAreaView style={webStyles.root} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen options={SCREEN_OPTIONS} />
       <View style={webStyles.wrap}>
         <Ionicons name="camera-outline" size={28} color={colors.textSubtle} />
         <Text style={webStyles.title}>Quick Inspection uses the phone camera</Text>
@@ -231,10 +223,12 @@ function QuickInspectionNative() {
   const liveOverlay = useCaptureSettingsStore((s) => s.liveOverlay);
   const guides = useCaptureSettingsStore((s) => s.guides);
   const setLiveOverlay = useCaptureSettingsStore((s) => s.setLiveOverlay);
+  const setGuides = useCaptureSettingsStore((s) => s.setGuides);
   const reducedMotion = useReducedMotion();
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
+  const { height: windowH } = useWindowDimensions();
   const [slope, setSlope] = useState<SlopeOrientation>(INITIAL_SLOPE);
   // 'auto': the tag follows the compass. 'pinned': the inspector chose it and
   // the compass only WARNS. South is never a silent default any more — with a
@@ -269,6 +263,7 @@ function QuickInspectionNative() {
   const [torch, setTorch] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [livePausedReason, setLivePausedReason] = useState<string | null>(null);
   // "Who is this job for?" — asked on Done when the job is still the
   // placeholder the first shutter created. Prefilled from a GPS
@@ -277,12 +272,58 @@ function QuickInspectionNative() {
   const [locating, setLocating] = useState(false);
   const [autoLocation, setAutoLocation] = useState<AutoLocation | null>(null);
   const [locationNote, setLocationNote] = useState<string | null>(null);
-  // Live shingle count / coverage from the last live frame, for the HUD line.
+  // Live shingle count / coverage from the last live frame, for the cluster.
   const [liveStats, setLiveStats] = useState<{ shingleCount?: number; coverageFraction?: number; pixelsPerInch: number | null } | null>(null);
-  // The bottom dock grew several rows; the HUD's bottom-left stack tracks its
-  // measured height instead of a constant that drifts every layout change.
+  // Measured chrome, so every absolute layer clears the others.
   const [dockHeight, setDockHeight] = useState(0);
   const [topBarHeight, setTopBarHeight] = useState(0);
+  const [modeStripHeight, setModeStripHeight] = useState(0);
+  // Hold-to-steady: the long-pressed shutter shows the level until release.
+  const [steadying, setSteadying] = useState(false);
+
+  // ── Chrome state (persisted preferences + crash-safety) ───────────────
+  const chromeOpenSaved = useCaptureChromeStore((s) => s.chromeOpen);
+  const setChromeOpenSaved = useCaptureChromeStore((s) => s.setChromeOpen);
+  const keepOpen = useCaptureChromeStore((s) => s.keepOpen);
+  const setKeepOpen = useCaptureChromeStore((s) => s.setKeepOpen);
+  const coachDetent = useCaptureChromeStore((s) => s.coachDetent);
+  const setCoachDetent = useCaptureChromeStore((s) => s.setCoachDetent);
+  const squareGuide = useCaptureChromeStore((s) => s.squareGuide);
+  const setSquareGuide = useCaptureChromeStore((s) => s.setSquareGuide);
+  const staticReason = useCaptureChromeStore((s) => s.staticReason);
+  const setStaticReason = useCaptureChromeStore((s) => s.setStaticReason);
+  const [chromeOpen, setChromeOpenLocal] = useState<boolean>(chromeOpenSaved);
+  const setChromeOpen = useCallback(
+    (v: boolean) => {
+      setChromeOpenLocal(v);
+      setChromeOpenSaved(v);
+    },
+    [setChromeOpenSaved],
+  );
+  const toggleChrome = () => {
+    Haptics.selectionAsync().catch(() => {});
+    setChromeOpen(!chromeOpen);
+  };
+  // Static chrome: Reduce Motion, or the previous run died on this screen.
+  const staticChrome = reducedMotion || staticReason != null;
+
+  useEffect(() => {
+    if (safetySignalChecked) return;
+    safetySignalChecked = true;
+    let cancelled = false;
+    readChromeSafetySignal().then((signal) => {
+      if (cancelled || !signal) return;
+      setStaticReason(signal);
+      useToastStore.getState().show({
+        tone: 'info',
+        title: 'Camera controls are static this session',
+        body: 'RoofWise closed unexpectedly on the camera last time. Turn animation back on in capture settings.',
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [setStaticReason]);
 
   // ── Where photos land ─────────────────────────────────────────────────
   // Photos are attached to the inspection the moment they are taken (a
@@ -334,7 +375,7 @@ function QuickInspectionNative() {
   // live loop share this ref: whoever sets it true owns the camera.
   const cameraLock = useRef(false);
 
-  // ── Focus / app state → sensors + live loop ───────────────────────────
+  // ── Focus / app state → sensors + live loop + the armed flag ──────────
   const [focused, setFocused] = useState(true);
   useFocusEffect(
     useCallback(() => {
@@ -349,8 +390,15 @@ function QuickInspectionNative() {
     );
     return () => sub.remove();
   }, []);
-  const motionSample = useThrottledMotion(focused && appActive && permission?.granted === true);
-  const compass = useCompassHeading(focused && appActive && permission?.granted === true);
+  const sensorsOn = focused && appActive && permission?.granted === true;
+  // Armed while the camera is on screen; cleared on blur / background /
+  // unmount. Still set at the next launch ⇒ the run ended here ⇒ static chrome.
+  useEffect(() => {
+    setChromeArmed(sensorsOn);
+    return () => setChromeArmed(false);
+  }, [sensorsOn]);
+  const motionSample = useThrottledMotion(sensorsOn);
+  const compass = useCompassHeading(sensorsOn);
   const compassUsable = !!compass && compass.accuracy >= COMPASS_USABLE_ACCURACY;
   const compassSlope: SlopeOrientation | null = compassUsable
     ? yawToOrientation(compass.degrees)
@@ -374,34 +422,31 @@ function QuickInspectionNative() {
     };
   }, [compassSlope, slope, slopeMode, areaTagPinned]);
 
-  // iOS-17 on-glass segmented control for capture mode: a white thumb springs
-  // between segments on a glass track. Purely presentational chrome — the
-  // selection logic (selectCaptureMode) is untouched.
-  const [modeTrackW, setModeTrackW] = useState(0);
-  const modeThumbX = useSharedValue(0);
-  const activeModeIndex = Math.max(
-    0,
-    CAPTURE_MODE_OPTIONS.findIndex((o) => o.mode === captureMode),
-  );
-  const modeSegW =
-    modeTrackW > 0
-      ? (modeTrackW - MODE_TRACK_PAD * 2) / CAPTURE_MODE_OPTIONS.length
-      : 0;
-  useEffect(() => {
-    if (modeSegW > 0) {
-      const x = MODE_TRACK_PAD + activeModeIndex * modeSegW;
-      modeThumbX.value = reducedMotion ? x : withSpring(x, motion.snappy);
-    }
-  }, [modeSegW, activeModeIndex, modeThumbX, reducedMotion]);
-  const modeThumbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: modeThumbX.value }],
-  }));
-
   const selectSlope = (next: SlopeOrientation) => {
     setSlope(next);
     setSlopeMode('pinned');
     if (!areaTagPinned) setAreaTag(defaultAreaTagForSlope(next));
     Haptics.selectionAsync().catch(() => {});
+  };
+
+  /** Long-press on the slope pill: pin the current tag, or hand it back to the compass. */
+  const togglePin = () => {
+    if (slopeMode === 'auto') {
+      setSlopeMode('pinned');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      toast({ tone: 'info', title: `Pinned ${slope}`, body: 'The compass only warns now. Hold again to follow it.' });
+      return;
+    }
+    if (!compassSlope) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      setSlopePrompt('No compass fix — pick the slope by hand.');
+      return;
+    }
+    setSlopeMode('auto');
+    setSlope(compassSlope);
+    if (!areaTagPinned) setAreaTag(defaultAreaTagForSlope(compassSlope));
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    toast({ tone: 'info', title: `Following the compass — ${compassSlope}` });
   };
 
   // ── Guided capture ────────────────────────────────────────────────────
@@ -509,14 +554,28 @@ function QuickInspectionNative() {
     setSlopePrompt(null);
   };
 
-  const selectAreaTag = (tag: string) => {
+  const selectAreaTag = (tag: AreaTag) => {
     setAreaTag(tag);
     setAreaTagPinned(true);
     Haptics.selectionAsync().catch(() => {});
   };
 
-  const selectCaptureMode = (mode: CaptureMode) => {
-    setCaptureMode(mode);
+  /**
+   * A frame mode is a view over (captureMode, areaTag). Test square and
+   * Close-up return the tag to the slope's own plane and let it follow the
+   * slope again; Edges and Collateral pin their first subject — you shoot
+   * gutters on more than one elevation.
+   */
+  const selectFrameMode = (mode: FrameMode) => {
+    const option = frameModeOption(mode);
+    setCaptureMode(option.captureMode);
+    if (mode === 'square' || mode === 'closeup') {
+      setAreaTag(defaultAreaTagForSlope(slope));
+      setAreaTagPinned(false);
+    } else {
+      setAreaTag(option.tags[0]);
+      setAreaTagPinned(true);
+    }
     Haptics.selectionAsync().catch(() => {});
   };
 
@@ -553,7 +612,7 @@ function QuickInspectionNative() {
    * (explicit `photoIndexes`, so a Retry re-runs a photo the store already
    * counts as analysed); photos captured while it runs stay queued for the
    * next pass. The pass result names each failed photo with a plain-words
-   * reason — that is what the strip and the hint line show.
+   * reason — that is what the review drawer shows.
    */
   const pump = useCallback(async () => {
     if (runningRef.current) return;
@@ -742,6 +801,8 @@ function QuickInspectionNative() {
   const capture = async () => {
     if (!camRef.current || capturing) return;
     setCapturing(true);
+    // The chrome gets out of the way of the shot — and stays out until asked.
+    if (chromeOpen && !keepOpen) setChromeOpen(false);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (!(await acquireCamera())) {
@@ -768,6 +829,16 @@ function QuickInspectionNative() {
     }
   };
 
+  /** Long-press on the shutter: show the level, capture on release. */
+  const onSteadyStart = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setSteadying(true);
+  };
+  const onSteadyEnd = () => {
+    setSteadying(false);
+    void capture();
+  };
+
   /**
    * Import existing photos from the library. Imports are first-class captures:
    * the shared `importFromLibrary` service normalizes each asset through the
@@ -782,8 +853,7 @@ function QuickInspectionNative() {
    * throws, returns nothing, or `multiSelectImport` is off. A per-asset read
    * failure (unreadable HEIC, iCloud not-downloaded) is reported without
    * aborting the batch.
-   */
-  /**
+   *
    * @param slopeChosen  the picker just answered — skip the gate. Needed
    *   because the re-entry runs before React commits the new `slopeMode`, so
    *   reading state here again would re-open the picker forever.
@@ -845,8 +915,10 @@ function QuickInspectionNative() {
       } else if (result.reachedLimit && result.imported > 0) {
         Alert.alert(
           'Import paused',
-          `Added ${result.imported} photos. Tap the library button again to keep importing.`,
+          `Added ${result.imported} photos. Tap Import on the tool rail again to keep importing.`,
         );
+      } else if (result.imported > 0) {
+        toast({ tone: 'success', title: `Imported ${result.imported} photo${result.imported === 1 ? '' : 's'}` });
       }
     } catch (e) {
       // The service is defensive; this only fires on an unexpected programming
@@ -868,6 +940,7 @@ function QuickInspectionNative() {
    * packet and proposal off until the details are real.
    */
   const finish = () => {
+    setReviewOpen(false);
     const inspectionId = targetIdRef.current;
     if (photos.length === 0 || !inspectionId) {
       router.back();
@@ -979,6 +1052,7 @@ function QuickInspectionNative() {
       enqueueAnalysis(photo.uri);
       return;
     }
+    setReviewOpen(false);
     router.push({
       pathname: '/edit-detection',
       params: {
@@ -989,12 +1063,47 @@ function QuickInspectionNative() {
     });
   };
 
+  // ── Rail actions ──────────────────────────────────────────────────────
+  const onTorch = () => {
+    Haptics.selectionAsync().catch(() => {});
+    setTorch((t) => !t);
+  };
+  const onLive = () => {
+    Haptics.selectionAsync().catch(() => {});
+    if (!isGeminiConfigured) {
+      // The disc cannot do anything without a key — the sheet says why.
+      setSettingsOpen(true);
+      return;
+    }
+    if (!liveOverlay) setLivePausedReason(null);
+    setLiveOverlay(!liveOverlay);
+  };
+  const onGuides = () => {
+    Haptics.selectionAsync().catch(() => {});
+    setGuides(!guides);
+  };
+  const onCoach = () => {
+    Haptics.selectionAsync().catch(() => {});
+    setCoachEnabled(!coachEnabled);
+  };
+  const onKeepOpen = () => {
+    const next = !keepOpen;
+    setKeepOpen(next);
+    if (next) setChromeOpen(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    toast({
+      tone: 'info',
+      title: next ? 'Controls stay open' : 'Controls tuck away again',
+      body: next ? 'Hold the chevron again to let them tuck away.' : undefined,
+    });
+  };
+
   if (!permission) return <View style={styles.permRoot} />;
 
   if (!permission.granted) {
     return (
       <SafeAreaView style={styles.permRoot} edges={['top', 'bottom']}>
-        <Stack.Screen options={{ headerShown: false }} />
+        <Stack.Screen options={SCREEN_OPTIONS} />
         <View style={styles.permWrap}>
           <Ionicons name="camera-outline" size={40} color={colors.textInverse} />
           <Text style={styles.permTitle}>Camera access needed</Text>
@@ -1012,37 +1121,221 @@ function QuickInspectionNative() {
     );
   }
 
-  const chromeTop = insets.top + topBarHeight + spacing.sm;
-  const chromeBottom = dockHeight ? dockHeight + insets.bottom + spacing.sm : undefined;
+  // ── Layout math — every layer clears the ones it must not cover ───────
+  const topBarTop = insets.top + spacing.sm;
+  const chromeTop = topBarTop + topBarHeight + spacing.sm;
+  const modeStripTop = chromeTop;
+  const railTop = modeStripTop + (modeStripHeight || 0) + spacing.md;
+  const dockBottom = insets.bottom + spacing.md;
+  const dockClear = dockBottom + dockHeight + spacing.sm;
+  const coachOn = coachEnabled && coachProg.length > 0;
+  const coachBottom = dockClear;
+  const aboveDock = coachOn ? coachBottom + COACH_PEEK_HEIGHT + spacing.sm : dockClear;
+  const railMaxHeight = Math.max(touchTarget.standard, windowH - railTop - aboveDock - spacing.md);
+  const coachMaxHeight = Math.max(0, windowH - chromeTop - coachBottom - spacing.lg);
+
   const targetPitch = inspection?.slopes.find((s) => s.orientation === slope)?.pitchDegrees;
-  const livePaused = capturing || importing || analyzing || namingOpen;
+  const sheetOpen = addToOpen || slopePrompt !== null || settingsOpen || namingOpen || reviewOpen;
+  const livePaused = capturing || importing || analyzing || namingOpen || reviewOpen;
+  const liveLabelTop = chromeTop + (chromeOpen ? (modeStripHeight || 0) + spacing.sm : 0);
 
-  // The most recent failed photo's reason, in plain words, where the roofer
-  // is already looking — the pill alone only has room for "Failed · Retry".
-  const lastFailure = [...photos]
-    .reverse()
-    .map((p) => stripStateFor(p, inspection, localAnalysis[p.uri]))
-    .find((s) => s.status === 'failed');
+  // The level's own verdict, for the shutter ring while holding to steady.
+  const levelOk: boolean | null = motionSample
+    ? Math.max(
+        Math.abs(motionSample.rollDegrees),
+        Math.abs(motionSample.pitchDegrees - (targetPitch ?? 0)),
+      ) <= LEVEL_TOLERANCE_DEG
+    : null;
 
-  const hint = importing
+  const session = summarizeSession(photos, inspection, localAnalysis);
+  const lastPhoto = photos.length > 0 ? photos[photos.length - 1] : null;
+  const importingState = importing
+    ? { done: importProgress?.done ?? 0, total: importProgress?.phase === 'multi' ? importProgress.total : undefined }
+    : null;
+
+  // One caption above the shutter, only when there is something to say.
+  const caption = steadying
+    ? levelOk === true
+      ? 'Square to roof — let go to shoot'
+      : 'Hold steady — let go to shoot'
+    : importing
     ? importProgress
       ? importProgress.phase === 'multi'
         ? `Importing ${importProgress.done} of ${importProgress.total}…`
         : `Imported ${importProgress.done} — tap Cancel in the picker when done.`
       : 'Opening your photo library…'
-    : photos.length === 0
-    ? captureModeOption(captureMode).hint
-    : lastFailure
-    ? `Analysis failed — ${(lastFailure.error ?? 'unknown reason').replace(/[.\s]+$/, '')}. Tap the photo to retry.`
     : !isGeminiConfigured
+    ? 'AI analysis isn’t set up on this build — photos save without analysis.'
+    : null;
+
+  const reviewStatus = !isGeminiConfigured
     ? "AI analysis isn't set up on this build — photos are saved without analysis. Ask your admin."
     : liveOverlay
-    ? 'Live overlay reads the camera. Photos analyze as you shoot — tap Done when finished.'
-    : 'Photos analyze as you shoot. Tap a thumbnail to check it, Done when finished.';
+    ? 'Live overlay reads the camera. Photos analyze as you shoot.'
+    : 'Photos analyze as you shoot. Tap one to check it.';
+
+  const onViewfinderTap = () => {
+    // A tap on the roof with the coach open tucks the coach first.
+    if (coachOn && coachDetent !== 'peek') {
+      setCoachDetent('peek');
+      return;
+    }
+    toggleChrome();
+  };
+
+  const slopeStatus = slopeMode === 'auto' ? (compassSlope ? 'auto' : 'not set') : 'pinned';
+
+  const topBar = (
+    <View
+      style={[styles.topBar, { top: topBarTop }]}
+      onLayout={(e) => setTopBarHeight(e.nativeEvent.layout.height)}
+      pointerEvents="box-none"
+    >
+      <RailButton bare icon="close" caption="" onPress={close} accessibilityLabel="Close camera" />
+
+      {/* The slope tag, always in view and always one tap to change. Hold to
+          pin it (or hand it back to the compass). */}
+      <Pressable
+        style={({ pressed }) => [styles.slopePill, pressed && styles.pressed]}
+        onPress={() => setSlopePrompt('Which slope are you shooting?')}
+        onLongPress={togglePin}
+        delayLongPress={400}
+        accessibilityRole="button"
+        accessibilityLabel={`Tagging ${slope} slope, ${slopeMode === 'auto' ? 'from the compass' : 'pinned'}. ${photos.length} photo${photos.length === 1 ? '' : 's'}. Tap to change. Hold to ${slopeMode === 'auto' ? 'pin' : 'follow the compass'}.`}
+      >
+        <Ionicons
+          name={slopeMode === 'auto' ? 'compass-outline' : 'pin'}
+          size={18}
+          color={colors.textInverse}
+        />
+        <Text style={styles.slopePillSlope}>{slope}</Text>
+        <Text style={styles.slopePillText} numberOfLines={1}>
+          {slopeStatus}
+          {photos.length > 0 ? ` · ${photos.length}` : ''}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color={colors.textInverse} />
+      </Pressable>
+
+      <RailButton
+        bare
+        icon={chromeOpen ? 'chevron-up' : 'chevron-down'}
+        caption=""
+        active={chromeOpen}
+        dot={keepOpen}
+        onPress={toggleChrome}
+        onLongPress={onKeepOpen}
+        accessibilityLabel={
+          chromeOpen
+            ? `Hide controls. Hold to ${keepOpen ? 'let them tuck away' : 'keep them open'}.`
+            : `Show controls. Hold to ${keepOpen ? 'let them tuck away' : 'keep them open'}.`
+        }
+      />
+    </View>
+  );
+
+  const dock = (
+    <View
+      style={[styles.dock, { bottom: dockBottom }]}
+      onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
+      pointerEvents="box-none"
+    >
+      {caption && (
+        <View style={styles.captionPill} pointerEvents="none">
+          <Text style={styles.captionText} numberOfLines={2}>
+            {caption}
+          </Text>
+        </View>
+      )}
+      <View style={styles.shutterRow} pointerEvents="box-none">
+        <View style={styles.dockSlot}>
+          <ShotThumb
+            uri={lastPhoto?.uri ?? null}
+            count={photos.length}
+            state={session.state}
+            failedCount={session.failed}
+            importing={importingState}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setReviewOpen(true);
+            }}
+            static={staticChrome}
+          />
+        </View>
+
+        <Shutter
+          onCapture={capture}
+          onSteadyStart={onSteadyStart}
+          onSteadyEnd={onSteadyEnd}
+          busy={capturing}
+          steadying={steadying}
+          levelOk={levelOk}
+          static={staticChrome}
+        />
+
+        <View style={[styles.dockSlot, styles.dockSlotEnd]}>
+          {photos.length > 0 ? (
+            <Pressable
+              onPress={finish}
+              style={({ pressed }) => [styles.doneBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`Done. ${photos.length} photo${photos.length === 1 ? '' : 's'} captured. Review and analyze.`}
+            >
+              <Ionicons name="checkmark" size={22} color={colors.textInverse} />
+              <Text style={styles.doneText}>Done</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+
+  const secondary = (
+    <>
+      <ModeStrip
+        style={[styles.modeStrip, { top: modeStripTop }]}
+        captureMode={captureMode}
+        areaTag={areaTag}
+        squareGuide={squareGuide}
+        onSelectMode={selectFrameMode}
+        onSelectTag={selectAreaTag}
+        onToggleSquareGuide={() => {
+          Haptics.selectionAsync().catch(() => {});
+          setSquareGuide(!squareGuide);
+        }}
+        onLayout={(e) => setModeStripHeight(e.nativeEvent.layout.height)}
+      />
+      <ToolRail
+        style={[styles.rail, { top: railTop }]}
+        maxHeight={railMaxHeight}
+        torch={torch}
+        onTorch={onTorch}
+        live={liveOverlay}
+        liveAvailable={isGeminiConfigured}
+        livePaused={livePausedReason != null}
+        onLive={onLive}
+        guides={guides}
+        onGuides={onGuides}
+        coach={coachEnabled}
+        onCoach={onCoach}
+        importing={importing}
+        onImport={() => runLibraryImport()}
+        onPitchGauge={() => router.push('/pitch-gauge')}
+        onSettings={() => setSettingsOpen(true)}
+      />
+      <CameraHUD
+        style={[styles.instruments, { bottom: aboveDock }]}
+        selectedSlope={slope}
+        slopeSource={slopeMode}
+        motion={motionSample}
+        heading={compass}
+        liveShingleCount={liveOverlay ? liveStats?.shingleCount ?? null : null}
+      />
+    </>
+  );
 
   return (
     <View style={styles.root}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen options={SCREEN_OPTIONS} />
       <CameraView
         ref={camRef}
         style={StyleSheet.absoluteFill}
@@ -1066,13 +1359,13 @@ function QuickInspectionNative() {
           focused={focused}
           slope={slope}
           reducedMotion={reducedMotion}
-          labelTop={chromeTop}
+          labelTop={liveLabelTop}
           onError={onLiveError}
           // The 10x10 guide only makes sense when the shot IS a test square.
-          guide={captureMode === 'square_10x10'}
+          guide={captureMode === 'square_10x10' && squareGuide}
           onFrameStats={setLiveStats}
         />
-        {guides && (
+        {(guides || steadying) && (
           <LevelGuide
             motion={motionSample}
             targetPitchDegrees={targetPitch}
@@ -1081,275 +1374,68 @@ function QuickInspectionNative() {
         )}
       </View>
 
-      <CameraHUD
-        selectedSlope={slope}
-        slopeSource={slopeMode}
-        areaTag={areaTag}
-        captureMode={captureMode}
-        motion={motionSample}
-        heading={compass}
-        topInset={chromeTop + (liveOverlay ? touchTarget.small : 0)}
-        bottomInset={chromeBottom}
+      <HudChrome
+        open={chromeOpen}
+        onViewfinderTap={onViewfinderTap}
+        onIdle={() => setChromeOpen(false)}
+        keepOpen={keepOpen}
+        paused={sheetOpen || steadying}
+        static={staticChrome}
+        primary={
+          <>
+            {topBar}
+            {dock}
+          </>
+        }
+        secondary={secondary}
       />
 
-      <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
-        <View
-          style={styles.topRow}
-          onLayout={(e) => setTopBarHeight(e.nativeEvent.layout.height)}
-        >
-          <Pressable
-            onPress={close}
-            style={styles.topBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Close camera"
-          >
-            <Ionicons name="close" size={26} color={colors.textInverse} />
-          </Pressable>
-
-          {/* The slope tag, always in view and always one tap to change.
-              It used to be a status readout; the dock chips it pointed at sat
-              below the fold, and every photo of every elevation filed as S. */}
-          <Pressable
-            style={styles.topPill}
-            onPress={() => setSlopePrompt('Which slope are you shooting?')}
-            accessibilityRole="button"
-            accessibilityLabel={`Tagging ${slope} slope, ${slopeMode === 'auto' ? 'from the compass' : 'pinned'}. ${photos.length} photos. Tap to change.`}
-          >
-            <Ionicons
-              name={slopeMode === 'auto' ? 'compass-outline' : 'pin'}
-              size={16}
-              color={colors.textInverse}
-            />
-            <Text style={styles.topPillSlope}>{slope}</Text>
-            <Text style={styles.topPillText} numberOfLines={1}>
-              {slopeMode === 'auto' ? (compassSlope ? 'auto' : 'not set') : 'pinned'}
-              {photos.length > 0 ? ` · ${photos.length} photo${photos.length === 1 ? '' : 's'}` : ''}
-              {liveOverlay && liveStats?.shingleCount != null ? ` · ~${liveStats.shingleCount} shingles` : ''}
-            </Text>
-            <Ionicons name="chevron-down" size={14} color={colors.textInverse} />
-          </Pressable>
-
-          <View style={styles.topRightGroup}>
-            {photos.length > 0 && (
-              <Pressable
-                onPress={finish}
-                style={styles.topBtn}
-                accessibilityRole="button"
-                accessibilityLabel={`Done. ${photos.length} photos captured. Review and analyze.`}
-              >
-                <Ionicons name="checkmark" size={26} color={colors.textInverse} />
-              </Pressable>
-            )}
-            <Pressable
-              onPress={() => router.push('/pitch-gauge')}
-              style={styles.topBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Open pitch gauge"
-            >
-              <Ionicons name="compass-outline" size={24} color={colors.textInverse} />
-            </Pressable>
-            <Pressable
-              onPress={() => setSettingsOpen(true)}
-              style={[styles.topBtn, liveOverlay && styles.topBtnActive]}
-              accessibilityRole="button"
-              accessibilityLabel="Capture settings"
-            >
-              <Ionicons
-                name="settings-outline"
-                size={24}
-                color={liveOverlay ? colors.text : colors.textInverse}
-              />
-            </Pressable>
-          </View>
-        </View>
-
-        <View
-          style={styles.bottomDock}
-          onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
-        >
-          {coachEnabled && coachProg.length > 0 && (
-            <CaptureCoach
-              progress={coachProg}
-              activeIndex={Math.min(coachIndex, coachProg.length - 1)}
-              onSelectStep={applyCoachStep}
-              onDismiss={() => setCoachEnabled(false)}
-            />
-          )}
-          {photos.length > 0 && (
-            <ReviewStrip
-              photos={photos}
-              inspection={inspection}
-              localAnalysis={localAnalysis}
-              reducedMotion={reducedMotion}
-              onOpen={openPhoto}
-              onDone={finish}
-            />
-          )}
-
-          {/* Capture mode. Above everything else because it decides whether a
-              photo's hits can ever count toward the per-square threshold.
-              iOS-17 on-glass segmented: glass track, white sliding thumb. */}
-          <View
-            style={styles.modeTrack}
-            onLayout={(e) => setModeTrackW(e.nativeEvent.layout.width)}
-          >
-            {modeSegW > 0 && (
-              <Animated.View
-                style={[styles.modeThumb, { width: modeSegW }, modeThumbStyle]}
-              />
-            )}
-            {CAPTURE_MODE_OPTIONS.map((opt) => {
-              const active = captureMode === opt.mode;
-              return (
-                <Pressable
-                  key={opt.mode}
-                  style={styles.modeSegment}
-                  onPress={() => selectCaptureMode(opt.mode)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={`${opt.label}. ${opt.hint}`}
-                >
-                  <Ionicons
-                    name={opt.icon}
-                    size={18}
-                    color={active ? colors.text : colors.textInverse}
-                    style={{ opacity: active ? 1 : 0.75 }}
-                  />
-                  <Text
-                    style={[styles.modeSegmentText, active && styles.modeSegmentTextActive]}
-                    numberOfLines={2}
-                  >
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* Capture subject — the 19 area tags. Rides each photo into the report. */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipRow}
-          >
-            <Text style={styles.rowLabel}>AREA</Text>
-            {AREA_TAGS.map((tag) => {
-              const active = areaTag === tag;
-              return (
-                <Pressable
-                  key={tag}
-                  style={[styles.chip, active && styles.chipActive]}
-                  onPress={() => selectAreaTag(tag)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
-                    {tag}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipRow}
-          >
-            <Text style={styles.rowLabel}>SLOPE</Text>
-            {SLOPES.map((s) => (
-              <Pressable
-                key={s}
-                style={[styles.chip, slope === s && styles.chipActive]}
-                onPress={() => selectSlope(s)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: slope === s }}
-                accessibilityLabel={`Slope ${s}`}
-              >
-                <Text style={[styles.chipText, slope === s && styles.chipTextActive]}>
-                  {s}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-
-          <View style={styles.shutterRow}>
-            <Pressable
-              onPress={() => runLibraryImport()}
-              disabled={importing}
-              style={[styles.dockBtn, importing && styles.dockBtnBusy]}
-              accessibilityRole="button"
-              accessibilityLabel="Import photos from library. Keep picking, then tap Cancel when done."
-            >
-              <Ionicons name="images-outline" size={26} color={colors.textInverse} />
-            </Pressable>
-
-            <Pressable
-              style={[styles.shutter, capturing && styles.shutterBusy]}
-              onPress={capture}
-              disabled={capturing}
-              accessibilityRole="button"
-              accessibilityLabel="Capture photo"
-            >
-              <View style={styles.shutterInner} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
-                setTorch((t) => !t);
-              }}
-              style={[styles.dockBtn, torch && styles.dockBtnActive]}
-              accessibilityRole="button"
-              accessibilityState={{ checked: torch }}
-              accessibilityLabel={torch ? 'Turn torch off' : 'Turn torch on'}
-            >
-              <Ionicons
-                name={torch ? 'flashlight' : 'flashlight-outline'}
-                size={26}
-                color={torch ? colors.text : colors.textInverse}
-              />
-            </Pressable>
-          </View>
-
-          <Text style={styles.captureHint} numberOfLines={2}>
-            {hint}
-          </Text>
-        </View>
-      </SafeAreaView>
+      {coachOn && (
+        <CoachDrawer
+          progress={coachProg}
+          activeIndex={Math.min(coachIndex, coachProg.length - 1)}
+          onSelectStep={applyCoachStep}
+          onDismiss={() => setCoachEnabled(false)}
+          detent={coachDetent}
+          onDetentChange={setCoachDetent}
+          bottomOffset={coachBottom}
+          maxHeight={coachMaxHeight}
+          static={staticChrome}
+        />
+      )}
 
       <AddPhotosToSheet
-
         visible={addToOpen}
-
         onChoose={onAddToChoice}
-
         onCancel={() => setAddToOpen(false)}
-
       />
 
       <SlopePickerSheet
-
         visible={slopePrompt !== null}
-
         selected={slope}
-
         compassSuggestion={compassSlope}
-
         photoCounts={photoCountsBySlope()}
-
         reason={slopePrompt ?? undefined}
-
         onSelect={onSlopePicked}
-
         onCancel={onSlopePickerCancel}
-
       />
 
       <CaptureSettingsSheet
         visible={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         livePausedReason={livePausedReason}
+      />
+
+      <ReviewDrawer
+        visible={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        photos={photos}
+        inspection={inspection}
+        localAnalysis={localAnalysis}
+        reducedMotion={reducedMotion}
+        onOpen={openPhoto}
+        onDone={finish}
+        statusLine={reviewStatus}
       />
 
       {/* Cancel / drag-down returns to the camera (Done is abandoned); "Skip
@@ -1401,161 +1487,21 @@ function QuickInspectionNative() {
   );
 }
 
-// ── Review strip ─────────────────────────────────────────────────────────
-
-/** State of one thumbnail: the store's record wins, screen-local fills gaps. */
-function stripStateFor(
-  photo: CapturedPhoto,
-  inspection: Inspection | undefined,
-  local: LocalAnalysis | undefined,
-): StripState {
-  if (!isGeminiConfigured) return { status: 'no_ai' };
-  const slope = inspection?.slopes.find((s) => s.id === photo.slopeId);
-  const markersOnPhoto = slope
-    ? slope.damage.filter((m) => m.photoIndex === photo.photoIndex).length
-    : 0;
-  const stored = slope?.photoAnalysis?.[photo.uri];
-  // Done is done — the store knows before this screen's batch reconciles.
-  if (stored?.status === 'done') {
-    return { status: 'done', findingCount: stored.findingCount ?? markersOnPhoto };
-  }
-  // A fresh local queue/analyzing entry (a retry) outranks a stale stored
-  // failure; otherwise the store's own record is the truth.
-  if (local && local.status !== 'failed') return { status: local.status };
-  if (stored) {
-    return {
-      status: stored.status,
-      findingCount: stored.findingCount ?? markersOnPhoto,
-      error: stored.error,
-    };
-  }
-  if (slope?.analyzedPhotoIndices?.includes(photo.photoIndex)) {
-    return { status: 'done', findingCount: markersOnPhoto };
-  }
-  if (local) return { status: local.status, error: local.error };
-  return { status: 'queued' };
-}
-
-function pillFor(state: StripState): { label: string; tone: PillTone; pulse: boolean } {
-  switch (state.status) {
-    case 'no_ai':
-      return { label: 'No AI', tone: 'warn', pulse: false };
-    case 'analyzing':
-      return { label: 'Analyzing', tone: 'info', pulse: true };
-    case 'done':
-      return { label: `Done · ${state.findingCount ?? 0}`, tone: 'success', pulse: false };
-    case 'failed':
-      return { label: 'Failed · Retry', tone: 'danger', pulse: false };
-    default:
-      return { label: 'Queued', tone: 'neutral', pulse: false };
-  }
-}
-
-function ReviewStrip({
-  photos,
-  inspection,
-  localAnalysis,
-  reducedMotion,
-  onOpen,
-  onDone,
-}: {
-  photos: CapturedPhoto[];
-  inspection: Inspection | undefined;
-  localAnalysis: Record<string, LocalAnalysis>;
-  reducedMotion: boolean;
-  onOpen: (photo: CapturedPhoto, state: StripState) => void;
-  onDone: () => void;
-}) {
-  const scrollRef = useRef<ScrollView>(null);
-  return (
-    <View style={styles.stripRow}>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.strip}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: !reducedMotion })}
-      >
-        {photos.map((p) => {
-          const state = stripStateFor(p, inspection, localAnalysis[p.uri]);
-          const pill = pillFor(state);
-          const a11y =
-            state.status === 'failed'
-              ? `Photo ${p.photoIndex + 1}, ${shortAreaTag(p.areaTag)}. Analysis failed${state.error ? `: ${state.error}` : ''}. Tap to retry.`
-              : `Photo ${p.photoIndex + 1}, ${shortAreaTag(p.areaTag)}, ${pill.label}. Tap to open.`;
-          return (
-            <Pressable
-              key={p.uri}
-              style={styles.thumbCol}
-              onPress={() => onOpen(p, state)}
-              accessibilityRole="button"
-              accessibilityLabel={a11y}
-            >
-              <View style={[styles.thumbWrap, state.status === 'failed' && styles.thumbWrapFailed]}>
-                <Image source={{ uri: p.uri }} style={styles.thumb} />
-                <View style={styles.thumbTag}>
-                  <Text style={styles.thumbTagText} numberOfLines={1}>
-                    {shortAreaTag(p.areaTag)}
-                  </Text>
-                </View>
-                {p.captureMode === 'single_shingle' && (
-                  <View style={styles.thumbModeDot}>
-                    <Ionicons name="layers" size={10} color={colors.textInverse} />
-                  </View>
-                )}
-                {p.imported && (
-                  <View style={[styles.thumbModeDot, styles.thumbImportDot]}>
-                    <Ionicons name="images" size={10} color={colors.textInverse} />
-                  </View>
-                )}
-              </View>
-              <Pill
-                label={pill.label}
-                tone={pill.tone}
-                size="sm"
-                solid
-                dot={pill.pulse}
-                pulse={pill.pulse && !reducedMotion}
-              />
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* The screen's one orange moment — Done hands off to analysis. */}
-      <Pressable style={styles.doneBtn} onPress={onDone} accessibilityRole="button">
-        <Text style={styles.doneBtnText}>Done</Text>
-        <Text style={styles.doneBtnSub}>{photos.length}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: brand.black },
-  overlay: { flex: 1, justifyContent: 'space-between' },
+  pressed: { opacity: 0.75 },
 
-  topRow: {
+  // ── Primary chrome ─────────────────────────────────────────────────────
+  topBar: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    gap: spacing.md,
   },
-  // Every top-bar control is a full 56pt glass disc — the smoke pair, so it
-  // reads on any roof behind it.
-  topBtn: {
-    width: touchTarget.standard,
-    height: touchTarget.standard,
-    borderRadius: radii.pill,
-    backgroundColor: glass.smokeFill,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.smokeBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBtnActive: { backgroundColor: colors.surface, borderColor: colors.surface },
-  topPill: {
+  slopePill: {
+    ...hudPanel,
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1564,202 +1510,68 @@ const styles = StyleSheet.create({
     height: touchTarget.standard,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
-    backgroundColor: glass.smokeFill,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.smokeBorder,
   },
-  topPillSlope: {
+  slopePillSlope: {
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
   },
-  topPillText: {
+  slopePillText: {
     color: colors.textInverse,
     opacity: 0.85,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     flexShrink: 1,
   },
-  topRightGroup: { flexDirection: 'row', gap: spacing.sm },
 
-  bottomDock: {
-    paddingBottom: spacing.sm,
-    backgroundColor: glass.smokeFill,
-    borderTopWidth: StyleSheet.hairlineWidth * 2,
-    borderTopColor: glass.smokeBorder,
-  },
-
-  // Review strip — thumbnails with their analysis state, plus Done.
-  stripRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.lg,
-    paddingTop: spacing.sm,
-    gap: spacing.sm,
-  },
-  strip: { gap: spacing.sm, alignItems: 'flex-start', paddingRight: spacing.sm },
-  thumbCol: { alignItems: 'center', gap: spacing.xs, minWidth: touchTarget.standard },
-  thumbWrap: {
-    width: touchTarget.standard,
-    height: touchTarget.standard,
-    borderRadius: radii.sm,
-    borderWidth: 2,
-    borderColor: colors.textInverse,
-    overflow: 'hidden',
-  },
-  thumbWrapFailed: { borderColor: colors.danger },
-  thumb: { width: '100%', height: '100%' },
-  thumbTag: {
+  dock: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.overlay,
-    paddingVertical: 1,
+    left: spacing.lg,
+    right: spacing.lg,
     alignItems: 'center',
+    gap: spacing.md,
   },
-  thumbTagText: {
-    color: colors.textInverse,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-  },
-  thumbModeDot: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 16,
-    height: 16,
+  captionPill: {
+    ...hudPanel,
     borderRadius: radii.pill,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    maxWidth: '100%',
   },
-  thumbImportDot: { right: undefined, left: 2, backgroundColor: colors.textMuted },
-
-  doneBtn: {
-    minWidth: touchTarget.preferred,
-    paddingHorizontal: spacing.lg,
-    height: touchTarget.preferred,
-    borderRadius: radii.button,
-    backgroundColor: colors.orange,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doneBtnText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
-  doneBtnSub: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
-
-  // On-glass segmented track + sliding white thumb (iOS-17 pattern).
-  modeTrack: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    height: touchTarget.standard,
-    borderRadius: radii.md,
-    backgroundColor: glass.fill,
-    padding: MODE_TRACK_PAD,
-  },
-  modeThumb: {
-    position: 'absolute',
-    top: MODE_TRACK_PAD,
-    bottom: MODE_TRACK_PAD,
-    left: 0,
-    borderRadius: radii.control,
-    backgroundColor: colors.surface,
-    ...shadows.thumb,
-  },
-  modeSegment: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modeSegmentText: {
+  captionText: {
     color: colors.textInverse,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
-    opacity: 0.8,
-    flexShrink: 1,
     textAlign: 'center',
   },
-  modeSegmentTextActive: { color: colors.text, opacity: 1, fontWeight: fontWeight.bold },
-
-  chipRow: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
-    gap: spacing.sm,
-    alignItems: 'center',
-  },
-  rowLabel: {
-    color: colors.textInverse,
-    opacity: 0.6,
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    marginRight: spacing.xs,
-  },
-  // Picker chips share the on-glass language: glass rest state, white fill +
-  // ink text when active (selection matches the segmented thumb, not orange).
-  chip: {
-    minWidth: touchTarget.standard,
-    height: touchTarget.standard,
-    borderRadius: radii.button,
-    paddingHorizontal: spacing.lg,
-    backgroundColor: glass.fillHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipActive: { backgroundColor: colors.surface },
-  chipText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
-  chipTextActive: { color: colors.text, fontWeight: fontWeight.bold },
-
   shutterRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.xxxl,
-    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
-  dockBtn: {
-    width: touchTarget.standard,
-    height: touchTarget.standard,
-    borderRadius: radii.pill,
-    backgroundColor: glass.fillHigh,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.borderStrong,
+  // Equal slots either side keep the shutter centred whether or not Done is showing.
+  dockSlot: { width: touchTarget.sticky, alignItems: 'flex-start', justifyContent: 'center' },
+  dockSlotEnd: { alignItems: 'flex-end' },
+  // The session's one orange moment, in the thumb zone beside the shutter.
+  doneBtn: {
+    height: touchTarget.preferred,
+    minWidth: touchTarget.preferred,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.button,
+    backgroundColor: colors.accent,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.xs,
   },
-  dockBtnBusy: { opacity: 0.5 },
-  dockBtnActive: { backgroundColor: colors.surface, borderColor: colors.surface },
-  // 80pt shutter: thin white ring, white core with a breathing gap between.
-  shutter: {
-    width: SHUTTER,
-    height: SHUTTER,
-    borderRadius: radii.pill,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: colors.textInverse,
-  },
-  shutterBusy: { opacity: 0.6 },
-  shutterInner: {
-    width: SHUTTER_CORE,
-    height: SHUTTER_CORE,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-  },
+  doneText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
 
-  captureHint: {
-    color: colors.textInverse,
-    opacity: 0.78,
-    fontSize: fontSize.caption,
-    textAlign: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
-  },
+  // ── Secondary chrome ──────────────────────────────────────────────────
+  modeStrip: { position: 'absolute', left: 0, right: 0 },
+  rail: { position: 'absolute', right: spacing.lg },
+  instruments: { position: 'absolute', left: spacing.lg, maxWidth: '60%' },
 
   permRoot: { flex: 1, backgroundColor: colors.navy },
   permWrap: { flex: 1, padding: spacing.xxl, alignItems: 'center', justifyContent: 'center', gap: spacing.md },

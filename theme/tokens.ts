@@ -382,3 +382,14 @@ export const theme = {
 };
 
 export type Theme = typeof theme;
+
+// Camera chrome timing (Quick Inspection HUD). A separate export rather than
+// new keys on `motion`, so nothing that spreads or enumerates `motion` moves.
+export const hudMotion = {
+  /** Secondary chrome (mode strip, tool rail, instruments) tucks itself away after this idle. */
+  idleCollapseMs: 4000,
+  /** Secondary layer fade in/out. */
+  chromeFadeMs: 200,
+  /** A transient status line ("Imported 3", "Hold steady") stays this long. */
+  statusHoldMs: 4000,
+};

@@ -34,12 +34,14 @@ import Animated, {
 import { GlassCard } from '@/components/glass/GlassCard';
 import type { IoniconName } from '@/components/ui/IconChip';
 import { useCaptureSettingsStore } from '@/lib/stores/captureSettingsStore';
+import { useCaptureChromeStore } from '@/lib/stores/captureChromeStore';
 import { isGeminiConfigured } from '@/lib/env';
 import {
   colors,
   fontSize,
   fontWeight,
   glass,
+  hudMotion,
   motion,
   radii,
   spacing,
@@ -147,6 +149,13 @@ export function CaptureSettingsSheet({ visible, onClose, livePausedReason }: Pro
   const setArNotify = useCaptureSettingsStore((s) => s.setArNotify);
   const coachEnabled = useCaptureSettingsStore((s) => s.coachEnabled);
   const setCoachEnabled = useCaptureSettingsStore((s) => s.setCoachEnabled);
+  // Chrome preferences — the HUD's own store.
+  const squareGuide = useCaptureChromeStore((s) => s.squareGuide);
+  const setSquareGuide = useCaptureChromeStore((s) => s.setSquareGuide);
+  const keepOpen = useCaptureChromeStore((s) => s.keepOpen);
+  const setKeepOpen = useCaptureChromeStore((s) => s.setKeepOpen);
+  const staticReason = useCaptureChromeStore((s) => s.staticReason);
+  const setStaticReason = useCaptureChromeStore((s) => s.setStaticReason);
 
   // Always reopen on the main list, not on whichever explainer was last read.
   useEffect(() => {
@@ -238,8 +247,45 @@ export function CaptureSettingsSheet({ visible, onClose, livePausedReason }: Pro
                 trailing={<SwitchVisual on={guides} />}
                 onPress={() => toggle(setGuides, guides)}
                 accessibilityState={{ checked: guides }}
-                last
               />
+              <SettingRow
+                icon="scan-circle-outline"
+                title="10×10 test-square guide"
+                subtitle={
+                  squareGuide
+                    ? 'On · drawn in Test-square mode once Live overlay finds the shingle scale. An estimate, labelled as one.'
+                    : 'Off · the dashed square and course lines stay hidden. Tap the Test-square chip twice to flip it while shooting.'
+                }
+                trailing={<SwitchVisual on={squareGuide} />}
+                onPress={() => toggle(setSquareGuide, squareGuide)}
+                accessibilityState={{ checked: squareGuide }}
+              />
+              <SettingRow
+                icon="pin-outline"
+                title="Keep controls open"
+                subtitle={
+                  keepOpen
+                    ? 'On · the mode strip and tool rail stay until you tap the viewfinder.'
+                    : `Off · controls tuck away after ${Math.round(hudMotion.idleCollapseMs / 1000)}s idle. Holding the chevron does the same.`
+                }
+                trailing={<SwitchVisual on={keepOpen} />}
+                onPress={() => toggle(setKeepOpen, keepOpen)}
+                accessibilityState={{ checked: keepOpen }}
+                last={staticReason == null}
+              />
+              {staticReason != null && (
+                <SettingRow
+                  icon="shield-checkmark-outline"
+                  title="Controls are static this session"
+                  subtitle="RoofWise closed unexpectedly on the camera last time, so the chrome runs without animation for now. Turn it back on here."
+                  trailing={<Chevron badge="Turn on" />}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setStaticReason(null);
+                  }}
+                  last
+                />
+              )}
             </>
           )}
 
