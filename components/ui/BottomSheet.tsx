@@ -12,7 +12,7 @@
 // crosses to JS with runOnJS.
 
 import { useEffect, type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -113,35 +113,48 @@ export function BottomSheet({
         <Animated.View style={[styles.dim, dimStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Dismiss" />
         </Animated.View>
-        <GestureDetector gesture={pan}>
-          <Animated.View
-            style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }, sheetStyle, style]}
-            accessibilityViewIsModal
-            accessibilityLabel={accessibilityLabel ?? title}
-          >
-            <View style={styles.grabberRow}>
-              <View style={styles.grabber} />
-            </View>
-            {cancel && (
-              <Pressable
-                onPress={close}
-                style={styles.cancel}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel"
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </Pressable>
-            )}
-            {(title || subtitle) && (
-              <View style={styles.head}>
-                {title && <Text style={styles.title}>{title}</Text>}
-                {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+        <Animated.View
+          style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }, sheetStyle, style]}
+          accessibilityViewIsModal
+          accessibilityLabel={accessibilityLabel ?? title}
+        >
+          {/* The header is the drag handle; the body scrolls. A sheet taller
+              than the screen (eleven Quick Action tiles on an SE) used to
+              push its last rows off the bottom with no way to reach them. */}
+          <GestureDetector gesture={pan}>
+            <View style={styles.handle}>
+              <View style={styles.grabberRow}>
+                <View style={styles.grabber} />
               </View>
-            )}
+              {cancel && (
+                <Pressable
+                  onPress={close}
+                  style={styles.cancel}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel"
+                >
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </Pressable>
+              )}
+              {(title || subtitle) && (
+                <View style={styles.head}>
+                  {title && <Text style={styles.title}>{title}</Text>}
+                  {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+                </View>
+              )}
+            </View>
+          </GestureDetector>
+          <ScrollView
+            style={styles.body}
+            contentContainerStyle={styles.bodyContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+          >
             {children}
-          </Animated.View>
-        </GestureDetector>
+          </ScrollView>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -158,6 +171,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     maxHeight: '88%',
   },
+  handle: { gap: spacing.md },
+  body: { flexGrow: 0 },
+  bodyContent: { gap: spacing.md, paddingBottom: spacing.xs },
   grabberRow: { alignItems: 'center', paddingTop: spacing.sm },
   grabber: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.fillQuiet },
   // 56pt so a gloved thumb cancels without hunting (Drift #1).

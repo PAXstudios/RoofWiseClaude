@@ -332,6 +332,15 @@ function titleCase(s: string): string {
   return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * IEM's `city` is the LSR location string — "2 S SAINT PAUL", "1 SW GRAPEVINE"
+ * — an offset from a town, not the town. The report's coordinates already
+ * place it; the roofer needs the town.
+ */
+export function cleanTown(raw: string): string {
+  return titleCase(raw.trim().replace(/^\d+(\.\d+)?\s+[NSEW]{1,3}\s+/i, ''));
+}
+
 function topTown(towns: Map<string, number>): string | undefined {
   let best: string | undefined;
   let n = 0;
@@ -390,7 +399,7 @@ export function stormEvidenceByCell(
         if (e.type === 'hail' && e.magnitude != null) d.maxHail = Math.max(d.maxHail ?? 0, e.magnitude);
         if (e.type === 'wind' && e.magnitude != null) d.maxWind = Math.max(d.maxWind ?? 0, e.magnitude);
         if (e.city) {
-          const t = titleCase(e.city);
+          const t = cleanTown(e.city);
           d.towns.set(t, (d.towns.get(t) ?? 0) + (isHome ? 2 : 1));
           c.towns.set(t, (c.towns.get(t) ?? 0) + (isHome ? 2 : 1));
         }
@@ -545,6 +554,29 @@ export function hitRateFor(perRoof: number, doors = DOORS_PER_STOP): HitRate {
 // Ranking
 // ---------------------------------------------------------------------------
 
+/** The per-roof probability's ceiling (roofHitProbability clamps here). */
+const P_MAX = 0.75;
+
+/**
+ * Knock Score (docs §2.6). Leads with the per-roof probability — in hail
+ * alley every cell has been hit several times and the saturating storm
+ * score reads 85–95 everywhere; what separates a great street from a fair
+ * one is the worst hail and how long ago (p), then how broad the exposure
+ * was, then the housing. Access, ground already covered and own jobs
+ * multiply. Weighted geometric mean: no storm → no lead.
+ */
+export function knockScoreFrom(f: ScoreFactors, perRoof: number): number {
+  const score =
+    100 *
+    Math.pow(Math.min(1, perRoof / P_MAX), 0.45) *
+    Math.pow(f.storm, 0.25) *
+    Math.pow(f.housing, 0.3) *
+    f.access *
+    f.canvassed *
+    f.ownJobs;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 export type RankInput = {
   base: BasePoint;
   now: Date;
@@ -667,16 +699,8 @@ export function rankAreas(input: RankInput): ScoredArea[] {
       canvassed: canvassedFactor(recentKnocks),
       ownJobs: ownJobsFactor(ownJobs),
     };
-    // Storms matter most: a perfect neighbourhood with no storm is not a lead.
-    const knockScore = Math.round(
-      100 *
-        Math.pow(factors.storm, 0.6) *
-        Math.pow(factors.housing, 0.4) *
-        factors.access *
-        factors.canvassed *
-        factors.ownJobs,
-    );
     const perRoof = roofHitProbability(evidence, housing, nowYear);
+    const knockScore = knockScoreFrom(factors, perRoof);
     const partial: Omit<ScoredArea, 'reasons'> = {
       key: ref.key,
       lat: center.lat,
@@ -688,7 +712,7 @@ export function rankAreas(input: RankInput): ScoredArea[] {
       housing,
       susceptibility,
       factors,
-      knockScore: Math.min(100, knockScore),
+      knockScore,
       hitRate: hitRateFor(perRoof),
       ownJobs,
       recentKnocks,
@@ -696,7 +720,10 @@ export function rankAreas(input: RankInput): ScoredArea[] {
     scored.push({ ...partial, reasons: ruleRationale(partial, now) });
   }
 
-  scored.sort((a, b) => b.knockScore - a.knockScore || b.hitRate.perRoof - a.hitRate.perRoof);
+  // Ties (one storm across several cells) go to the nearer cell.
+  scored.sort(
+    (a, b) => b.knockScore - a.knockScore || b.hitRate.perRoof - a.hitRate.perRoof || a.distanceMiles - b.distanceMiles,
+  );
   return scored.slice(0, input.limit ?? MAX_AREAS);
 }
 
@@ -713,18 +740,8 @@ export function applyHousing(
       if (!h) return a;
       const susceptibility = susceptibilityScore(h, nowYear);
       const factors = { ...a.factors, housing: susceptibility / 100 };
-      const knockScore = Math.min(
-        100,
-        Math.round(
-          100 *
-            Math.pow(factors.storm, 0.6) *
-            Math.pow(factors.housing, 0.4) *
-            factors.access *
-            factors.canvassed *
-            factors.ownJobs,
-        ),
-      );
       const perRoof = roofHitProbability(a.storm, h, nowYear);
+      const knockScore = knockScoreFrom(factors, perRoof);
       const partial: Omit<ScoredArea, 'reasons'> = {
         ...a,
         housing: h,
@@ -735,7 +752,9 @@ export function applyHousing(
       };
       return { ...partial, reasons: ruleRationale(partial, now) };
     })
-    .sort((a, b) => b.knockScore - a.knockScore || b.hitRate.perRoof - a.hitRate.perRoof);
+    .sort(
+      (a, b) => b.knockScore - a.knockScore || b.hitRate.perRoof - a.hitRate.perRoof || a.distanceMiles - b.distanceMiles,
+    );
 }
 
 // ---------------------------------------------------------------------------

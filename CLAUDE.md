@@ -103,6 +103,7 @@ Pulled from `PROMPT_LOG.md`. The full list is canonical there; this is the short
   - `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`
   - `EXPO_PUBLIC_GEMINI_API_KEY`
   - `EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY`, `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY`, `EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY` (Places / Solar / Weather / Geocoding share these as appropriate)
+  - `EXPO_PUBLIC_CENSUS_API_KEY` (optional, free — roof age / ownership for the knock finder; the ACS API refuses unkeyed calls)
 - `SUPABASE_SERVICE_ROLE_KEY` is **server-only** — it must never ship in a client bundle.
 - If a key was ever pasted in chat, treat it as exposed and rotate.
 
@@ -146,6 +147,7 @@ npm run lint                      # expo lint
 | Zustand stores | `lib/stores/*.ts` |
 | Pure services (HAAG, decision, taxonomy) | `lib/services/{decisionEngine,haagThresholds,haagPdf,proposalGenerator,proposalPdf,costEstimator}.ts` |
 | Network/IO services | `lib/services/{gemini,places,solar,geocoding,weather,stormMatch,stormWatch,pushNotifications,transcribeAudio,analyzeSlope}.ts` |
+| "Where should I knock?" | `lib/services/knockOpportunities.ts` (pure formula — `docs/KNOCK_OPPORTUNITIES.md` is the authority), `knockFinder.ts` (orchestrator), `censusHousing.ts`, `opportunityBrief.ts` (Gemini phrases the engine's numbers), `app/knock-finder.tsx` |
 | Cloud sync | `lib/services/{leadSync,inspectionSync,photoSync,correctionsSync,analysisQueue,lifecycleHooks,backup}.ts` |
 | Learning loop | `lib/services/learning/{userCorrectionProfile,localLearningEngine}.ts` |
 | Shared UI | `components/{ScreenHeader,PressableScale,SignaturePad,VoiceNoteRecorder,AnalysisQueueChip,DamageScoreBar,DamageMarkerLayer,CameraHUD,WeatherTile,AICalibrationCard,AddressAutocomplete,AppleSignInButton,ToastHost}.tsx` |

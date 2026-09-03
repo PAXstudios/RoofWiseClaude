@@ -140,12 +140,18 @@ build year (Drift #5).
 ### 2.6 Knock Score
 
 ```
-Knock = 100 × storm^0.6 × housing^0.4 × access × canvassed × ownJobs
+Knock = 100 × (p / 0.75)^0.45 × storm^0.25 × housing^0.3 × access × canvassed × ownJobs
 ```
 
-(storm and housing as 0–1). A weighted geometric mean: a perfect
-neighbourhood with no storm is not a lead, and a monster storm over
-apartment blocks is a weaker one.
+(`p` = the per-roof probability from §4.1; storm and housing as 0–1.)
+The first live run on a Plano base showed why the per-roof probability
+leads: within 100 mi of DFW every cell had been hit on 5–16 storm days in
+two years, the saturating Storm Score read 85–95 everywhere, and the top
+ten landed within four points of each other. What separates a great
+street from a fair one there is the **worst hail and how long ago** (p),
+then how broad the exposure was (storm), then the housing. A weighted
+geometric mean: a perfect neighbourhood with no storm is not a lead, and a
+monster storm over apartment blocks is a weaker one.
 
 ---
 
