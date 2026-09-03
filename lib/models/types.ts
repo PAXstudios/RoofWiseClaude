@@ -1283,6 +1283,40 @@ export type ProposalLineItem = {
 
 export type ProposalStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired';
 
+// -----------------------------------------------------------------------------
+// Do not knock — homes and zones the roofer must never canvass
+// -----------------------------------------------------------------------------
+
+/** A single door, or an area (HOA no-solicit list, a gated community, a street). */
+export type DoNotKnockKind = 'home' | 'zone';
+
+/**
+ * Where the entry came from: the roofer added it by hand, a "Do not knock"
+ * pin outcome created it, or it was imported from an HOA / city no-solicit list.
+ */
+export type DoNotKnockSource = 'roofer' | 'outcome' | 'hoa_list';
+
+export type DoNotKnockEntry = {
+  id: string;
+  kind: DoNotKnockKind;
+  /** "1420 Oak St" or "Willow Bend HOA". */
+  label: string;
+  /** A home's door, or a zone's centre. */
+  lat?: number;
+  lng?: number;
+  /** Home: the door's footprint (default 25 m). Zone: a circle when no polygon. */
+  radiusMeters?: number;
+  /** A drawn zone. Wins over `radiusMeters` when present (≥ 3 points). */
+  polygon?: { lat: number; lng: number }[];
+  address?: string;
+  source: DoNotKnockSource;
+  note?: string;
+  /** The knock whose "Do not knock" outcome created this entry. */
+  knockId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Proposal = {
   id: string;
   jobId: string;
