@@ -1,6 +1,11 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAltitudeFeet, type MotionSample } from '@/lib/services/deviceMotion';
+import {
+  COMPASS_USABLE_ACCURACY,
+  useAltitudeFeet,
+  type CompassHeading,
+  type MotionSample,
+} from '@/lib/services/deviceMotion';
 import {
   pitchDegreesToRatio,
   yawToOrientation,
@@ -24,10 +29,15 @@ type Props = {
   captureMode?: CaptureMode;
   /**
    * Motion sample owned by the screen (one throttled DeviceMotion stream is
-   * shared by the HUD and the level guide). Null hides the compass and the
-   * pitch chip — web, no sensors, or the screen is blurred.
+   * shared by the HUD and the level guide). Null hides the pitch chip — web,
+   * no sensors, or the screen is blurred. NOT used for the compass: its yaw is
+   * relative to an arbitrary start frame, not to north.
    */
   motion: MotionSample | null;
+  /** Real compass heading (Location.watchHeadingAsync). Null hides the compass. */
+  heading?: CompassHeading | null;
+  /** How the current slope tag was chosen — shown so a wrong auto-tag is visible. */
+  slopeSource?: 'auto' | 'pinned';
   /**
    * Height of whatever chrome sits at the bottom of the screen (the capture
    * dock), so the bottom-left stack clears it. Measured by the host screen —
@@ -53,11 +63,14 @@ export function CameraHUD({
   areaTag,
   captureMode,
   motion,
+  heading: compass,
+  slopeSource,
   bottomInset,
   topInset,
 }: Props) {
   const altFeet = useAltitudeFeet();
-  const heading = motion ? yawToOrientation(motion.yawDegrees) : null;
+  const heading = compass ? yawToOrientation(compass.degrees) : null;
+  const usable = !!compass && compass.accuracy >= COMPASS_USABLE_ACCURACY;
   const slopeOk = !selectedSlope || !heading || selectedSlope === heading;
 
   const mode = captureModeOption(captureMode ?? 'square_10x10');
@@ -66,23 +79,36 @@ export function CameraHUD({
   return (
     <View style={styles.wrap} pointerEvents="none">
       {/* Top-right: compass + heading */}
-      {motion && heading && (
+      {compass && heading && (
         <View style={[styles.topRight, { top: topInset ?? DEFAULT_TOP_INSET }]}>
           <View style={styles.compassWrap}>
+            {/* The needle points at north; rotating by -heading keeps it
+                there as the phone turns, like a real compass. */}
             <View
               style={[
                 styles.compassNeedle,
-                { transform: [{ rotate: `${motion.yawDegrees}deg` }] },
+                { transform: [{ rotate: `${-compass.degrees}deg` }] },
               ]}
             >
               <View style={styles.compassNorth} />
             </View>
           </View>
-          <View style={[styles.compassChip, !slopeOk && styles.compassChipWarn]}>
-            <Text style={styles.compassText}>{heading}</Text>
+          <View style={[styles.compassChip, usable && !slopeOk && styles.compassChipWarn]}>
+            <Text style={styles.compassText}>
+              {heading}
+              {!usable ? ' ?' : ''}
+            </Text>
             <Text style={styles.compassSub}>
-              {Math.round(motion.yawDegrees)}°
-              {selectedSlope && (slopeOk ? ' · matches' : ` · expected ${selectedSlope}`)}
+              {Math.round(compass.degrees)}°{compass.reference === 'magnetic' ? ' mag' : ''}
+              {!usable
+                ? ' · low accuracy'
+                : selectedSlope
+                  ? slopeOk
+                    ? slopeSource === 'auto'
+                      ? ' · auto'
+                      : ' · matches'
+                    : ` · tagged ${selectedSlope}`
+                  : ''}
             </Text>
           </View>
         </View>

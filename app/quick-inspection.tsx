@@ -55,6 +55,7 @@ import {
   type Inspection,
   type PhotoAnalysisStatus,
   type SlopeOrientation,
+  yawToOrientation,
 } from '@/lib/models/types';
 import {
   CAPTURE_MODE_OPTIONS,
@@ -63,6 +64,11 @@ import {
   defaultAreaTagForSlope,
   shortAreaTag,
 } from '@/lib/services/captureSession';
+import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
+import {
+  COMPASS_USABLE_ACCURACY,
+  useCompassHeading,
+} from '@/lib/services/deviceMotion';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useSafetyStore } from '@/lib/stores/safetyStore';
@@ -77,6 +83,22 @@ import { Pill, type PillTone } from '@/components/ui/Pill';
 const SLOPES: SlopeOrientation[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
 const INITIAL_SLOPE: SlopeOrientation = 'S';
+
+/**
+ * How long the compass must sit in a new octant before the auto-tag follows
+ * it. A roofer turning to frame a shot sweeps through neighbouring octants;
+ * only a heading that HOLDS is a slope change.
+ */
+const AUTO_SLOPE_SETTLE_MS = 900;
+
+/** Octants apart on the compass rose (0–4). */
+function octantDistance(a: SlopeOrientation, b: SlopeOrientation): number {
+  const i = SLOPES.indexOf(a);
+  const j = SLOPES.indexOf(b);
+  if (i < 0 || j < 0) return 4;
+  const d = Math.abs(i - j) % SLOPES.length;
+  return Math.min(d, SLOPES.length - d);
+}
 
 /** Inner inset of the capture-mode segmented track (the thumb slides inside it). */
 const MODE_TRACK_PAD = spacing.xs;
@@ -203,6 +225,19 @@ function QuickInspectionNative() {
   const camRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
   const [slope, setSlope] = useState<SlopeOrientation>(INITIAL_SLOPE);
+  // 'auto': the tag follows the compass. 'pinned': the inspector chose it and
+  // the compass only WARNS. South is never a silent default any more — with a
+  // usable compass the tag tracks the phone; without one, the first shutter
+  // asks. Filing a north photo under South corrupts the per-slope counts HAAG
+  // §2/§4 decide on, so this is evidence integrity, not polish.
+  const [slopeMode, setSlopeMode] = useState<'auto' | 'pinned'>('auto');
+  // Non-null = the slope picker is up, with the sentence that explains why.
+  const [slopePrompt, setSlopePrompt] = useState<string | null>(null);
+  // A prepared photo waiting for the picker's answer before it is filed.
+  const pendingCaptureRef = useRef<string | null>(null);
+  const autoSlopeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A library import waiting for the picker's answer before it starts.
+  const pendingImportRef = useRef(false);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
   const [captureMode, setCaptureMode] = useState<CaptureMode>(DEFAULT_CAPTURE_MODE);
   const [areaTag, setAreaTag] = useState<string>(() =>
@@ -271,6 +306,29 @@ function QuickInspectionNative() {
     return () => sub.remove();
   }, []);
   const motionSample = useThrottledMotion(focused && appActive && permission?.granted === true);
+  const compass = useCompassHeading(focused && appActive && permission?.granted === true);
+  const compassUsable = !!compass && compass.accuracy >= COMPASS_USABLE_ACCURACY;
+  const compassSlope: SlopeOrientation | null = compassUsable
+    ? yawToOrientation(compass.degrees)
+    : null;
+
+  // Auto-tag: follow the compass once it has HELD a new octant. Pinned mode
+  // never moves the tag — it only lets the shutter warn on a mismatch.
+  useEffect(() => {
+    if (autoSlopeTimer.current) {
+      clearTimeout(autoSlopeTimer.current);
+      autoSlopeTimer.current = null;
+    }
+    if (slopeMode !== 'auto' || !compassSlope || compassSlope === slope) return;
+    autoSlopeTimer.current = setTimeout(() => {
+      autoSlopeTimer.current = null;
+      setSlope(compassSlope);
+      if (!areaTagPinned) setAreaTag(defaultAreaTagForSlope(compassSlope));
+    }, AUTO_SLOPE_SETTLE_MS);
+    return () => {
+      if (autoSlopeTimer.current) clearTimeout(autoSlopeTimer.current);
+    };
+  }, [compassSlope, slope, slopeMode, areaTagPinned]);
 
   // iOS-17 on-glass segmented control for capture mode: a white thumb springs
   // between segments on a glass track. Purely presentational chrome — the
@@ -297,8 +355,71 @@ function QuickInspectionNative() {
 
   const selectSlope = (next: SlopeOrientation) => {
     setSlope(next);
+    setSlopeMode('pinned');
     if (!areaTagPinned) setAreaTag(defaultAreaTagForSlope(next));
     Haptics.selectionAsync().catch(() => {});
+  };
+
+  /** Photos already filed per slope on this job — shown in the picker. */
+  const photoCountsBySlope = (): Partial<Record<SlopeOrientation, number>> => {
+    const out: Partial<Record<SlopeOrientation, number>> = {};
+    for (const sl of inspection?.slopes ?? []) out[sl.orientation] = sl.photoPaths.length;
+    return out;
+  };
+
+  /**
+   * File a prepared photo — after making sure the slope tag is one a human or
+   * a usable compass actually chose.
+   *
+   * Asks (and holds the photo) when:
+   *  • there is no usable compass and nothing has pinned the tag yet — the
+   *    default is not evidence;
+   *  • the tag is pinned but the compass says the phone faces somewhere else
+   *    by more than one octant — a hip corner is one octant off, the other
+   *    side of the house is not.
+   */
+  const fileCapture = (uri: string, imported?: boolean) => {
+    const untouchedDefault = slopeMode === 'auto' && !compassSlope && photosRef.current.length === 0;
+    if (untouchedDefault) {
+      pendingCaptureRef.current = uri;
+      setSlopePrompt('No compass fix — which slope is this photo of?');
+      return;
+    }
+    if (slopeMode === 'pinned' && compassSlope && octantDistance(slope, compassSlope) >= 2) {
+      pendingCaptureRef.current = uri;
+      setSlopePrompt(`Compass says you're facing ${compassSlope}, but photos are being tagged ${slope}.`);
+      return;
+    }
+    addPhoto(uri, imported);
+  };
+
+  const onSlopePicked = (next: SlopeOrientation) => {
+    selectSlope(next);
+    setSlopePrompt(null);
+    const uri = pendingCaptureRef.current;
+    pendingCaptureRef.current = null;
+    if (uri) {
+      try {
+        addPhoto(uri);
+      } catch (e) {
+        Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
+      }
+    }
+    if (pendingImportRef.current) {
+      pendingImportRef.current = false;
+      // selectSlope pinned the mode, so the re-entry passes the gate.
+      setTimeout(() => {
+        runLibraryImport(true).catch(() => {});
+      }, 0);
+    }
+  };
+
+  const onSlopePickerCancel = () => {
+    // A photo held for the question is dropped, not filed under a guess; a
+    // pending import simply does not start.
+    pendingCaptureRef.current = null;
+    pendingImportRef.current = false;
+    setSlopePrompt(null);
   };
 
   const selectAreaTag = (tag: string) => {
@@ -540,7 +661,7 @@ function QuickInspectionNative() {
       }
       if (!uri) throw new Error('No photo data');
       const small = await prepareCapturedPhoto(uri);
-      addPhoto(small);
+      fileCapture(small);
     } catch (e) {
       Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -563,8 +684,24 @@ function QuickInspectionNative() {
    * failure (unreadable HEIC, iCloud not-downloaded) is reported without
    * aborting the batch.
    */
-  const runLibraryImport = async () => {
+  /**
+   * @param slopeChosen  the picker just answered — skip the gate. Needed
+   *   because the re-entry runs before React commits the new `slopeMode`, so
+   *   reading state here again would re-open the picker forever.
+   */
+  const runLibraryImport = async (slopeChosen = false) => {
     if (importing) return;
+    // A batch import files every asset under the current tag, so the tag has
+    // to be a chosen one BEFORE the picker opens. Auto mode with no compass fix
+    // is the untouched default — ask first, then import. (Imports with a live
+    // compass or a pinned slope go straight through; the shutter guard's
+    // mismatch check does not apply because library photos were not taken
+    // facing anything now.)
+    if (!slopeChosen && slopeMode === 'auto' && !compassSlope) {
+      pendingImportRef.current = true;
+      setSlopePrompt('Which slope are the photos you are about to import of?');
+      return;
+    }
     setImporting(true);
     setImportProgress(null);
     try {
@@ -807,9 +944,11 @@ function QuickInspectionNative() {
 
       <CameraHUD
         selectedSlope={slope}
+        slopeSource={slopeMode}
         areaTag={areaTag}
         captureMode={captureMode}
         motion={motionSample}
+        heading={compass}
         topInset={chromeTop + (liveOverlay ? touchTarget.small : 0)}
         bottomInset={chromeBottom}
       />
@@ -828,26 +967,39 @@ function QuickInspectionNative() {
             <Ionicons name="close" size={26} color={colors.textInverse} />
           </Pressable>
 
+          {/* The slope tag, always in view and always one tap to change.
+              It used to be a status readout; the dock chips it pointed at sat
+              below the fold, and every photo of every elevation filed as S. */}
           <Pressable
             style={styles.topPill}
-            onPress={photos.length > 0 ? finish : undefined}
-            disabled={photos.length === 0}
-            accessibilityRole={photos.length > 0 ? 'button' : 'text'}
-            accessibilityLabel={
-              photos.length > 0
-                ? `${slope} slope, ${photos.length} photos. Finish and review.`
-                : `${slope} slope. No photos yet.`
-            }
+            onPress={() => setSlopePrompt('Which slope are you shooting?')}
+            accessibilityRole="button"
+            accessibilityLabel={`Tagging ${slope} slope, ${slopeMode === 'auto' ? 'from the compass' : 'pinned'}. ${photos.length} photos. Tap to change.`}
           >
+            <Ionicons
+              name={slopeMode === 'auto' ? 'compass-outline' : 'pin'}
+              size={16}
+              color={colors.textInverse}
+            />
             <Text style={styles.topPillSlope}>{slope}</Text>
             <Text style={styles.topPillText} numberOfLines={1}>
-              {photos.length === 0
-                ? 'slope · no photos yet'
-                : `slope · ${photos.length} photo${photos.length === 1 ? '' : 's'}`}
+              {slopeMode === 'auto' ? (compassSlope ? 'auto' : 'not set') : 'pinned'}
+              {photos.length > 0 ? ` · ${photos.length} photo${photos.length === 1 ? '' : 's'}` : ''}
             </Text>
+            <Ionicons name="chevron-down" size={14} color={colors.textInverse} />
           </Pressable>
 
           <View style={styles.topRightGroup}>
+            {photos.length > 0 && (
+              <Pressable
+                onPress={finish}
+                style={styles.topBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`Done. ${photos.length} photos captured. Review and analyze.`}
+              >
+                <Ionicons name="checkmark" size={26} color={colors.textInverse} />
+              </Pressable>
+            )}
             <Pressable
               onPress={() => router.push('/pitch-gauge')}
               style={styles.topBtn}
@@ -975,7 +1127,7 @@ function QuickInspectionNative() {
 
           <View style={styles.shutterRow}>
             <Pressable
-              onPress={runLibraryImport}
+              onPress={() => runLibraryImport()}
               disabled={importing}
               style={[styles.dockBtn, importing && styles.dockBtnBusy]}
               accessibilityRole="button"
@@ -1017,6 +1169,24 @@ function QuickInspectionNative() {
           </Text>
         </View>
       </SafeAreaView>
+
+      <SlopePickerSheet
+
+        visible={slopePrompt !== null}
+
+        selected={slope}
+
+        compassSuggestion={compassSlope}
+
+        photoCounts={photoCountsBySlope()}
+
+        reason={slopePrompt ?? undefined}
+
+        onSelect={onSlopePicked}
+
+        onCancel={onSlopePickerCancel}
+
+      />
 
       <CaptureSettingsSheet
         visible={settingsOpen}

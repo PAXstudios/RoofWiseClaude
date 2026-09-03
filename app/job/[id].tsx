@@ -40,6 +40,7 @@ import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { DamageScoreBar } from '@/components/DamageScoreBar';
 import { DamageScoreCard } from '@/components/DamageScoreCard';
 import { PropertyIntelCard } from '@/components/PropertyIntelCard';
+import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
 import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { transcribeAudio } from '@/lib/services/transcribeAudio';
@@ -178,6 +179,9 @@ export default function JobDetail() {
   const [generatingLong, setGeneratingLong] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<LibraryImportProgress | null>(null);
+  // Library import asks WHICH slope first — it used to file everything under
+  // the last slope (South on an empty job), silently.
+  const [importSlopePicker, setImportSlopePicker] = useState(false);
   // "Record now" on the finalize gate has to land the roofer on the card that
   // fixes the problem, not just dismiss a dialog.
   const scrollRef = useRef<ScrollView>(null);
@@ -231,17 +235,21 @@ export default function JobDetail() {
   /**
    * Import existing photos from the library straight into this job. Each asset
    * rides the shared `importFromLibrary` service (same pipeline + multi-select
-   * story as the capture screen), attaches to this job's most recent slope
-   * (South if the job has none yet), then the whole slope is queued for
+   * story as the capture screen), attaches to the slope the inspector picks in
+   * the sheet — never a guessed one — then the whole slope is queued for
    * background analysis — so imported photos flow through the exact same
    * analysis queue as captured ones and land back here with per-photo state.
    */
-  const runJobLibraryImport = async () => {
+  const runJobLibraryImport = () => {
+    if (importing) return;
+    setImportSlopePicker(true);
+  };
+
+  const runJobLibraryImportFor = async (targetSlope: SlopeOrientation) => {
+    setImportSlopePicker(false);
     if (importing) return;
     setImporting(true);
     setImportProgress(null);
-    const targetSlope: SlopeOrientation =
-      inspection.slopes[inspection.slopes.length - 1]?.orientation ?? 'S';
     const areaTag = defaultAreaTagForSlope(targetSlope);
     try {
       const result = await importFromLibrary({
@@ -1013,6 +1021,16 @@ export default function JobDetail() {
           </Text>
         </PressableScale>
       </ScrollView>
+    <SlopePickerSheet
+      visible={importSlopePicker}
+      title="Import to which slope?"
+      reason="Photos are filed per slope — the per-slope hit count is what the HAAG threshold reads."
+      photoCounts={Object.fromEntries(inspection.slopes.map((sl) => [sl.orientation, sl.photoPaths.length]))}
+      onSelect={(sl) => {
+        runJobLibraryImportFor(sl).catch(() => {});
+      }}
+      onCancel={() => setImportSlopePicker(false)}
+    />
     </SafeAreaView>
   );
 }

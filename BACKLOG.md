@@ -113,6 +113,7 @@ entry does not count as tracked.
 
 ## Done (most recent first)
 
+- [x] **Photos filed under South regardless of slope** — the HUD "compass" was DeviceMotion yaw (relative to an arbitrary start frame), so nothing safe could auto-tag. Real compass via `Location.watchHeadingAsync`; auto-tag with 900 ms settle; pinned mode; the tag is never a silent default (first shot without a compass asks; mismatch > 1 octant asks; cancel drops the photo); compass-rose `SlopePickerSheet`; job import asks — closed by #70
 - [x] **Asphalt hit threshold set to the carrier standard — ≥ 8 functional hits per 100 sq ft test square, every asphalt family** (owner decision after research showed HAAG publishes no hit count; the prior >5 was stricter than any carrier). §2 and §4 now agree on one number. `docs/THRESHOLD_PROVENANCE.md` — closed by #69
 - [x] Analyze screen: "Next" always live, unanalyzed photos handed to the background queue, lands on the job; `analyzeSlope` in-flight guard so a screen pass + queue pass on one slope cannot double-attach markers — closed by #68
 - [x] Property intelligence: every job measures its roof on creation (Google Solar, live), engine/proposal/estimator/report read one area; facet→plane clustering fixes the S/SW boundary split (2.9 → 6.9 sq) — closed by #67

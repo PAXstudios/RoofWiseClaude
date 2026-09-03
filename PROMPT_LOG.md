@@ -2583,3 +2583,24 @@ There was no exit. Once a pass started, the primary button became a spinner, "Re
 **On "all four slopes":** already the behaviour (§4 escalates above 2 slopes). Stronger, sourced, and NOT yet built: carriers frequently approve the whole roof off a **single** qualifying slope because shingles must match and warranties bar partial replacement on matched planes. The engine has that gate — `§3 appearance_match_impossible` — and nothing in the app sets it. Backlogged.
 
 **Files touched:** `lib/services/{haagThresholds,decisionEngine,damageScore}.ts`, `docs/{HAAG_DECISION_ENGINE,DAMAGE_SCORE,THRESHOLD_PROVENANCE,PRODUCT_SYNTHESIS}.md`, `CLAUDE.md`, `PROMPT_LOG.md`, `BACKLOG.md`.
+
+---
+
+### [2026-09-03] #70 — Every photo was filed under South: the "compass" was never a compass
+
+**Prompt:**
+> "the user photos of the different slopes is not showing in the job window, so for example, i took photos of multiple slopes, but its only showing that the south slope has all the photos."
+
+**Root cause — two layers.** (1) The capture screen's slope tag defaulted to `'S'` and only changed when the inspector found the SLOPE chip row in the bottom dock, below the fold; the job screen's library import hard-coded `slopes[last]?.orientation ?? 'S'` with no choice at all. (2) The reason nothing safer could be built: the HUD's "auto-detected slope orientation" read `MotionSample.yawDegrees`, which is DeviceMotion's `rotation.alpha` — on iOS, attitude relative to an **arbitrary reference frame** chosen when the sensor starts. It is "how far have I turned since I opened the camera", not "which way am I facing". The "expected S" hints it printed were noise. Per-slope hit counts are what §2/§4 decide replacement on, so this was corrupted evidence, not a display bug.
+
+**Built.**
+- `useCompassHeading()` in `deviceMotion.ts` — `Location.watchHeadingAsync`, true north (magnetic fallback), with expo-location's 0–3 accuracy grade; below `COMPASS_USABLE_ACCURACY` (2) it is a hint, never an instrument. `CameraHUD` now reads it (needle counter-rotates by heading like a real compass) and shows the tag's source: `auto` / `matches` / `tagged S`.
+- Capture screen: the tag has a mode. **auto** follows the compass once a new octant has held 900 ms (a roofer framing a shot sweeps through neighbours; only a heading that holds is a slope change). **pinned** is set by any explicit choice and never moves. The top pill is now the slope control (was a readout pointing at chips below the fold); Done moved to a 56pt checkmark.
+- **The tag is never a silent default.** With no usable compass and nothing pinned, the first shutter holds the photo and asks. A pinned tag that disagrees with the compass by more than one octant (a hip corner is one octant off; the other side of the house is not) holds the photo and asks. Cancel drops the photo — never files it under a guess. A library import from the camera with no chosen slope asks before the batch starts.
+- New `components/capture/SlopePickerSheet.tsx` — a compass-rose picker (64pt cells, `GlassCard`) showing photos already filed per slope and a one-tap "Compass says NE — use it". The job screen's import now opens it instead of guessing.
+
+**Verified headless:** job screen → Import opens "Import to which slope?" with `N · 1 photo`, `S · 2 photos`; the capture screen's web fallback still renders; zero page errors. Typecheck + lint green. One bug caught in my own change before commit: the gated import re-entered `runLibraryImport` from a stale closure and would have re-opened the picker forever; it now passes an explicit `slopeChosen` flag.
+
+**Not yet:** the optional step-by-step capture coach (slopes → gutters/downspouts → siding → skylight/chimney flashing → vents → AC) — second half of this task.
+
+**Files touched:** `lib/services/deviceMotion.ts`, `components/CameraHUD.tsx`, `components/capture/SlopePickerSheet.tsx` (new), `app/quick-inspection.tsx`, `app/job/[id].tsx`.
