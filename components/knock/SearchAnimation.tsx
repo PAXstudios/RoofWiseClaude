@@ -129,8 +129,24 @@ export function SearchAnimation({ caption }: Props) {
     ring.value = withRepeat(withTiming(1, { duration: RING_MS, easing: Easing.out(Easing.quad) }), -1, false);
   }, [reduced, sweep, scan, ring]);
 
-  // The sweep: a wedge rotated about the base.
-  const sweepProps = useAnimatedProps(() => ({ transform: [{ rotate: `${sweep.value}deg` }] as any }));
+  // The sweep: a wedge about the base. Its geometry is computed from the
+  // angle directly (points + line end) rather than rotating a group — an
+  // animated group transform is not applied by react-native-svg on every
+  // platform, and numbers are all a worklet needs.
+  const sweepPolyProps = useAnimatedProps(() => {
+    const a = ((sweep.value - 90) * Math.PI) / 180;
+    const half = (24 * Math.PI) / 180;
+    const R = 144;
+    const x1 = CX + R * Math.cos(a - half);
+    const y1 = CY + R * Math.sin(a - half);
+    const x2 = CX + R * Math.cos(a + half);
+    const y2 = CY + R * Math.sin(a + half);
+    return { points: `${CX},${CY} ${x1},${y1} ${x2},${y2}` };
+  });
+  const sweepLineProps = useAnimatedProps(() => {
+    const a = ((sweep.value - 90) * Math.PI) / 180;
+    return { x2: CX + 136 * Math.cos(a), y2: CY + 136 * Math.sin(a) };
+  });
   // Expanding ring from the base.
   const ringProps = useAnimatedProps(() => ({ r: 10 + ring.value * 130, opacity: 0.55 * (1 - ring.value) }));
   // Horizontal scanline.
@@ -158,7 +174,7 @@ export function SearchAnimation({ caption }: Props) {
             <Stop offset="0" stopColor={brand.royalInk} />
             <Stop offset="1" stopColor={brand.black} />
           </LinearGradient>
-          <RadialGradient id="wedge" cx="0" cy="0" r="1">
+          <RadialGradient id="wedge" cx={CX} cy={CY} r={150} gradientUnits="userSpaceOnUse">
             <Stop offset="0" stopColor={brand.burnt} stopOpacity="0.55" />
             <Stop offset="1" stopColor={brand.burnt} stopOpacity="0" />
           </RadialGradient>
@@ -193,11 +209,9 @@ export function SearchAnimation({ caption }: Props) {
           <StormCell key={i} {...c} sweep={sweep} />
         ))}
 
-        {/* The sweep wedge, rotating about the base. */}
-        <AnimatedG origin={`${CX}, ${CY}`} animatedProps={sweepProps}>
-          <AnimatedPolygon points={`${CX},${CY} ${CX - 58},${CY - 132} ${CX + 58},${CY - 132}`} fill="url(#wedge)" />
-          <Line x1={CX} y1={CY} x2={CX} y2={CY - 136} stroke={brand.burnt} strokeWidth={2} strokeOpacity={0.9} />
-        </AnimatedG>
+        {/* The sweep wedge and its leading edge. */}
+        <AnimatedPolygon fill="url(#wedge)" animatedProps={sweepPolyProps} />
+        <AnimatedLine x1={CX} y1={CY} stroke={brand.burnt} strokeWidth={2} strokeOpacity={0.9} animatedProps={sweepLineProps} />
 
         {/* Base — the roofer. */}
         <Circle cx={CX} cy={CY} r={7} fill={brand.burnt} />

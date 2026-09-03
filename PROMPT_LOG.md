@@ -2938,3 +2938,11 @@ The Context Summary now describes the tree as of #84 (determination chain incl. 
 **Verified:** 13 new pure assertions (badges, plausibility band, home-value fallback order, agent/list-price/listed-date mapping); typecheck + lint green; headless walk on a seeded for-sale lead and job: the "For sale" pill on the list row and board card, the lead screen's record card with the badge hint and Call/Email agent, the job's pill, agent buttons and the flagged 40-sq measurement, and the finder's progress card rendering the SVG (20 circles, the sweep polygon, the step caption, the accessibility label). **Not verified:** motion itself on a device (the walk sees frames, not 60 fps), the "recently sold" flow end-to-end (it spends quota; the mapping path is the same one the live lookup exercised), the agent Call/Email links on a phone.
 
 **Files touched:** `components/knock/SearchAnimation.tsx` (new), `app/knock-finder.tsx`, `app/new-lead.tsx`, `app/(tabs)/leads.tsx`, `app/lead/[id].tsx`, `app/job/[id].tsx`, `app/new-job.tsx`, `lib/services/propertyRecord.ts`, `lib/services/{knockFinder,knockOpportunities}.ts`, `lib/stores/leadStore.ts`, `lib/models/types.ts`, `BACKLOG.md`, `PROMPT_LOG.md`.
+
+### [2026-09-03] #91 — Search animation: the sweep is driven by geometry, not a group transform
+
+**Prompt:** (verification of #90 — the two-frame web smoke showed the radar wedge parked at 12 o'clock while the scanline and pulse ring moved)
+
+A rotating `<G transform>` fed by `useAnimatedProps` is not applied by react-native-svg on every platform. The wedge's polygon points and the leading-edge line end are now computed from the sweep angle inside the worklet (pure arithmetic on one shared value), and the wedge gradient is anchored to the base in user space. Same look, works wherever the other animated props already worked. Re-verified by reading the polygon's `points` across three frames on the web export.
+
+**Files touched:** `components/knock/SearchAnimation.tsx`, `PROMPT_LOG.md`.
