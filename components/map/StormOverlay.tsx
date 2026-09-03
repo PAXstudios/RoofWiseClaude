@@ -22,6 +22,7 @@
 
 import { memo, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { MapCircle, MapPin, MapPolygon, type Region } from '@/components/map/Map';
 import type { StormOverlayProps } from '@/components/map/types';
 import { magnitudeLabel, type StormEvent } from '@/lib/noaa';
@@ -230,23 +231,75 @@ export function useStormOverlaySelection(
   }, [sanitized, snapKey, enabled]);
 }
 
-function eventA11yLabel(e: StormEvent): string {
+function eventA11yLabel(e: StormEvent, selected?: boolean): string {
   const kind = e.type === 'hail' ? 'Hail' : 'Wind';
   const when = new Date(e.occurredAt).toLocaleDateString();
-  return `${kind} ${magnitudeLabel(e)}, ${when}${e.city ? `, ${e.city}` : ''}`;
+  const base = `${kind} ${magnitudeLabel(e)}, ${when}${e.city ? `, ${e.city}` : ''}`;
+  return selected ? `${base}. Selected.` : base;
 }
 
-function clusterA11yLabel(c: StormClusterCell): string {
+function clusterA11yLabel(c: StormClusterCell, selected?: boolean): string {
   const mag = clusterMagnitudeLabel(c);
-  return `${c.count} storm report${c.count === 1 ? '' : 's'}${mag ? `, strongest ${mag}` : ''}. Zooms in.`;
+  const base = `${c.count} storm report${c.count === 1 ? '' : 's'}${mag ? `, strongest ${mag}` : ''}`;
+  return selected ? `${base}. Selected.` : `${base}. Zooms in.`;
 }
+
+/**
+ * One storm report's pin. Plain native `pinColor` marker in the common
+ * (unselected) case — the cheap path every other pin already uses. Selected
+ * (Select mode's multi-pick) swaps in a custom-view ring + checkmark, same
+ * `tracksViewChanges={false}` snapshot-once discipline as `ClusterGlyph` —
+ * it only re-snapshots because the key changes with the selected flag, never
+ * per frame.
+ */
+const EventGlyph = memo(function EventGlyph({
+  event,
+  selected,
+  onPress,
+}: {
+  event: StormEvent;
+  selected: boolean;
+  onPress?: (event: StormEvent) => void;
+}) {
+  const tone = stormTone(event);
+  if (!selected) {
+    return (
+      <MapPin
+        coordinate={{ latitude: event.lat, longitude: event.lon }}
+        pinColor={TONE_STROKE[tone]}
+        onPress={onPress ? () => onPress(event) : undefined}
+        accessibilityLabel={eventA11yLabel(event)}
+      />
+    );
+  }
+  return (
+    <MapPin
+      coordinate={{ latitude: event.lat, longitude: event.lon }}
+      tracksViewChanges={false}
+      onPress={onPress ? () => onPress(event) : undefined}
+      accessibilityLabel={eventA11yLabel(event, true)}
+      accessibilityState={{ selected: true }}
+    >
+      <View style={styles.eventGlyphShadow}>
+        <View style={[styles.eventGlyphRing, { borderColor: TONE_STROKE[tone] }]}>
+          <View style={[styles.eventGlyphDot, { backgroundColor: TONE_STROKE[tone] }]}>
+            <Ionicons name="checkmark" size={12} color={colors.textInverse} />
+          </View>
+        </View>
+      </View>
+    </MapPin>
+  );
+});
 
 const ClusterGlyph = memo(function ClusterGlyph({
   cell,
   onPress,
+  selected,
 }: {
   cell: StormClusterCell;
   onPress?: (cell: StormClusterCell) => void;
+  /** Every member event is in the Select-mode selection. */
+  selected?: boolean;
 }) {
   const label = clusterMagnitudeLabel(cell);
   return (
@@ -254,16 +307,29 @@ const ClusterGlyph = memo(function ClusterGlyph({
       coordinate={{ latitude: cell.lat, longitude: cell.lon }}
       tracksViewChanges={false}
       onPress={onPress ? () => onPress(cell) : undefined}
-      accessibilityLabel={clusterA11yLabel(cell)}
+      accessibilityLabel={clusterA11yLabel(cell, selected)}
+      accessibilityState={selected ? { selected: true } : undefined}
     >
       <View style={styles.glyphShadow}>
-        <View style={[styles.glyph, { backgroundColor: TONE_STROKE[cell.tone] }]}>
-          <Text style={styles.glyphCount}>{cell.count}</Text>
-          {label ? (
-            <Text style={styles.glyphMag} numberOfLines={1}>
-              {label}
-            </Text>
-          ) : null}
+        <View
+          style={[
+            styles.glyph,
+            { backgroundColor: TONE_STROKE[cell.tone] },
+            selected && styles.glyphSelected,
+          ]}
+        >
+          {selected ? (
+            <Ionicons name="checkmark" size={14} color={colors.textInverse} />
+          ) : (
+            <>
+              <Text style={styles.glyphCount}>{cell.count}</Text>
+              {label ? (
+                <Text style={styles.glyphMag} numberOfLines={1}>
+                  {label}
+                </Text>
+              ) : null}
+            </>
+          )}
         </View>
       </View>
     </MapPin>
@@ -276,6 +342,7 @@ export const StormOverlay = memo(function StormOverlay({
   swathEmphasis,
   onSelectEvent,
   onSelectCluster,
+  selected,
 }: StormOverlayProps & {
   swaths?: StormSwath[];
   /** Fill boldness for the swaths, from `swathEmphasisForRegion`. */
@@ -299,19 +366,30 @@ export const StormOverlay = memo(function StormOverlay({
           />
         );
       })}
-      {selection.markers.map((e) => (
-        <MapPin
-          key={e.id}
-          coordinate={{ latitude: e.lat, longitude: e.lon }}
-          pinColor={TONE_STROKE[stormTone(e)]}
-          onPress={onSelectEvent ? () => onSelectEvent(e) : undefined}
-          accessibilityLabel={eventA11yLabel(e)}
-        />
-      ))}
-      {selection.clusters.map((c) => (
-        // Re-key on count so a changed glyph re-snapshots (tracksViewChanges is off).
-        <ClusterGlyph key={`${c.id}:${c.count}`} cell={c} onPress={onSelectCluster} />
-      ))}
+      {selection.markers.map((e) => {
+        const isSelected = selected?.has(e.id) ?? false;
+        return (
+          <EventGlyph
+            key={isSelected ? `${e.id}:sel` : e.id}
+            event={e}
+            selected={isSelected}
+            onPress={onSelectEvent}
+          />
+        );
+      })}
+      {selection.clusters.map((c) => {
+        const allSelected =
+          !!selected && c.eventIds.length > 0 && c.eventIds.every((id) => selected.has(id));
+        return (
+          // Re-key on count/selected so a changed glyph re-snapshots (tracksViewChanges is off).
+          <ClusterGlyph
+            key={`${c.id}:${c.count}:${allSelected}`}
+            cell={c}
+            onPress={onSelectCluster}
+            selected={allSelected}
+          />
+        );
+      })}
     </>
   );
 });
@@ -329,6 +407,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.surface,
   },
+  // Select mode, every member selected: a touch bigger and a thicker ring so
+  // a fully-picked cluster reads distinct from a plain count glyph.
+  glyphSelected: { borderWidth: 3, transform: [{ scale: 1.15 }] },
   glyphCount: {
     color: colors.textInverse,
     fontSize: fontSize.bodySm,
@@ -340,5 +421,26 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     fontWeight: fontWeight.semibold,
     marginTop: -2,
+  },
+
+  // A selected storm pin (Select mode): a white ring around the tone dot
+  // with a checkmark — distinct from the plain pinColor teardrop at a
+  // glance, and still centred on the report's coordinate.
+  eventGlyphShadow: { ...shadows.float },
+  eventGlyphRing: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 3,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventGlyphDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

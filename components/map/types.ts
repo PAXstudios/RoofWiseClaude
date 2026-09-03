@@ -30,6 +30,13 @@ export type StormOverlayProps = {
   onSelectEvent?: (event: StormEvent) => void;
   /** Tap on a cluster glyph (far zoom) — hosts usually zoom into it. */
   onSelectCluster?: (cell: StormClusterCell) => void;
+  /**
+   * Event ids currently selected (the map's Select mode). A marker whose id
+   * is in this set renders visibly distinct (ring + checkmark) instead of
+   * its plain pin; a cluster whose every member id is in this set renders
+   * the same way. Omitted/empty outside select mode.
+   */
+  selected?: ReadonlySet<string>;
 };
 
 export type {

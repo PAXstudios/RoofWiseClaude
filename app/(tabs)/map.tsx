@@ -16,12 +16,14 @@
 // nothing was removed, and every control is within two taps of the map.
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type PropsWithChildren,
+  type ReactNode,
 } from 'react';
 import {
   View,
@@ -68,12 +70,15 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
 import { PressableScale } from '@/components/PressableScale';
 import { GlassCard } from '@/components/glass/GlassCard';
-import { IconChip } from '@/components/ui/IconChip';
+import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { ConfirmSheet } from '@/components/sheets/ConfirmSheet';
+import { openDirections } from '@/components/pipeline/contact';
 import { magnitudeLabel, type StormEvent } from '@/lib/noaa';
 import { LocationField, type ResolvedLocation } from '@/components/LocationField';
 import { KnockPinMarker } from '@/components/knock/KnockPinMarker';
 import { outcomeColor, outcomeIcon } from '@/components/knock/outcomeStyle';
+import { startRoute } from '@/components/knock/sessionTracker';
 import { list as listDiagnostics } from '@/lib/services/diagnostics';
 import { KNOCK_OUTCOMES } from '@/lib/services/knockOutcomes';
 import { resolveServiceCenter } from '@/lib/services/serviceState';
@@ -102,14 +107,22 @@ import {
   type StormClusterCell,
 } from '@/lib/services/stormCluster';
 import { fetchAddressStormHistory } from '@/lib/services/stormMatch';
-import { leadsInStormCluster, type StormLeadCluster } from '@/lib/services/stormWatch';
+import {
+  stormEventToRouteTarget,
+  stormEventToSavedArea,
+  savedAreaToRouteTarget,
+} from '@/lib/services/stormTracerSelection';
+import { KNOCK_ROUTE_RADIUS_MILES, leadsInStormCluster, type StormLeadCluster } from '@/lib/services/stormWatch';
 import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useMapChrome } from '@/lib/stores/mapChromeStore';
+import { useSavedAreaStore, useSavedAreas, type SavedArea } from '@/lib/stores/savedAreaStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
+import { useToastStore } from '@/lib/stores/toastStore';
+import type { Inspection, KnockRouteTarget, Lead } from '@/lib/models/types';
 import {
   colors,
   fontSize,
@@ -122,13 +135,14 @@ import {
   touchTarget,
 } from '@/theme/tokens';
 
-type Filter = 'leads' | 'jobs' | 'storms' | 'knocks';
+type Filter = 'leads' | 'jobs' | 'storms' | 'knocks' | 'saved';
 
 const FILTERS: { id: Filter; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: 'leads', label: 'Leads', icon: 'people-outline' },
   { id: 'jobs', label: 'Jobs', icon: 'hammer-outline' },
   { id: 'storms', label: 'Storms', icon: 'thunderstorm-outline' },
   { id: 'knocks', label: 'Knocks', icon: 'walk-outline' },
+  { id: 'saved', label: 'Saved', icon: 'bookmark-outline' },
 ];
 
 const PERILS: { id: Peril; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -342,43 +356,281 @@ function ClusterInsight({ cluster, onPress }: { cluster: StormLeadCluster; onPre
 }
 
 /**
- * Tap-a-pin detail: the real report, nothing inferred. Date, magnitude,
- * place, and the NWS remark when there is one.
+ * One 56pt action inside a detail card's action row — Directions, Open,
+ * Start route here, Remove. Tokens only (Drift #1 / #11); `tone="danger"`
+ * is Remove's only use, never a confirm on its own (the caller shows
+ * `ConfirmSheet` first).
  */
-function StormDetailCard({ event, onClose }: { event: StormEvent; onClose: () => void }) {
+function DetailAction({
+  icon,
+  label,
+  onPress,
+  tone = 'default',
+}: {
+  icon: IoniconName;
+  label: string;
+  onPress: () => void;
+  tone?: 'default' | 'danger';
+}) {
+  return (
+    <PressableScale
+      style={[styles.detailActionBtn, tone === 'danger' && styles.detailActionBtnDanger]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+    >
+      <Ionicons name={icon} size={18} color={tone === 'danger' ? colors.danger : colors.brand} />
+      <Text
+        style={[styles.detailActionText, tone === 'danger' && styles.detailActionTextDanger]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </PressableScale>
+  );
+}
+
+/** Wraps a detail card's `DetailAction` row — wraps to a second line on a
+ *  narrow screen rather than squeezing three 56pt targets thin. */
+function DetailActionsRow({ children }: { children: ReactNode }) {
+  return <View style={styles.detailActionsRow}>{children}</View>;
+}
+
+/**
+ * The one grammar every tapped pin's drawer card shares: chip, eyebrow,
+ * title, an optional line of real data, a close button, and whatever action
+ * row the caller passes as children — Directions everywhere (Feature 2),
+ * plus Open / Start route / Remove where each pin kind offers them.
+ */
+function PinDetailCard({
+  icon,
+  tone,
+  eyebrow,
+  title,
+  subtitle,
+  subtitleLines = 2,
+  onClose,
+  children,
+  testID,
+}: {
+  icon: IoniconName;
+  tone: ChipTone;
+  eyebrow: string;
+  title: string;
+  subtitle?: string;
+  subtitleLines?: number;
+  onClose: () => void;
+  children: ReactNode;
+  testID?: string;
+}) {
+  return (
+    <View style={styles.detailCardWrap} testID={testID}>
+      <View style={styles.detailCard}>
+        <IconChip name={icon} tone={tone} size="md" />
+        <View style={styles.insightText}>
+          <Text style={styles.insightLabel}>{eyebrow}</Text>
+          <Text style={styles.insightHeadline} numberOfLines={2}>
+            {title}
+          </Text>
+          {subtitle ? (
+            <Text style={styles.detailRemark} numberOfLines={subtitleLines}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+        <PressableScale
+          style={styles.detailClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close details"
+          onPress={onClose}
+        >
+          <Ionicons name="close" size={22} color={colors.text} />
+        </PressableScale>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+/**
+ * Tap-a-pin detail: the real report, nothing inferred. Date, magnitude,
+ * place, and the NWS remark when there is one — plus Directions out to the
+ * phone's own navigation app (Feature 2; storm reports carry coordinates,
+ * never a street address, so `openDirections` gets coords only).
+ */
+function StormDetailCard({
+  event,
+  onClose,
+  onDirections,
+}: {
+  event: StormEvent;
+  onClose: () => void;
+  onDirections: () => void;
+}) {
   const kind = event.type === 'hail' ? 'Hail' : 'Wind';
   const when = new Date(event.occurredAt);
   const where = [event.city, event.state].filter(Boolean).join(', ');
   return (
-    <View style={styles.detailCard} testID="storm-detail">
-      <IconChip
-        name={event.type === 'hail' ? 'snow-outline' : 'flag-outline'}
-        tone={event.type === 'hail' ? 'blue' : 'orange'}
-        size="md"
-      />
-      <View style={styles.insightText}>
-        <Text style={styles.insightLabel}>
-          {kind.toUpperCase()} · {magnitudeLabel(event)}
-        </Text>
-        <Text style={styles.insightHeadline} numberOfLines={2}>
-          {when.toLocaleDateString()} {when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-          {where ? ` · ${where}` : ''}
-        </Text>
-        {event.remarks ? (
-          <Text style={styles.detailRemark} numberOfLines={3}>
-            {event.remarks}
-          </Text>
-        ) : null}
-      </View>
-      <PressableScale
-        style={styles.detailClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close storm details"
-        onPress={onClose}
-      >
-        <Ionicons name="close" size={22} color={colors.text} />
-      </PressableScale>
-    </View>
+    <PinDetailCard
+      testID="storm-detail"
+      icon={event.type === 'hail' ? 'snow-outline' : 'flag-outline'}
+      tone={event.type === 'hail' ? 'blue' : 'orange'}
+      eyebrow={`${kind.toUpperCase()} · ${magnitudeLabel(event)}`}
+      title={`${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${where ? ` · ${where}` : ''}`}
+      subtitle={event.remarks || undefined}
+      subtitleLines={3}
+      onClose={onClose}
+    >
+      <DetailActionsRow>
+        <DetailAction icon="navigate-outline" label="Directions" onPress={onDirections} />
+      </DetailActionsRow>
+    </PinDetailCard>
+  );
+}
+
+/** A lead pin's drawer card — Open (in-app, the existing callout nav) and
+ *  Directions (Feature 2), so a tap on the pin itself offers the same two
+ *  actions the callout balloon does. */
+function LeadDetailCard({
+  lead,
+  inCore,
+  onClose,
+  onOpen,
+  onDirections,
+}: {
+  lead: Lead;
+  inCore: boolean;
+  onClose: () => void;
+  onOpen: () => void;
+  onDirections: () => void;
+}) {
+  const miles = lead.lastStormMatch?.distanceMiles;
+  const subtitle =
+    inCore && miles != null
+      ? `In storm core · ${miles.toFixed(1)} mi · ${lead.stage.replace('_', ' ')}`
+      : `Stage: ${lead.stage.replace('_', ' ')}`;
+  return (
+    <PinDetailCard
+      testID="lead-detail"
+      icon="person-outline"
+      tone={inCore ? 'orange' : 'blue'}
+      eyebrow="LEAD"
+      title={lead.customerName}
+      subtitle={subtitle}
+      onClose={onClose}
+    >
+      <DetailActionsRow>
+        <DetailAction icon="open-outline" label="Open" onPress={onOpen} />
+        <DetailAction icon="navigate-outline" label="Directions" onPress={onDirections} />
+      </DetailActionsRow>
+    </PinDetailCard>
+  );
+}
+
+/** A job pin's drawer card — same Open + Directions pair as a lead. */
+function JobDetailCard({
+  job,
+  onClose,
+  onOpen,
+  onDirections,
+}: {
+  job: Inspection;
+  onClose: () => void;
+  onOpen: () => void;
+  onDirections: () => void;
+}) {
+  return (
+    <PinDetailCard
+      testID="job-detail"
+      icon="hammer-outline"
+      tone="orange"
+      eyebrow="JOB"
+      title={job.customerName}
+      subtitle={`${job.reportId} · ${job.status.replace('_', ' ')}`}
+      onClose={onClose}
+    >
+      <DetailActionsRow>
+        <DetailAction icon="open-outline" label="Open" onPress={onOpen} />
+        <DetailAction icon="navigate-outline" label="Directions" onPress={onDirections} />
+      </DetailActionsRow>
+    </PinDetailCard>
+  );
+}
+
+/** A saved area's drawer card (the Saved layer) — Directions, start a route
+ *  right here, or remove it (behind a `ConfirmSheet` — destructive action). */
+function SavedAreaDetailCard({
+  area,
+  onClose,
+  onDirections,
+  onStartHere,
+  onRemove,
+}: {
+  area: SavedArea;
+  onClose: () => void;
+  onDirections: () => void;
+  onStartHere: () => void;
+  onRemove: () => void;
+}) {
+  const storm = area.storm;
+  const stormLine = storm
+    ? [
+        storm.town,
+        storm.hailInches != null ? `Hail ${storm.hailInches.toFixed(2)}"` : null,
+        storm.windMph != null ? `${Math.round(storm.windMph)} mph` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : null;
+  return (
+    <PinDetailCard
+      testID="saved-area-detail"
+      icon="bookmark"
+      tone="green"
+      eyebrow={`SAVED AREA · ${area.radiusMiles} MI CANVASS`}
+      title={area.label}
+      subtitle={stormLine || undefined}
+      onClose={onClose}
+    >
+      <DetailActionsRow>
+        <DetailAction icon="navigate-outline" label="Directions" onPress={onDirections} />
+        <DetailAction icon="walk-outline" label="Start route" onPress={onStartHere} />
+        <DetailAction icon="trash-outline" label="Remove" tone="danger" onPress={onRemove} />
+      </DetailActionsRow>
+    </PinDetailCard>
+  );
+}
+
+/** The knock finder's canvass-ring pin (`?ring&ringLabel`) — its callout
+ *  already opens the plan; this drawer card offers the same tap plus
+ *  Directions when the roofer taps the pin itself instead of the callout. */
+function RingDetailCard({
+  label,
+  radiusMiles,
+  onClose,
+  onOpenPlan,
+  onDirections,
+}: {
+  label: string;
+  radiusMiles: number;
+  onClose: () => void;
+  onOpenPlan: () => void;
+  onDirections: () => void;
+}) {
+  return (
+    <PinDetailCard
+      testID="ring-detail"
+      icon="compass-outline"
+      tone="orange"
+      eyebrow={`KNOCK AREA · ${radiusMiles} MI CANVASS`}
+      title={label}
+      onClose={onClose}
+    >
+      <DetailActionsRow>
+        <DetailAction icon="open-outline" label="Open plan" onPress={onOpenPlan} />
+        <DetailAction icon="navigate-outline" label="Directions" onPress={onDirections} />
+      </DetailActionsRow>
+    </PinDetailCard>
   );
 }
 
@@ -433,8 +685,15 @@ export default function MapScreen() {
   const leads = useLeadStore((s) => s.leads);
   const archive = useKnockSessionStore((s) => s.archive);
   const active = useKnockSessionStore((s) => s.activeSession);
+  const startSession = useKnockSessionStore((s) => s.start);
+  const setRouteStops = useKnockSessionStore((s) => s.setRouteStops);
   const serviceAreas = useServiceAreaStore((s) => s.areas);
   const alerts = useStormAlertStore((s) => s.alerts);
+  // Saved storm areas (Feature 1) — pinned from Select mode, kept for later.
+  const savedAreas = useSavedAreas();
+  const addSavedAreas = useSavedAreaStore((s) => s.addMany);
+  const removeSavedArea = useSavedAreaStore((s) => s.remove);
+  const toast = useToastStore((s) => s.show);
 
   // Chrome memory: rail tucked, drawer detent, satellite — per screen.
   const chrome = useMapChrome('storm');
@@ -456,6 +715,21 @@ export default function MapScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<StormEvent | null>(null);
+  // Select mode (Feature 1): pick one or many storm pins, then save them or
+  // start a knock route from them. Only meaningful on the Storms filter —
+  // the rail button only shows there, and leaving the filter clears it.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+  // The other pin kinds' drawer cards (Feature 2's Directions lives here
+  // too). At most one of these — plus `selectedEvent` above — is non-null;
+  // switching the filter or tapping a new pin resets the others.
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedSavedAreaId, setSelectedSavedAreaId] = useState<string | null>(null);
+  const [ringDetailOpen, setRingDetailOpen] = useState(false);
+  // "Remove this saved area?" — a destructive action gets a confirm sheet
+  // (Drift #1), never a bare tap.
+  const [confirmRemoveSavedId, setConfirmRemoveSavedId] = useState<string | null>(null);
   // Address search + my-location. The map was a viewport with no way to say
   // where to look; these are the two ways a real map does.
   const [searchText, setSearchText] = useState('');
@@ -656,6 +930,19 @@ export default function MapScreen() {
     () => (activeDay ? eventsOnDay(controlledEvents, activeDay) : controlledEvents),
     [controlledEvents, activeDay],
   );
+  // Select mode resolves a chosen id back to its event (Save / Start route
+  // need the real point, not just the id the overlay handed back). Built
+  // from the same list `useStormOverlaySelection` sanitises, so every id it
+  // can hand back resolves here — bar the rare duplicate-coordinate id that
+  // sanitizeStormEvents re-keys (a few in a few thousand for a busy area);
+  // that one drops out of a save/route silently rather than crashing one.
+  const eventsById = useMemo(() => {
+    // `Map` here is the JS built-in — this file's own `Map` (the map
+    // component, imported from components/map/Map) shadows the global name.
+    const map = new globalThis.Map<string, StormEvent>();
+    for (const e of events) map.set(e.id, e);
+    return map;
+  }, [events]);
 
   /** Jump the camera. Search, my-location, a storm day and follow-me land here. */
   const jumpTo = useCallback(
@@ -776,27 +1063,7 @@ export default function MapScreen() {
     () => !!selectedEvent && selection.markers.some((e) => e.id === selectedEvent.id),
     [selectedEvent, selection.markers],
   );
-
-  // A tapped storm report raises the drawer to half so its card is in view;
-  // closing it lowers the drawer again only if this raise put it there.
-  const raisedForDetail = useRef(false);
-  const showDetail = filter === 'storms' && !!selectedEvent && selectedStillShown;
   const { detent, setDetent } = chrome;
-  useEffect(() => {
-    if (showDetail && detent === 'peek') {
-      raisedForDetail.current = true;
-      setDetent('half');
-    }
-    // Only the selection should raise the drawer, not a hand-set detent.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDetail]);
-  const closeDetail = useCallback(() => {
-    setSelectedEvent(null);
-    if (raisedForDetail.current) {
-      raisedForDetail.current = false;
-      if (chrome.detent === 'half') chrome.setDetent('peek');
-    }
-  }, [chrome]);
 
   // Armed flag: on only while storm overlays are actually drawn on a focused
   // screen; cleared the moment they aren't, and on every app background.
@@ -864,6 +1131,165 @@ export default function MapScreen() {
   );
   const clusterLeadIds = useMemo(() => new Set(cluster?.leadIds ?? []), [cluster]);
 
+  // Feature 2's other tapped-pin cards: resolved from the id state so a
+  // store change (a lead re-staged, a saved area removed elsewhere) never
+  // leaves a stale object on screen — the card just disappears with its data.
+  const selectedLead = useMemo(
+    () => (selectedLeadId ? leadPins.find((l) => l.id === selectedLeadId) ?? null : null),
+    [selectedLeadId, leadPins],
+  );
+  const selectedJob = useMemo(
+    () => (selectedJobId ? jobPins.find((j) => j.id === selectedJobId) ?? null : null),
+    [selectedJobId, jobPins],
+  );
+  const selectedSavedArea = useMemo(
+    () => (selectedSavedAreaId ? savedAreas.find((a) => a.id === selectedSavedAreaId) ?? null : null),
+    [selectedSavedAreaId, savedAreas],
+  );
+
+  // A tapped pin raises the drawer to half so its card is in view; closing it
+  // lowers the drawer again only if this raise put it there. One card shows
+  // at a time — the filter already keeps storm/lead/job/saved mutually
+  // exclusive, and the canvass-ring pin only takes the slot when nothing
+  // else has it.
+  const raisedForDetail = useRef(false);
+  const showStormDetail = filter === 'storms' && !!selectedEvent && selectedStillShown;
+  const showLeadDetail = filter === 'leads' && !!selectedLead;
+  const showJobDetail = filter === 'jobs' && !!selectedJob;
+  const showSavedDetail = filter === 'saved' && !!selectedSavedArea;
+  const showRingDetail =
+    ringDetailOpen && !!focusRing && !showStormDetail && !showLeadDetail && !showJobDetail && !showSavedDetail;
+  const showDetail = showStormDetail || showLeadDetail || showJobDetail || showSavedDetail || showRingDetail;
+  useEffect(() => {
+    if (showDetail && detent === 'peek') {
+      raisedForDetail.current = true;
+      setDetent('half');
+    }
+    // Only the selection should raise the drawer, not a hand-set detent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDetail]);
+  const closeDetail = useCallback(() => {
+    setSelectedEvent(null);
+    setSelectedLeadId(null);
+    setSelectedJobId(null);
+    setSelectedSavedAreaId(null);
+    setRingDetailOpen(false);
+    if (raisedForDetail.current) {
+      raisedForDetail.current = false;
+      if (chrome.detent === 'half') chrome.setDetent('peek');
+    }
+  }, [chrome]);
+
+  // Select mode (Feature 1): toggle one pin, or every event in a tapped
+  // cluster, into the running selection.
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode((v) => {
+      const next = !v;
+      if (next) {
+        // Entering select mode closes any open storm detail card — a pin tap
+        // now toggles a selection instead of opening one.
+        setSelectedEvent(null);
+      } else {
+        setSelectedIds(new Set());
+      }
+      return next;
+    });
+  }, []);
+  const toggleEventSelected = useCallback((event: StormEvent) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(event.id)) next.delete(event.id);
+      else next.add(event.id);
+      return next;
+    });
+  }, []);
+  const selectClusterMembers = useCallback((cell: StormClusterCell) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = cell.eventIds.length > 0 && cell.eventIds.every((id) => next.has(id));
+      for (const id of cell.eventIds) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  // Start a route the proper way — permission → GPS watcher → mileage trip →
+  // session (sessionTracker.startRoute), same as PlanView.startDay. A denied
+  // permission still sets the plan on a fresh session (Drift #5: nothing the
+  // roofer chose is lost) — Knock mode shows the permission card from there.
+  const startKnockRoute = useCallback(
+    async (stops: KnockRouteTarget[]) => {
+      if (stops.length === 0) return;
+      let ok = true;
+      if (active) {
+        setRouteStops(stops);
+      } else {
+        const r = await startRoute({ routeStops: stops });
+        if (!r.ok) {
+          startSession(undefined, stops[0], { routeStops: stops });
+          ok = false;
+        }
+      }
+      toast(
+        ok
+          ? {
+              tone: 'success',
+              title: 'Knock route started',
+              body: `${stops.length} stop${stops.length === 1 ? '' : 's'} · first: ${stops[0].label}`,
+            }
+          : {
+              tone: 'warn',
+              title: 'Location is off',
+              body: 'The route is set. Turn location on in Knock mode to place pins and count miles.',
+            },
+      );
+      router.push('/door-knocking');
+    },
+    [active, setRouteStops, startSession, router, toast],
+  );
+
+  const saveSelectedAreas = useCallback(() => {
+    const chosen = Array.from(selectedIds)
+      .map((id) => eventsById.get(id))
+      .filter((e): e is StormEvent => !!e);
+    if (chosen.length === 0) return;
+    const added = addSavedAreas(chosen.map((e) => stormEventToSavedArea(e, KNOCK_ROUTE_RADIUS_MILES)));
+    toast({
+      tone: 'success',
+      title: `${added.length} area${added.length === 1 ? '' : 's'} saved`,
+      body:
+        added.length < chosen.length
+          ? `${chosen.length - added.length} already saved nearby · find them on the Saved layer`
+          : 'Find them on the Saved layer',
+    });
+  }, [selectedIds, eventsById, addSavedAreas, toast]);
+
+  const startRouteFromSelection = useCallback(() => {
+    const chosen = Array.from(selectedIds)
+      .map((id) => eventsById.get(id))
+      .filter((e): e is StormEvent => !!e);
+    if (chosen.length === 0) return;
+    const stops = chosen.map((e) => stormEventToRouteTarget(e, KNOCK_ROUTE_RADIUS_MILES));
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    void startKnockRoute(stops);
+  }, [selectedIds, eventsById, startKnockRoute]);
+
+  const startRouteFromSaved = useCallback(() => {
+    if (savedAreas.length === 0) return;
+    void startKnockRoute(savedAreas.map(savedAreaToRouteTarget));
+  }, [savedAreas, startKnockRoute]);
+
+  const startRouteFromOneSavedArea = useCallback(
+    (area: SavedArea) => {
+      void startKnockRoute([savedAreaToRouteTarget(area)]);
+    },
+    [startKnockRoute],
+  );
+
   const toggleOverlays = useCallback(
     (next: boolean) => {
       setSelectedEvent(null);
@@ -908,7 +1334,9 @@ export default function MapScreen() {
         ? `${jobPins.length} of ${inspections.length} jobs mapped`
         : filter === 'leads'
           ? `${leadPins.length} of ${leads.length} leads mapped`
-          : `${knockPins.length} knock pins`;
+          : filter === 'saved'
+            ? `${savedAreas.length} saved area${savedAreas.length === 1 ? '' : 's'}`
+            : `${knockPins.length} knock pins`;
 
   // ---- the summary chip: what the map is showing, in one line -------------
   const filterLabel = FILTERS.find((f) => f.id === filter)?.label ?? 'Map';
@@ -919,12 +1347,14 @@ export default function MapScreen() {
   const dayShort = activeDayInfo ? shortDayLabel(activeDayInfo) : 'All days';
   const summary =
     filter === 'storms'
-      ? `${filterLabel} · ${rangeShort} · ${perilShort}${magShort} · ${dayShort}${overlaysOn ? '' : ' · Overlays off'}`
+      ? `${filterLabel} · ${rangeShort} · ${perilShort}${magShort} · ${dayShort}${overlaysOn ? '' : ' · Overlays off'}${selectMode ? ' · Select mode' : ''}`
       : filter === 'leads'
         ? `${filterLabel} · ${leadPins.length} mapped`
         : filter === 'jobs'
           ? `${filterLabel} · ${jobPins.length} mapped`
-          : `${filterLabel} · ${knockPins.length} pins`;
+          : filter === 'saved'
+            ? `${filterLabel} · ${savedAreas.length} saved`
+            : `${filterLabel} · ${knockPins.length} pins`;
 
   // Active-filter count for the layers badge: anything off its default.
   const activeFilterCount =
@@ -965,6 +1395,18 @@ export default function MapScreen() {
       onPress: () => setLayersOpen(true),
     },
   ];
+  if (filter === 'storms') {
+    // Select mode (Feature 1) — only meaningful on the Storms filter, where
+    // there are storm pins to pick. Off elsewhere; leaving the filter turns
+    // it back off too (see the layers sheet's filter row below).
+    rail.push({
+      key: 'select',
+      icon: 'checkmark-circle-outline',
+      label: selectMode ? 'Turn off select mode' : 'Select storm areas',
+      active: selectMode,
+      onPress: toggleSelectMode,
+    });
+  }
   if (legendAvailable) {
     rail.push({
       key: 'legend',
@@ -995,6 +1437,14 @@ export default function MapScreen() {
           value: filter,
           onChange: (id) => {
             setSelectedEvent(null);
+            setSelectedLeadId(null);
+            setSelectedJobId(null);
+            setSelectedSavedAreaId(null);
+            setRingDetailOpen(false);
+            if (id !== 'storms') {
+              setSelectMode(false);
+              setSelectedIds(new Set());
+            }
             setFilter(id as Filter);
           },
         },
@@ -1191,7 +1641,9 @@ export default function MapScreen() {
                 />
               ))}
             {/* The knock finder's chosen area: its 3-mi canvass ring and a
-                labelled pin whose callout goes back to the plan. */}
+                labelled pin whose callout goes back to the plan; a tap on the
+                pin itself opens the same card in the drawer (Feature 2's
+                Directions lives there — the callout keeps its own nav too). */}
             {focusRing && (
               <>
                 <MapCircle
@@ -1206,6 +1658,7 @@ export default function MapScreen() {
                   title={focusRing.label}
                   description={`${focusRing.radiusMiles} mi canvass radius · tap for the plan`}
                   tone="orange"
+                  onPress={() => setRingDetailOpen(true)}
                   onCalloutPress={() => router.push('/knock-finder')}
                 />
               </>
@@ -1215,8 +1668,12 @@ export default function MapScreen() {
                 selection={selection}
                 swaths={swaths}
                 swathEmphasis={swathEmphasisForRegion(region)}
-                onSelectEvent={setSelectedEvent}
-                onSelectCluster={onSelectCluster}
+                // Select mode intercepts the tap: a pin toggles into the
+                // running selection, a cluster toggles its whole membership,
+                // instead of opening the detail card / zooming in.
+                onSelectEvent={selectMode ? toggleEventSelected : setSelectedEvent}
+                onSelectCluster={selectMode ? selectClusterMembers : onSelectCluster}
+                selected={selectMode ? selectedIds : undefined}
               />
             )}
             {filter === 'jobs' &&
@@ -1227,6 +1684,7 @@ export default function MapScreen() {
                   title={ins.customerName}
                   description={`${ins.reportId} · ${ins.status.replace('_', ' ')}`}
                   tone="orange"
+                  onPress={() => setSelectedJobId(ins.id)}
                   onCalloutPress={() => router.push(`/job/${ins.id}` as any)}
                 />
               ))}
@@ -1246,7 +1704,9 @@ export default function MapScreen() {
                         ? `In storm core · ${miles.toFixed(1)} mi · ${lead.stage.replace('_', ' ')}`
                         : `Stage: ${lead.stage.replace('_', ' ')}`
                     }
-                    // Audit P2: job pins opened the job, lead pins opened nothing.
+                    // The pin itself opens the drawer's Open + Directions card
+                    // (Feature 2); the callout keeps its own in-app nav too.
+                    onPress={() => setSelectedLeadId(lead.id)}
                     onCalloutPress={() => router.push(`/lead/${lead.id}` as any)}
                     tone={inCore ? 'danger' : 'info'}
                   />
@@ -1264,6 +1724,28 @@ export default function MapScreen() {
                   muted={!activeKnockIds.has(k.id)}
                   onPress={() => router.push('/door-knocking')}
                 />
+              ))}
+            {/* Saved areas (Feature 1) — every pin Select mode saved, kept for
+                a later day: its canvass ring plus a pin that opens the
+                drawer's Directions / Start route here / Remove card. */}
+            {filter === 'saved' &&
+              savedAreas.map((a) => (
+                <Fragment key={a.id}>
+                  <MapCircle
+                    center={{ latitude: a.lat, longitude: a.lng }}
+                    radius={a.radiusMiles * 1609.34}
+                    strokeColor={colors.success}
+                    strokeWidth={2}
+                    fillColor={colors.successSoft}
+                  />
+                  <MapPin
+                    coordinate={{ latitude: a.lat, longitude: a.lng }}
+                    title={a.label}
+                    description={`${a.radiusMiles} mi canvass · saved ${new Date(a.savedAt).toLocaleDateString()}`}
+                    tone="success"
+                    onPress={() => setSelectedSavedAreaId(a.id)}
+                  />
+                </Fragment>
               ))}
           </Map>
         </View>
@@ -1371,6 +1853,60 @@ export default function MapScreen() {
                   </Text>
                 </View>
               )}
+              {/* Select mode's action bar (Feature 1): visible at every detent,
+                  same as the safety/error rows above, so it is never buried
+                  under whatever the drawer is showing at half or full. */}
+              {selectMode && selectedIds.size > 0 && (
+                <View style={styles.selectionBar} testID="map-selection-bar">
+                  <Text style={styles.selectionCount} numberOfLines={1}>
+                    {selectedIds.size} area{selectedIds.size === 1 ? '' : 's'} selected
+                  </Text>
+                  <View style={styles.selectionActions}>
+                    <PressableScale
+                      style={styles.selectionBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Save selected areas"
+                      onPress={saveSelectedAreas}
+                    >
+                      <Ionicons name="bookmark-outline" size={18} color={colors.brand} />
+                      <Text style={styles.selectionBtnText}>Save</Text>
+                    </PressableScale>
+                    <PressableScale
+                      style={[styles.selectionBtn, styles.selectionBtnPrimary]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Start a knock route from selected areas"
+                      onPress={startRouteFromSelection}
+                    >
+                      <Ionicons name="walk-outline" size={18} color={colors.textInverse} />
+                      <Text style={[styles.selectionBtnText, styles.selectionBtnPrimaryText]}>Start route</Text>
+                    </PressableScale>
+                    <PressableScale
+                      style={styles.selectionClearBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear selection"
+                      onPress={clearSelection}
+                    >
+                      <Ionicons name="close" size={20} color={colors.text} />
+                    </PressableScale>
+                  </View>
+                </View>
+              )}
+              {/* The Saved layer's one-tap route (Feature 1): every saved area
+                  becomes a stop, in one route, the moment the roofer is ready
+                  to canvass what Select mode picked earlier. */}
+              {filter === 'saved' && savedAreas.length > 0 && (
+                <PressableScale
+                  style={styles.savedRouteBar}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Start a knock route from ${savedAreas.length} saved areas`}
+                  onPress={startRouteFromSaved}
+                >
+                  <Ionicons name="walk-outline" size={18} color={colors.textInverse} />
+                  <Text style={styles.savedRouteBarText} numberOfLines={1}>
+                    Start route from {savedAreas.length} saved area{savedAreas.length === 1 ? '' : 's'}
+                  </Text>
+                </PressableScale>
+              )}
               <View style={styles.drawerHeadRow}>
                 <Text style={styles.statText} numberOfLines={2} testID="map-stat">
                   {statLine}
@@ -1401,7 +1937,48 @@ export default function MapScreen() {
             </PressableScale>
           }
         >
-          {showDetail && selectedEvent && <StormDetailCard event={selectedEvent} onClose={closeDetail} />}
+          {showStormDetail && selectedEvent && (
+            <StormDetailCard
+              event={selectedEvent}
+              onClose={closeDetail}
+              onDirections={() => openDirections('', { lat: selectedEvent.lat, lng: selectedEvent.lon })}
+            />
+          )}
+          {showLeadDetail && selectedLead && (
+            <LeadDetailCard
+              lead={selectedLead}
+              inCore={clusterLeadIds.has(selectedLead.id)}
+              onClose={closeDetail}
+              onOpen={() => router.push(`/lead/${selectedLead.id}` as any)}
+              onDirections={() => openDirections(selectedLead.address, { lat: selectedLead.lat, lng: selectedLead.lng })}
+            />
+          )}
+          {showJobDetail && selectedJob && (
+            <JobDetailCard
+              job={selectedJob}
+              onClose={closeDetail}
+              onOpen={() => router.push(`/job/${selectedJob.id}` as any)}
+              onDirections={() => openDirections(selectedJob.address, { lat: selectedJob.lat, lng: selectedJob.lng })}
+            />
+          )}
+          {showSavedDetail && selectedSavedArea && (
+            <SavedAreaDetailCard
+              area={selectedSavedArea}
+              onClose={closeDetail}
+              onDirections={() => openDirections('', { lat: selectedSavedArea.lat, lng: selectedSavedArea.lng })}
+              onStartHere={() => startRouteFromOneSavedArea(selectedSavedArea)}
+              onRemove={() => setConfirmRemoveSavedId(selectedSavedArea.id)}
+            />
+          )}
+          {showRingDetail && focusRing && (
+            <RingDetailCard
+              label={focusRing.label}
+              radiusMiles={focusRing.radiusMiles}
+              onClose={closeDetail}
+              onOpenPlan={() => router.push('/knock-finder')}
+              onDirections={() => openDirections('', { lat: focusRing.lat, lng: focusRing.lng })}
+            />
+          )}
           {cluster && <ClusterInsight cluster={cluster} onPress={() => setFilter('leads')} />}
           {filter === 'storms' && dayRows.length > 0 && (
             <View style={styles.daysBlock}>
@@ -1416,15 +1993,34 @@ export default function MapScreen() {
               </View>
             </View>
           )}
-          {filter !== 'storms' && !cluster && (
+          {filter !== 'storms' && !cluster && !showDetail && (
             <Text style={styles.drawerHint}>
               {filter === 'knocks'
                 ? 'Tap a knock pin to open it in Knock mode.'
-                : `Tap a pin's callout to open the ${filter === 'leads' ? 'lead' : 'job'}.`}
+                : filter === 'saved'
+                  ? savedAreas.length > 0
+                    ? 'Tap a saved pin for directions, to start a route there, or to remove it.'
+                    : 'Select storm pins on the Storms filter, then Save — they show up here.'
+                  : `Tap a pin for directions, or its callout to open the ${filter === 'leads' ? 'lead' : 'job'}.`}
             </Text>
           )}
         </MapDrawer>
       </View>
+
+      <ConfirmSheet
+        visible={confirmRemoveSavedId != null}
+        title="Remove this saved area?"
+        body={savedAreas.find((a) => a.id === confirmRemoveSavedId)?.label}
+        confirmLabel="Remove"
+        cancelLabel="Keep"
+        onClose={() => setConfirmRemoveSavedId(null)}
+        onConfirm={() => {
+          if (!confirmRemoveSavedId) return;
+          removeSavedArea(confirmRemoveSavedId);
+          if (selectedSavedAreaId === confirmRemoveSavedId) setSelectedSavedAreaId(null);
+          setConfirmRemoveSavedId(null);
+        }}
+      />
 
       <LayersSheet
         visible={layersOpen}
@@ -1509,6 +2105,53 @@ const styles = StyleSheet.create({
   },
   plannerText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
 
+  // Select mode's action bar — "N areas selected" + Save / Start route /
+  // Clear. Lives in the drawer header so it is visible at every detent, same
+  // grammar as the safety/error rows above it.
+  selectionBar: {
+    gap: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radii.card,
+    backgroundColor: colors.brandSoft,
+  },
+  selectionCount: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
+  selectionActions: { flexDirection: 'row', gap: spacing.sm },
+  selectionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    flexGrow: 1,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.button,
+    backgroundColor: colors.surface,
+  },
+  selectionBtnPrimary: { backgroundColor: colors.brand },
+  selectionBtnText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
+  selectionBtnPrimaryText: { color: colors.textInverse },
+  selectionClearBtn: {
+    width: touchTarget.standard,
+    height: touchTarget.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.button,
+    backgroundColor: colors.surface,
+  },
+
+  // The Saved layer's "Start route from N saved areas" — one full-width 56pt
+  // bar, the same burnt accent Knock mode's own CTA wears.
+  savedRouteBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: touchTarget.standard,
+    borderRadius: radii.button,
+    backgroundColor: colors.accent,
+  },
+  savedRouteBarText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.textInverse },
+
   // The one primary CTA — 88pt, burnt, in the thumb zone at every detent.
   cta: {
     flexDirection: 'row',
@@ -1575,6 +2218,10 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     color: colors.text,
   },
+  // A tapped pin's card: the chip/text/close header (unchanged look) plus an
+  // action row underneath — Directions everywhere, Open / Start route /
+  // Remove where each pin kind offers them (Feature 2 / Feature 1).
+  detailCardWrap: { gap: spacing.sm },
   detailCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1597,6 +2244,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Wraps rather than squeezing three 56pt targets thin on a narrow phone.
+  detailActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  detailActionBtn: {
+    flexGrow: 1,
+    flexBasis: 108,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.button,
+    backgroundColor: colors.fillQuiet,
+  },
+  detailActionBtnDanger: { backgroundColor: colors.dangerSoft },
+  detailActionText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.brand },
+  detailActionTextDanger: { color: colors.danger },
 
   // Storm days — one 56pt row per day, newest first.
   daysBlock: { gap: spacing.sm },
