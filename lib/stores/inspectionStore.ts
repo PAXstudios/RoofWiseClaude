@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { roofAgePrefill } from '../services/propertyRecord';
+import { isAppointmentTimestamp } from '../services/appointmentTime';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { inspectionStorage } from '../services/inspectionPersistence';
 import type {
   BrittlenessProtocol,
   BrittlenessTest,
@@ -10,6 +11,7 @@ import type {
   CollateralChecklistItem,
   CollateralEvidence,
   CollateralZone,
+  Correction,
   CoverPhoto,
   DamageMarker,
   Inspection,
@@ -28,16 +30,24 @@ import type {
   RoofMaterial,
   Slope,
   SlopeOrientation,
+  TrainingItem,
 } from '../models/types';
+import { resolveReviewEvidence } from '../services/reviewEvidence';
+import { manuallyReviewedAnalysis, validateCorrectionSession, type CorrectionSession } from '../services/correctionEvidence';
+import { patchPhotoAnalysis, readPhotoAnalysis } from '../services/photoAnalysisState';
 import { squaresFacing } from '../services/propertyIntel';
 import { bucketHitCountsByMode } from '../services/captureSession';
 import { deriveFunctional } from '../services/functionalDamage';
+import { migratePhotoAnalysis, projectPhotoAnalysis } from '../services/photoAnalysisState';
 import {
   brittlenessResultToLegacy,
   emptyCollateralEvidence,
 } from '../models/types';
 import { useLeadStore } from './leadStore';
 import { useActivityStore } from './activityStore';
+import { useInspectionSyncStore, waitForInspectionSyncHydration } from './inspectionSyncStore';
+
+inspectionStorage.beginHydration?.();
 
 /**
  * Fire a pipeline event without a hard top-level import — `automations.ts`
@@ -62,6 +72,70 @@ function newId(): string {
 
 function newSlopeId(): string {
   return `slp_${Date.now()}_${counter++}`;
+}
+
+function newPhotoAttachmentId(): string {
+  return `photo_${Date.now()}_${counter++}_${Math.random().toString(36).slice(2)}`;
+}
+
+/** Lazy additive migration; existing valid identities survive restart. */
+function attachmentIds(slope: Slope): string[] {
+  const seen = new Set<string>();
+  return slope.photoPaths.map((_, index) => {
+    const previous = slope.photoAttachmentIds?.[index];
+    const id = typeof previous === 'string' && previous && !seen.has(previous)
+      && slope.photoAttachmentIds?.filter((id) => id === previous).length === 1
+      ? previous : newPhotoAttachmentId();
+    seen.add(id);
+    return id;
+  });
+}
+
+function normalizeAttachmentEvidence(slope: Slope): Slope {
+  const duplicatedIndexes = new Set(slope.photoPaths.flatMap((_, index) => {
+    const id = slope.photoAttachmentIds?.[index];
+    return id && slope.photoAttachmentIds!.filter((other) => other === id).length > 1 ? [index] : [];
+  }));
+  const normalized = migratePhotoAnalysis({ ...slope, photoAttachmentIds: attachmentIds(slope) });
+  const findings = (normalized.aiFindings ?? []).map((finding) => {
+    if (finding.photoAttachmentId || !finding.photoPath) return finding;
+    const indexes = normalized.photoPaths.flatMap((uri, index) => uri === finding.photoPath ? [index] : []);
+    return indexes.length === 1 ? { ...finding, photoAttachmentId: normalized.photoAttachmentIds![indexes[0]] } : finding;
+  });
+  const validMarker = (marker: DamageMarker) => Number.isInteger(marker.photoIndex) && marker.photoIndex! >= 0 && marker.photoIndex! < normalized.photoPaths.length;
+  const validFinding = (finding: InspectionFinding) => !!finding.photoAttachmentId && normalized.photoAttachmentIds!.includes(finding.photoAttachmentId);
+  const retiredMarkers = normalized.damage.filter((marker) => !validMarker(marker));
+  const retiredFindings = findings.filter((finding) => !validFinding(finding));
+  const validScale = (scale: NonNullable<Slope['scaleEstimates']>[number]) => Number.isInteger(scale.photoIndex) && scale.photoIndex >= 0 && scale.photoIndex < normalized.photoPaths.length;
+  const retiredScales = (normalized.scaleEstimates ?? []).filter((scale) => !validScale(scale));
+  return { ...normalized,
+    damage: normalized.damage.filter(validMarker), aiFindings: findings.filter(validFinding),
+    analyzedPhotoIndices: (normalized.analyzedPhotoIndices ?? []).filter((index) => Number.isInteger(index) && index >= 0 && index < normalized.photoPaths.length && !duplicatedIndexes.has(index)),
+    scaleEstimates: normalized.scaleEstimates?.filter(validScale),
+    historicalPhotoEvidence: retiredMarkers.length || retiredFindings.length || retiredScales.length
+      ? [...(normalized.historicalPhotoEvidence ?? []), { reason: 'Evidence lacks a valid surviving attachment', markers: retiredMarkers, findings: retiredFindings, scaleEstimates: retiredScales }]
+      : normalized.historicalPhotoEvidence,
+  };
+}
+
+/** Attachment edits cannot leave unowned legacy evidence active on a new
+ * photo (or a slope with no photos). Keep it explicitly historical instead. */
+function retirePhotoEvidence(slope: Slope, index: number): Slope {
+  const normalized = normalizeAttachmentEvidence(slope);
+  const id = normalized.photoAttachmentIds![index];
+  const retiredMarkers = normalized.damage.filter((marker) => marker.photoIndex === index || marker.photoIndex === undefined);
+  const retiredFindings = (normalized.aiFindings ?? []).filter((finding) => !finding.photoAttachmentId || finding.photoAttachmentId === id);
+  const analysis = normalized.photoAnalysisByAttachment?.[id];
+  return {
+    ...normalized,
+    damage: normalized.damage.filter((marker) => marker.photoIndex !== index && marker.photoIndex !== undefined),
+    aiFindings: (normalized.aiFindings ?? []).filter((finding) => finding.photoAttachmentId && finding.photoAttachmentId !== id),
+    historicalPhotoEvidence: [...(normalized.historicalPhotoEvidence ?? []), {
+      reason: 'Attachment removed or replaced; prior and unattributed evidence retained as history',
+      photoPath: normalized.photoPaths[index], markers: retiredMarkers, findings: retiredFindings, analysis,
+      scaleEstimates: normalized.scaleEstimates?.filter((scale) => scale.photoIndex === index),
+    }],
+  };
 }
 
 /**
@@ -109,6 +183,8 @@ function ordinalOf(reportId: unknown): number {
 }
 
 type CreateDraft = {
+  /** Reserved by the durable capture journal; retries reuse the same job. */
+  id?: string;
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;
@@ -292,6 +368,7 @@ type InspectionStoreState = {
   setAudioNoteLabel: (id: string, noteId: string, label: string) => void;
   removePhoto: (inspectionId: string, slopeId: string, photoIndex: number) => void;
   replacePhoto: (inspectionId: string, slopeId: string, photoIndex: number, uri: string) => void;
+  ensurePhotoAttachmentIds: (inspectionId: string, slopeId: string) => void;
   setPhotoUpload: (
     inspectionId: string,
     slopeId: string,
@@ -321,6 +398,8 @@ type InspectionStoreState = {
   setRoofPitch: (inspectionId: string, degrees: number) => void;
   /** Link (or unlink with `undefined`) the pipeline lead this job came from. */
   setLeadId: (inspectionId: string, leadId: string | undefined) => void;
+  /** Rebook only work that has not started. Never changes inspection status. */
+  setScheduledAt: (inspectionId: string, scheduledAt: string) => void;
   /**
    * File the install window (docs/PIPELINE.md). Stamps `installScheduledAt`
    * to now and emits `install_scheduled` — the automation engine moves the
@@ -336,6 +415,8 @@ type InspectionStoreState = {
     slopeId: string,
     markers: DamageMarker[],
   ) => void;
+  rejectReviewedPhoto: (item: TrainingItem, correction: Correction) => void;
+  correctReviewedPhoto: (session: CorrectionSession, correction: Correction) => void;
   replacePhotoMarkers: (
     inspectionId: string,
     slopeId: string,
@@ -345,6 +426,7 @@ type InspectionStoreState = {
 };
 
 function withRecount(slope: Slope): Slope {
+  slope = normalizeAttachmentEvidence(slope);
   const m = slope.damage;
   // Split the hail hits by the capture mode of the photo each marker came
   // from, in the SAME pass that recounts hailCount.
@@ -441,7 +523,7 @@ const finiteOr0 = (v: unknown): number =>
  * a value the roofer did not record (no pitch, no area, no verdict).
  */
 function normalizeSlope(raw: Record<string, unknown>): Slope {
-  return {
+  return withRecount({
     ...(raw as unknown as Slope),
     orientation:
       typeof raw.orientation === 'string' ? (raw.orientation as SlopeOrientation) : 'Unknown',
@@ -458,11 +540,11 @@ function normalizeSlope(raw: Record<string, unknown>): Slope {
     photoPaths: Array.isArray(raw.photoPaths)
       ? raw.photoPaths.filter((p): p is string => typeof p === 'string')
       : [],
-  };
+  });
 }
 
 /** Same guard for the `Inspection` shell; the defaults are `create()`'s. */
-function normalizeInspection(raw: Record<string, unknown>): Inspection {
+export function normalizeInspection(raw: Record<string, unknown>, previous?: Inspection): Inspection {
   return {
     ...(raw as unknown as Inspection),
     status: typeof raw.status === 'string' ? (raw.status as InspectionStatus) : 'in_progress',
@@ -475,7 +557,64 @@ function normalizeInspection(raw: Record<string, unknown>): Inspection {
     collateralChecklist: isRecord(raw.collateralChecklist)
       ? (raw.collateralChecklist as Record<string, boolean>)
       : {},
-    slopes: Array.isArray(raw.slopes) ? raw.slopes.filter(isRecord).map(normalizeSlope) : [],
+    slopes: Array.isArray(raw.slopes) ? raw.slopes.filter(isRecord).map((slope) => {
+      const before = previous?.slopes.find((sl) => sl.id === slope.id);
+      // Legacy payloads have no IDs. Reuse accepted IDs only when the file
+      // sequence AND capture metadata still describe the same attachments.
+      const incomingIds = Array.isArray(slope.photoAttachmentIds) ? slope.photoAttachmentIds : [];
+      // Quarantine by the INCOMING IDs before prior IDs can repair positions.
+      // Otherwise prior [A,B,C] + incoming [A,A,C] would revive A's ambiguous
+      // state/findings when reconciliation restores [A,B,C].
+      const duplicatedIds = new Set(incomingIds.filter((id) => typeof id === 'string' && incomingIds.filter((other) => other === id).length > 1));
+      if (duplicatedIds.size > 0) {
+        const incomingAnalysis = isRecord(slope.photoAnalysisByAttachment) ? slope.photoAnalysisByAttachment : {};
+        const legacyAnalysisHistory: { reason: string; photoPath: string; analysis: unknown }[] = [];
+        if (!isRecord(slope.photoAnalysisByAttachment) && isRecord(slope.photoAnalysis)) {
+          const paths = Array.isArray(slope.photoPaths) ? slope.photoPaths : [];
+          for (const [uri, analysis] of Object.entries(slope.photoAnalysis)) {
+            const positions = paths.flatMap((path, index) => path === uri ? [index] : []);
+            const id = positions.length === 1 ? incomingIds[positions[0]] : undefined;
+            if (typeof id === 'string' && id && !duplicatedIds.has(id)) incomingAnalysis[id] = analysis;
+            else legacyAnalysisHistory.push({ reason: 'Incoming attachment ID has multiple or unknown owners', photoPath: uri, analysis });
+          }
+        }
+        const ambiguousAnalysis = Object.entries(incomingAnalysis).filter(([id]) => duplicatedIds.has(id));
+        const incomingFindings = Array.isArray(slope.aiFindings) ? slope.aiFindings : [];
+        const ambiguousFindings = incomingFindings.filter((finding) => isRecord(finding) && duplicatedIds.has(finding.photoAttachmentId));
+        slope = { ...slope,
+          photoAnalysisByAttachment: Object.fromEntries(Object.entries(incomingAnalysis).filter(([id]) => !duplicatedIds.has(id))),
+          aiFindings: incomingFindings.filter((finding) => !isRecord(finding) || !duplicatedIds.has(finding.photoAttachmentId)),
+          historicalPhotoEvidence: [
+            ...(Array.isArray(slope.historicalPhotoEvidence) ? slope.historicalPhotoEvidence : []),
+            ...legacyAnalysisHistory,
+            ...ambiguousAnalysis.map(([, analysis]) => ({ reason: 'Incoming attachment ID has multiple owners', analysis })),
+            ...(ambiguousFindings.length ? [{ reason: 'Incoming attachment ID has multiple owners', findings: ambiguousFindings }] : []),
+          ],
+        };
+      }
+      const idsValid = Array.isArray(slope.photoPaths) && incomingIds.length === slope.photoPaths.length
+        && incomingIds.every((id) => typeof id === 'string' && id.length > 0)
+        && new Set(incomingIds).size === incomingIds.length;
+      const previousIds = before?.photoAttachmentIds ?? [];
+      const priorIdsValid = before && previousIds.length === before.photoPaths.length
+        && previousIds.every((id) => typeof id === 'string' && id.length > 0) && new Set(previousIds).size === previousIds.length;
+      const sameAttachments = before && priorIdsValid && !idsValid
+        && JSON.stringify(slope.photoPaths) === JSON.stringify(before.photoPaths)
+        && JSON.stringify(slope.photoMeta) === JSON.stringify(before.photoMeta);
+      const ambiguousIndexes = new Set(incomingIds.flatMap((id, index) => incomingIds.filter((other) => other === id).length > 1 ? [index] : []));
+      // Reserve every unique incoming owner before repairing any other slot.
+      const reservedIds = new Set(incomingIds.filter((id) => typeof id === 'string' && id && incomingIds.filter((other) => other === id).length === 1));
+      const reconciledIds = previousIds.map((id, index) => {
+        const incoming = incomingIds[index];
+        if (typeof incoming === 'string' && incoming && incomingIds.filter((other) => other === incoming).length === 1) return incoming;
+        const fallback = reservedIds.has(id) ? newPhotoAttachmentId() : id;
+        reservedIds.add(fallback);
+        return fallback;
+      });
+      return normalizeSlope(sameAttachments ? { ...slope, photoAttachmentIds: reconciledIds,
+        analyzedPhotoIndices: Array.isArray(slope.analyzedPhotoIndices) ? slope.analyzedPhotoIndices.filter((index) => !ambiguousIndexes.has(index)) : slope.analyzedPhotoIndices,
+      } : slope);
+    }) : [],
     verifyWithInspector: raw.verifyWithInspector === true,
   };
 }
@@ -486,13 +625,41 @@ function normalizeInspection(raw: Record<string, unknown>): Inspection {
  * stored counter is missing or behind it, so a migrated device can never
  * mint a duplicate RW-YYYY-#### number.
  */
-function migrateInspections(persisted: unknown): Persisted {
+function migrateInspections(persisted: unknown, current?: Inspection[]): Persisted {
   const raw = isRecord(persisted) ? persisted : {};
   const list = Array.isArray(raw.inspections) ? raw.inspections.filter(isRecord) : [];
-  const inspections = list.map(normalizeInspection);
+  const inspections = list.map((raw) => normalizeInspection(raw, current?.find((ins) => ins.id === raw.id)));
   const highest = inspections.reduce((max, i) => Math.max(max, ordinalOf(i.reportId)), 0);
   const stored = typeof raw.nextOrdinal === 'number' ? raw.nextOrdinal : 0;
   return { inspections, nextOrdinal: Math.max(stored, highest + 1) };
+}
+
+// Only one hydration read runs at a time (see the serialized entry point
+// below). Snapshot content rather than object identity: old callers may have
+// mutated nested records in place before persisting them.
+let hydrationBaseline = new Map<string, string>();
+let acceptedHydration = false;
+let retryingHydration = false;
+let applyingHydration = false;
+const hydrationRemovals = new Set<string>();
+
+/** The sync watcher must not reinterpret restored records as fresh edits. */
+export function isApplyingInspectionHydration(): boolean { return applyingHydration; }
+
+function mergeHydration(persisted: unknown, current: InspectionStoreState): InspectionStoreState {
+  const loaded = migrateInspections(persisted, current.inspections);
+  const byId = new Map(loaded.inspections.map((inspection) => [inspection.id, inspection]));
+  for (const id of hydrationRemovals) byId.delete(id);
+  for (const id of Object.keys(useInspectionSyncStore.getState().tombstones)) byId.delete(id);
+  const liveIds = new Set(current.inspections.map((inspection) => inspection.id));
+  for (const id of hydrationBaseline.keys()) if (!liveIds.has(id)) byId.delete(id);
+  for (const inspection of current.inspections) {
+    if (hydrationBaseline.get(inspection.id) !== JSON.stringify(inspection)) {
+      byId.set(inspection.id, normalizeInspection(inspection as unknown as Record<string, unknown>));
+    }
+  }
+  applyingHydration = true;
+  return { ...current, inspections: [...byId.values()], nextOrdinal: Math.max(current.nextOrdinal, loaded.nextOrdinal) };
 }
 
 export const useInspectionStore = create<InspectionStoreState>()(
@@ -502,12 +669,15 @@ export const useInspectionStore = create<InspectionStoreState>()(
       nextOrdinal: 1,
 
       create: (d) => {
+        const existing = d.id ? get().inspections.find((i) => i.id === d.id) : undefined;
+        if (existing) return existing;
+        if (d.id) hydrationRemovals.delete(d.id);
         const year = new Date().getFullYear();
         const ord = get().nextOrdinal;
         const now = new Date().toISOString();
         const status: InspectionStatus = d.status ?? 'in_progress';
         const inspection: Inspection = {
-          id: newId(),
+          id: d.id ?? newId(),
           reportId: mintReportId(year, ord),
           createdAt: now,
           status,
@@ -582,8 +752,13 @@ export const useInspectionStore = create<InspectionStoreState>()(
         return inspection;
       },
 
-      remove: (id) =>
-        set((s) => ({ inspections: s.inspections.filter((i) => i.id !== id) })),
+      remove: (id) => {
+        hydrationRemovals.add(id);
+        // An unread saved ID may be absent from the array, so the watcher
+        // cannot infer this deletion from an identity diff.
+        useInspectionSyncStore.getState().markDeleted(id);
+        set((s) => ({ inspections: s.inspections.filter((i) => i.id !== id) }));
+      },
 
       setStatus: (id, status) => {
         const current = get().inspections.find((i) => i.id === id);
@@ -817,7 +992,8 @@ export const useInspectionStore = create<InspectionStoreState>()(
             return {
               ...ins,
               slopes: ins.slopes.map((sl) => {
-                if (sl.id !== slopeId) return sl;
+                if (sl.id !== slopeId || !sl.photoPaths[photoIndex]) return sl;
+                sl = retirePhotoEvidence(sl, photoIndex);
                 // Drop the photo + its markers; renumber markers and the
                 // analyzed-index record above it so both stay aligned with
                 // the shifted photoPaths array.
@@ -843,14 +1019,20 @@ export const useInspectionStore = create<InspectionStoreState>()(
                 // Upload bookkeeping is keyed by URI, so nothing renumbers —
                 // but a dropped photo's pending/failed state goes with it.
                 const removedUri = sl.photoPaths[photoIndex];
-                return withRecount({
+                return withRecount(projectPhotoAnalysis({
                   ...sl,
                   photoPaths,
                   damage,
                   analyzedPhotoIndices,
                   photoMeta,
-                  photoSync: withoutKey(sl.photoSync, removedUri),
-                });
+                  photoAttachmentIds: attachmentIds(sl).filter((_, index) => index !== photoIndex),
+                  scaleEstimates: sl.scaleEstimates?.filter((scale) => scale.photoIndex !== photoIndex)
+                    .map((scale) => scale.photoIndex > photoIndex ? { ...scale, photoIndex: scale.photoIndex - 1 } : scale),
+                  // Analysis belongs to an attachment, even if another entry
+                  // happens to point at the same file. Never retain its spinner.
+                  photoSync: photoPaths.includes(removedUri) ? sl.photoSync : withoutKey(sl.photoSync, removedUri),
+                  photoUploads: photoPaths.includes(removedUri) ? sl.photoUploads : withoutKey(sl.photoUploads, removedUri),
+                }));
               }),
             };
           }),
@@ -868,13 +1050,31 @@ export const useInspectionStore = create<InspectionStoreState>()(
             return {
               ...ins,
               slopes: ins.slopes.map((sl) => {
-                if (sl.id !== slopeId) return sl;
+                if (sl.id !== slopeId || !sl.photoPaths[photoIndex]) return sl;
+                sl = retirePhotoEvidence(sl, photoIndex);
+                const removedUri = sl.photoPaths[photoIndex];
                 const photoPaths = sl.photoPaths.map((u, i) =>
                   i === photoIndex ? uri : u,
                 );
-                return { ...sl, photoPaths };
+                return withRecount(projectPhotoAnalysis({
+                  ...sl, photoPaths,
+                  photoAttachmentIds: attachmentIds(sl).map((id, index) => index === photoIndex ? newPhotoAttachmentId() : id),
+                  damage: sl.damage.filter((marker) => marker.photoIndex !== photoIndex),
+                  analyzedPhotoIndices: sl.analyzedPhotoIndices?.filter((index) => index !== photoIndex),
+                  scaleEstimates: sl.scaleEstimates?.filter((scale) => scale.photoIndex !== photoIndex),
+                  photoSync: photoPaths.includes(removedUri) ? sl.photoSync : withoutKey(sl.photoSync, removedUri),
+                  photoUploads: photoPaths.includes(removedUri) ? sl.photoUploads : withoutKey(sl.photoUploads, removedUri),
+                }));
               }),
             };
+          }),
+        })),
+
+      ensurePhotoAttachmentIds: (inspectionId, slopeId) =>
+        set((state) => ({
+          inspections: state.inspections.map((ins) => ins.id !== inspectionId ? ins : {
+            ...ins,
+            slopes: ins.slopes.map((sl) => sl.id !== slopeId ? sl : withRecount(sl)),
           }),
         })),
 
@@ -951,6 +1151,16 @@ export const useInspectionStore = create<InspectionStoreState>()(
           ),
         })),
 
+      setScheduledAt: (inspectionId, scheduledAt) => {
+        if (!isAppointmentTimestamp(scheduledAt)) return;
+        const current = get().inspections.find((ins) => ins.id === inspectionId);
+        if (!current || current.status !== 'scheduled' || current.reportFinalizedAt || current.scheduledAt === scheduledAt) return;
+        set((s) => ({
+          inspections: s.inspections.map((ins) => ins.id === inspectionId
+            ? { ...ins, scheduledAt, updatedAt: new Date().toISOString() } : ins),
+        }));
+      },
+
       setInstallDates: (inspectionId, startAt, endAt) => {
         const current = get().inspections.find((i) => i.id === inspectionId);
         if (!current) return;
@@ -986,8 +1196,12 @@ export const useInspectionStore = create<InspectionStoreState>()(
                 slopes.push(slope);
               }
               const photoIndex = slope.photoPaths.length;
+              slope = normalizeAttachmentEvidence(slope);
+              slopes[slopes.findIndex((sl) => sl.id === slope!.id)] = slope;
+              slope.photoAttachmentIds = [...attachmentIds(slope), newPhotoAttachmentId()];
               slope.photoPaths = [...slope.photoPaths, cap.uri];
               slope.photoMeta = appendPhotoMeta(slope, photoIndex, cap);
+              slopes[slopes.findIndex((sl) => sl.id === slope!.id)] = withRecount(slope);
             }
             return { ...ins, slopes };
           }),
@@ -1007,11 +1221,14 @@ export const useInspectionStore = create<InspectionStoreState>()(
                 slopes.push(slope);
               }
               const photoIndex = slope.photoPaths.length;
+              slope = normalizeAttachmentEvidence(slope);
+              slopes[slopes.findIndex((sl) => sl.id === slope!.id)] = slope;
+              slope.photoAttachmentIds = [...attachmentIds(slope), newPhotoAttachmentId()];
               slope.photoPaths = [...slope.photoPaths, cap.uri];
               slope.photoMeta = appendPhotoMeta(slope, photoIndex, cap);
               const tagged = cap.markers.map((m) => ({ ...m, photoIndex }));
               slope.damage = [...slope.damage, ...tagged];
-              slope.aiFindings = [...(slope.aiFindings ?? []), ...cap.findings];
+              slope.aiFindings = [...(slope.aiFindings ?? []), ...cap.findings.map((f) => ({ ...f, photoPath: cap.uri, photoAttachmentId: slope!.photoAttachmentIds![photoIndex] }))];
               for (const f of cap.findings) {
                 if (!f.detected) continue;
                 switch (f.label) {
@@ -1026,11 +1243,62 @@ export const useInspectionStore = create<InspectionStoreState>()(
                   case 'splitting': slope.wearCount += f.count; break;
                 }
               }
+              slopes[slopes.findIndex((sl) => sl.id === slope!.id)] = withRecount(slope);
             }
             return { ...ins, slopes };
           }),
         }));
       },
+
+      correctReviewedPhoto: (session, correction) => set((s) => {
+        const inspection = s.inspections.find((i) => i.id === session.inspectionId);
+        if (inspection?.photoCorrections?.[session.id]) return s;
+        const target = validateCorrectionSession(inspection, session);
+        const replaced = new Set(target.findings);
+        const oldMarkers = new Set(target.markers);
+        return { inspections: s.inspections.map((ins) => ins.id !== session.inspectionId ? ins : {
+          ...ins,
+          storedEngineResult: undefined,
+          storedEngineResultAt: undefined,
+          photoCorrections: { ...ins.photoCorrections, [session.id]: correction },
+          slopes: ins.slopes.map((sl) => {
+            if (sl.id !== session.slopeId) return sl;
+            const updated = { ...sl,
+              damage: [...sl.damage.filter((m) => !oldMarkers.has(m)),
+                ...correction.correctedDetection.markers.map((m) => ({ ...m, photoIndex: target.photoIndex }))],
+              aiFindings: [...(sl.aiFindings ?? []).filter((f) => !replaced.has(f)), ...correction.correctedDetection.findings],
+            };
+            return withRecount(patchPhotoAnalysis(updated, target.photoIndex,
+              manuallyReviewedAnalysis(target.analysis, correction.correctedDetection.markers, correction.correctedAt)));
+          }),
+        }) };
+      }),
+
+      rejectReviewedPhoto: (item, correction) => set((s) => {
+        const inspection = s.inspections.find((i) => i.id === item.inspectionId);
+        if (inspection?.reviewRejections?.[item.id]) return s;
+        const target = resolveReviewEvidence(inspection, item);
+        const rejected = new Set(target.findings);
+        return { inspections: s.inspections.map((ins) => ins.id !== item.inspectionId ? ins : {
+          ...ins,
+          storedEngineResult: undefined,
+          storedEngineResultAt: undefined,
+          reviewRejections: { ...ins.reviewRejections, [item.id]: correction },
+          slopes: ins.slopes.map((sl) => {
+            if (sl.id !== target.slope.id) return sl;
+            // Assign IDs before migrating live URI metadata. Remove findings
+            // using their validated references before normalization clones them.
+            const normalized = normalizeAttachmentEvidence({
+              ...sl,
+              damage: sl.damage.filter((m) => m.photoIndex !== target.photoIndex),
+              aiFindings: (sl.aiFindings ?? []).filter((f) => !rejected.has(f)),
+            });
+            return withRecount(readPhotoAnalysis(normalized, target.photoIndex)
+              ? patchPhotoAnalysis(normalized, target.photoIndex, { findingCount: 0 })
+              : normalized);
+          }),
+        }) };
+      }),
 
       setSlopeMarkers: (inspectionId, slopeId, markers) =>
         set((s) => ({
@@ -1077,10 +1345,66 @@ export const useInspectionStore = create<InspectionStoreState>()(
     }),
     {
       name: 'roofwise.inspections.v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => inspectionStorage),
       version: PERSIST_VERSION,
+      skipHydration: true,
       migrate: (persisted) => migrateInspections(persisted),
+      // Validate every persisted version, including current-version backups.
+      merge: mergeHydration,
+      // Zustand's merge does not persist current-version migrations. Commit
+      // the accepted state directly through the ordered adapter: no setState
+      // recursion or initialization-time reference to the store constant.
+      onRehydrateStorage: (before) => {
+        if (!retryingHydration) hydrationBaseline = acceptedHydration
+          ? new Map(before.inspections.map((inspection) => [inspection.id, JSON.stringify(inspection)])) : new Map();
+        return () => {
+          applyingHydration = false;
+        };
+      },
       partialize: (s): Persisted => ({ inspections: s.inspections, nextOrdinal: s.nextOrdinal }),
     },
   ),
 );
+
+// Serialize initial and explicit rehydrations so each read keeps its own
+// baseline; a second caller cannot replace the baseline of a delayed read.
+const hydrateInspections = useInspectionStore.persist.rehydrate;
+let hydrationTail: Promise<void> = Promise.resolve();
+useInspectionStore.persist.rehydrate = () => {
+  const run = hydrationTail.catch(() => {}).then(async () => {
+    // After a durable first load the live collection is complete, so edits
+    // during an explicit reread can still reach their existing checkpoints.
+    inspectionStorage.beginHydration?.(!acceptedHydration);
+    try {
+      await waitForInspectionSyncHydration();
+      await hydrateInspections();
+      if (!useInspectionStore.persist.hasHydrated()) throw new Error('Local inspections could not be loaded. Retry.');
+      const accepted = useInspectionStore.getState();
+      const snapshot = JSON.stringify({ state: { inspections: accepted.inspections, nextOrdinal: accepted.nextOrdinal }, version: PERSIST_VERSION });
+      if (inspectionStorage.finishHydration) await inspectionStorage.finishHydration('roofwise.inspections.v1', snapshot);
+      else await inspectionStorage.setItem('roofwise.inspections.v1', snapshot);
+      acceptedHydration = true;
+      retryingHydration = false;
+      hydrationRemovals.clear();
+    } catch (error) {
+      retryingHydration = true;
+      inspectionStorage.failHydration?.(error);
+      throw error;
+    }
+  });
+  hydrationTail = run;
+  return run;
+};
+export function inspectionHydrationState() {
+  return { promise: hydrationTail, hydrated: useInspectionStore.persist.hasHydrated() };
+}
+void Promise.resolve(useInspectionStore.persist.rehydrate()).catch(() => {});
+
+export async function waitForInspectionHydration(): Promise<void> {
+  while (true) {
+    const observed = hydrationTail;
+    try { await observed; }
+    catch { await (observed === hydrationTail ? useInspectionStore.persist.rehydrate() : hydrationTail); continue; }
+    if (observed === hydrationTail && useInspectionStore.persist.hasHydrated()) return;
+  }
+}

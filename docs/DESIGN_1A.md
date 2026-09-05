@@ -38,7 +38,7 @@ that file should hold a literal.
 | `magenta` | `#8A3A73` | *(new)* | Mesh transition stop (62–82%) between blue and orange. Variants seen: `#7A2E5E` (deep), `#9C3A5E` (warm), `#6B3BC4`/`#5B3BD6` (violet, on Lead/Sign-in screens) — treat as one role, `brand.magenta`, and let callers choose the exact stop via the gradient helper below |
 | `burnt` | `#E8631A` | `burnt` (`#D9541E`) | Primary orange — CTAs, active states, "Signed" stage colour |
 | `burntDeep` | `#C1490E` | `burntDeep` (`#A63C12`) | Severe/dark orange — score badges, deep gradient stops |
-| `burntLight` | `#FF8A3D` | *(new)* | Light orange highlight — active tab icon, progress dots, glow accents |
+| `burntLight` | `#FF8A3D` | *(new)* | Light orange highlight — progress dots and glow accents; excluded from bottom navigation by the later owner override in §4 |
 | `amber` | `#FFC43D` | *(new)* | Caution/moderate — granule-loss findings, "MODERATE" score badge |
 | `paper` | `#F2F0E7` | `colors.bg` was `#F6F6FA` | Warm paper ground — replaces the old cool light-gray background everywhere. This is also the "white" text colour used over dark heroes (never pure `#FFFFFF` on a mesh) |
 | `paperBorder` | `#DDDED1` | `colors.border` was `#E6E8F0` | Card borders on the paper ground |
@@ -124,15 +124,19 @@ combinations by name. Do not let each screen invent its own stop list.
 - Card radius: **16–22px** (mostly 18) — slightly larger than the current
   `radii.card` (16). Bump `radii.card` to 18, keep `radii.lg` (20) and
   `radii.xl` (24) as the mock's larger cards use those too.
-- **Floating pill tab bar**: `radii.pill` (999), floats 14–16px off the
-  bottom edge with side margins (16px), NOT edge-to-edge. Background is the
-  screen's dominant ground (dark `royalInk` on light screens for contrast
-  reversal, or `paper` on dark-background screens like the storm map — the
-  mock flips the bar's own colour to whatever reads against that screen's
-  content, not a fixed light/dark rule). Active tab gets a soft rounded chip
-  behind icon+label (`burnt` at 18% alpha) with the icon+label coloured
-  `burntLight`; inactive tabs sit at ~60% opacity of the bar's ink colour.
-  This replaces `components/shell/BottomTabs.tsx`'s current edge-to-edge bar.
+- **Floating pill tab bar — owner's device-review override, 2026-09-04:**
+  Keep 1A's suspended `radii.pill` geometry with 16px side margins, but use
+  **light/paper bottom controls on every screen**, including Map. No blue/navy
+  dock fill and no orange bottom treatment or selected chip. This later
+  instruction supersedes the original mock's dark/light reversal and orange
+  active state (PROMPT_LOG #109–#110). The shared `navigationDock` tokens own
+  the white raised capsule, opaque warm-paper safe-area ground, 12px bottom
+  spacing, layered shadow, cool tonal selection, and navy text/focus ring.
+  Targets remain at least 56pt; selected state also uses filled icons and
+  heavier text. Web exposes a single roving keyboard stop: arrows wrap,
+  Home/End select the first/last tab, and Space/Enter activate. Native press,
+  long-press and haptics retain their existing behavior; motion respects the
+  system Reduce Motion setting.
 - Buttons: primary CTA height **56–60px** (mock height varies 54–60; keep
   the app's existing `touchTarget.sticky` = 88 for the one true sticky
   bottom CTA per screen, but note the mock's in-flow buttons run smaller,
@@ -174,7 +178,7 @@ combinations by name. Do not let each screen invent its own stop list.
 | 03 · Capture + AI scan | `app/quick-inspection.tsx` + `components/capture/hud/*` | Dark shingle-texture ground + grain, dashed test-square overlay with a live finding tag, slope-selector pill row, frosted on-device-prepass progress card, bottom dock (thumbnails + Analyze pill + shutter). This is the camera HUD system (already exists, `#96`) — reskin its glass/colours onto 1a's palette; the *structure* (tuck-away rail, mode strip, shutter, review drawer) stays, since it's more capable than the mock's flat mock-up. |
 | 04 · Damage report | `app/job/[id].tsx` (Overview/Photos tabs), `app/photo-report.tsx`, `lib/services/haagPdf.ts` | Mesh header, big damage-score number + bar, "cited storm event" card, heatmap photo card, findings list with severity-coloured accent bars, scope-estimate card, sticky PDF/Send-to-carrier dual buttons. Map "Findings" rows onto real `DamageMarker`/finding data; "Send to carrier" ≈ the existing packet-share action. |
 | 05 · Lead detail | `app/lead/[id].tsx` | Mesh header with avatar+name+source, Call/Text/Nav 3-up, stage progress bar (map onto real `LeadStage`), info card (carrier/claim/deductible/adjuster), **"Copilot says" AI-suggestion card — new capability, not in the app today**; flag as a BACKLOG item rather than fabricating one (no I/O to back it yet), timeline (map onto real `activityStore` events for that lead). |
-| 06 · Storm map | `app/(tabs)/map.tsx` | Dark desaturated mesh, terrain SVG strokes (decorative — optional), swath glow circles (already exist as `StormOverlay` swaths — recolour), pin dots, top filter chips (already exist via the `LayersSheet`/`SummaryChip` system from Wave I — reskin colours only, keep the control-rail/drawer structure, it's more capable than the mock's flat filter row), bottom floating event card with "Build knock route" (≈ existing "Start route" flow) + legend. Floating tab bar flips to light-on-dark here per §4. |
+| 06 · Storm map | `app/(tabs)/map.tsx` | Dark desaturated mesh, terrain SVG strokes (decorative — optional), swath glow circles (already exist as `StormOverlay` swaths — recolour), pin dots, top filter chips (already exist via the `LayersSheet`/`SummaryChip` system from Wave I — reskin colours only, keep the control-rail/drawer structure, it's more capable than the mock's flat filter row), bottom floating event card with "Build knock route" (≈ existing "Start route" flow) + legend. Floating tab bar stays light/paper, consistent with all other screens under the later owner override in §4. |
 | 07 · Pipeline board | `app/(tabs)/leads.tsx` (Pipeline, `#103`) | Mesh header ("CRM · PIPELINE" eyebrow + open count + weighted value + Sort + filter pills), Kanban columns with coloured dot+label+count headers, cards with severity/status badge chips, amount, timing note; Signed column's cards go solid `royalInk` fill. Reskin the existing Pipeline board (already has real automation/stage logic from Wave L) onto these colours/type — do not rebuild its logic. |
 
 **Screens the mock doesn't show at all** — reskin using the same tokens/

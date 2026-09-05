@@ -15,6 +15,7 @@
 // through the system share sheet (expo-sharing, the same path as the mileage
 // log and the reports screen).
 
+import { readPhotoAnalysis } from './photoAnalysisState';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { formatDate, formatDateTime } from '../format/date';
@@ -476,7 +477,7 @@ export function renderWorkOrderHtml(ctx: JobDocumentContext, list: MaterialList 
   const generatedAt = formatDateTime(new Date());
   const { haag, decision } = resolveEngineResult(ins, Date.now(), { honorFreeze: false });
   const analyzed = ins.slopes.reduce(
-    (n, sl) => n + sl.photoPaths.filter((uri, i) => sl.photoAnalysis?.[uri]?.status === 'done' || sl.analyzedPhotoIndices?.includes(i)).length,
+    (n, sl) => n + sl.photoPaths.filter((uri, i) => readPhotoAnalysis(sl, i)?.status === 'done' || sl.analyzedPhotoIndices?.includes(i)).length,
     0,
   );
   const photos = ins.slopes.reduce((n, sl) => n + sl.photoPaths.length, 0);

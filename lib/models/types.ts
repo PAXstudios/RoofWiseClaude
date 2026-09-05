@@ -248,6 +248,10 @@ export type DamageMarker = {
 };
 
 export type InspectionFinding = {
+  /** The attachment that produced this finding; duplicate file URIs differ. */
+  photoAttachmentId?: string;
+  /** Stable source URI; unlike a photo index, survives earlier-photo deletion. */
+  photoPath?: string;
   label: DamageCategory;
   detected: boolean;
   severity: Severity;
@@ -559,6 +563,9 @@ export type PhotoAnalysisStatus = 'queued' | 'analyzing' | 'done' | 'failed';
 
 export type PhotoAnalysisState = {
   status: PhotoAnalysisStatus;
+  /** Explicit human review of the current markers; model metadata is historical. */
+  reviewSource?: 'inspector';
+  reviewedAt?: string;
   /** ISO timestamp of the last transition. */
   at: string;
   /** Plain-language reason — present when `status === 'failed'`. */
@@ -671,6 +678,10 @@ export type Slope = {
    * tagging existed; entries are renumbered alongside photoPaths on delete.
    */
   photoMeta?: PhotoMeta[];
+  /** Stable attachment identities aligned with photoPaths. Unlike a URI, an
+   * identity is never reused after removal/replacement. Older records receive
+   * these lazily before analysis or attachment mutations. */
+  photoAttachmentIds?: string[];
   /**
    * Hit counts aggregated per capture mode — kept apart because only the
    * 10x10 square feeds the HAAG per-square threshold. Absent until a
@@ -679,14 +690,24 @@ export type Slope = {
   squareHitCount?: number;
   singleShingleHitCount?: number;
   /**
-   * Per-photo AI analysis state keyed by the LOCAL PHOTO URI (the entry in
-   * `photoPaths`), not by index: `removePhoto` renumbers indices and a
-   * rotated photo gets a fresh URI, so a URI key stays correct through both
-   * without store changes. Read it with `getPhotoAnalysisState(slope, index)`
-   * from `lib/services/analyzeSlope.ts`, which also covers photos analyzed
-   * before this field existed. Optional — older inspections predate it.
+   * Legacy URI-keyed compatibility mirror, populated only when a URI has one
+   * attachment. Use readPhotoAnalysis/getPhotoAnalysisState with the index;
+   * duplicate attachments keep independent state in photoAnalysisByAttachment.
    */
   photoAnalysis?: Record<string, PhotoAnalysisState>;
+  /** Canonical per-attachment analysis; photoAnalysis mirrors unique URIs for
+   * compatibility with older persisted records and external consumers. */
+  photoAnalysisByAttachment?: Record<string, PhotoAnalysisState>;
+  /** Retained legacy evidence whose photo ownership is no longer defensible.
+   * Excluded from active damage, findings, counts and report projections. */
+  historicalPhotoEvidence?: {
+    reason: string;
+    photoPath?: string;
+    markers?: DamageMarker[];
+    findings?: InspectionFinding[];
+    analysis?: PhotoAnalysisState;
+    scaleEstimates?: Slope['scaleEstimates'];
+  }[];
   /**
    * Per-photo upload state keyed by LOCAL PHOTO URI (same convention as
    * `photoAnalysis`). Absent for photos that uploaded or were never tried.
@@ -700,6 +721,10 @@ export type RoofRecommendation = 'repair' | 'partial_replacement' | 'full_replac
 
 export type Inspection = {
   id: string;
+  /** Rejection audit committed with the evidence; repairs interrupted queue/correction writes. */
+  reviewRejections?: Record<string, Correction>;
+  /** Marker corrections committed atomically with evidence; replay repairs projections. */
+  photoCorrections?: Record<string, Correction>;
   reportId: string;             // auto-minted "RW-2026-####"
   createdAt: string;            // ISO 8601
   status: InspectionStatus;
@@ -1450,6 +1475,13 @@ export type TrainingItem = {
   inspectionId: string;
   slopeId?: string;
   photoPath: string;
+  /** Applied (confidence-gated) evidence at enqueue, separate from raw training output. */
+  reviewEvidence?: {
+    attachmentId?: string;
+    markers: DamageMarker[];
+    findings: InspectionFinding[];
+    analysisAt: string;
+  };
   originalAnalysis: {
     findings: InspectionFinding[];
     markers: DamageMarker[];

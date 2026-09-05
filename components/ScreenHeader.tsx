@@ -2,6 +2,9 @@ import type { ReactNode } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 import {
   colors,
   fontFamily,
@@ -32,12 +35,17 @@ type Props = {
  */
 export function ScreenHeader({ title, subtitle, back, right }: Props) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const onBack = typeof back === 'function' ? back : back ? () => router.back() : undefined;
 
   // Sub-screen: inline title after a plain chevron.
   if (onBack) {
     return (
-      <View style={styles.inlineRow}>
+      <View
+        style={[styles.inlineRow, { marginTop: -insets.top, paddingTop: insets.top }]}
+      >
+        <StatusBar style="light" />
+        <MeshBackground variant="cool" />
         <Pressable
           onPress={onBack}
           hitSlop={8}
@@ -45,7 +53,7 @@ export function ScreenHeader({ title, subtitle, back, right }: Props) {
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Ionicons name="chevron-back" size={26} color={colors.text} />
+          <Ionicons name="chevron-back" size={26} color={colors.onMesh} />
         </Pressable>
         <View style={styles.titleBlock}>
           <Text style={styles.inlineTitle} numberOfLines={1}>
@@ -64,7 +72,11 @@ export function ScreenHeader({ title, subtitle, back, right }: Props) {
 
   // Tab root: large title on the grouped ground.
   return (
-    <View style={styles.largeWrap}>
+    <View
+      style={[styles.largeWrap, { marginTop: -insets.top, paddingTop: insets.top + spacing.sm }]}
+    >
+      <StatusBar style="light" />
+      <MeshBackground variant="home" />
       <View style={styles.largeRow}>
         <Text style={styles.largeTitle} numberOfLines={1}>
           {title}
@@ -83,8 +95,8 @@ export function ScreenHeader({ title, subtitle, back, right }: Props) {
 const styles = StyleSheet.create({
   largeWrap: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.md,
+    overflow: 'hidden',
   },
   largeRow: {
     flexDirection: 'row',
@@ -96,7 +108,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
     fontFamily: fontFamily.archivo.bold,
-    color: colors.text,
+    color: colors.onMesh,
     letterSpacing: -0.5,
   },
   inlineRow: {
@@ -106,6 +118,8 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.xs,
     paddingRight: spacing.xl,
     gap: spacing.xs,
+    paddingBottom: spacing.xs,
+    overflow: 'hidden',
   },
   backBtn: {
     width: touchTarget.standard,
@@ -118,13 +132,13 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,
-    color: colors.text,
+    color: colors.onMesh,
     letterSpacing: -0.2,
   },
   subtitle: {
     fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.regular,
-    color: colors.textMuted,
+    color: 'rgba(242, 240, 231, 0.72)',
     marginTop: 2,
   },
 });

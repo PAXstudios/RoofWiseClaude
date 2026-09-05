@@ -56,7 +56,7 @@ export function useTodayAgenda(): TodayAgenda {
     const now = new Date();
     const { start } = dayBounds(now);
     const todays = inspectionsToday(inspections, now);
-    const due = followUpsDue(leads, now);
+    const due = followUpsDue(leads, now, inspections);
     const cold = goingColdLeads(leads, now.getTime());
     const dueTasks = tasksDueToday(tasks, now);
 

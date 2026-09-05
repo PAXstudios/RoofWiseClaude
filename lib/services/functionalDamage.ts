@@ -30,6 +30,7 @@
 // every analysis pass (`analyzeSlope`), so deleting the model's only
 // mat-fracture hit clears the flag and confirming a soft spot sets it.
 
+import { readPhotoAnalysis } from './photoAnalysisState';
 import { FUNCTIONAL_EVIDENCE, type DamageMarker, type Slope } from '../models/types';
 
 /** Below this the model itself flagged the mark for inspector review. */
@@ -57,13 +58,13 @@ export type FunctionalDerivation = {
 };
 
 export function deriveFunctional(
-  slope: Pick<Slope, 'damage' | 'photoMeta' | 'photoPaths' | 'photoAnalysis'>,
+  slope: Pick<Slope, 'damage' | 'photoMeta' | 'photoPaths' | 'photoAnalysis' | 'photoAttachmentIds' | 'photoAnalysisByAttachment'>,
 ): FunctionalDerivation {
   const testSquarePhotos = new Set<number>();
   slope.photoPaths.forEach((uri, i) => {
     const meta = slope.photoMeta?.find((m) => m.photoIndex === i);
     const mode = meta?.captureMode ?? 'square_10x10';
-    const st = slope.photoAnalysis?.[uri];
+    const st = readPhotoAnalysis(slope, i);
     if (mode === 'square_10x10' && !(st?.noRoofDetected === true)) testSquarePhotos.add(i);
   });
 

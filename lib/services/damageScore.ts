@@ -21,6 +21,7 @@
 // Every point deducted cites the HAAG rule that caused it: a carrier rejects a
 // black-box number.
 
+import { readPhotoAnalysis } from './photoAnalysisState';
 import type { RoofMaterial } from '../models/types';
 import {
   engineInputFromInspection,
@@ -632,7 +633,7 @@ export function evidenceFromInspection(inspection: Inspection): ScoreEvidence {
     // not-a-roof is not a test square, whatever mode it was shot in.
     const nonRoof = new Set<number>();
     slope.photoPaths.forEach((uri, i) => {
-      if (slope.photoAnalysis?.[uri]?.noRoofDetected === true) nonRoof.add(i);
+      if (readPhotoAnalysis(slope, i)?.noRoofDetected === true) nonRoof.add(i);
     });
     const meta = slope.photoMeta;
     testSquaresBySlope[slope.id] =

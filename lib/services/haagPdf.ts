@@ -1,4 +1,5 @@
 import { formatDateShort, formatDateTime } from '@/lib/format/date';
+import { photoWasAnalyzed } from './photoAnalysisState';
 // HAAG-style PDF report generator.
 // Uses expo-print to render an HTML template to a PDF on disk.
 //
@@ -125,18 +126,14 @@ export type ReportPhoto = {
 const REPORT_PHOTO_ASPECT = 4 / 3;
 
 /** One photo's annotation record from the store, by its captured URI. */
-function annotationsFor(uri: string): { items: readonly Annotation[]; imageW: number; imageH: number } {
-  const rec = useAnnotationStore.getState().getRecord(uri);
+function annotationsFor(uri: string, attachmentId?: string): { items: readonly Annotation[]; imageW: number; imageH: number } {
+  const rec = useAnnotationStore.getState().getRecord(uri, attachmentId);
   return { items: rec?.items ?? [], imageW: rec?.imageW ?? 0, imageH: rec?.imageH ?? 0 };
 }
 
 /** Was this photo run through Gemini? */
 function wasAnalyzed(slope: Inspection['slopes'][number], index: number): boolean {
-  // Back-compat: inspections captured before `analyzedPhotoIndices` existed
-  // have no record either way. Treat their photos as analyzed rather than
-  // labelling a genuinely-reviewed photo "not analyzed" in a claim packet.
-  if (!slope.analyzedPhotoIndices) return true;
-  return slope.analyzedPhotoIndices.includes(index);
+  return photoWasAnalyzed(slope, index);
 }
 
 /**
@@ -165,7 +162,7 @@ async function preparePhotoDataUris(
       if (dataUri) {
         const marks = slope.damage.filter((m) => m.photoIndex === index);
         const avg = averageConfidence(marks.map((m) => m.confidence));
-        const ann = annotationsFor(uri);
+        const ann = annotationsFor(uri, slope.photoAttachmentIds?.[index]);
         encoded.push({
           index,
           dataUri,

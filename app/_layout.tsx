@@ -22,6 +22,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { install as installDiagnostics, DiagnosticsGate } from '@/lib/services/diagnostics';
 import { installUiRuntimeGuard } from '@/lib/services/uiRuntimeGuard';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
+// Track drawing ownership before any photo can be removed or replaced.
+import '@/lib/stores/annotationStore';
 import { startWatching as resumeKnockTracking } from '@/components/knock/sessionTracker';
 
 // Module-level, not inside RootLayout: the global JS-error / promise-rejection

@@ -7,8 +7,10 @@
 // File/Directory API. Migrating to it is backlogged.
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { useInspectionStore } from '../stores/inspectionStore';
-import { useLeadStore } from '../stores/leadStore';
+import { inspectionHydrationState, normalizeInspection, useInspectionStore, waitForInspectionHydration } from '../stores/inspectionStore';
+import { flushLeadPersistence, leadHydrationState, useLeadStore, waitForLeadHydration } from '../stores/leadStore';
+import { flushInspectionSyncPersistence, inspectionSyncHydrationState, waitForInspectionSyncHydration } from '../stores/inspectionSyncStore';
+import { flushInspectionPersistence } from './inspectionPersistence';
 import { useProposalStore } from '../stores/proposalStore';
 import { useProposalLinkStore } from '../stores/proposalLinkStore';
 import { useEstimateStore } from '../stores/estimateStore';
@@ -101,11 +103,18 @@ export async function restoreFromUri(uri: string): Promise<RestoreSummary> {
     throw new Error(`Backup is from a newer app version (v${blob.version}). Update RoofWise first.`);
   }
 
+  while (true) {
+    const before = [inspectionHydrationState(), inspectionSyncHydrationState(), leadHydrationState()];
+    await Promise.all([waitForInspectionHydration(), waitForInspectionSyncHydration(), waitForLeadHydration()]);
+    const after = [inspectionHydrationState(), inspectionSyncHydrationState(), leadHydrationState()];
+    if (after.every((state, index) => state.hydrated && state.promise === before[index].promise)) break;
+  }
+
   useInspectionStore.setState((s) => ({
-    inspections: blob.inspections ?? s.inspections,
+    inspections: blob.inspections?.map((ins) => normalizeInspection(ins as unknown as Record<string, unknown>)) ?? s.inspections,
     nextOrdinal: blob.nextOrdinal ?? s.nextOrdinal,
   }));
-  useLeadStore.setState({ leads: blob.leads ?? [] });
+  useLeadStore.getState().replaceAll(blob.leads ?? []);
   useProposalStore.setState({ proposals: blob.proposals ?? [] });
   useProposalLinkStore.setState({ links: blob.proposalLinks ?? [] });
   useEstimateStore.setState({ estimates: blob.estimates ?? [] });
@@ -122,6 +131,8 @@ export async function restoreFromUri(uri: string): Promise<RestoreSummary> {
   if (blob.inspectorProfile) {
     useInspectorProfileStore.setState({ profile: blob.inspectorProfile });
   }
+
+  await Promise.all([flushInspectionPersistence(), flushLeadPersistence(), flushInspectionSyncPersistence()]);
 
   return {
     version: blob.version,

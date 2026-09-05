@@ -31,7 +31,7 @@ import { getPlaceDetails, type PlacePrediction } from '@/lib/services/places';
 import { describeGoogleApiError } from '@/lib/services/googleApi';
 import { getBiasCoordinate } from '@/lib/services/locationBias';
 import type { DoNotKnockEntry, DoNotKnockSource } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 type Mode = 'home' | 'zone' | 'list';
 type Point = { lat: number; lng: number };
@@ -714,7 +714,7 @@ const styles = StyleSheet.create({
     borderColor: colors.navy,
   },
   modeBtnOn: { backgroundColor: colors.navy },
-  modeBtnText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.navy, flexShrink: 1 },
+  modeBtnText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.navy, flexShrink: 1 },
   modeBtnTextOn: { color: colors.textInverse },
   panel: { gap: spacing.md },
   input: {
@@ -726,11 +726,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.hairline,
     fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.text,
   },
   inputMultiline: { minHeight: 140, textAlignVertical: 'top', fontSize: fontSize.bodyMd, lineHeight: 21 },
-  hint: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
-  groupLabel: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+  hint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  groupLabel: { ...dataLabel, color: colors.textMuted },
   mapWrap: { height: 260, borderRadius: radii.lg, overflow: 'hidden' },
   map: { flex: 1 },
   btnRow: { flexDirection: 'row', gap: spacing.sm },
@@ -766,7 +767,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   primaryBtnDisabled: { backgroundColor: colors.accentDisabled },
-  primaryBtnText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
+  primaryBtnText: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
   chipRow: { flexDirection: 'row', gap: spacing.sm },
   chip: {
     flex: 1,
@@ -806,9 +807,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: touchTarget.preferred, paddingLeft: spacing.lg, paddingRight: spacing.xs, paddingVertical: spacing.sm },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   rowMain: { flex: 1, gap: 2 },
-  rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 17 },
-  rowMeta: { fontSize: fontSize.caption, color: colors.textSubtle },
+  rowTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  rowSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 17 },
+  rowMeta: { ...dataLabel, color: colors.textSubtle },
   removeBtn: { width: touchTarget.standard, height: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
   empty: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.lg },
   emptyTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, marginTop: spacing.xs },

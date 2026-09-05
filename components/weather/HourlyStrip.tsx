@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RichCard } from '@/components/ui/RichCard';
 import type { IoniconName } from '@/components/ui/IconChip';
 import type { ForecastHour, ForecastStatus } from '@/lib/services/weatherForecast';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 /** HAAG §7: precipitation chance at/above this rates UNSAFE. */
 export const PRECIP_UNSAFE_PERCENT = 20;
@@ -233,25 +233,24 @@ const styles = StyleSheet.create({
     borderRadius: 0,
   },
   hour: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
+    ...dataLabel,
     color: colors.textSubtle,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
   },
   hourNow: { color: colors.text },
   temp: {
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
   value: {
+    fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodySm,
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
-  unit: { fontSize: fontSize.caption, color: colors.textSubtle },
+  unit: { fontFamily: fontFamily.mono, fontSize: fontSize.caption, color: colors.textSubtle },
   valueWet: { color: colors.brand, fontWeight: fontWeight.semibold },
   valueWarn: { color: colors.warn, fontWeight: fontWeight.semibold },
   valueDanger: { color: colors.danger, fontWeight: fontWeight.bold },
@@ -263,5 +262,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
   },
-  emptyText: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  emptyText: { flex: 1, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
 });

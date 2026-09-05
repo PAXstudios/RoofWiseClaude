@@ -13,6 +13,7 @@
 // ONLY places a lead becomes a job or a job grows a lead. Node-testable:
 // nothing here imports React or a native module.
 
+import { photoWasAnalyzed } from './photoAnalysisState';
 import type {
   Inspection,
   InspectionStatus,
@@ -165,15 +166,14 @@ function isoMs(iso: string | undefined): number {
   return Number.isNaN(t) ? NaN : t;
 }
 
-/** Photos taken / analyzed across every slope. Older records with no `analyzedPhotoIndices` count as analyzed. */
+/** Photos taken / explicitly analyzed across every slope. */
 export function photoProgress(ins: Inspection | undefined): { done: number; total: number } {
   if (!ins) return { done: 0, total: 0 };
   let total = 0;
   let done = 0;
   for (const sl of ins.slopes) {
     total += sl.photoPaths.length;
-    if (sl.analyzedPhotoIndices == null) done += sl.photoPaths.length;
-    else done += sl.analyzedPhotoIndices.filter((i) => i >= 0 && i < sl.photoPaths.length).length;
+    done += sl.photoPaths.filter((_, index) => photoWasAnalyzed(sl, index)).length;
   }
   return { done, total };
 }
@@ -365,7 +365,9 @@ export function nextActionFor(input: {
       return fu ? `Follow up ${fu}` : 'Book the inspection';
     case 'inspection_scheduled': {
       const when = input.scheduledAt ?? input.followUpAt;
-      return when && isoMs(when) >= now - DAY_MS ? `Inspect ${shortDay(when)}` : 'Start the inspection';
+      return when && isoMs(when) >= now - DAY_MS
+        ? `Inspect ${shortDay(when)} at ${new Date(when).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
+        : 'Start the inspection';
     }
     case 'inspecting': {
       if (input.photos.total === 0) return 'Take photos';
@@ -415,7 +417,7 @@ function latestIso(...values: (string | undefined)[]): string {
 }
 
 /** The inspections a lead owns: its `inspectionId` first, then any job pointing back at it. */
-function inspectionsForLead(lead: Lead, inspections: readonly Inspection[]): Inspection[] {
+export function inspectionsForLead(lead: Lead, inspections: readonly Inspection[]): Inspection[] {
   const own = inspections.filter((i) => i.id === lead.inspectionId || i.leadId === lead.id);
   return own.sort((a, b) => {
     if (a.id === lead.inspectionId) return -1;

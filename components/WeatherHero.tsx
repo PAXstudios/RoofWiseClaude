@@ -111,6 +111,8 @@ import type { IoniconName } from '@/components/ui/IconChip';
 import {
   brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
@@ -1030,12 +1032,7 @@ const styles = StyleSheet.create({
     // white on burnt would land at 4.0 — under AA at flag size (Drift #1).
     backgroundColor: glass.frostFill,
   },
-  alertFlagText: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    letterSpacing: 1.2,
-    color: brand.burntDeep,
-  },
+  alertFlagText: { ...dataLabel, color: brand.burntDeep },
 
   nowChip: {
     flexDirection: 'row',
@@ -1049,12 +1046,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: glass.smokeBorder,
   },
-  nowChipText: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
-    letterSpacing: 1.2,
-    color: colors.textInverse,
-  },
+  nowChipText: { ...dataLabel, color: colors.onMesh },
 
   safetyChip: {
     flexDirection: 'row',
@@ -1064,10 +1056,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
   },
-  safetyChipText: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, letterSpacing: 0.6 },
+  safetyChipText: { ...dataLabel },
 
   readingBlock: { gap: spacing.xs },
   title: {
+    fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
     color: colors.textInverse,
@@ -1075,6 +1068,7 @@ const styles = StyleSheet.create({
   },
   readingRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
   temp: {
+    fontFamily: fontFamily.archivo.regular,
     fontSize: TEMP_SIZE,
     lineHeight: TEMP_SIZE,
     // Light-weight and huge — the Apple Weather contrast between a display
@@ -1084,6 +1078,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   tempUnit: {
+    fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.titleXl,
     fontWeight: fontWeight.regular,
     color: colors.textInverse,
@@ -1119,6 +1114,7 @@ const styles = StyleSheet.create({
     borderColor: glass.smokeBorder,
   },
   metaPrimary: {
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     color: colors.textInverse,
@@ -1126,7 +1122,7 @@ const styles = StyleSheet.create({
   titleAlone: { fontSize: fontSize.titleXl },
   /** Headline sitting inside the meta column — tighter than the display slot. */
   titleTight: { fontSize: fontSize.titleMd, marginBottom: spacing.xs },
-  metaSecondary: { fontSize: fontSize.bodySm, color: colors.brandSoft },
+  metaSecondary: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.brandSoft },
   /** Warm secondary for the burnt hero — 5.3:1 on `stormSevere`. */
   metaSecondaryWarm: { color: colors.accentSoft },
 
@@ -1144,6 +1140,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     flex: 1,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     color: colors.textInverse,

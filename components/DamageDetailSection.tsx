@@ -13,6 +13,7 @@
 // roof hits (Drift #7). Everything here is the inspection's real data; an
 // inspection with no analyzed photo says so instead of showing zeros.
 
+import { readPhotoAnalysis } from '@/lib/services/photoAnalysisState';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -78,7 +79,7 @@ export function summarizeInspection(inspection: Inspection): {
     // Analyzed = explicit done state, or the legacy analyzed-index list.
     const legacy = new Set(slope.analyzedPhotoIndices ?? []);
     slope.photoPaths.forEach((uri, i) => {
-      const st = slope.photoAnalysis?.[uri];
+      const st = readPhotoAnalysis(slope, i);
       if (st?.status === 'done' || (!st && legacy.has(i))) analyzedPhotos += 1;
       if (st?.status === 'done' && st.noRoofDetected && st.subject && st.subject !== 'roof_field') {
         collateral.push({

@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View, Text, StyleSheet, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -268,12 +269,13 @@ export default function LeadDetail() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar style="light" />
+      <MeshBackground variant="cool" />
 
       {/* The bluer, no-orange cut of the mesh (docs/DESIGN_1A.md §2/§6) —
           distinct from the Pipeline board's cooler violet and from Home's
           warmer hero. */}
       <View style={styles.hero}>
-        <MeshBackground variant="cool" style={styles.heroMesh} />
         <View style={styles.heroTopRow}>
           <PressableScale
             onPress={() => router.back()}
@@ -328,7 +330,50 @@ export default function LeadDetail() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView style={styles.body} contentContainerStyle={styles.scroll}>
+        {/* Screen 05 puts the pipeline read immediately under the identity
+            hero. Existing property/contact tools follow it as extensions of
+            the same visual system, rather than displacing this primary state. */}
+        <FadeSlideIn index={0}>
+          <SectionHeader title="Stage" style={styles.sectionHeaderSpacing} />
+          {isLost ? (
+            <View style={styles.lostBanner}>
+              <Ionicons name="close-circle-outline" size={18} color={colors.danger} />
+              <Text style={styles.lostBannerText}>Marked lost — pick a stage below to bring it back.</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.progressTrack}>
+                {stageGroups.map((g, i) => (
+                  <View key={g} style={[styles.progressSegment, i < currentGroupIndex && styles.progressSegmentDone, i === currentGroupIndex && styles.progressSegmentCurrent]} />
+                ))}
+              </View>
+              <View style={styles.progressLabelRow}>
+                {stageGroups.map((g, i) => (
+                  <Text key={g} numberOfLines={1} style={[styles.progressLabel, i === currentGroupIndex && styles.progressLabelCurrent, i > currentGroupIndex && styles.progressLabelAhead]}>
+                    {PIPELINE_GROUP_LABELS[g]}
+                  </Text>
+                ))}
+              </View>
+            </>
+          )}
+        </FadeSlideIn>
+
+        {/* The artboard's compact label/value insurance card follows Stage.
+            It stays conditional because these values live on a linked job. */}
+        {insuranceRows.length > 0 && (
+          <FadeSlideIn index={1}>
+            <View style={styles.infoCard}>
+              {insuranceRows.map((row, i) => (
+                <View key={row.key} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                  <Text style={styles.infoLabel}>{row.label}</Text>
+                  <Text style={[styles.infoValue, row.mono && styles.infoValueMono]} numberOfLines={1}>{row.value}</Text>
+                </View>
+              ))}
+            </View>
+          </FadeSlideIn>
+        )}
+
         {/* A knock-created lead announces what it is missing before anything
             else — one tap opens the editor. */}
         {missing.any && (
@@ -426,70 +471,6 @@ export default function LeadDetail() {
               </View>
             ))}
           </RichCard>
-        </FadeSlideIn>
-
-        {/* Insurance — the mock's label-left/value-right hairline rows
-            (docs/DESIGN_1A.md §6). Carrier/claim/deductible/adjuster live on
-            the linked JOB, not the lead, so this reads real data only and is
-            simply absent before the lead becomes a job. */}
-        {insuranceRows.length > 0 && (
-          <FadeSlideIn index={2}>
-            <SectionHeader title="Insurance" style={styles.sectionHeaderSpacing} />
-            <View style={styles.infoCard}>
-              {insuranceRows.map((row, i) => (
-                <View key={row.key} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
-                  <Text style={styles.infoLabel}>{row.label}</Text>
-                  <Text style={[styles.infoValue, row.mono && styles.infoValueMono]} numberOfLines={1}>
-                    {row.value}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </FadeSlideIn>
-        )}
-
-        {/* Stage-progress bar — the mock's segmented royal→burnt strip
-            (docs/DESIGN_1A.md §6), mapped onto the real `PIPELINE_GROUPS` a
-            lead moves through. The interactive 12-stage chip picker beneath
-            it is the actual control; this is the at-a-glance read. */}
-        <FadeSlideIn index={2}>
-          <SectionHeader title="Stage" style={styles.sectionHeaderSpacing} />
-          {isLost ? (
-            <View style={styles.lostBanner}>
-              <Ionicons name="close-circle-outline" size={18} color={colors.danger} />
-              <Text style={styles.lostBannerText}>Marked lost — pick a stage below to bring it back.</Text>
-            </View>
-          ) : (
-            <>
-              <View style={styles.progressTrack}>
-                {stageGroups.map((g, i) => (
-                  <View
-                    key={g}
-                    style={[
-                      styles.progressSegment,
-                      i < currentGroupIndex && styles.progressSegmentDone,
-                      i === currentGroupIndex && styles.progressSegmentCurrent,
-                    ]}
-                  />
-                ))}
-              </View>
-              <View style={styles.progressLabelRow}>
-                {stageGroups.map((g, i) => (
-                  <Text
-                    key={g}
-                    numberOfLines={1}
-                    style={[
-                      styles.progressLabel,
-                      i === currentGroupIndex && styles.progressLabelCurrent,
-                      i > currentGroupIndex && styles.progressLabelAhead,
-                    ]}
-                  >
-                    {PIPELINE_GROUP_LABELS[g]}
-                  </Text>
-                ))}
-              </View>
-            </>
-          )}
         </FadeSlideIn>
 
         <FadeSlideIn index={2}>
@@ -791,15 +772,16 @@ const styles = StyleSheet.create({
   agentBtns: { flexDirection: 'row', gap: spacing.sm },
   agentBtn: { flex: 1, minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
   agentBtnText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, fontWeight: fontWeight.semibold, color: colors.text },
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: brand.royal },
+  body: { flex: 1, backgroundColor: colors.bg },
 
   // --- Mesh hero — the "cool", no-orange cut (docs/DESIGN_1A.md §2/§6) -----
   hero: {
-    paddingTop: spacing.xxl,
+    paddingTop: spacing.xs,
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.md,
     overflow: 'hidden',
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   heroMesh: {},
   heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -827,13 +809,13 @@ const styles = StyleSheet.create({
   heroActions: { flexDirection: 'row', gap: spacing.sm },
   heroAction: {
     flex: 1,
-    minHeight: touchTarget.standard,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
     paddingHorizontal: spacing.xs,
-    borderRadius: radii.control,
+    borderRadius: 15,
     backgroundColor: glass.fill,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: glass.border,

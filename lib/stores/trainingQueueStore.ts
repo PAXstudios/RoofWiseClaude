@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { reviewStorage } from '../services/reviewPersistence';
 import type {
   DamageMarker,
   InspectionFinding,
@@ -14,6 +14,7 @@ function newId(): string {
 }
 
 type EnqueueInput = {
+  reviewEvidence?: TrainingItem['reviewEvidence'];
   inspectionId: string;
   slopeId?: string;
   photoPath: string;
@@ -40,6 +41,7 @@ export const useTrainingQueueStore = create<TrainingQueueState>()(
           inspectionId: input.inspectionId,
           slopeId: input.slopeId,
           photoPath: input.photoPath,
+          reviewEvidence: input.reviewEvidence,
           originalAnalysis: {
             findings: input.findings,
             markers: input.markers,
@@ -60,7 +62,7 @@ export const useTrainingQueueStore = create<TrainingQueueState>()(
     }),
     {
       name: 'roofwise.trainingQueue.v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => reviewStorage),
       partialize: (s) => ({ items: s.items }),
     },
   ),

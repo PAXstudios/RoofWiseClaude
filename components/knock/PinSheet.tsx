@@ -17,9 +17,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -51,6 +48,7 @@ import { blockedBy } from '@/lib/services/doNotKnock';
 import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 import { outcomeColor, outcomeIcon } from './outcomeStyle';
 import { saveKnock, type SaveKnockResult } from './saveKnock';
+import { appointmentAt, appointmentFields, isAppointmentTimestamp } from '@/lib/services/appointmentTime';
 
 export type PinPoint = { lat: number; lng: number; placedBy: 'gps' | 'map_tap' };
 
@@ -113,6 +111,11 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
   const [outcome, setOutcome] = useState<KnockOutcome | null>(null);
   const [notes, setNotes] = useState('');
   const [followUp, setFollowUp] = useState<FollowUpChoice>({ kind: 'none' });
+  const [appointmentDate, setAppointmentDate] = useState('');
+  const [appointmentTime, setAppointmentTime] = useState('');
+  // Preserve the original instant (including repeated-hour offset/seconds)
+  // until the roofer actually changes a calendar or clock field.
+  const [unchangedAppointmentIso, setUnchangedAppointmentIso] = useState<string | undefined>();
   /** The date the knock came in with — offered as "Keep …" beside the cadence chips. */
   const [keepIso, setKeepIso] = useState<string | null>(null);
   const [comeBackWhen, setComeBackWhen] = useState<ComeBackWhen | null>(null);
@@ -148,6 +151,11 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
     setNotes(fresh ? '' : (source?.notes ?? ''));
     setFollowUp(!fresh && source?.followUpAt ? { kind: 'keep', iso: source.followUpAt } : { kind: 'none' });
     setKeepIso(!fresh && source?.followUpAt ? source.followUpAt : null);
+    const booked = !fresh && source && outcomeMeta(source.outcome).id === 'appointment'
+      ? appointmentFields(source.followUpAt) : appointmentFields();
+    setAppointmentDate(booked.date);
+    setAppointmentTime(booked.time);
+    setUnchangedAppointmentIso(booked.date && isAppointmentTimestamp(source?.followUpAt) ? source.followUpAt : undefined);
     setComeBackWhen(!fresh ? (source?.comeBackWhen ?? null) : null);
     setDamageNoted(!fresh && source?.damageNoted !== undefined ? source.damageNoted : null);
     setContactName(source?.contactName ?? '');
@@ -214,6 +222,11 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
     setNotes(source?.notes ?? '');
     setFollowUp(source?.followUpAt ? { kind: 'keep', iso: source.followUpAt } : { kind: 'none' });
     setKeepIso(source?.followUpAt ?? null);
+    const booked = source && outcomeMeta(source.outcome).id === 'appointment'
+      ? appointmentFields(source.followUpAt) : appointmentFields();
+    setAppointmentDate(booked.date);
+    setAppointmentTime(booked.time);
+    setUnchangedAppointmentIso(booked.date && isAppointmentTimestamp(source?.followUpAt) ? source.followUpAt : undefined);
     setContactName(source?.contactName ?? '');
     setContactPhone(source?.contactPhone ?? '');
     if (source?.propertyRecord) setRecord(source.propertyRecord);
@@ -249,15 +262,25 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
     }
   };
 
+  const changeAppointmentDate = (date: string) => {
+    if (date !== appointmentDate) setUnchangedAppointmentIso(undefined);
+    setAppointmentDate(date);
+  };
+  const changeAppointmentTime = (time: string) => {
+    if (time !== appointmentTime) setUnchangedAppointmentIso(undefined);
+    setAppointmentTime(time);
+  };
   const resolvedFollowUpAt = (): string | undefined => {
     if (!meta?.setsFollowUp) return undefined;
+    if (meta.id === 'appointment') return unchangedAppointmentIso ?? appointmentAt(appointmentDate, appointmentTime);
     if (meta.asksWhen) return comeBackWhen ? comeBackFollowUpAt(comeBackWhen) : undefined;
     if (followUp.kind === 'days') return followUpAtFromDays(followUp.days);
     if (followUp.kind === 'keep') return followUp.iso;
     return undefined;
   };
 
-  const canSave = !!outcome && !!point && !saving && !readOnly && (!meta?.asksWhen || !!comeBackWhen);
+  const canSave = !!outcome && !!point && !saving && !readOnly && (!meta?.asksWhen || !!comeBackWhen) &&
+    (meta?.id !== 'appointment' || !!resolvedFollowUpAt());
 
   const save = () => {
     if (!canSave || !outcome || !point) return;
@@ -279,6 +302,7 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
       },
       {
         existingKnockId: editing?.id,
+        seedLeadId: archived?.createdLeadId,
         seedHistory: archived
           ? [
               ...(archived.history ?? []),
@@ -301,14 +325,25 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
   const phoneOnFile = contactPhone.trim() || (editing ?? archived)?.contactPhone;
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={title} accessibilityLabel={title}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.kav}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.body}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={title}
+      accessibilityLabel={title}
+      footer={!readOnly ? (
+        <PressableScale
+          style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
+          disabled={!canSave}
+          onPress={save}
+          accessibilityRole="button"
+          accessibilityLabel={saveLabel}
+          accessibilityState={{ disabled: !canSave }}
         >
+          <Text style={[styles.saveText, !canSave && styles.saveTextDisabled]}>{saveLabel}</Text>
+        </PressableScale>
+      ) : undefined}
+    >
+      <View style={styles.body}>
           {/* "Update this house?" — a pin inside a house-width of a knock from this route. */}
           {mode?.kind === 'new' && mode.nearby ? (
             <View style={styles.nearby}>
@@ -508,9 +543,55 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
           ) : null}
 
           {/* Follow-up day */}
-          {meta?.setsFollowUp && !meta.asksWhen ? (
+          {meta?.id === 'appointment' ? (
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>{meta.id === 'appointment' ? 'Inspection day' : 'Follow up'}</Text>
+              <Text style={styles.fieldLabel}>Inspection date and time</Text>
+              <View style={styles.rowWrap}>
+                {FOLLOW_UP_DAYS.map((d) => {
+                  const date = appointmentFields(followUpAtFromDays(d.days)).date;
+                  const active = appointmentDate === date;
+                  return (
+                    <PressableScale key={d.days} style={[styles.pick, active && styles.pickActive]}
+                      onPress={() => changeAppointmentDate(date)} accessibilityRole="button"
+                      accessibilityLabel={`Inspection ${d.label}, ${date}`} accessibilityState={{ selected: active }}>
+                      <Text style={[styles.pickText, active && styles.pickTextActive]}>{d.label}</Text>
+                    </PressableScale>
+                  );
+                })}
+              </View>
+              <View style={styles.inputRow}>
+                <TextInput style={styles.input} value={appointmentDate} onChangeText={changeAppointmentDate}
+                  placeholder="YYYY-MM-DD" placeholderTextColor={colors.textSubtle}
+                  accessibilityLabel="Inspection date, YYYY-MM-DD" editable={!readOnly} />
+              </View>
+              <View style={styles.rowWrap}>
+                {['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'].map((time) => {
+                  const hour = Number(time.slice(0, 2));
+                  const label = `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
+                  const active = appointmentTime === time;
+                  return (
+                    <PressableScale key={time} style={[styles.pick, active && styles.pickActive]}
+                      onPress={() => changeAppointmentTime(time)} accessibilityRole="button"
+                      accessibilityLabel={`Inspection at ${label}`} accessibilityState={{ selected: active }}>
+                      <Text style={[styles.pickText, active && styles.pickTextActive]}>{label}</Text>
+                    </PressableScale>
+                  );
+                })}
+              </View>
+              <View style={styles.inputRow}>
+                <TextInput style={styles.input} value={appointmentTime} onChangeText={changeAppointmentTime}
+                  placeholder="HH:MM (24-hour)" placeholderTextColor={colors.textSubtle}
+                  accessibilityLabel="Inspection time, HH:MM, 24-hour local time" editable={!readOnly} />
+              </View>
+              <Text style={styles.noteText}>{resolvedFollowUpAt()
+                ? `Appointment: ${formatWhen(resolvedFollowUpAt()!)} · local time`
+                : 'Choose a valid date and time to book the inspection.'}</Text>
+            </View>
+          ) : null}
+
+          {meta?.setsFollowUp && !meta.asksWhen && meta.id !== 'appointment' ? (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Follow up</Text>
               <View style={styles.rowWrap}>
                 {keepIso ? (
                   <PressableScale
@@ -672,24 +753,10 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
               ))}
             </View>
           ) : null}
-        </ScrollView>
-
         <View style={styles.footer}>
-          {!readOnly ? (
-            <PressableScale
-              style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
-              disabled={!canSave}
-              onPress={save}
-              accessibilityRole="button"
-              accessibilityLabel={saveLabel}
-              accessibilityState={{ disabled: !canSave }}
-            >
-              <Text style={[styles.saveText, !canSave && styles.saveTextDisabled]}>{saveLabel}</Text>
-            </PressableScale>
-          ) : null}
           {!readOnly && !canSave ? (
             <Text style={styles.saveHint}>
-              {!outcome ? 'Pick what happened to save.' : meta?.asksWhen && !comeBackWhen ? 'Pick when to come back.' : ''}
+              {!outcome ? 'Pick what happened to save.' : meta?.asksWhen && !comeBackWhen ? 'Pick when to come back.' : meta?.id === 'appointment' ? 'Choose a valid inspection date and time.' : ''}
             </Text>
           ) : null}
           {leadId || editing ? (
@@ -725,15 +792,13 @@ export function PinSheet({ visible, mode, onClose, onSaved, onRemove, onOpenLead
             </View>
           ) : null}
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  kav: { flexShrink: 1 },
   fill: { flex: 1 },
-  scroll: { flexGrow: 0 },
   body: { gap: spacing.lg, paddingBottom: spacing.md },
   field: { gap: spacing.sm },
   fieldLabel: {

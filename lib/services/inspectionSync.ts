@@ -23,8 +23,8 @@
 // binaries separately and writes the public URLs into the payload.
 
 import { supabase } from '../supabase';
-import { useInspectionStore } from '../stores/inspectionStore';
-import { useInspectionSyncStore } from '../stores/inspectionSyncStore';
+import { inspectionHydrationState, isApplyingInspectionHydration, normalizeInspection, useInspectionStore, waitForInspectionHydration } from '../stores/inspectionStore';
+import { inspectionSyncHydrationState, useInspectionSyncStore, waitForInspectionSyncHydration } from '../stores/inspectionSyncStore';
 import { useAuthStore } from '../auth/authStore';
 import type { Inspection } from '../models/types';
 
@@ -43,7 +43,7 @@ export function startInspectionWatcher(): void {
   useInspectionStore.subscribe((state) => {
     const next = state.inspections;
     if (next === prevInspections) return;
-    if (applyingRemote) {
+    if (applyingRemote || isApplyingInspectionHydration()) {
       prevInspections = next;
       return;
     }
@@ -55,11 +55,15 @@ export function startInspectionWatcher(): void {
     }
     const nextIds = new Set(next.map((i) => i.id));
     for (const old of prevInspections ?? []) {
-      if (!nextIds.has(old.id)) sync.markDeleted(old.id);
+      if (!nextIds.has(old.id) && !sync.deleted.includes(old.id)) sync.markDeleted(old.id);
     }
     prevInspections = next;
   });
 }
+
+// Subscribe before the initial hydration microtasks run. Hydration application
+// is excluded above, but user edits made while either read is held are tracked.
+startInspectionWatcher();
 
 export type InspectionSyncSummary = {
   pushed: number;
@@ -82,6 +86,19 @@ export function syncInspections(): Promise<InspectionSyncSummary> {
 }
 
 async function run(): Promise<InspectionSyncSummary> {
+  try {
+    while (true) {
+      const business = inspectionHydrationState();
+      const metadata = inspectionSyncHydrationState();
+      await Promise.all([waitForInspectionHydration(), waitForInspectionSyncHydration()]);
+      const nextBusiness = inspectionHydrationState();
+      const nextMetadata = inspectionSyncHydrationState();
+      if (business.promise === nextBusiness.promise && metadata.promise === nextMetadata.promise
+        && nextBusiness.hydrated && nextMetadata.hydrated) break;
+    }
+  } catch (error) {
+    return { pushed: 0, pulled: 0, deleted: 0, conflicts: 0, error: error instanceof Error ? error.message : 'Local inspections unavailable. Retry.' };
+  }
   const user = useAuthStore.getState().user;
   if (!user) {
     return { pushed: 0, pulled: 0, deleted: 0, conflicts: 0, error: 'Not signed in' };
@@ -95,6 +112,7 @@ async function run(): Promise<InspectionSyncSummary> {
 
   // 1) Push remote deletes for locally-removed inspections
   const pendingDeletes = syncStore.deleted;
+  const deleteRevisions = Object.fromEntries(pendingDeletes.map((id) => [id, syncStore.revisions[id] ?? 0]));
   if (pendingDeletes.length > 0) {
     const { error } = await supabase
       .from(TABLE)
@@ -105,15 +123,26 @@ async function run(): Promise<InspectionSyncSummary> {
       return { pushed: 0, pulled: 0, deleted: 0, conflicts: 0, error: error.message };
     }
     if (!error) {
-      useInspectionSyncStore.getState().clearDeleted(pendingDeletes);
+      useInspectionSyncStore.getState().clearDeleted(deleteRevisions);
       deleted = pendingDeletes.length;
     }
   }
 
   // 2) Push dirty inspections — unless the same row was edited LATER on
   //    another device, in which case that edit wins and ours is dropped.
-  const dirty = useInspectionSyncStore.getState().dirty;
+  const snapshot = useInspectionSyncStore.getState();
+  const dirty = snapshot.dirty;
   const dirtyIds = Object.keys(dirty);
+  // Capture payload, edit time and local acknowledgement revision together,
+  // before the first network boundary. A later edit belongs to the next run.
+  const pending = useInspectionStore.getState().inspections
+    .filter((i) => dirtyIds.includes(i.id))
+    .map((i) => ({ row: inspectionToRow(i, user.id, dirty[i.id]), revision: snapshot.revisions[i.id] ?? 0 }));
+  const unchanged = (id: string, revision: number) => {
+    const current = useInspectionSyncStore.getState();
+    return (current.revisions[id] ?? 0) === revision
+      && !current.tombstones[id] && !current.deleted.includes(id);
+  };
   if (dirtyIds.length > 0) {
     const { data: remoteRows, error: peekError } = await supabase
       .from(TABLE)
@@ -130,22 +159,24 @@ async function run(): Promise<InspectionSyncSummary> {
     const superseded: Inspection[] = [];
     for (const row of remoteRows ?? []) {
       const id = String(row.id);
+      const captured = pending.find((item) => item.row.id === id);
+      if (!captured || !unchanged(id, captured.revision)) continue;
       if (ts(row.updated_at) <= ts(dirty[id])) continue;
       const remote = row.payload as Inspection | null;
-      if (remote && typeof remote === 'object' && remote.id) superseded.push(remote);
+      if (remote && typeof remote === 'object' && remote.id === id) superseded.push(remote);
     }
     if (superseded.length > 0) {
       applyRemote(superseded, 0);
-      useInspectionSyncStore.getState().clearDirty(superseded.map((i) => i.id));
+      useInspectionSyncStore.getState().clearDirty(Object.fromEntries(
+        superseded.map((i) => [i.id, snapshot.revisions[i.id] ?? 0]),
+      ));
       conflicts = superseded.length;
       pulled += superseded.length;
     }
 
     const supersededIds = new Set(superseded.map((i) => i.id));
-    const all = useInspectionStore.getState().inspections;
-    const rows = all
-      .filter((i) => dirtyIds.includes(i.id) && !supersededIds.has(i.id))
-      .map((i) => inspectionToRow(i, user.id, dirty[i.id]));
+    const toPush = pending.filter(({ row, revision }) => !supersededIds.has(row.id) && unchanged(row.id, revision));
+    const rows = toPush.map(({ row }) => row);
     if (rows.length > 0) {
       const { error } = await supabase.from(TABLE).upsert(rows, { onConflict: 'id' });
       if (error) {
@@ -154,7 +185,9 @@ async function run(): Promise<InspectionSyncSummary> {
         }
         return { pushed: 0, pulled, deleted, conflicts, error: error.message };
       }
-      useInspectionSyncStore.getState().clearDirty(rows.map((r) => r.id));
+      useInspectionSyncStore.getState().clearDirty(Object.fromEntries(
+        toPush.map(({ row, revision }) => [row.id, revision]),
+      ));
       pushed = rows.length;
     }
   }
@@ -178,7 +211,7 @@ async function run(): Promise<InspectionSyncSummary> {
   }
 
   if (data && data.length > 0) {
-    const stillDirty = useInspectionSyncStore.getState().dirty;
+    const current = useInspectionSyncStore.getState();
     const local = useInspectionStore.getState().inspections;
     const localById = new Map(local.map((i) => [i.id, i]));
     const incoming: Inspection[] = [];
@@ -187,9 +220,9 @@ async function run(): Promise<InspectionSyncSummary> {
     for (const row of data) {
       const ordinal = parseOrdinal(String(row.report_id ?? ''));
       if (ordinal > maxOrdinal) maxOrdinal = ordinal;
-      if (stillDirty[row.id]) continue; // local changes win; next push reconciles
+      if (current.dirty[row.id] || current.tombstones[row.id] || current.deleted.includes(row.id)) continue;
       const remote = row.payload as Inspection | null;
-      if (!remote || typeof remote !== 'object' || !remote.id) continue;
+      if (!remote || typeof remote !== 'object' || remote.id !== row.id) continue;
       const existing = localById.get(remote.id);
       if (!existing || JSON.stringify(existing) !== JSON.stringify(remote)) {
         incoming.push(remote);
@@ -210,7 +243,7 @@ function applyRemote(incoming: Inspection[], maxOrdinal: number): void {
   try {
     useInspectionStore.setState((s) => {
       const byId = new Map(s.inspections.map((i) => [i.id, i]));
-      for (const ins of incoming) byId.set(ins.id, ins);
+      for (const ins of incoming) byId.set(ins.id, normalizeInspection(ins as unknown as Record<string, unknown>, byId.get(ins.id)));
       const merged = Array.from(byId.values()).sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );

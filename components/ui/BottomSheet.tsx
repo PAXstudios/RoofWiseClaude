@@ -11,8 +11,8 @@
 // only numeric shared values and call nothing else; the dismiss callback
 // crosses to JS with runOnJS.
 
-import { useEffect, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -35,6 +35,8 @@ type Props = {
   /** Show the top-left Cancel. Default true. */
   cancel?: boolean;
   children: ReactNode;
+  /** Primary action kept above the keyboard, outside the scrolling body. */
+  footer?: ReactNode;
   style?: StyleProp<ViewStyle>;
   /** Spoken name for the sheet. */
   accessibilityLabel?: string;
@@ -53,6 +55,7 @@ export function BottomSheet({
   subtitle,
   cancel = true,
   children,
+  footer,
   style,
   accessibilityLabel,
 }: Props) {
@@ -60,6 +63,21 @@ export function BottomSheet({
   const reduced = useReducedMotion();
   const y = useSharedValue(OFFSCREEN);
   const dim = useSharedValue(0);
+  const [availableHeight, setAvailableHeight] = useState<number | null>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  // Measure inside the avoidance container: on iOS its own frame remains
+  // full-height while padding changes, so measuring that frame misses the
+  // space actually left above the keyboard.
+  const compact = availableHeight !== null && availableHeight <= touchTarget.sticky * 4 + spacing.xl * 2;
+  const bottomPadding = compact && keyboardOpen ? spacing.xs : Math.max(insets.bottom, spacing.lg);
+
+  useEffect(() => {
+    if (!visible || Platform.OS === 'web') return;
+    setKeyboardOpen(Keyboard.isVisible());
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardOpen(false));
+    return () => { show.remove(); hide.remove(); };
+  }, [visible]);
 
   useEffect(() => {
     if (visible) {
@@ -106,6 +124,12 @@ export function BottomSheet({
     const v = dim.value;
     return { opacity: typeof v === 'number' && Number.isFinite(v) ? v : 1 };
   });
+  const heading = (title || subtitle) ? (
+    <View style={styles.head}>
+      {title && <Text style={styles.title}>{title}</Text>}
+      {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+    </View>
+  ) : null;
 
   return (
     <Modal visible={visible} transparent statusBarTranslucent onRequestClose={close}>
@@ -113,48 +137,61 @@ export function BottomSheet({
         <Animated.View style={[styles.dim, dimStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Dismiss" />
         </Animated.View>
-        <Animated.View
-          style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }, sheetStyle, style]}
-          accessibilityViewIsModal
-          accessibilityLabel={accessibilityLabel ?? title}
+        {/* Resize the sheet's available viewport, including its header and
+            scroll body. Avoidance inside a scrolling child only adds more
+            content below the keyboard and leaves other form sheets uncovered. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          enabled={Platform.OS !== 'web'}
+          style={[styles.keyboardViewport, { paddingTop: insets.top }]}
+          pointerEvents="box-none"
         >
-          {/* The header is the drag handle; the body scrolls. A sheet taller
-              than the screen (eleven Quick Action tiles on an SE) used to
-              push its last rows off the bottom with no way to reach them. */}
-          <GestureDetector gesture={pan}>
-            <View style={styles.handle}>
-              <View style={styles.grabberRow}>
-                <View style={styles.grabber} />
-              </View>
-              {cancel && (
-                <Pressable
-                  onPress={close}
-                  style={styles.cancel}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel"
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </Pressable>
-              )}
-              {(title || subtitle) && (
-                <View style={styles.head}>
-                  {title && <Text style={styles.title}>{title}</Text>}
-                  {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
-                </View>
-              )}
-            </View>
-          </GestureDetector>
-          <ScrollView
-            style={styles.body}
-            contentContainerStyle={styles.bodyContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            nestedScrollEnabled
+          <View
+            style={styles.keyboardViewport}
+            pointerEvents="box-none"
+            onLayout={({ nativeEvent }) => setAvailableHeight(nativeEvent.layout.height)}
           >
-            {children}
-          </ScrollView>
-        </Animated.View>
+            <Animated.View
+              style={[styles.sheet, { paddingBottom: bottomPadding }, sheetStyle, style, compact && styles.compactSheet]}
+              accessibilityViewIsModal
+              accessibilityLabel={accessibilityLabel ?? title}
+            >
+              {/* The header is the drag handle; the body scrolls. A sheet taller
+                  than the screen (eleven Quick Action tiles on an SE) used to
+                  push its last rows off the bottom with no way to reach them. */}
+              <GestureDetector gesture={pan}>
+                <View style={[styles.handle, compact && styles.compactHandle]}>
+                  <View style={[styles.grabberRow, compact && styles.compactGrabberRow]} pointerEvents="none">
+                    <View style={styles.grabber} />
+                  </View>
+                  {cancel && (
+                    <Pressable
+                      onPress={close}
+                      style={styles.cancel}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel"
+                    >
+                      <Text style={styles.cancelText}>Cancel</Text>
+                    </Pressable>
+                  )}
+                  {!compact && heading}
+                </View>
+              </GestureDetector>
+              <ScrollView
+                style={styles.body}
+                contentContainerStyle={styles.bodyContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+              >
+                {compact && heading}
+                {children}
+              </ScrollView>
+              {footer != null && <View style={styles.footer}>{footer}</View>}
+            </Animated.View>
+          </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -162,6 +199,7 @@ export function BottomSheet({
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
+  keyboardViewport: { flex: 1, justifyContent: 'flex-end' },
   dim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
     backgroundColor: colors.surface,
@@ -171,15 +209,19 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     maxHeight: '88%',
   },
-  handle: { gap: spacing.md },
-  body: { flexGrow: 0 },
+  handle: { gap: spacing.md, flexShrink: 0 },
+  compactSheet: { maxHeight: '100%', gap: spacing.xs },
+  compactHandle: { minHeight: touchTarget.standard, justifyContent: 'center', gap: 0 },
+  compactGrabberRow: { position: 'absolute', top: 0, left: 0, right: 0 },
+  body: { flexGrow: 0, flexShrink: 1 },
   bodyContent: { gap: spacing.md, paddingBottom: spacing.xs },
+  footer: { flexShrink: 0 },
   grabberRow: { alignItems: 'center', paddingTop: spacing.sm },
   grabber: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.fillQuiet },
   // 56pt so a gloved thumb cancels without hunting (Drift #1).
   cancel: { minHeight: touchTarget.standard, justifyContent: 'center', alignSelf: 'flex-start' },
   cancelText: {
-    color: colors.accent,
+    color: colors.text,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.medium,
     fontFamily: fontFamily.archivo.medium,

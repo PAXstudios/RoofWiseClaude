@@ -12,11 +12,8 @@
 // note, never a coordinate string dressed as a street — and Save stays off
 // until both the name and a street address are real.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -187,14 +184,26 @@ export function CustomerDetailsSheet({
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={title} subtitle={subtitle} accessibilityLabel={title}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.body}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={title}
+      subtitle={subtitle}
+      accessibilityLabel={title}
+      footer={
+        <PressableScale
+          style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
+          disabled={!canSave}
+          onPress={save}
+          accessibilityRole="button"
+          accessibilityLabel={saveLabel}
+          accessibilityState={{ disabled: !canSave }}
         >
+          <Text style={[styles.saveText, !canSave && styles.saveTextDisabled]}>{saveLabel}</Text>
+        </PressableScale>
+      }
+    >
+      <View style={styles.body}>
           <Field
             label="Customer name *"
             icon="person-outline"
@@ -352,20 +361,8 @@ export function CustomerDetailsSheet({
               ) : null}
             </>
           )}
-        </ScrollView>
-
-        {/* Sticky 88pt Save; a quiet skip beneath it when the caller offers one. */}
+        {/* Secondary actions scroll; the shared footer keeps the 88pt Save visible. */}
         <View style={styles.footer}>
-          <PressableScale
-            style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
-            disabled={!canSave}
-            onPress={save}
-            accessibilityRole="button"
-            accessibilityLabel={saveLabel}
-            accessibilityState={{ disabled: !canSave }}
-          >
-            <Text style={[styles.saveText, !canSave && styles.saveTextDisabled]}>{saveLabel}</Text>
-          </PressableScale>
           {!canSave && (
             <Text style={styles.saveHint}>
               {!nameOk
@@ -387,7 +384,7 @@ export function CustomerDetailsSheet({
             </PressableScale>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </BottomSheet>
   );
 }
@@ -399,20 +396,25 @@ function Field({
   tone,
   ...rest
 }: { label: string; icon: IoniconName; tone: ChipTone } & React.ComponentProps<typeof TextInput>) {
+  const labelId = useId();
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text nativeID={labelId} style={styles.fieldLabel}>{label}</Text>
       <View style={styles.inputRow}>
         <IconChip name={icon} tone={tone} size="sm" />
-        <TextInput style={styles.input} placeholderTextColor={colors.textSubtle} {...rest} />
+        <TextInput
+          style={styles.input}
+          placeholderTextColor={colors.textSubtle}
+          accessibilityLabel={label}
+          aria-labelledby={labelId}
+          {...rest}
+        />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  fill: { flexShrink: 1 },
-  scroll: { flexGrow: 0 },
   body: { gap: spacing.lg, paddingBottom: spacing.md },
   field: { gap: spacing.sm },
   fieldLabel: { ...dataLabel, color: colors.textSubtle },

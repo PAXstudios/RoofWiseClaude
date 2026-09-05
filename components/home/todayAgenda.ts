@@ -16,19 +16,18 @@ export type ScheduleItem =
   | { key: string; time: number; kind: 'followup'; lead: Lead; overdue: boolean }
   | { key: string; time: number; kind: 'route'; session: KnockSession };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /** Local-midnight bounds for the day containing `now`. */
 export function dayBounds(now: Date = new Date()): { start: number; end: number } {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  return { start, end: start + DAY_MS };
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+  return { start, end };
 }
 
 /**
  * Follow-ups due by the end of today (overdue ones included), earliest first.
  * Signed and lost leads are out: the deal is decided, the reminder is stale.
  */
-export function followUpsDue(leads: readonly Lead[], now: Date = new Date()): Lead[] {
+export function followUpsDue(leads: readonly Lead[], now: Date = new Date(), inspections: readonly Inspection[] = []): Lead[] {
   const endOfDay = dayBounds(now).end - 1;
   return leads
     .filter(
@@ -36,19 +35,31 @@ export function followUpsDue(leads: readonly Lead[], now: Date = new Date()): Le
         l.followUpAt &&
         l.stage !== 'signed' &&
         l.stage !== 'lost' &&
+        !isAppointmentReminder(l, inspections) &&
         new Date(l.followUpAt).getTime() <= endOfDay,
     )
     .sort((a, b) => new Date(a.followUpAt!).getTime() - new Date(b.followUpAt!).getTime());
 }
 
-/** Inspections created inside `[startMs, endMs)`. */
+/** Matching linked appointment reminders are represented by the inspection. */
+function isAppointmentReminder(lead: Lead, inspections: readonly Inspection[]): boolean {
+  return inspections.some((ins) => (lead.inspectionId === ins.id || ins.leadId === lead.id) &&
+    !!ins.scheduledAt && Date.parse(ins.scheduledAt) === Date.parse(lead.followUpAt ?? ''));
+}
+
+/** Booked visits use their appointment; other work retains its logged date. */
+export function inspectionAgendaAt(ins: Inspection): string | undefined {
+  return ins.status === 'scheduled' ? ins.scheduledAt : ins.createdAt;
+}
+
+/** Inspections scheduled/logged inside `[startMs, endMs)`. */
 export function inspectionsInWindow(
   inspections: readonly Inspection[],
   startMs: number,
   endMs: number,
 ): Inspection[] {
   return inspections.filter((ins) => {
-    const t = new Date(ins.createdAt).getTime();
+    const t = Date.parse(inspectionAgendaAt(ins) ?? '');
     return t >= startMs && t < endMs;
   });
 }
@@ -78,7 +89,8 @@ export function inspectionsThisWeek(
   now: Date = new Date(),
 ): Inspection[] {
   const { start } = dayBounds(now);
-  return inspectionsInWindow(inspections, start, start + 7 * DAY_MS);
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7).getTime();
+  return inspectionsInWindow(inspections, start, end);
 }
 
 /** The rail, time-ordered. */
@@ -95,12 +107,13 @@ export function scheduleItemsFor(input: {
   for (const ins of input.inspections) {
     items.push({
       key: `ins_${ins.id}`,
-      time: new Date(ins.createdAt).getTime(),
+      time: Date.parse(inspectionAgendaAt(ins) ?? ''),
       kind: 'inspection',
       ins,
     });
   }
   for (const lead of input.followUps) {
+    if (isAppointmentReminder(lead, input.inspections)) continue;
     const t = new Date(lead.followUpAt!).getTime();
     items.push({ key: `fu_${lead.id}`, time: t, kind: 'followup', lead, overdue: t < start });
   }

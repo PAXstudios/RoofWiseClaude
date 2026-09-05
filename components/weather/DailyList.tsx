@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RichCard } from '@/components/ui/RichCard';
 import type { IoniconName } from '@/components/ui/IconChip';
 import type { ForecastDay, ForecastDayPart, ForecastStatus } from '@/lib/services/weatherForecast';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 import {
   conditionIcon,
   EmptyLine,
@@ -295,12 +295,14 @@ const styles = StyleSheet.create({
   rowPressed: { backgroundColor: colors.fillQuiet },
   weekday: {
     width: 54,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     color: colors.text,
   },
   precip: {
     width: 40,
+    fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodySm,
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
@@ -309,6 +311,7 @@ const styles = StyleSheet.create({
   precipWet: { color: colors.brand, fontWeight: fontWeight.semibold },
   low: {
     width: 36,
+    fontFamily: fontFamily.archivo.regular,
     textAlign: 'right',
     fontSize: fontSize.bodyMd,
     color: colors.textMuted,
@@ -316,6 +319,7 @@ const styles = StyleSheet.create({
   },
   high: {
     width: 36,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     color: colors.text,
@@ -344,8 +348,8 @@ const styles = StyleSheet.create({
   },
   detailLast: { borderBottomLeftRadius: radii.card, borderBottomRightRadius: radii.card },
   part: { gap: spacing.sm, paddingTop: spacing.md },
-  partTitle: { fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.text },
-  partDesc: { fontWeight: fontWeight.regular, color: colors.textMuted },
+  partTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.text },
+  partDesc: { fontFamily: fontFamily.archivo.regular, fontWeight: fontWeight.regular, color: colors.textMuted },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     flexDirection: 'row',
@@ -358,6 +362,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  chipText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
+  chipText: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
   sunRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingTop: spacing.sm },
 });

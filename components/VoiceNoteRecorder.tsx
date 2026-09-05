@@ -22,6 +22,8 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -299,14 +301,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card,
   },
-  label: {
-    fontSize: fontSize.caption,
-    color: colors.slate,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  sub: { fontSize: fontSize.bodySm, color: colors.slate },
+  label: { ...dataLabel, color: colors.textMuted },
+  sub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
 
   recordRow: { marginTop: spacing.md },
   recordBtn: {
@@ -319,7 +315,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   recordBtnActive: { backgroundColor: colors.danger },
-  recordText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  recordText: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
 
   notesList: { marginTop: spacing.md },
   noteRow: {
@@ -337,8 +333,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  noteLabel: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
-  noteMeta: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  noteLabel: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
+  noteMeta: { fontFamily: fontFamily.mono, fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
   // Row icon buttons take the glove floor (Drift #1) — they were bare 18px
   // glyphs with hitSlop.
   iconBtn: {

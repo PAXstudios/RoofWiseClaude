@@ -17,6 +17,7 @@
 // weights running in the opposite direction, which is how a severely
 // hail-damaged roof scored low and read as ordinary age wear.
 
+import { readPhotoAnalysis } from './photoAnalysisState';
 import {
   ROOF_MATERIAL_LABELS,
   legacyBrittlenessToResult,
@@ -988,7 +989,7 @@ function hailHitsPerSquare(s: Slope): number {
   // the #65 unit bug in the other direction.
   const nonRoof = new Set<number>();
   s.photoPaths.forEach((uri, i) => {
-    if (s.photoAnalysis?.[uri]?.noRoofDetected === true) nonRoof.add(i);
+    if (readPhotoAnalysis(s, i)?.noRoofDetected === true) nonRoof.add(i);
   });
 
   const meta = s.photoMeta;

@@ -12,11 +12,9 @@ import {
   StyleSheet,
   Modal,
   useWindowDimensions,
-  type NativeSyntheticEvent,
-  type NativeScrollEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,20 +35,19 @@ import { useTaskStore } from '@/lib/stores/taskStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { scheduleFollowUpReminder } from '@/lib/services/pushNotifications';
 import { MeshBackground } from '@/components/ui/MeshBackground';
-import { ScreenHeader } from '@/components/ScreenHeader';
 import { Image } from 'expo-image';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
-import { IconChip, CHIP_TONES, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
+import { IconChip, CHIP_TONES, type ChipTone } from '@/components/ui/IconChip';
 import { Pill } from '@/components/ui/Pill';
-import { SettingsAffordance } from '@/components/ui/SettingsAffordance';
 import { ConfirmSheet } from '@/components/sheets/ConfirmSheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { QuickActions } from '@/components/pipeline/QuickActions';
 import { FOLLOW_UP_OPTIONS, FollowUpSheet } from '@/components/pipeline/FollowUpSheet';
 import { recordStatusBadge } from '@/lib/services/propertyRecord';
 import { formatDateShort } from '@/lib/format/date';
 import type { LeadStage } from '@/lib/models/types';
-import { leadStageColumn } from '@/lib/models/types';
+import { LEAD_SOURCE_LABELS, leadStageColumn } from '@/lib/models/types';
 import {
   buildPipeline,
   ensureLeadForInspection,
@@ -89,26 +86,37 @@ import {
 const DRAG_COMMIT_PX = 96;
 
 type ViewMode = 'board' | 'list';
+type BoardFilter = 'all' | 'storm' | 'stale';
 
 const VIEW_OPTIONS = [
   { id: 'board', label: 'Board' },
   { id: 'list', label: 'List' },
 ] as const;
 
-/** List-view filter chips: All, the seven stage groups, Storm. */
+/** Shared stage scopes; Storm/Stale are separate masthead refinements. */
 const FILTER_CHIPS: { id: PipelineFilter; label: string }[] = [
   { id: 'all', label: 'All' },
+  { id: 'jobs', label: 'Jobs' },
   ...PIPELINE_GROUPS.map((g) => ({ id: g as PipelineFilter, label: PIPELINE_GROUP_LABELS[g] })),
-  { id: 'storm', label: 'Storm' },
 ];
 
 const SORT_CYCLE: PipelineSort[] = ['updated', 'days', 'amount'];
 
 /** Stable identity so an empty column never remounts its page on re-render. */
 const EMPTY_COLUMN: PipelineItem[] = [];
+const BOARD_FILTERS: { id: BoardFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'storm', label: 'Storm' },
+  { id: 'stale', label: 'Stale' },
+];
 
 export default function PipelineScreen() {
   const router = useRouter();
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // Reserve room for real column content, even on SE-sized phones. Search
+  // stays mounted when the available height changes (including a keyboard).
+  const compact = height - insets.top - insets.bottom <= 700;
   const params = useLocalSearchParams<{
     segment?: string;
     at?: string;
@@ -130,9 +138,11 @@ export default function PipelineScreen() {
   );
 
   const [view, setView] = useState<ViewMode>('board');
+  const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
   const [filter, setFilter] = useState<PipelineFilter>('all');
   const [sort, setSort] = useState<PipelineSort>('updated');
   const [query, setQuery] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState<PipelineItem | null>(null);
   const [confirmLost, setConfirmLost] = useState<{ item: PipelineItem; stage: LeadStage } | null>(null);
@@ -143,13 +153,11 @@ export default function PipelineScreen() {
   // onto the closest group. `at` is a nonce so a second push with the same
   // value still fires (tab params persist across visits).
   useEffect(() => {
-    if (params.filter) {
-      setFilter(params.filter as PipelineFilter);
-    } else if (params.segment === 'jobs') {
-      setFilter('jobs');
-    } else if (params.segment === 'leads') {
-      setFilter('leads');
-    }
+    const preset = params.filter ?? params.segment;
+    if (!preset) return;
+    setBoardFilter(preset === 'storm' ? 'storm' : 'all');
+    setFilter(FILTER_CHIPS.find((option) => option.id === preset)?.id ?? 'all');
+    setQuery('');
   }, [params.filter, params.segment, params.at]);
 
   // `?focus=<itemId>` (a storm-cluster tap, a notification) briefly rings the
@@ -162,13 +170,21 @@ export default function PipelineScreen() {
   }, [params.focus, params.at]);
 
   const filtered = useMemo(() => {
-    let out = items.filter((it) => matchesFilter(it, filter));
+    let out = items.filter((it) => matchesFilter(it, filter)
+      && (boardFilter !== 'storm' || !!it.storm)
+      && (boardFilter !== 'stale' || stageAgeTone(it) !== 'quiet'));
     const q = query.trim().toLowerCase();
     if (q) out = out.filter((it) => `${it.customerName} ${it.address}`.toLowerCase().includes(q));
     return sortItems(out, sort);
-  }, [items, filter, query, sort]);
+  }, [items, filter, boardFilter, query, sort]);
 
   const summary = useMemo(() => summarizePipeline(items), [items]);
+  const activeFilterCount = Number(filter !== 'all') + Number(boardFilter !== 'all');
+  const resetFilters = () => { setFilter('all'); setBoardFilter('all'); setQuery(''); };
+
+  const cycleSort = useCallback(() => {
+    setSort((current) => SORT_CYCLE[(SORT_CYCLE.indexOf(current) + 1) % SORT_CYCLE.length]);
+  }, []);
 
   const openItem = useCallback(
     (item: PipelineItem) => {
@@ -222,33 +238,49 @@ export default function PipelineScreen() {
 
   return (
     <View style={styles.root}>
-      <ScreenHeader
-        title="Pipeline"
-        subtitle={`${items.length} total · ${summary.activeCount} active`}
-        right={
-          <View style={styles.headerActions}>
-            <SettingsAffordance />
-            <PressableScale
-              style={styles.fab}
-              pressedScale={0.92}
-              onPress={() => setNewMenuOpen(true)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="New lead or job"
-            >
-              <Ionicons name="add" size={26} color={colors.textInverse} />
-            </PressableScale>
-          </View>
-        }
+      <PipelineMasthead
+        compact={compact}
+        total={items.length}
+        summary={summary}
+        filter={boardFilter}
+        onFilter={setBoardFilter}
+        sort={sort}
+        onSort={cycleSort}
+        onSettings={() => router.push('/settings')}
+        onAdd={() => setNewMenuOpen(true)}
       />
 
-      <PipelineSummaryHero summary={summary} />
-
-      <Segmented options={VIEW_OPTIONS} value={view} onChange={setView} />
+      <View style={compact && styles.compactToolbar}>
+        <Segmented options={VIEW_OPTIONS} value={view} onChange={setView} compact={compact} />
+        {compact && (
+          <PressableScale
+            style={[styles.filterTrigger, activeFilterCount > 0 && styles.chipActive]}
+            onPress={() => setFiltersOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Pipeline filters and sort${activeFilterCount ? `, ${activeFilterCount} active filters` : ''}`}
+            accessibilityState={{ expanded: filtersOpen }}
+          >
+            <Ionicons name="options-outline" size={18} color={activeFilterCount ? colors.textInverse : colors.text} />
+            <Text style={[styles.filterTriggerText, activeFilterCount > 0 && styles.chipTextActive]}>
+              {activeFilterCount ? `Filters ${activeFilterCount}` : 'Filters'}
+            </Text>
+          </PressableScale>
+        )}
+      </View>
+      <PipelineFilters
+        hideStages={compact}
+        filter={filter}
+        onFilter={setFilter}
+        query={query}
+        onQuery={setQuery}
+        canReset={filter !== 'all' || boardFilter !== 'all' || !!query}
+        onReset={resetFilters}
+      />
 
       {view === 'board' ? (
         <BoardView
-          items={items}
+          items={filtered}
+          filtering={filter !== 'all' || boardFilter !== 'all' || !!query.trim()}
           onOpen={openItem}
           onRequestMove={setMoveTarget}
           onDragMove={requestMove}
@@ -260,12 +292,6 @@ export default function PipelineScreen() {
         <ListView
           items={filtered}
           total={items.length}
-          filter={filter}
-          onFilter={setFilter}
-          sort={sort}
-          onSort={setSort}
-          query={query}
-          onQuery={setQuery}
           onOpen={openItem}
           onRequestMove={setMoveTarget}
           onBook={book.open}
@@ -273,6 +299,46 @@ export default function PipelineScreen() {
           highlightId={highlightId}
         />
       )}
+
+      <BottomSheet
+        visible={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        title="Pipeline filters"
+        subtitle={`${filtered.length} results · ${PIPELINE_SORT_LABELS[sort]}`}
+        footer={(
+          <PressableScale style={styles.emptyBtn} onPress={() => setFiltersOpen(false)} accessibilityRole="button" accessibilityLabel="Show pipeline results">
+            <Text style={styles.emptyBtnText}>Show results</Text>
+          </PressableScale>
+        )}
+      >
+        <Text style={styles.filterSectionLabel}>Focus</Text>
+        <View style={styles.sheetFilterChoices}>
+          {BOARD_FILTERS.map((option) => (
+            <PressableScale key={option.id} style={[styles.chip, boardFilter === option.id && styles.chipActive]} onPress={() => setBoardFilter(option.id)} accessibilityRole="button" accessibilityState={{ selected: boardFilter === option.id }}>
+              <Text style={[styles.chipText, boardFilter === option.id && styles.chipTextActive]}>{option.label}</Text>
+            </PressableScale>
+          ))}
+        </View>
+        <Text style={styles.filterSectionLabel}>Stage</Text>
+        <View style={styles.sheetFilterChoices}>
+          {FILTER_CHIPS.map((option) => (
+            <PressableScale key={option.id} style={[styles.chip, filter === option.id && styles.chipActive]} onPress={() => setFilter(option.id)} accessibilityRole="button" accessibilityState={{ selected: filter === option.id }}>
+              <Text style={[styles.chipText, filter === option.id && styles.chipTextActive]}>{option.label}</Text>
+            </PressableScale>
+          ))}
+        </View>
+        <Text style={styles.filterSectionLabel}>Sort</Text>
+        <View style={styles.sheetFilterChoices}>
+          {SORT_CYCLE.map((option) => (
+            <PressableScale key={option} style={[styles.chip, sort === option && styles.chipActive]} onPress={() => setSort(option)} accessibilityRole="button" accessibilityState={{ selected: sort === option }}>
+              <Text style={[styles.chipText, sort === option && styles.chipTextActive]}>{PIPELINE_SORT_LABELS[option]}</Text>
+            </PressableScale>
+          ))}
+        </View>
+        <PressableScale style={styles.sortChip} onPress={resetFilters} accessibilityRole="button" accessibilityLabel="Clear search and all pipeline filters">
+          <Text style={styles.chipText}>Reset filters and search</Text>
+        </PressableScale>
+      </BottomSheet>
 
       <FollowUpSheet
         visible={book.target !== null}
@@ -338,122 +404,102 @@ function useBookFollowUp() {
 }
 
 // -----------------------------------------------------------------------------
-// Summary hero
+// Reference-matched Pipeline masthead
 // -----------------------------------------------------------------------------
 
-function PipelineSummaryHero({ summary }: { summary: ReturnType<typeof summarizePipeline> }) {
-  const groupLine = PIPELINE_GROUPS.filter((g) => g !== 'lost')
-    .map((g) => `${summary.counts[g]} ${PIPELINE_GROUP_LABELS[g]}`)
-    .join(' · ');
-
-  return (
-    <FadeSlideIn style={styles.summaryWrap}>
-      <View style={styles.summaryHero}>
-        {/* 1A cooler/violet mesh — deliberately distinct from Home's warmer
-            hero (docs/DESIGN_1A.md §2/§6: Pipeline board header carries no
-            orange stop). */}
-        <MeshBackground variant="night" style={styles.summaryMesh} />
-        <Text style={styles.summaryEyebrow}>CRM · PIPELINE</Text>
-        <View style={styles.summaryRow}>
-          <SummaryStat icon="layers-outline" tone="blue" value={String(summary.activeCount)} label="Active" />
-          <View style={styles.summaryDivider} />
-          <SummaryStat
-            icon="trophy-outline"
-            tone="green"
-            value={String(summary.signedThisMonth.count)}
-            label="Signed this month"
-          />
-          {summary.pipelineValue > 0 && (
-            <>
-              <View style={styles.summaryDivider} />
-              <SummaryStat
-                icon="cash-outline"
-                tone="orange"
-                value={`$${formatMoneyShort(summary.pipelineValue).replace('$', '')}`}
-                label="Pipeline value"
-              />
-            </>
-          )}
-        </View>
-        {groupLine.length > 0 && (
-          <Text style={styles.summaryGroupLine} numberOfLines={1}>
-            {groupLine}
-          </Text>
-        )}
-      </View>
-    </FadeSlideIn>
-  );
-}
-
-function SummaryStat({
-  icon,
-  tone,
-  value,
-  label,
+function PipelineMasthead({
+  compact,
+  total,
+  summary,
+  filter,
+  onFilter,
+  sort,
+  onSort,
+  onSettings,
+  onAdd,
 }: {
-  icon: IoniconName;
-  tone: ChipTone;
-  value: string;
-  label: string;
+  compact: boolean;
+  total: number;
+  summary: ReturnType<typeof summarizePipeline>;
+  filter: BoardFilter;
+  onFilter: (filter: BoardFilter) => void;
+  sort: PipelineSort;
+  onSort: () => void;
+  onSettings: () => void;
+  onAdd: () => void;
 }) {
   return (
-    <View style={styles.summaryStat} accessibilityLabel={`${label}: ${value}`}>
-      <IconChip name={icon} tone={tone} size="sm" />
-      <View style={styles.summaryStatBody}>
-        <Text style={styles.summaryValue} numberOfLines={1}>
-          {value}
-        </Text>
-        <Text style={styles.summaryLabel} numberOfLines={1}>
-          {label}
-        </Text>
+    <View style={[styles.pipelineMasthead, compact && styles.compactMasthead]} testID="pipeline-masthead">
+      <MeshBackground variant="night" />
+      <View style={styles.mastheadTopRow}>
+        <View style={styles.mastheadHeading}>
+          <Text style={styles.summaryEyebrow}>CRM · PIPELINE</Text>
+          {compact && <Text style={[styles.mastheadTitle, styles.compactTitle]}>Pipeline</Text>}
+        </View>
+        <View style={styles.mastheadActions}>
+          <PressableScale style={styles.mastheadIconBtn} onPress={onSettings} accessibilityRole="button" accessibilityLabel="Settings">
+            <Ionicons name="settings-outline" size={19} color={colors.onMesh} />
+          </PressableScale>
+          <PressableScale style={styles.mastheadIconBtn} onPress={onAdd} accessibilityRole="button" accessibilityLabel="New lead or job">
+            <Ionicons name="add" size={22} color={colors.onMesh} />
+          </PressableScale>
+        </View>
       </View>
+      {!compact && <Text style={styles.mastheadTitle}>Pipeline</Text>}
+      <Text style={styles.mastheadSubtitle}>
+        {total} total · {summary.activeCount} active
+        {summary.pipelineValue > 0 ? ` · ${formatMoneyShort(summary.pipelineValue)} pipeline value` : ''}
+      </Text>
+      {!compact && <View style={styles.mastheadControls}>
+        <View style={styles.mastheadFilters}>
+          {BOARD_FILTERS.map((option) => {
+            const active = filter === option.id;
+            return (
+              <PressableScale
+                key={option.id}
+                style={[styles.mastheadFilter, active && styles.mastheadFilterActive]}
+                onPress={() => onFilter(option.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                <Text style={[styles.mastheadFilterText, active && styles.mastheadFilterTextActive]}>{option.label}</Text>
+              </PressableScale>
+            );
+          })}
+        </View>
+        <PressableScale style={styles.mastheadSort} onPress={onSort} accessibilityRole="button" accessibilityLabel={`Sort: ${PIPELINE_SORT_LABELS[sort]}`}>
+          <Ionicons name="swap-vertical-outline" size={15} color={colors.onMesh} />
+          <Text style={styles.mastheadSortText}>{sort === 'updated' ? 'Updated' : sort === 'days' ? 'Age' : 'Amount'}</Text>
+        </PressableScale>
+      </View>}
     </View>
   );
 }
 
 // -----------------------------------------------------------------------------
-// List view
+// Shared filters — changing view never changes the selected work
 // -----------------------------------------------------------------------------
 
-function ListView({
-  items,
-  total,
+function PipelineFilters({
+  hideStages = false,
   filter,
   onFilter,
-  sort,
-  onSort,
   query,
   onQuery,
-  onOpen,
-  onRequestMove,
-  onBook,
-  onContacted,
-  highlightId,
+  canReset,
+  onReset,
 }: {
-  items: PipelineItem[];
-  total: number;
+  hideStages?: boolean;
   filter: PipelineFilter;
   onFilter: (f: PipelineFilter) => void;
-  sort: PipelineSort;
-  onSort: (s: PipelineSort) => void;
   query: string;
   onQuery: (q: string) => void;
-  onOpen: (item: PipelineItem) => void;
-  onRequestMove: (item: PipelineItem) => void;
-  onBook: (item: PipelineItem) => void;
-  onContacted: (item: PipelineItem) => void;
-  highlightId: string | null;
+  canReset: boolean;
+  onReset: () => void;
 }) {
-  const router = useRouter();
-
-  const cycleSort = () => {
-    Haptics.selectionAsync().catch(() => {});
-    onSort(SORT_CYCLE[(SORT_CYCLE.indexOf(sort) + 1) % SORT_CYCLE.length]);
-  };
-
   return (
-    <View style={styles.boardRoot}>
-      <ScrollView
+    <View>
+      {!hideStages && <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.chipScroll}
@@ -475,7 +521,7 @@ function ListView({
             </PressableScale>
           );
         })}
-      </ScrollView>
+      </ScrollView>}
 
       <View style={styles.searchRow}>
         <View style={styles.search}>
@@ -484,24 +530,47 @@ function ListView({
             value={query}
             onChangeText={onQuery}
             placeholder="Name or address"
+            accessibilityLabel="Search pipeline by name or address"
             placeholderTextColor={colors.textSubtle}
             style={styles.searchInput}
             autoCorrect={false}
+            returnKeyType="search"
           />
         </View>
-        <PressableScale
+        {canReset && <PressableScale
           pressedScale={0.96}
           style={styles.sortChip}
-          onPress={cycleSort}
+          onPress={onReset}
           accessibilityRole="button"
-          accessibilityLabel={`Sorted by ${PIPELINE_SORT_LABELS[sort]}. Tap to change.`}
+          accessibilityLabel="Clear search and all pipeline filters"
         >
-          <Ionicons name="swap-vertical-outline" size={16} color={colors.text} />
-          <Text style={styles.chipText}>{PIPELINE_SORT_LABELS[sort]}</Text>
-        </PressableScale>
+          <Text style={styles.chipText}>Reset</Text>
+        </PressableScale>}
       </View>
+    </View>
+  );
+}
 
-      <ScrollView contentContainerStyle={styles.content}>
+function ListView({
+  items,
+  total,
+  onOpen,
+  onRequestMove,
+  onBook,
+  onContacted,
+  highlightId,
+}: {
+  items: PipelineItem[];
+  total: number;
+  onOpen: (item: PipelineItem) => void;
+  onRequestMove: (item: PipelineItem) => void;
+  onBook: (item: PipelineItem) => void;
+  onContacted: (item: PipelineItem) => void;
+  highlightId: string | null;
+}) {
+  const router = useRouter();
+  return (
+      <ScrollView style={styles.boardRoot} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {items.length === 0 ? (
           <FadeSlideIn style={styles.empty}>
             <Ionicons name="people-outline" size={28} color={colors.textSubtle} />
@@ -534,7 +603,6 @@ function ListView({
           </FadeSlideIn>
         )}
       </ScrollView>
-    </View>
   );
 }
 
@@ -544,6 +612,7 @@ function ListView({
 
 function BoardView({
   items,
+  filtering,
   onOpen,
   onRequestMove,
   onDragMove,
@@ -552,6 +621,7 @@ function BoardView({
   highlightId,
 }: {
   items: PipelineItem[];
+  filtering: boolean;
   onOpen: (item: PipelineItem) => void;
   onRequestMove: (item: PipelineItem) => void;
   onDragMove: (item: PipelineItem, stage: LeadStage) => void;
@@ -560,10 +630,7 @@ function BoardView({
   highlightId: string | null;
 }) {
   const { width } = useWindowDimensions();
-  const pagerRef = useRef<ScrollView>(null);
-  const chipsRef = useRef<ScrollView>(null);
-  const chipOffsets = useRef<(number | undefined)[]>([]);
-  const [columnIndex, setColumnIndex] = useState(0);
+  const columnWidth = Math.min(286, Math.max(252, width * 0.74));
 
   const byColumn = useMemo(() => {
     const map = new Map<LeadStage, PipelineItem[]>();
@@ -573,113 +640,49 @@ function BoardView({
   }, [items]);
 
   const summaries = useMemo(() => columnSummary(items), [items]);
-
-  // Jump to the highlighted item's column, if any.
-  useEffect(() => {
-    if (!highlightId) return;
-    const hit = items.find((it) => it.id === highlightId);
-    if (!hit) return;
-    const idx = BOARD_COLUMNS.indexOf(leadStageColumn(hit.stage));
-    if (idx >= 0) {
-      setColumnIndex(idx);
-      pagerRef.current?.scrollTo({ x: idx * width, animated: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightId]);
-
-  const goToColumn = useCallback(
-    (i: number) => {
-      if (i < 0 || i >= BOARD_COLUMNS.length) return;
-      const adjacent = Math.abs(i - columnIndex) === 1;
-      setColumnIndex(i);
-      pagerRef.current?.scrollTo({ x: i * width, animated: adjacent });
-    },
-    [width, columnIndex],
-  );
-
-  useEffect(() => {
-    const x = chipOffsets.current[columnIndex];
-    if (x === undefined) return;
-    chipsRef.current?.scrollTo({ x: Math.max(0, x - spacing.xl), animated: true });
-  }, [columnIndex]);
-
-  useEffect(() => {
-    pagerRef.current?.scrollTo({ x: columnIndex * width, animated: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width]);
-
-  const onPagerSettled = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (width <= 0) return;
-    const next = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (next !== columnIndex && next >= 0 && next < BOARD_COLUMNS.length) {
-      setColumnIndex(next);
-      Haptics.selectionAsync().catch(() => {});
-    }
-  };
+  // A scoped board should open on its matching work, not on empty New columns.
+  // Hidden stages make drag destinations ambiguous; scoped cards use Move stage.
+  const columns = filtering ? BOARD_COLUMNS.filter((col) => byColumn.get(col)?.length) : BOARD_COLUMNS;
 
   return (
     <View style={styles.boardRoot}>
+      {filtering && columns.length > 0 && (
+        <Text style={styles.columnEmptyHint}>Filtered view · use Move stage to move cards.</Text>
+      )}
+      {columns.length === 0 && (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Nothing matches</Text>
+          <Text style={styles.emptyBody}>Try a different filter or clear the search.</Text>
+        </View>
+      )}
       <ScrollView
-        ref={chipsRef}
+        key={columns.join('|')}
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.stageStrip}
-        contentContainerStyle={styles.stageStripContent}
+        style={styles.kanbanScroll}
+        contentContainerStyle={styles.kanbanColumns}
+        snapToInterval={columnWidth + spacing.md}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        directionalLockEnabled
+        testID="pipeline-kanban"
+        keyboardShouldPersistTaps="handled"
       >
-        {BOARD_COLUMNS.map((col, i) => {
-          const active = i === columnIndex;
-          const muted = col === 'lost';
-          const s = summaries.get(col)!;
-          return (
-            <PressableScale
-              key={col}
-              pressedScale={0.96}
-              onLayout={(e) => {
-                chipOffsets.current[i] = e.nativeEvent.layout.x;
-              }}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => goToColumn(i)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`${stageLabel(col)}, ${s.count} ${s.count === 1 ? 'item' : 'items'}`}
-            >
-              <View style={[styles.stageChipDot, { backgroundColor: stageAccent(col) }]} />
-              <Text
-                numberOfLines={1}
-                style={[styles.chipText, muted && !active && styles.chipTextMuted, active && styles.chipTextActive]}
-              >
-                {stageLabel(col)}
-              </Text>
-              <Text style={[styles.chipCount, active && styles.chipCountActive]}>{s.count}</Text>
-            </PressableScale>
-          );
-        })}
-      </ScrollView>
-
-      <ScrollView
-        ref={pagerRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={onPagerSettled}
-        style={styles.pager}
-      >
-        {BOARD_COLUMNS.map((col, i) => (
-          <View key={col} style={{ width }}>
-            {Math.abs(i - columnIndex) <= 1 ? (
-              <ColumnPage
-                stage={col}
-                columnIndex={i}
-                columnItems={byColumn.get(col) ?? EMPTY_COLUMN}
-                summary={summaries.get(col)!}
-                onOpen={onOpen}
-                onRequestMove={onRequestMove}
-                onDragMove={onDragMove}
-                onBook={onBook}
-                onContacted={onContacted}
-                highlightId={highlightId}
-              />
-            ) : null}
+        {columns.map((col) => (
+          <View key={col} style={[styles.kanbanColumn, { width: columnWidth }] }>
+            <ColumnPage
+              stage={col}
+              columnIndex={BOARD_COLUMNS.indexOf(col)}
+              dragEnabled={!filtering}
+              columnItems={byColumn.get(col) ?? EMPTY_COLUMN}
+              summary={summaries.get(col)!}
+              onOpen={onOpen}
+              onRequestMove={onRequestMove}
+              onDragMove={onDragMove}
+              onBook={onBook}
+              onContacted={onContacted}
+              highlightId={highlightId}
+            />
           </View>
         ))}
       </ScrollView>
@@ -690,6 +693,7 @@ function BoardView({
 function ColumnPage({
   stage,
   columnIndex,
+  dragEnabled,
   columnItems,
   summary,
   onOpen,
@@ -701,6 +705,7 @@ function ColumnPage({
 }: {
   stage: LeadStage;
   columnIndex: number;
+  dragEnabled: boolean;
   columnItems: PipelineItem[];
   summary: { count: number; total: number };
   onOpen: (item: PipelineItem) => void;
@@ -723,41 +728,40 @@ function ColumnPage({
 
   const commitDrag = useCallback(
     (item: PipelineItem, dir: 1 | -1) => {
+      if (!dragEnabled) return;
       const nextIdx = columnIndex + dir;
       if (nextIdx < 0 || nextIdx >= BOARD_COLUMNS.length) return;
       onDragMove(item, BOARD_COLUMNS[nextIdx]);
     },
-    [columnIndex, onDragMove],
+    [columnIndex, dragEnabled, onDragMove],
   );
-
-  if (columnItems.length === 0) {
-    return (
-      <Animated.View style={[styles.columnEmpty, enterStyle]}>
-        <Ionicons name="people-outline" size={28} color={colors.textSubtle} />
-        <Text style={styles.columnEmptyText}>Nothing in {stageLabel(stage)}.</Text>
-        <Text style={styles.columnEmptyHint}>Swipe for the next stage.</Text>
-        <PressableScale style={styles.emptyBtn} onPress={() => router.push('/new-lead')} accessibilityRole="button">
-          <Text style={styles.emptyBtnText}>Add a lead</Text>
-        </PressableScale>
-      </Animated.View>
-    );
-  }
 
   return (
     <Animated.View style={[styles.columnFill, enterStyle]}>
       <View style={styles.stageSummary}>
         <View style={styles.stageSummaryRow}>
-          <Text style={styles.stageSummaryCount}>
-            {summary.count} {summary.count === 1 ? 'item' : 'items'}
-          </Text>
+          <View style={[styles.stageHeadingDot, { backgroundColor: stageAccent(stage) }]} />
+          <Text style={styles.stageHeading} numberOfLines={1}>{stageLabel(stage)}</Text>
+          <View style={styles.stageCountBadge}><Text style={styles.stageCountText}>{summary.count}</Text></View>
+          <View style={{ flex: 1 }} />
           {summary.total > 0 && <Text style={styles.stageSummaryValue}>{formatMoneyShort(summary.total)}</Text>}
         </View>
       </View>
-      <ScrollView style={styles.columnScroll} contentContainerStyle={styles.columnContent}>
+      <ScrollView style={styles.columnScroll} contentContainerStyle={styles.columnContent} testID={`pipeline-column-${stage}`} keyboardShouldPersistTaps="handled">
+        {columnItems.length === 0 && (
+          <View style={styles.columnEmpty}>
+            <Text style={styles.columnEmptyText}>Nothing in {stageLabel(stage)}.</Text>
+            <Text style={styles.columnEmptyHint}>Swipe for the next stage.</Text>
+            <PressableScale style={styles.emptyBtn} onPress={() => router.push('/new-lead')} accessibilityRole="button">
+              <Text style={styles.emptyBtnText}>Add a lead</Text>
+            </PressableScale>
+          </View>
+        )}
         {columnItems.map((item, i) => (
           <FadeSlideIn key={item.id} index={Math.min(i, 6)}>
             <BoardCard
               item={item}
+              dragEnabled={dragEnabled}
               accent={stageAccent(stage)}
               onOpen={() => onOpen(item)}
               onRequestMove={() => onRequestMove(item)}
@@ -779,6 +783,7 @@ function ColumnPage({
 
 function BoardCard({
   item,
+  dragEnabled,
   accent,
   onOpen,
   onRequestMove,
@@ -788,6 +793,7 @@ function BoardCard({
   highlighted,
 }: {
   item: PipelineItem;
+  dragEnabled: boolean;
   accent: string;
   onOpen: () => void;
   onRequestMove: () => void;
@@ -805,7 +811,7 @@ function BoardCard({
   }, []);
 
   const pan = Gesture.Pan()
-    .enabled(!reducedMotion)
+    .enabled(dragEnabled && !reducedMotion)
     .activateAfterLongPress(350)
     .onStart(() => {
       'worklet';
@@ -844,7 +850,7 @@ function BoardCard({
     </Animated.View>
   );
 
-  if (reducedMotion) return card;
+  if (!dragEnabled || reducedMotion) return card;
   return <GestureDetector gesture={pan}>{card}</GestureDetector>;
 }
 
@@ -897,12 +903,14 @@ function PipelineCard({
   // view keeps its flat white-card language.
   const dark = variant === 'board' && leadStageColumn(item.stage) === 'signed';
   const topBadge = cardTopBadge(item, tone);
+  const origin = pipelineOrigin(item);
 
   return (
     <Animated.View style={[styles.card, dark && styles.cardDark, glowStyle]}>
       {variant === 'board' && accent && !dark ? <View style={[styles.cardAccent, { backgroundColor: accent }]} /> : null}
+      <View style={styles.cardBody}>
       <PressableScale
-        style={styles.cardBody}
+        style={styles.cardOpen}
         pressedScale={0.98}
         onPress={onOpen}
         accessibilityRole="button"
@@ -963,6 +971,10 @@ function PipelineCard({
         </View>
 
         <View style={styles.cardBadgeRow}>
+          <View style={[styles.metaChip, dark && styles.metaChipDark]}>
+            <Ionicons name={origin.icon} size={13} color={dark ? colors.onMesh : colors.textMuted} />
+            <Text style={[styles.metaChipText, dark && styles.metaChipTextDark]}>{origin.label}</Text>
+          </View>
           {item.daysInStage != null && (
             <Pill
               label={item.daysInStage === 0 ? 'New today' : `${item.daysInStage}d in stage`}
@@ -987,18 +999,21 @@ function PipelineCard({
           {item.storm && <Pill label="Storm" tone="accent" size="sm" icon="thunderstorm-outline" />}
           {badge && <Pill label={badge.label} tone={badge.tone} size="sm" />}
         </View>
+      </PressableScale>
 
-        <QuickActions
-          name={item.customerName}
-          phone={item.phone}
-          email={item.email}
-          address={item.address}
-          coords={{ lat: item.lat, lng: item.lng }}
-          onBook={onBook}
-          onContacted={onContacted}
-          tone={dark ? 'dark' : 'light'}
-          style={styles.cardActions}
-        />
+        {variant === 'list' ? (
+          <QuickActions
+            name={item.customerName}
+            phone={item.phone}
+            email={item.email}
+            address={item.address}
+            coords={{ lat: item.lat, lng: item.lng }}
+            onBook={onBook}
+            onContacted={onContacted}
+            tone={dark ? 'dark' : 'light'}
+            style={styles.cardActions}
+          />
+        ) : null}
 
         <PressableScale
           pressedScale={0.96}
@@ -1007,10 +1022,12 @@ function PipelineCard({
           accessibilityRole="button"
           accessibilityLabel={`Move ${item.customerName} to another stage`}
         >
-          <Text style={[styles.moveBtnText, dark && styles.moveBtnTextDark]}>Move</Text>
+          <Text style={[styles.moveBtnText, dark && styles.moveBtnTextDark]}>
+            {variant === 'board' ? 'Move stage' : 'Move'}
+          </Text>
           <Ionicons name="arrow-forward" size={16} color={dark ? colors.onMesh : colors.text} />
         </PressableScale>
-      </PressableScale>
+      </View>
     </Animated.View>
   );
 }
@@ -1035,6 +1052,14 @@ function cardTopBadge(
     return { label: 'Viewed', bg: colors.infoSoft, fg: brand.royalDeep };
   }
   return undefined;
+}
+
+/** Make the source of every pipeline record explicit without inventing data. */
+function pipelineOrigin(item: PipelineItem): { label: string; icon: keyof typeof Ionicons.glyphMap } {
+  if (!item.leadId && item.inspectionId) return { label: 'Job', icon: 'briefcase-outline' };
+  if (item.source === 'knock') return { label: 'Door knock', icon: 'footsteps-outline' };
+  if (item.source) return { label: LEAD_SOURCE_LABELS[item.source], icon: 'person-outline' };
+  return { label: item.inspectionId ? 'Lead + job' : 'Lead', icon: 'person-outline' };
 }
 
 // -----------------------------------------------------------------------------
@@ -1169,10 +1194,12 @@ function Segmented<T extends string>({
   options,
   value,
   onChange,
+  compact = false,
 }: {
   options: readonly { id: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
+  compact?: boolean;
 }) {
   const [trackWidth, setTrackWidth] = useState(0);
   const index = Math.max(0, options.findIndex((o) => o.id === value));
@@ -1194,7 +1221,7 @@ function Segmented<T extends string>({
   };
 
   return (
-    <View style={styles.segmentedWrap}>
+    <View style={[styles.segmentedWrap, compact && styles.compactSegmentedWrap]}>
       <View style={styles.segmentedTrack} onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}>
         {trackWidth > 0 && <Animated.View style={[styles.segmentedThumb, { width: segmentWidth }, thumbStyle]} />}
         {options.map((s) => {
@@ -1203,7 +1230,6 @@ function Segmented<T extends string>({
             <Pressable
               key={s.id}
               style={styles.segment}
-              hitSlop={{ top: 10, bottom: 10 }}
               onPress={() => change(s.id)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
@@ -1259,54 +1285,76 @@ function stageAccent(stage: LeadStage): string {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
 
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  fab: {
+  // --- Full-width reference masthead --------------------------------------
+  pipelineMasthead: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    overflow: 'hidden',
+    backgroundColor: brand.royalInk,
+  },
+  mastheadTopRow: { flexDirection: 'row', alignItems: 'center' },
+  mastheadHeading: { flex: 1 },
+  summaryEyebrow: { ...dataLabel, color: colors.onMesh, opacity: 0.68 },
+  compactMasthead: { paddingTop: spacing.md, paddingBottom: spacing.md },
+  compactTitle: { fontSize: fontSize.titleXl },
+  compactToolbar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
+  compactSegmentedWrap: { flex: 1, paddingHorizontal: 0, paddingVertical: 0 },
+  filterTrigger: { minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
+  filterTriggerText: { color: colors.text, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm },
+  filterSectionLabel: { ...dataLabel, marginTop: spacing.sm, marginBottom: spacing.sm },
+  sheetFilterChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  mastheadActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  mastheadIconBtn: {
     width: touchTarget.standard,
     height: touchTarget.standard,
     borderRadius: radii.pill,
-    backgroundColor: colors.navy,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.float,
+    backgroundColor: glass.fillHigh,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: glass.borderStrong,
   },
-
-  // --- Summary hero -------------------------------------------------------
-  summaryWrap: { paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
-  summaryHero: {
-    borderRadius: radii.xl,
-    overflow: 'hidden',
-    padding: spacing.lg,
-    backgroundColor: brand.royalInk,
-    ...shadows.hero,
-  },
-  summaryMesh: { borderRadius: radii.xl },
-  // "CRM · PIPELINE" — the mono eyebrow the mock opens every header with.
-  summaryEyebrow: { ...dataLabel, color: colors.onMesh, opacity: 0.7, marginBottom: spacing.sm },
-  summaryRow: { flexDirection: 'row', alignItems: 'center' },
-  summaryStat: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  summaryStatBody: { flexShrink: 1, gap: 1 },
-  summaryDivider: {
-    width: StyleSheet.hairlineWidth * 2,
-    height: 32,
-    backgroundColor: glass.border,
-    marginHorizontal: spacing.sm,
-  },
-  summaryValue: {
-    fontSize: fontSize.titleSm,
+  mastheadTitle: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.display,
     fontFamily: fontFamily.archivo.extrabold,
-    fontWeight: fontWeight.bold,
-    color: colors.textInverse,
-    letterSpacing: -0.3,
-    fontVariant: ['tabular-nums'],
+    fontWeight: fontWeight.extrabold,
+    color: colors.onMesh,
+    letterSpacing: -0.8,
   },
-  summaryLabel: { ...dataLabel, color: colors.brandSoft },
-  summaryGroupLine: {
-    marginTop: spacing.md,
-    fontSize: fontSize.caption,
+  mastheadSubtitle: {
+    marginTop: 2,
+    fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.regular,
-    color: colors.brandSoft,
+    color: colors.onMesh,
+    opacity: 0.72,
     fontVariant: ['tabular-nums'],
   },
+  mastheadControls: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  mastheadFilters: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  mastheadFilter: {
+    minHeight: touchTarget.standard,
+    minWidth: touchTarget.standard,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: glass.fillHigh,
+  },
+  mastheadFilterActive: { backgroundColor: colors.surface },
+  mastheadFilterText: { color: colors.onMesh, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption },
+  mastheadFilterTextActive: { color: colors.text },
+  mastheadSort: {
+    minHeight: touchTarget.standard,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: glass.fillHigh,
+  },
+  mastheadSortText: { color: colors.onMesh, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption },
 
   // --- Segmented control ---------------------------------------------------
   segmentedWrap: {
@@ -1317,7 +1365,7 @@ const styles = StyleSheet.create({
   },
   segmentedTrack: {
     flexDirection: 'row',
-    height: 40,
+    height: touchTarget.standard + TRACK_INSET * 2,
     borderRadius: radii.control + 2,
     backgroundColor: colors.fillQuiet,
     padding: TRACK_INSET,
@@ -1448,22 +1496,45 @@ const styles = StyleSheet.create({
 
   // --- Board ---------------------------------------------------------------
   boardRoot: { flex: 1 },
-  stageStrip: { flexGrow: 0, flexShrink: 0 },
-  stageStripContent: {
-    paddingHorizontal: spacing.xl,
+  kanbanScroll: { flex: 1 },
+  kanbanColumns: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.md,
-    gap: spacing.sm,
-    alignItems: 'center',
+    gap: spacing.md,
+    alignItems: 'stretch',
   },
-  pager: { flex: 1 },
+  kanbanColumn: {
+    borderRadius: radii.card,
+    backgroundColor: colors.surfaceMuted,
+  },
   columnFill: { flex: 1 },
 
   stageSummary: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },
-  stageSummaryRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  stageSummaryRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  stageHeadingDot: { width: 8, height: 8, borderRadius: radii.pill },
+  stageHeading: {
+    maxWidth: 148,
+    color: colors.text,
+    fontFamily: fontFamily.archivo.bold,
+    fontSize: fontSize.bodySm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.25,
+  },
+  stageCountBadge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.fillQuiet,
+  },
+  stageCountText: { color: colors.textMuted, fontFamily: fontFamily.mono, fontSize: fontSize.caption },
   stageSummaryCount: {
     fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.semibold,
@@ -1481,7 +1552,7 @@ const styles = StyleSheet.create({
 
   columnScroll: { flex: 1 },
   columnContent: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.sm,
     paddingTop: spacing.xs,
     gap: spacing.md,
     paddingBottom: spacing.xxxl,
@@ -1516,6 +1587,7 @@ const styles = StyleSheet.create({
   cardDark: { backgroundColor: brand.royalInk, borderColor: brand.royalInk },
   cardAccent: { width: 4, borderTopLeftRadius: radii.card, borderBottomLeftRadius: radii.card },
   cardBody: { flex: 1, padding: spacing.lg, gap: spacing.sm },
+  cardOpen: { gap: spacing.sm },
 
   // Top-left status chip row — the mock's "78 SEVERE · RW-2841" language.
   cardTopBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

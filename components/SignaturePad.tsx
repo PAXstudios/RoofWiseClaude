@@ -11,6 +11,7 @@ import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -230,7 +231,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
   },
-  placeholderText: { color: colors.slate, fontSize: fontSize.bodySm },
+  placeholderText: { color: colors.textMuted, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm },
   clearBtn: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
@@ -239,7 +240,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  clearText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  clearText: { color: colors.text, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   acceptRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   acceptBtn: {
     flex: 1,
@@ -255,7 +256,7 @@ const styles = StyleSheet.create({
   // Neutral ink wash while disabled — a washed accent still reads as live
   // and white-on-it fails contrast in sun (see colors.fillDisabled).
   acceptBtnDisabled: { backgroundColor: colors.fillDisabled },
-  acceptText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  acceptText: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
   acceptTextDisabled: { color: colors.textMuted },
-  hint: { color: colors.textMuted, fontSize: fontSize.bodySm, textAlign: 'center' },
+  hint: { color: colors.textMuted, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, textAlign: 'center' },
 });

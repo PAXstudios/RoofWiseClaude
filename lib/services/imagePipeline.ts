@@ -21,6 +21,7 @@
 
 import { Image } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { retainPhotoEvidence, PhotoRetentionError } from './photoEvidence';
 
 export type ImageProfile = {
   /** Max width in px. Images narrower than this are never upscaled. */
@@ -51,7 +52,7 @@ function getSize(uri: string): Promise<{ width: number; height: number } | null>
  * only when the source is larger than the target, and degrades gracefully
  * rather than losing the photo.
  */
-export async function prepareCapturedPhoto(uri: string): Promise<string> {
+export async function prepareCapturedPhoto(uri: string, options: { retainEvidence?: boolean } = {}): Promise<string> {
   const size = await getSize(uri);
 
   for (const profile of [ANALYZE_PROFILE, SAFE_PROFILE]) {
@@ -67,14 +68,19 @@ export async function prepareCapturedPhoto(uri: string): Promise<string> {
         compress: profile.compress,
         format: ImageManipulator.SaveFormat.JPEG,
       });
-      return out.uri;
-    } catch {
+      // Quick Inspection's journal transaction owns retention itself. Other
+      // callers continue receiving durable evidence by default.
+      return options.retainEvidence === false ? out.uri : await retainPhotoEvidence(out.uri);
+    } catch (error) {
+      // This error owns an unresolved durable file. Trying another profile
+      // would hide that handle and create more untracked copies.
+      if (error instanceof PhotoRetentionError) throw error;
       // Fall through to the next, smaller profile.
     }
   }
 
   // Never silently drop a photo.
-  return uri;
+  return options.retainEvidence === false ? uri : retainPhotoEvidence(uri);
 }
 
 // -----------------------------------------------------------------------------

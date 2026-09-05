@@ -1,16 +1,17 @@
 import { PressableScale } from '@/components/PressableScale';
 import { formatDateShort, formatRelative, isValidDate } from '@/lib/format/date';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Alert,
-  Share,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
@@ -24,6 +25,7 @@ import { FOLLOW_UP_OPTIONS, FollowUpSheet } from '@/components/pipeline/FollowUp
 import { findLinkedLead, daysInStage } from '@/components/pipeline/chain';
 import { JOB_STATUS_META } from '@/components/pipeline/JobPipelineCard';
 import * as ImagePicker from 'expo-image-picker';
+import * as Sharing from 'expo-sharing';
 import { generateHaagReport } from '@/lib/services/haagPdf';
 import { generateLongReport } from '@/lib/services/longReport';
 import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
@@ -49,6 +51,7 @@ import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { transcribeAudio } from '@/lib/services/transcribeAudio';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { isGeminiConfigured } from '@/lib/env';
+import { damageScoreFromEngine } from '@/lib/services/damageScore';
 import {
   CLAIM_VIABILITY_LABELS,
   ROOFWISE_RECOMMENDATION_LABELS,
@@ -78,6 +81,7 @@ import {
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import type { ChipTone } from '@/components/ui/IconChip';
 import { MeshBackground } from '@/components/ui/MeshBackground';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import {
   brand,
   colors,
@@ -164,6 +168,7 @@ export default function JobDetail() {
   const setCoverPhoto = useInspectionStore((s) => s.setCoverPhoto);
   const lookupRecord = usePropertyRecordStore((s) => s.lookup);
   const [coverSheet, setCoverSheet] = useState(false);
+  const [actionsSheet, setActionsSheet] = useState(false);
   const addAudioNote = useInspectionStore((s) => s.addAudioNote);
   const removeAudioNote = useInspectionStore((s) => s.removeAudioNote);
   const setAudioNoteLabel = useInspectionStore((s) => s.setAudioNoteLabel);
@@ -180,6 +185,8 @@ export default function JobDetail() {
   const [detailsSheet, setDetailsSheet] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingLong, setGeneratingLong] = useState(false);
+  const reportInFlight = useRef(false);
+  const [showClaimEvidence, setShowClaimEvidence] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<LibraryImportProgress | null>(null);
   const [importSlopePicker, setImportSlopePicker] = useState(false);
@@ -216,6 +223,7 @@ export default function JobDetail() {
   // The same read path the reports use — see the long comment this used to
   // carry in the single-scroll job page; unchanged.
   const { haag, decision } = resolveEngineResult(inspection, Date.now(), { honorFreeze: false });
+  const damageScore = damageScoreFromEngine(inspection, haag);
   const engineFreshness = storedEngineFreshness(inspection);
   const isClaim = inspection.kind === 'insurance_claim';
 
@@ -360,58 +368,69 @@ export default function JobDetail() {
         ? `Brittleness test recorded as ${proto.result}, but no photo evidence is attached. The field protocol requires a photo of the test process.`
         : null;
 
-  const finalizeWithSnapshot = async (): Promise<Inspection> => {
-    const at = new Date().toISOString();
-    try {
-      const coord = inspection.lat != null && inspection.lng != null ? { lat: inspection.lat, lng: inspection.lng } : undefined;
-      const forecast = (await getSafetyForecast(coord)) ?? undefined;
-      const { payload } = snapshotEngineResult(inspection, at, forecast);
-      setStoredEngineResult(inspection.id, payload, at, { force: true });
-    } catch {
-      // A missed snapshot is recoverable — the report falls back to evaluating the same engine at render time.
+  // Header, actions sheet, and both footer buttons share this readiness gate.
+  const requestReport = (kind: 'haag' | 'long', allowIncompleteEvidence = false) => {
+    if (reportInFlight.current) return;
+    if (Platform.OS === 'web') {
+      toast({ tone: 'info', title: 'Export PDF in the mobile app', body: 'Open this job in RoofWise on iOS or Android to generate and share its report.' });
+      return;
     }
-    setReportFinalizedAt(inspection.id, at);
-    return useInspectionStore.getState().inspections.find((i) => i.id === inspection.id) ?? inspection;
-  };
-
-  // Both raw generators self-gate on `missing.any` (the belt-and-braces the
-  // disabled CTA already carries) and otherwise generate unconditionally —
-  // the brittleness-gap Alert (with its "Record now" → scroll-to-evidence)
-  // now lives in OverviewTab, the one place that owns the scroll ref the
-  // jump needs. See OverviewTab's `onGenerateHaagPress` / `onGenerateLongPress`.
-  const runHaagReport = async () => {
-    if (missing.any) {
+    const current = useInspectionStore.getState().getById(inspection.id);
+    if (!current) return;
+    if (missingJobDetails(current).any) {
       setDetailsSheet(true);
       return;
     }
-    try {
-      setGenerating(true);
-      const finalized = await finalizeWithSnapshot();
-      const { uri } = await generateHaagReport(finalized);
-      logActivity({ kind: 'pdf_generated', inspectionId: inspection.id, message: `Generated HAAG report for ${inspection.reportId}` });
-      await Share.share({ url: uri, message: `RoofWise HAAG report ${inspection.reportId}` });
-    } catch (e) {
-      Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const runLongReport = async () => {
-    if (missing.any) {
-      setDetailsSheet(true);
+    const protocol = current.brittlenessProtocol;
+    const gap = current.kind === 'insurance_claim' && (!protocol?.result || protocol.photoIds.length === 0);
+    if (gap && !allowIncompleteEvidence) {
+      Alert.alert(
+        'Claim evidence is incomplete',
+        `${!protocol?.result ? 'Brittleness test not recorded. The HAAG repairability gate (§3) cannot be evaluated without it.' : `Brittleness test recorded as ${protocol.result}, but no photo evidence is attached. The field protocol requires a photo of the test process.`}\n\nThe ${kind === 'long' ? 'Long Report' : 'report'} discloses the gap either way — the adjuster will see it.`,
+        [
+          { text: 'Record now', style: 'cancel', onPress: () => { setTab('overview'); setShowClaimEvidence(true); } },
+          { text: 'Generate anyway', onPress: () => requestReport(kind, true) },
+        ],
+      );
       return;
     }
+    void runReport(kind, current);
+  };
+
+  const runReport = async (kind: 'haag' | 'long', current: Inspection) => {
+    if (reportInFlight.current) return;
+    reportInFlight.current = true;
+    const setBusy = kind === 'haag' ? setGenerating : setGeneratingLong;
+    const label = kind === 'haag' ? 'HAAG report' : 'Long Report';
+    setBusy(true);
+    let generated = false;
     try {
-      setGeneratingLong(true);
-      const finalized = await finalizeWithSnapshot();
-      const { uri } = await generateLongReport({ inspection: finalized });
-      logActivity({ kind: 'pdf_generated', inspectionId: inspection.id, message: `Generated Long Report for ${inspection.reportId}` });
-      await Share.share({ url: uri, message: `RoofWise Long Report ${inspection.reportId}` });
+      const coord = current.lat != null && current.lng != null ? { lat: current.lat, lng: current.lng } : undefined;
+      // A weather outage is not a report failure; the engine records uncertainty.
+      const forecast = await getSafetyForecast(coord).catch(() => undefined);
+      const { payload, at } = snapshotEngineResult(current, new Date().toISOString(), forecast ?? undefined);
+      // Freeze only this in-memory document until generation succeeds. A failed
+      // export must preserve the prior signed snapshot and emit no pipeline event.
+      const document = { ...current, storedEngineResult: payload, storedEngineResultAt: at, reportFinalizedAt: at };
+      const { uri } = kind === 'haag'
+        ? await generateHaagReport(document)
+        : await generateLongReport({ inspection: document });
+      setStoredEngineResult(current.id, payload, at, { force: true });
+      setReportFinalizedAt(current.id, at);
+      generated = true;
+      logActivity({ kind: 'pdf_generated', inspectionId: current.id, message: `Generated ${label} for ${current.reportId}` });
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Report generated — sharing unavailable', 'This device cannot open a file-sharing sheet. The report was finalized, but has not been sent.');
+        return;
+      }
+      // Native file sharing attaches the PDF on both platforms. This resolves
+      // on dismissal too, so do not claim the report was sent or advance a lead.
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: `RoofWise ${label} ${current.reportId}` });
     } catch (e) {
-      Alert.alert('Report failed', e instanceof Error ? e.message : 'Unknown error');
+      Alert.alert(generated ? 'Report generated — sharing failed' : 'Report failed', e instanceof Error ? e.message : 'Unknown error');
     } finally {
-      setGeneratingLong(false);
+      reportInFlight.current = false;
+      setBusy(false);
     }
   };
 
@@ -539,53 +558,8 @@ export default function JobDetail() {
     }
   };
 
-  return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      <Stack.Screen options={{ headerShown: false }} />
-      {/* Mesh header — back / report-id / download / share, per the mock's
-          "04 · Damage report" template (docs/DESIGN_1A.md §6). "Download"
-          is the SAME `runHaagReport` the Overview tab's own PDF button
-          calls (generate + open the share sheet in one action) — a quick
-          access point, not a second code path. */}
-      <View style={styles.header}>
-        <MeshBackground variant="cool" />
-        <PressableScale onPress={() => router.back()} hitSlop={10} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
-          <Ionicons name="chevron-back" size={24} color={colors.onMesh} />
-        </PressableScale>
-        <Text style={styles.headerReportId} numberOfLines={1}>
-          {inspection.reportId}
-        </Text>
-        <View style={{ flex: 1 }} />
-        {pendingHere > 0 && (
-          <PressableScale
-            onPress={() => router.push('/processing')}
-            hitSlop={10}
-            style={styles.headerBtn}
-            accessibilityRole="button"
-            accessibilityLabel={`${pendingHere} photo${pendingHere === 1 ? '' : 's'} analyzing. Open processing.`}
-          >
-            <ActivityIndicator size="small" color={colors.onMesh} />
-          </PressableScale>
-        )}
-        <PressableScale
-          onPress={() => void runHaagReport()}
-          disabled={generating}
-          hitSlop={10}
-          style={styles.headerBtn}
-          accessibilityRole="button"
-          accessibilityLabel={isClaim ? 'Download HAAG claim packet PDF' : 'Download HAAG report PDF'}
-        >
-          {generating ? (
-            <ActivityIndicator size="small" color={colors.onMesh} />
-          ) : (
-            <Ionicons name="download-outline" size={22} color={colors.onMesh} />
-          )}
-        </PressableScale>
-        <PressableScale onPress={onDelete} hitSlop={10} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Delete job">
-          <Ionicons name="trash-outline" size={22} color={colors.onMesh} />
-        </PressableScale>
-      </View>
-
+  const jobChrome = (
+    <>
       {missing.any && (
         <PressableScale
           style={styles.missingBanner}
@@ -636,10 +610,71 @@ export default function JobDetail() {
         onChange={onOpenTab}
         style={styles.tabsBar}
       />
+    </>
+  );
+
+  return (
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar style="light" />
+      <MeshBackground variant="cool" />
+      {/* 1A screen 04 is one continuous report masthead: controls, address,
+          property context, then the scored bar. The real tabbed workflow
+          remains directly beneath it so Measure/Photos/Proposal/Tasks are
+          not sacrificed to match the static artboard. */}
+      <View style={styles.reportHero}>
+        <View style={styles.reportHeroTopRow}>
+          <PressableScale onPress={() => router.back()} hitSlop={10} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
+            <Ionicons name="chevron-back" size={24} color={colors.onMesh} />
+          </PressableScale>
+          <Text style={styles.headerReportId} numberOfLines={1}>REPORT {inspection.reportId}</Text>
+          <View style={{ flex: 1 }} />
+          {pendingHere > 0 && (
+            <PressableScale onPress={() => router.push('/processing')} hitSlop={10} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={`${pendingHere} photos analyzing. Open processing.`}>
+              <ActivityIndicator size="small" color={colors.onMesh} />
+            </PressableScale>
+          )}
+          <PressableScale
+            onPress={() => requestReport('haag')}
+            disabled={generating || generatingLong}
+            hitSlop={10}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={isClaim ? 'Download HAAG claim packet PDF' : 'Download HAAG report PDF'}
+          >
+            {generating ? <ActivityIndicator size="small" color={colors.onMesh} /> : <Ionicons name="download-outline" size={22} color={colors.onMesh} />}
+          </PressableScale>
+          <PressableScale onPress={() => setActionsSheet(true)} hitSlop={10} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Job actions">
+            <Ionicons name="ellipsis-horizontal" size={22} color={colors.onMesh} />
+          </PressableScale>
+        </View>
+        <Text style={styles.reportAddress} numberOfLines={2}>{missing.address ? 'Address not set' : inspection.address}</Text>
+        <Text style={styles.reportPropertyLine} numberOfLines={2}>{propertyOneLiner(inspection)}{insurancePolicyLine ? ` · ${insurancePolicyLine}` : ''}</Text>
+        <View style={styles.reportScoreRow}>
+          <View>
+            <Text style={styles.reportScoreLabel}>DAMAGE SCORE</Text>
+            <Text style={styles.reportScore}>{damageScore.assessed ? damageScore.score : '—'}</Text>
+          </View>
+          <View style={styles.reportScoreBody}>
+            <View style={styles.reportScoreTrack}>
+              <LinearGradient colors={[brand.burntLight, brand.burntDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.reportScoreFill, { width: damageScore.assessed ? `${damageScore.score}%` : '0%' }]} />
+            </View>
+            <View style={styles.reportScoreMeta}>
+              <Text style={styles.reportScoreEnd}>0</Text>
+              <View style={styles.reportBandPill}><Text style={styles.reportBandText}>{damageScore.assessed ? damageScore.bandLabel : 'NOT ASSESSED'}</Text></View>
+              <Text style={styles.reportScoreEnd}>100</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.jobBody}>
+      {tab !== 'overview' ? jobChrome : null}
 
       <View style={styles.tabBody}>
         {tab === 'overview' && (
           <OverviewTab
+            header={jobChrome}
             inspection={inspection}
             haag={haag}
             decision={decision}
@@ -668,8 +703,10 @@ export default function JobDetail() {
             onRemoveAudioNote={(noteId) => removeAudioNote(inspection.id, noteId)}
             onTranscribeAudioNote={onTranscribeAudioNote}
             onSignInspector={(svg) => setInspectorSignature(inspection.id, svg)}
-            onGenerateHaagReport={() => void runHaagReport()}
-            onGenerateLongReport={() => void runLongReport()}
+            showClaimEvidence={showClaimEvidence}
+            onClaimEvidenceShown={() => setShowClaimEvidence(false)}
+            onGenerateHaagReport={() => requestReport('haag')}
+            onGenerateLongReport={() => requestReport('long')}
           />
         )}
         {tab === 'measure' && (
@@ -697,6 +734,64 @@ export default function JobDetail() {
         )}
         {tab === 'tasks' && <TasksTab inspection={inspection} linkedLead={linkedLead} />}
       </View>
+      </View>
+
+      <BottomSheet
+        visible={actionsSheet}
+        onClose={() => setActionsSheet(false)}
+        title="Job actions"
+        subtitle={inspection.reportId}
+        accessibilityLabel="Job actions"
+      >
+        <PressableScale
+          style={styles.jobActionRow}
+          onPress={() => {
+            setActionsSheet(false);
+            setDetailsSheet(true);
+          }}
+          accessibilityRole="button"
+        >
+          <View style={styles.jobActionIcon}><Ionicons name="create-outline" size={22} color={colors.text} /></View>
+          <View style={styles.jobActionBody}><Text style={styles.jobActionTitle}>Edit job details</Text><Text style={styles.jobActionSub}>Customer, property and roof information</Text></View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+        </PressableScale>
+        <PressableScale
+          style={styles.jobActionRow}
+          onPress={() => {
+            setActionsSheet(false);
+            setCoverSheet(true);
+          }}
+          accessibilityRole="button"
+        >
+          <View style={styles.jobActionIcon}><Ionicons name="image-outline" size={22} color={colors.text} /></View>
+          <View style={styles.jobActionBody}><Text style={styles.jobActionTitle}>Choose cover photo</Text><Text style={styles.jobActionSub}>Change the image used across this job</Text></View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+        </PressableScale>
+        <PressableScale
+          style={styles.jobActionRow}
+          disabled={generating || generatingLong}
+          onPress={() => {
+            setActionsSheet(false);
+            requestReport('haag');
+          }}
+          accessibilityRole="button"
+        >
+          <View style={styles.jobActionIcon}><Ionicons name="download-outline" size={22} color={colors.text} /></View>
+          <View style={styles.jobActionBody}><Text style={styles.jobActionTitle}>{generating ? 'Generating report…' : 'Download report'}</Text><Text style={styles.jobActionSub}>Create and share the current PDF</Text></View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+        </PressableScale>
+        <PressableScale
+          style={[styles.jobActionRow, styles.jobActionDanger]}
+          onPress={() => {
+            setActionsSheet(false);
+            setTimeout(onDelete, 180);
+          }}
+          accessibilityRole="button"
+        >
+          <View style={[styles.jobActionIcon, styles.jobActionDangerIcon]}><Ionicons name="trash-outline" size={22} color={colors.danger} /></View>
+          <View style={styles.jobActionBody}><Text style={[styles.jobActionTitle, styles.jobActionDangerText]}>Delete job</Text><Text style={styles.jobActionSub}>Permanently remove this job</Text></View>
+        </PressableScale>
+      </BottomSheet>
 
       {linkedLead && (
         <FollowUpSheet
@@ -929,7 +1024,50 @@ function CompactHero({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: brand.royalInk },
+  jobBody: { flex: 1, backgroundColor: colors.bg },
+  reportHero: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: 0,
+    paddingBottom: spacing.sm,
+    overflow: 'hidden',
+  },
+  reportHeroTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs },
+  reportAddress: {
+    color: colors.onMesh,
+    fontFamily: fontFamily.archivo.extrabold,
+    fontWeight: fontWeight.extrabold,
+    fontSize: 20,
+    lineHeight: 23,
+    letterSpacing: -0.5,
+  },
+  reportPropertyLine: {
+    color: colors.onMesh,
+    opacity: 0.72,
+    fontFamily: fontFamily.archivo.regular,
+    fontSize: fontSize.bodySm,
+    lineHeight: 16,
+    marginTop: 2,
+    marginBottom: spacing.sm,
+  },
+  reportScoreRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.lg },
+  reportScoreLabel: { ...dataLabel, color: colors.onMesh, opacity: 0.62 },
+  reportScore: {
+    color: brand.burntLight,
+    fontFamily: fontFamily.archivo.extrabold,
+    fontWeight: fontWeight.extrabold,
+    fontSize: 36,
+    lineHeight: 38,
+    letterSpacing: -1.8,
+    marginTop: 0,
+  },
+  reportScoreBody: { flex: 1, paddingBottom: spacing.xs },
+  reportScoreTrack: { height: 9, borderRadius: radii.pill, backgroundColor: 'rgba(242,240,231,0.22)', overflow: 'hidden' },
+  reportScoreFill: { height: 9, borderRadius: radii.pill },
+  reportScoreMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
+  reportScoreEnd: { color: colors.onMesh, opacity: 0.55, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption },
+  reportBandPill: { maxWidth: '72%', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: brand.burntDeep },
+  reportBandText: { color: colors.textInverse, fontFamily: fontFamily.mono, fontWeight: fontWeight.bold, fontSize: 9, textTransform: 'uppercase' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -939,6 +1077,32 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   headerBtn: { width: touchTarget.small, height: touchTarget.small, alignItems: 'center', justifyContent: 'center' },
+  jobActionRow: {
+    minHeight: touchTarget.preferred,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.control,
+    backgroundColor: colors.fillQuiet,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
+  jobActionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  jobActionBody: { flex: 1, gap: 2 },
+  jobActionTitle: { color: colors.text, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd },
+  jobActionSub: { color: colors.textMuted, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm },
+  jobActionDanger: { backgroundColor: colors.dangerSoft, borderColor: colors.dangerSoft },
+  jobActionDangerIcon: { backgroundColor: colors.surface },
+  jobActionDangerText: { color: colors.danger },
   // "RW-2841" — the mock's report-id convention (docs/DESIGN_1A.md §3).
   headerReportId: { ...dataLabel, color: colors.onMesh },
 

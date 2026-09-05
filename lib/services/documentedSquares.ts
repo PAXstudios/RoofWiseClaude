@@ -9,6 +9,7 @@
 // packet with 29 aerial squares and 2.4 documented squares is telling the
 // adjuster something true about its own evidence.
 
+import { readPhotoAnalysis } from './photoAnalysisState';
 import type { Slope } from '../models/types';
 
 export type DocumentedCoverage = {
@@ -26,7 +27,7 @@ export type DocumentedCoverage = {
  * Only 10×10 roof photos count. A single-shingle close-up documents one
  * shingle, not a square; a non-roof photo documents nothing on the roof.
  */
-export function documentedCoverage(slope: Pick<Slope, 'photoPaths' | 'photoMeta' | 'photoAnalysis'>): DocumentedCoverage {
+export function documentedCoverage(slope: Pick<Slope, 'photoPaths' | 'photoMeta' | 'photoAnalysis' | 'photoAttachmentIds' | 'photoAnalysisByAttachment'>): DocumentedCoverage {
   let squares = 0;
   let photos = 0;
   let chalked = 0;
@@ -34,7 +35,7 @@ export function documentedCoverage(slope: Pick<Slope, 'photoPaths' | 'photoMeta'
   slope.photoPaths.forEach((uri, i) => {
     const meta = slope.photoMeta?.find((m) => m.photoIndex === i);
     if ((meta?.captureMode ?? 'square_10x10') !== 'square_10x10') return;
-    const st = slope.photoAnalysis?.[uri];
+    const st = readPhotoAnalysis(slope, i);
     if (!st || st.status !== 'done' || st.noRoofDetected) return;
     const cov = st.squareCoverage;
     if (!cov) return;
@@ -52,11 +53,11 @@ export function documentedCoverage(slope: Pick<Slope, 'photoPaths' | 'photoMeta'
 }
 
 /** Whole shingles counted across the slope's roof photos (sum; frames may overlap). */
-export function shingleCountForSlope(slope: Pick<Slope, 'photoPaths' | 'photoAnalysis'>): number | undefined {
+export function shingleCountForSlope(slope: Pick<Slope, 'photoPaths' | 'photoAnalysis' | 'photoAttachmentIds' | 'photoAnalysisByAttachment'>): number | undefined {
   let total = 0;
   let any = false;
-  for (const uri of slope.photoPaths) {
-    const st = slope.photoAnalysis?.[uri];
+  for (let index = 0; index < slope.photoPaths.length; index++) {
+    const st = readPhotoAnalysis(slope, index);
     if (st?.status === 'done' && !st.noRoofDetected && typeof st.shingleCount === 'number') {
       total += st.shingleCount;
       any = true;

@@ -10,6 +10,7 @@
 // analyzeSlope / markPhotosFailed) so the capture strip shows
 // "Failed · Retry". Retries happen only for failures a retry can fix.
 
+import { readPhotoAnalysis } from './photoAnalysisState';
 import { useAnalysisQueueStore, type AnalysisJob } from '../stores/analysisQueueStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useActivityStore } from '../stores/activityStore';
@@ -47,6 +48,30 @@ class QueueJobError extends Error {
 }
 
 let draining = false;
+let captureRecoveryFinished = false;
+
+/** Capture's live pump keeps its intent on photoAnalysis. Recover that intent
+ * once per process through the existing durable queue, after BOTH stores load.
+ * Foreground transitions must not race a currently mounted camera's pump. */
+async function recoverInterruptedCaptureAnalysis(): Promise<void> {
+  if (captureRecoveryFinished) return;
+  for (const store of [useInspectionStore, useAnalysisQueueStore]) {
+    if (!store.persist.hasHydrated()) await store.persist.rehydrate();
+    if (!store.persist.hasHydrated()) throw new Error('Saved analysis could not be loaded.');
+  }
+  for (const inspection of useInspectionStore.getState().inspections) {
+    for (const slope of inspection.slopes) {
+      const interrupted = slope.photoPaths.some((uri, index) => {
+        const status = readPhotoAnalysis(slope, index)?.status;
+        return !slope.analyzedPhotoIndices?.includes(index) && (status === 'queued' || status === 'analyzing');
+      });
+      if (interrupted) useAnalysisQueueStore.getState().enqueue({
+        inspectionId: inspection.id, slopeId: slope.id, slopeLabel: slope.orientation,
+      });
+    }
+  }
+  captureRecoveryFinished = true;
+}
 
 // ── Module-level background pump ───────────────────────────────────────────
 // The drain must run whenever queued jobs exist, NOT only while a particular
@@ -97,6 +122,7 @@ export async function drainAnalysisQueue(): Promise<void> {
   if (draining) return;
   draining = true;
   try {
+    await recoverInterruptedCaptureAnalysis();
     // Fresh read each loop iteration — jobs can be enqueued mid-drain.
     for (;;) {
       const store = useAnalysisQueueStore.getState();
@@ -266,17 +292,14 @@ export function deriveAnalysisProgress(inspections: Inspection[]): SlopeAnalysis
   const groups: SlopeAnalysisProgress[] = [];
   for (const ins of inspections) {
     for (const sl of ins.slopes) {
-      const pa = sl.photoAnalysis;
-      if (!pa) continue;
       let queued = 0;
       let analyzing = 0;
       let done = 0;
       let failed = 0;
       const failedIndexes: number[] = [];
-      for (const [uri, st] of Object.entries(pa)) {
-        // Skip records for photos that were removed/rotated out of photoPaths.
-        const idx = sl.photoPaths.indexOf(uri);
-        if (idx < 0) continue;
+      for (let idx = 0; idx < sl.photoPaths.length; idx++) {
+        const st = readPhotoAnalysis(sl, idx);
+        if (!st) continue;
         switch (st.status) {
           case 'queued':
             queued++;

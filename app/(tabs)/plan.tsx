@@ -188,7 +188,7 @@ export default function PlanScreen() {
 
   // Shared with Home's Today module (`components/home/todayAgenda.ts`) so the
   // two screens can never disagree about what is due.
-  const followUpsDue = useMemo(() => followUpsDueFor(leads), [leads]);
+  const followUpsDue = useMemo(() => followUpsDueFor(leads, new Date(), inspections), [leads, inspections]);
 
   const todayInspections = useMemo(
     () => (view === 'today' ? inspectionsToday(inspections) : inspectionsThisWeek(inspections)),
@@ -348,7 +348,8 @@ export default function PlanScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.rowTitle}>{ins.customerName}</Text>
                       <Text style={styles.rowSub}>{ins.address}</Text>
-                      <Text style={styles.rowMeta}>{ins.reportId}</Text>
+                      <Text style={styles.rowMeta}>{ins.reportId}{ins.status === 'scheduled' && ins.scheduledAt
+                        ? ` · ${new Date(ins.scheduledAt).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
                   </PressableScale>

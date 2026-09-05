@@ -106,7 +106,7 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
     const r = await startRoute(opts);
     if (r.ok) return true;
     startSession(undefined, opts.routeTarget ?? opts.routeStops?.[0], { routeStops: opts.routeStops });
-    toast({ tone: 'warn', title: 'Location is off', body: 'The route is set. Turn location on in Knock mode to place pins and count miles.' });
+    toast({ tone: 'warn', title: 'Route saved · location is off', body: 'Retry location in Knock mode, or tap houses on the map. GPS pins and mileage need location.' });
     return false;
   };
 
@@ -114,7 +114,7 @@ export function PlanView({ plan }: { plan: KnockPlan }) {
     const t = { ...target, radiusMiles: KNOCK_ROUTE_RADIUS_MILES };
     if (activeSession) {
       setRouteTarget(t);
-      toast({ tone: 'success', title: 'Added to your knock route', body: `${t.label} · ${KNOCK_ROUTE_RADIUS_MILES} mi canvass radius` });
+      toast({ tone: 'success', title: `Routing to ${t.label}`, body: 'Your other stops are kept. Next returns to the remaining route.' });
     } else if (await beginRoute({ routeTarget: t })) {
       toast({ tone: 'success', title: 'Knock route started', body: `${t.label} · ${KNOCK_ROUTE_RADIUS_MILES} mi canvass radius` });
     }

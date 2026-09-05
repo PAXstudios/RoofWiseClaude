@@ -329,3 +329,26 @@ the read site, same convention as `leadStageColumn()`.
 
 Reports' "source → signed rate" and Pipeline's badges both read through
 `normalizeLeadSource()`.
+
+### Door-to-lead identity
+
+`saveKnock.ts` reuses the active knock's explicit `createdLeadId` first,
+or the archived knock's link when choosing **Knock again**, then an exact
+normalized street address. A proximity fallback (15 m) may
+reuse only one eligible lead, and only when at least one address is still
+unknown. Different known street numbers or units never match merely because
+their pins are close. Multiple eligible GPS candidates create a separate
+lead rather than changing an arbitrary customer's stage, contact or reminder.
+Existing explicit links remain authoritative after customer corrections.
+An archived revisit logs a new knock with the same customer link and prior
+history, leaving the archived visit unchanged; even a no-answer revisit
+retains a valid link without changing the customer's Pipeline stage. A
+deleted/missing customer on either an active edit or archived revisit falls
+back to the guarded address/GPS match for lead-producing outcomes. Other
+outcomes clear the stale link; neither path resurrects the deleted customer
+or persists a dangling link.
+This safeguard does not rewrite historical knocks or leads.
+
+Regression check: `node tests/knock-lead-identity.cjs` exercises the save,
+session and lead stores, and the resulting Pipeline projection in isolated
+memory; it never adds test records to the app.

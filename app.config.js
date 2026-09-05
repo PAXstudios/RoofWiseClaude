@@ -30,6 +30,7 @@ module.exports = {
     runtimeVersion: { policy: 'sdkVersion' },
     scheme: 'roofwise',
     version: '0.1.0',
+    icon: './assets/roofwise-app-logo.png',
     orientation: 'portrait',
     userInterfaceStyle: 'light',
     // Expo Go 52+ only runs the New Architecture; SDK 54 defaults it on.
@@ -75,7 +76,8 @@ module.exports = {
         },
       },
       adaptiveIcon: {
-        backgroundColor: '#0C183C',
+        foregroundImage: './assets/roofwise-app-logo.png',
+        backgroundColor: '#F2F0E7',
       },
     },
     web: {
@@ -95,9 +97,10 @@ module.exports = {
         // instead of the top-level `splash` field.
         'expo-splash-screen',
         {
+          image: './assets/roofwise-app-logo.png',
+          imageWidth: 220,
           resizeMode: 'contain',
-          // Brand v2: the app proper runs on white (see theme/tokens.ts).
-          backgroundColor: '#FFFFFF',
+          backgroundColor: '#F2F0E7',
         },
       ],
       'expo-apple-authentication',

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { reviewStorage } from '../services/reviewPersistence';
 import type {
   Correction,
   CorrectionType,
@@ -72,6 +72,8 @@ export type RecordCorrectionInput = {
 
 type CorrectionsStoreState = {
   corrections: Correction[];
+  /** Idempotently project an audit already committed with inspection evidence. */
+  recordReviewRejection: (correction: Correction) => void;
 
   record: (input: RecordCorrectionInput) => Correction;
   /**
@@ -165,6 +167,11 @@ export const useCorrectionsStore = create<CorrectionsStoreState>()(
   persist(
     (set, get) => ({
       corrections: [],
+      recordReviewRejection: (correction) => set((s) => ({
+        corrections: s.corrections.some((c) => c.id === correction.id)
+          ? s.corrections
+          : [correction, ...s.corrections].slice(0, 1000),
+      })),
 
       record: (input) => {
         const corr: Correction = {
@@ -302,7 +309,7 @@ export const useCorrectionsStore = create<CorrectionsStoreState>()(
     }),
     {
       name: 'roofwise.corrections.v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => reviewStorage),
       version: PERSIST_VERSION,
       migrate: (persisted) => migrateCorrections(persisted),
       partialize: (s): Persisted => ({ corrections: s.corrections }),

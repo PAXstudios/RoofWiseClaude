@@ -22,6 +22,7 @@ import { useWizardPrefillStore } from '@/lib/stores/wizardPrefillStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   glass,
@@ -105,6 +106,7 @@ const webStyles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   title: {
+    fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.navy,
@@ -112,6 +114,7 @@ const webStyles = StyleSheet.create({
     maxWidth: 420,
   },
   body: {
+    fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodyMd,
     color: colors.slate,
     textAlign: 'center',
@@ -128,6 +131,7 @@ const webStyles = StyleSheet.create({
   },
   ctaText: {
     color: colors.textInverse,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
   },
@@ -485,7 +489,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   headerBtn: { padding: spacing.xs },
-  headerTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
+  headerTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.onMesh },
 
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.xxl },
   destination: {
@@ -498,13 +502,13 @@ const styles = StyleSheet.create({
     backgroundColor: glass.fill,
     maxWidth: '90%',
   },
-  destinationText: { color: colors.cream, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
-  hint: { fontSize: fontSize.bodyMd, color: 'rgba(255,255,255,0.78)', textAlign: 'center', paddingHorizontal: spacing.xxl },
+  destinationText: { color: colors.onMesh, fontFamily: fontFamily.mono, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  hint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.onMesh, opacity: 0.78, textAlign: 'center', paddingHorizontal: spacing.xxl },
 
   readout: { alignItems: 'center', gap: spacing.xs },
-  degrees: { fontSize: 96, fontWeight: fontWeight.bold, color: colors.cream, letterSpacing: -2 },
+  degrees: { fontFamily: fontFamily.archivo.extrabold, fontSize: fontSize.display * 2.8, fontWeight: fontWeight.extrabold, color: colors.onMesh, letterSpacing: -2 },
   degreesImplausible: { color: colors.warn },
-  ratio: { fontSize: fontSize.titleLg, fontWeight: fontWeight.semibold, color: colors.orange, marginTop: -spacing.sm },
+  ratio: { fontFamily: fontFamily.mono, fontSize: fontSize.titleLg, fontWeight: fontWeight.semibold, color: colors.accent, marginTop: -spacing.sm },
   implausible: {
     color: colors.warn,
     fontSize: fontSize.bodySm,
@@ -524,7 +528,7 @@ const styles = StyleSheet.create({
   bullseyeDot: { width: 24, height: 24, borderRadius: 12 },
 
   altRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  altText: { color: colors.cream, fontSize: fontSize.bodyMd },
+  altText: { color: colors.onMesh, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd },
 
   cta: {
     margin: spacing.xl,
@@ -535,14 +539,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  ctaText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  ctaText: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
 
   // Attach sheet — same glass sheet the capture flow's slope picker uses.
   scrim: { flex: 1, backgroundColor: colors.scrim, justifyContent: 'flex-end' },
   sheetWrap: { paddingHorizontal: spacing.md },
   sheet: { padding: spacing.lg, gap: spacing.md },
-  sheetTitle: { color: colors.textInverse, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold },
-  sheetBody: { color: colors.textInverse, opacity: 0.8, fontSize: fontSize.bodySm, lineHeight: 18 },
+  sheetTitle: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold },
+  sheetBody: { color: colors.textInverse, fontFamily: fontFamily.archivo.regular, opacity: 0.8, fontSize: fontSize.bodySm, lineHeight: 18 },
   sheetBack: {
     flexDirection: 'row',
     alignItems: 'center',

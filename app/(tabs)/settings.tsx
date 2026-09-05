@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -239,6 +239,7 @@ export default function SettingsScreen() {
               : 'Off — alerts only; make plans by hand'
           }
           trailing={<MiniSwitch on={autoPlanStorms} />}
+          checked={autoPlanStorms}
           onPress={() => setAutoPlanStorms(!autoPlanStorms)}
         />
         <Sep />
@@ -332,6 +333,7 @@ export default function SettingsScreen() {
           title="Pre-inspection safety check"
           sub={preFlightEnabled ? 'On — runs every 4 hours' : 'Off'}
           trailing={<MiniSwitch on={preFlightEnabled} />}
+          checked={preFlightEnabled}
           onPress={() => setPreFlightEnabled(!preFlightEnabled)}
         />
       </Group>
@@ -927,6 +929,7 @@ function Row({
   onPress,
   disabled,
   muted,
+  checked,
 }: {
   icon?: IoniconName;
   tone?: ChipTone;
@@ -937,13 +940,15 @@ function Row({
   onPress?: () => void;
   disabled?: boolean;
   muted?: boolean;
+  checked?: boolean;
 }) {
+  const descriptionId = useId();
   const body = (
     <>
       {icon ? <IconChip name={icon} tone={tone} size="sm" /> : null}
       <View style={styles.rowText}>
         <Text style={[styles.rowTitle, muted && styles.rowTitleMuted]}>{title}</Text>
-        {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
+        {sub ? <Text nativeID={descriptionId} style={styles.rowSub}>{sub}</Text> : null}
       </View>
       {trailing}
       {chevron ? (
@@ -954,13 +959,28 @@ function Row({
 
   if (!onPress) return <View style={styles.row}>{body}</View>;
 
+  // RN Web handles Enter on switches, but reserves Space for button roles.
+  const webSwitchProps = Platform.OS === 'web' && checked !== undefined ? {
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if (event.key !== ' ' && event.key !== 'Spacebar') return;
+      event.preventDefault();
+      if (!disabled && !event.repeat) onPress();
+    },
+  } : {};
+
   return (
     <PressableScale
+      {...webSwitchProps}
       style={[styles.row, disabled && styles.rowDisabled]}
       onPress={onPress}
       disabled={disabled}
-      accessibilityRole="button"
+      accessibilityRole={checked === undefined ? 'button' : 'switch'}
       accessibilityLabel={title}
+      accessibilityHint={sub}
+      aria-describedby={sub ? descriptionId : undefined}
+      accessibilityState={{ disabled: !!disabled, checked }}
+      aria-checked={checked}
+      aria-disabled={!!disabled}
     >
       {body}
     </PressableScale>
@@ -980,7 +1000,13 @@ function MiniSwitch({ on }: { on: boolean }) {
   }));
 
   return (
-    <View style={[styles.switchTrack, on && styles.switchTrackOn]}>
+    <View
+      style={[styles.switchTrack, on && styles.switchTrackOn]}
+      accessible={false}
+      aria-hidden
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       <Animated.View style={[styles.switchThumb, thumbStyle]} />
     </View>
   );

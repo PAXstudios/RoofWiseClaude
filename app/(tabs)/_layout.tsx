@@ -1,6 +1,7 @@
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Tabs, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { BottomTabs } from '@/components/shell/BottomTabs';
 import { Sidebar } from '@/components/shell/Sidebar';
 import { TopBar } from '@/components/shell/TopBar';
@@ -9,6 +10,7 @@ import { useResponsive } from '@/theme/useResponsive';
 import { colors } from '@/theme/tokens';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { env } from '@/lib/env';
+import { MeshBackground } from '@/components/ui/MeshBackground';
 
 // A REAL tab navigator. This layout used to render <Slot/>, which expo-router
 // 6 backs with a StackRouter: every tab tap was a stack action, so the current
@@ -55,6 +57,8 @@ export default function TabsLayout() {
   // edge-to-edge under the home indicator.
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
+      <StatusBar style="light" />
+      <MeshBackground variant="home" />
       <Tabs
         tabBar={renderTabBar}
         // 'history': Android back / router.back() from a tab returns to the

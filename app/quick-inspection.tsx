@@ -13,6 +13,8 @@
 // the inspection the moment they are taken, analysed per slope-batch as you
 // shoot, and the slope tag is never a silent default (SlopePickerSheet).
 
+import { photoWasAnalyzed, readPhotoAnalysis } from '@/lib/services/photoAnalysisState';
+import { captureKey, resolveCapturedPhoto } from '@/components/capture/hud/reviewState';
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
@@ -34,14 +36,23 @@ import {
   useRouter,
 } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
+import { useAnalysisQueueStore } from '@/lib/stores/analysisQueueStore';
+import { retainPhotoEvidence } from '@/lib/services/photoEvidence';
+import { flushInspectionPersistence } from '@/lib/services/inspectionPersistence';
+import {
+  readPendingCaptures, writePendingCapture, removePendingCapture,
+  stageCapture, subscribePendingCaptures, CaptureStagingError, type CaptureContext, type PendingCapture,
+  resumePendingCapture, discardPendingCapture,
+} from '@/lib/services/pendingCaptures';
 import {
   importFromLibrary,
   isUnreadableAssetError,
   type LibraryImportProgress,
 } from '@/lib/services/libraryImport';
-import { analyzeSlope, markPhotosQueued } from '@/lib/services/analyzeSlope';
+import { analyzeSlope, setPhotoAnalysisState } from '@/lib/services/analyzeSlope';
 import { describeAnalysisError } from '@/lib/services/gemini';
 import { isGeminiConfigured } from '@/lib/env';
 import * as Haptics from 'expo-haptics';
@@ -142,6 +153,11 @@ const CAMERA_LOCK_WAIT_MS = 3000;
 
 /** The crash-safety signal is read once per JS session, not per mount. */
 let safetySignalChecked = false;
+
+// A URI belongs to one live analysis request from enqueue through completion.
+// Shared across route instances: an unmounted camera can still finish its
+// active request while the recovered photo appears in a newly mounted route.
+const captureAnalysisOwners = new Set<string>();
 
 export default function QuickInspection() {
   // The capture pipeline (expo-camera viewfinder, HEIC handling, haptics)
@@ -245,10 +261,12 @@ function QuickInspectionNative() {
   // Non-null = the slope picker is up, with the sentence that explains why.
   const [slopePrompt, setSlopePrompt] = useState<string | null>(null);
   // A prepared photo waiting for the picker's answer before it is filed.
-  const pendingCaptureRef = useRef<string | null>(null);
+  const pendingCaptureRef = useRef<PendingCapture | null>(null);
+  const filingRef = useRef(false);
+  const [recoveryReady, setRecoveryReady] = useState(false);
   const autoSlopeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A library import waiting for the picker's answer before it starts.
-  const pendingImportRef = useRef(false);
+  const pendingImportRef = useRef<CaptureContext | null>(null);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
   const [captureMode, setCaptureMode] = useState<CaptureMode>(DEFAULT_CAPTURE_MODE);
   const [areaTag, setAreaTag] = useState<string>(() =>
@@ -266,6 +284,12 @@ function QuickInspectionNative() {
   const setCoachStep = useCaptureSettingsStore((s) => s.setCoachStep);
   const setCollateralZone = useInspectionStore((s) => s.setCollateralZone);
   const [capturing, setCapturing] = useState(false);
+  const captureInFlightRef = useRef(false);
+  const captureExitNotice = () => {
+    Alert.alert('Saving your photo', 'Wait for the photo to finish saving and confirm its slope before leaving the camera.');
+  };
+  // Covers native back/swipe and route replacement as well as our Close button.
+  usePreventRemove(capturing || pendingCaptureRef.current !== null, captureExitNotice);
   const [torch, setTorch] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -386,6 +410,12 @@ function QuickInspectionNative() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Queued work that never started is recoverable from persisted photo
+      // state; active batches release their ownership when their request ends.
+      for (const uri of pendingRef.current) captureAnalysisOwners.delete(uri);
+      pendingRef.current = [];
+      // Pending evidence already lives in the durable journal. Teardown must
+      // never pop or clear it; the next route/process resumes it explicitly.
     };
   }, []);
 
@@ -422,6 +452,10 @@ function QuickInspectionNative() {
   const compassSlope: SlopeOrientation | null = compassUsable
     ? yawToOrientation(compass.degrees)
     : null;
+  // A shutter can wait behind the live preview's camera lock. Its render
+  // closure is then stale: sample the current evidence when exposure starts.
+  const exposureEvidenceRef = useRef({ slope, slopeMode, compassSlope });
+  exposureEvidenceRef.current = { slope, slopeMode, compassSlope };
 
   // Auto-tag: follow the compass once it has HELD a new octant. Pinned mode
   // never moves the tag — it only lets the shutter warn on a mismatch.
@@ -518,6 +552,59 @@ function QuickInspectionNative() {
     return out;
   };
 
+  const captureContext = (): CaptureContext => ({ slope, areaTag, captureMode, areaTagPinned, slopeMode, compassSlope });
+
+  const contextForSlope = (context: CaptureContext, next: SlopeOrientation): CaptureContext => ({
+    ...context,
+    slope: next,
+    areaTag: context.areaTagPinned ? context.areaTag : defaultAreaTagForSlope(next),
+  });
+
+  /** Keep ownership of the prepared image until all filing steps succeed. */
+  const saveCapture = async (pending: PendingCapture): Promise<boolean> => {
+    if (filingRef.current) return false;
+    filingRef.current = true;
+    pendingCaptureRef.current = pending;
+    try {
+      await writePendingCapture(pending);
+      pending = await resumePendingCapture(pending);
+      pendingCaptureRef.current = pending;
+      if (pending.retentionRecovery && !pending.retentionRecovery.copyCompleted) {
+        throw new Error('The native photo copy did not complete. Discard this pending capture and capture or import it again; partial bytes cannot be filed as evidence.');
+      }
+      await retainPhotoEvidence(pending.uri);
+      if (!mountedRef.current) return false;
+      // Reserve the job ID in the journal before creating anything. A crash
+      // between job creation and attachment must reuse that exact job.
+      if (pending.createdHere && !useInspectionStore.getState().getById(pending.targetId)) {
+        ensureInspection(pending.targetId);
+      }
+      if (!useInspectionStore.getState().getById(pending.targetId)) {
+        throw new Error('This job no longer exists. The interrupted photo is still on this device.');
+      }
+      targetIdRef.current = pending.targetId;
+      createdHereRef.current = createdHereRef.current || pending.createdHere;
+      setTargetId(pending.targetId);
+      addPhoto(pending.uri, pending.context, pending.imported);
+      // Force a current snapshot even if an earlier subscriber threw after
+      // attachment and the retry did not need another store mutation.
+      useInspectionStore.setState((state) => ({ inspections: state.inspections }));
+      await flushInspectionPersistence();
+      await removePendingCapture(pending.uri);
+      pendingCaptureRef.current = null;
+      if (mountedRef.current) setSlopePrompt(null);
+      return true;
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : 'The photo could not be saved.';
+      if (mountedRef.current) setSlopePrompt(pending.retentionRecovery?.copyCompleted === false
+        ? reason
+        : `${reason} Your photo is still here — choose its slope to retry saving.`);
+      return false;
+    } finally {
+      filingRef.current = false;
+    }
+  };
+
   /**
    * File a prepared photo — after making sure the slope tag is one a human or
    * a usable compass actually chose.
@@ -525,53 +612,132 @@ function QuickInspectionNative() {
    * Asks (and holds the photo) when:
    *  • there is no usable compass and nothing has pinned the tag yet — the
    *    default is not evidence;
+   *  • the compass has changed but the auto tag is still settling — the old
+   *    slope must not inherit a shot of the new face;
    *  • the tag is pinned but the compass says the phone faces somewhere else
    *    by more than one octant — a hip corner is one octant off, the other
    *    side of the house is not.
    */
-  const fileCapture = (uri: string, imported?: boolean) => {
-    const untouchedDefault = slopeMode === 'auto' && !compassSlope && photosRef.current.length === 0;
-    if (untouchedDefault) {
-      pendingCaptureRef.current = uri;
-      setSlopePrompt('No compass fix — which slope is this photo of?');
+  const fileCapture = async (photo: PendingCapture) => {
+    if (!mountedRef.current) return;
+    const { context } = photo;
+    const { slope, slopeMode, compassSlope } = context;
+    if (slopeMode === 'auto' && compassSlope !== context.slope) {
+      pendingCaptureRef.current = photo;
+      setSlopePrompt(compassSlope
+        ? `Compass is changing from ${context.slope} to ${compassSlope} — which slope is this photo of?`
+        : 'No compass fix — which slope is this photo of?');
       return;
     }
     if (slopeMode === 'pinned' && compassSlope && octantDistance(slope, compassSlope) >= 2) {
-      pendingCaptureRef.current = uri;
+      pendingCaptureRef.current = photo;
       setSlopePrompt(`Compass says you're facing ${compassSlope}, but photos are being tagged ${slope}.`);
       return;
     }
-    addPhoto(uri, imported);
+    await saveCapture(photo);
   };
 
-  const onSlopePicked = (next: SlopeOrientation) => {
-    selectSlope(next);
-    setSlopePrompt(null);
-    const uri = pendingCaptureRef.current;
-    pendingCaptureRef.current = null;
-    if (uri) {
-      try {
-        addPhoto(uri);
-      } catch (e) {
-        Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
+  const onSlopePicked = async (next: SlopeOrientation) => {
+    if (filingRef.current) return;
+    const pending = pendingCaptureRef.current;
+    if (pending) {
+      const saved = useInspectionStore.getState().getById(pending.targetId)
+        ?.slopes.find((s) => s.photoPaths.includes(pending.uri));
+      if (saved && saved.orientation !== next) {
+        // Attachment may have succeeded before a later step failed. This is
+        // a retry, not a retag: never imply that the saved evidence moved.
+        selectSlope(saved.orientation);
+        setSlopePrompt(`This photo is already saved to ${saved.orientation}. Choose ${saved.orientation} to retry finishing that save; choosing ${next} cannot move the saved photo.`);
+        return;
       }
     }
+    selectSlope(next);
+    setSlopePrompt(null);
+    if (pending) {
+      // React has not committed selectSlope yet. File the explicit answer,
+      // carrying the shot's original mode and any manually chosen subject.
+      if (!await saveCapture({ ...pending, context: contextForSlope(pending.context, next) })) return;
+    }
     if (pendingImportRef.current) {
-      pendingImportRef.current = false;
-      // selectSlope pinned the mode, so the re-entry passes the gate.
+      const context = contextForSlope(pendingImportRef.current, next);
+      pendingImportRef.current = null;
+      // Let the slope modal start closing before opening the native library.
+      // The explicit context, not this delay, carries the inspector's answer.
       setTimeout(() => {
-        runLibraryImport(true).catch(() => {});
+        void runLibraryImport(context);
       }, 0);
     }
   };
 
-  const onSlopePickerCancel = () => {
+  const onSlopePickerCancel = async () => {
+    if (filingRef.current) return;
+    const pending = pendingCaptureRef.current;
+    if (pending) {
+      const saved = useInspectionStore.getState().getById(pending.targetId)
+        ?.slopes.find((s) => s.photoPaths.includes(pending.uri));
+      if (saved) {
+        selectSlope(saved.orientation);
+        setSlopePrompt(`This photo is already saved to ${saved.orientation} and cannot be discarded here. Choose ${saved.orientation} to finish adding it to review and analysis.`);
+        return;
+      }
+    }
     // A photo held for the question is dropped, not filed under a guess; a
-    // pending import simply does not start.
+    // pending import simply does not start. Already attached evidence above
+    // keeps its retry record until review/analysis hand-off succeeds.
+    if (pending) {
+      filingRef.current = true;
+      try {
+        await discardPendingCapture(pending);
+      } catch {
+        setSlopePrompt('Could not discard this photo. Please retry.');
+        return;
+      } finally {
+        filingRef.current = false;
+      }
+    }
     pendingCaptureRef.current = null;
-    pendingImportRef.current = false;
+    pendingImportRef.current = null;
     setSlopePrompt(null);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const recover = async () => {
+      if (!mountedRef.current || pendingCaptureRef.current || captureInFlightRef.current || slopePrompt) return;
+      try {
+        if (!useInspectionStore.persist.hasHydrated()) await useInspectionStore.persist.rehydrate();
+        if (!useInspectionStore.persist.hasHydrated()) throw new Error('Saved jobs could not be loaded.');
+        const entries = await readPendingCaptures();
+        if (cancelled || !mountedRef.current || pendingCaptureRef.current || captureInFlightRef.current) return;
+        const entry = entries.find((photo) => photo.targetId === targetIdRef.current || photo.originTargetId === targetIdRef.current);
+        if (entry?.discardRequested) {
+          const attached = useInspectionStore.getState().getById(entry.targetId)
+            ?.slopes.some((savedSlope) => savedSlope.photoPaths.includes(entry.uri));
+          if (attached) throw new Error('This interrupted photo is already filed and cannot be discarded.');
+          await discardPendingCapture(entry);
+          if (!cancelled) void recover();
+          return;
+        }
+        setRecoveryReady(true);
+        if (!entry) return;
+        pendingCaptureRef.current = entry;
+        setAddToOpen(false);
+        setSlopePrompt(entry.retentionRecovery?.copyCompleted === false
+          ? 'The interrupted photo copy did not complete. Discard this pending capture and capture or import it again; partial bytes cannot be filed as evidence.'
+          : 'Recovered your interrupted photo — confirm its slope to finish saving it.');
+      } catch (error) {
+        if (!cancelled) {
+          setRecoveryReady(false);
+          Alert.alert('Photo recovery unavailable', error instanceof Error ? error.message : 'Please retry.', [
+            { text: 'Retry', onPress: () => { void recover(); } },
+          ]);
+        }
+      }
+    };
+    const unsubscribe = subscribePendingCaptures(() => { void recover(); });
+    void recover();
+    return () => { cancelled = true; unsubscribe(); };
+  }, [targetId, slopePrompt, capturing]);
 
   const selectAreaTag = (tag: AreaTag) => {
     setAreaTag(tag);
@@ -637,91 +803,93 @@ function QuickInspectionNative() {
     if (runningRef.current) return;
     const nextUri = pendingRef.current[0];
     if (!nextUri) return;
-    const head = photosRef.current.find((p) => p.uri === nextUri);
+    const head = photosRef.current.find((p) => captureKey(p) === nextUri);
     if (!head) {
       pendingRef.current.shift();
+      captureAnalysisOwners.delete(nextUri);
       void pump();
       return;
     }
     const batch = photosRef.current.filter(
-      (p) => p.slopeId === head.slopeId && pendingRef.current.includes(p.uri),
+      (p) => p.slopeId === head.slopeId && pendingRef.current.includes(captureKey(p)),
     );
-    const batchUris = batch.map((p) => p.uri);
+    const batchUris = batch.map(captureKey);
     pendingRef.current = pendingRef.current.filter((u) => !batchUris.includes(u));
     runningRef.current = true;
-    if (mountedRef.current) {
-      setAnalyzing(true);
-      setLocalAnalysis((prev) => {
-        const next = { ...prev };
-        for (const u of batchUris) next[u] = { status: 'analyzing' };
-        return next;
-      });
-    }
-
-    let batchError: string | null = null;
-    let failures: { uri: string; reason: string }[] = [];
     try {
-      const result = await analyzeSlope(head.inspectionId, head.slopeId, {
-        photoIndexes: batch.map((p) => p.photoIndex),
-      });
-      failures = result.failures;
-    } catch (e) {
-      // analyzeSlope only throws when the slope itself is gone (discarded
-      // mid-pass) or on a programming error; per-photo failures come back
-      // in `failures`, already toasted by the service.
-      batchError = describeAnalysisError(e);
-    }
-
-    const slopeNow = useInspectionStore
-      .getState()
-      .inspections.find((i) => i.id === head.inspectionId)
-      ?.slopes.find((s) => s.id === head.slopeId);
-    const analyzed = new Set(slopeNow?.analyzedPhotoIndices ?? []);
-    let ok = 0;
-    let bad = 0;
-    const update: Record<string, LocalAnalysis | null> = {};
-    for (const p of batch) {
-      const failure = failures.find((f) => f.uri === p.uri);
-      if (!failure && !batchError && analyzed.has(p.photoIndex)) {
-        update[p.uri] = null;
-        ok++;
-      } else {
-        const reason =
-          failure?.reason ??
-          slopeNow?.photoAnalysis?.[p.uri]?.error ??
-          batchError ??
-          'Analysis did not finish.';
-        update[p.uri] = { status: 'failed', error: reason };
-        bad++;
-      }
-    }
-
-    runningRef.current = false;
-    if (mountedRef.current) {
-      setLocalAnalysis((prev) => {
-        const next = { ...prev };
-        for (const [u, v] of Object.entries(update)) {
-          if (v) next[u] = v;
-          else delete next[u];
-        }
-        return next;
-      });
-      setAnalyzing(false);
-    }
-
-    if (bad > 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      // Per-photo failures were already toasted by analyzeSlope; only a
-      // pass that never ran needs its own.
-      if (batchError) {
-        useToastStore.getState().show({
-          tone: 'danger',
-          title: 'Analysis could not run',
-          body: batchError,
+      if (mountedRef.current) {
+        setAnalyzing(true);
+        setLocalAnalysis((prev) => {
+          const next = { ...prev };
+          for (const u of batchUris) next[u] = { status: 'analyzing' };
+          return next;
         });
       }
-    } else if (ok > 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+      let batchError: string | null = null;
+      try {
+        await analyzeSlope(head.inspectionId, head.slopeId, {
+          photoIndexes: batch.flatMap((p) => {
+            const target = resolveCapturedPhoto(p, useInspectionStore.getState().getById(p.inspectionId));
+            return target ? [target.index] : [];
+          }),
+        });
+      } catch (e) {
+        // analyzeSlope only throws when the slope itself is gone (discarded
+        // mid-pass) or on a programming error; per-photo failures come back
+        // in `failures`, already toasted by the service.
+        batchError = describeAnalysisError(e);
+      }
+
+      let ok = 0;
+      let bad = 0;
+      const update: Record<string, LocalAnalysis | null> = {};
+      for (const p of batch) {
+        const target = resolveCapturedPhoto(p, useInspectionStore.getState().getById(p.inspectionId));
+        const state = target ? readPhotoAnalysis(target.slope, target.index) : undefined;
+        const failure = state?.status === 'failed' ? state.error : undefined;
+        if (target && !failure && !batchError && photoWasAnalyzed(target.slope, target.index)) {
+          update[captureKey(p)] = null;
+          ok++;
+        } else {
+          const reason =
+            failure ??
+            batchError ??
+            'Analysis did not finish.';
+          update[captureKey(p)] = { status: 'failed', error: reason };
+          bad++;
+        }
+      }
+
+      if (mountedRef.current) {
+        setLocalAnalysis((prev) => {
+          const next = { ...prev };
+          for (const [u, v] of Object.entries(update)) {
+            if (v) next[u] = v;
+            else delete next[u];
+          }
+          return next;
+        });
+        setAnalyzing(false);
+      }
+
+      if (bad > 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        // Per-photo failures were already toasted by analyzeSlope; only a
+        // pass that never ran needs its own.
+        if (batchError) {
+          useToastStore.getState().show({
+            tone: 'danger',
+            title: 'Analysis could not run',
+            body: batchError,
+          });
+        }
+      } else if (ok > 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+    } finally {
+      runningRef.current = false;
+      for (const uri of batchUris) captureAnalysisOwners.delete(uri);
     }
 
     if (mountedRef.current) void pump();
@@ -729,24 +897,34 @@ function QuickInspectionNative() {
 
   const enqueueAnalysis = useCallback(
     (uri: string) => {
-      if (!isGeminiConfigured) return;
-      const photo = photosRef.current.find((p) => p.uri === uri);
-      // The store's own "Queued" record, so the Analyze screen and the job
-      // agree with this strip about the photo's state from the first moment.
-      if (photo) markPhotosQueued(photo.inspectionId, photo.slopeId, [uri]);
-      setLocalAnalysis((prev) => ({ ...prev, [uri]: { status: 'queued' } }));
-      if (!pendingRef.current.includes(uri)) pendingRef.current.push(uri);
-      void pump();
+      if (!isGeminiConfigured || captureAnalysisOwners.has(uri)) return;
+      const photo = photosRef.current.find((p) => captureKey(p) === uri);
+      if (!photo) return;
+      const target = resolveCapturedPhoto(photo, useInspectionStore.getState().getById(photo.inspectionId));
+      if (!target) return;
+      captureAnalysisOwners.add(uri);
+      try {
+        // The store's own "Queued" record, so the Analyze screen and the job
+        // agree with this strip about the photo's state from the first moment.
+        setPhotoAnalysisState(photo.inspectionId, photo.slopeId, photo.uri, { status: 'queued' }, photo.attachmentId);
+        setLocalAnalysis((prev) => ({ ...prev, [uri]: { status: 'queued' } }));
+        if (!pendingRef.current.includes(uri)) pendingRef.current.push(uri);
+        void pump();
+      } catch (error) {
+        captureAnalysisOwners.delete(uri);
+        throw error;
+      }
     },
     [pump],
   );
 
-  const ensureInspection = (): string => {
-    if (targetIdRef.current) return targetIdRef.current;
+  const ensureInspection = (reservedId?: string): string => {
+    if (!reservedId && targetIdRef.current) return targetIdRef.current;
     // Customer/address/roof details start as placeholders so the photo has
     // somewhere to live; Done asks for the real ones (`finish`), and the Job
     // screen keeps asking until they are real.
     const ins = createInspection({
+      id: reservedId,
       customerName: PLACEHOLDER_CUSTOMER_NAME,
       address: PLACEHOLDER_ADDRESS,
       material: 'architectural_asphalt',
@@ -770,41 +948,60 @@ function QuickInspectionNative() {
    * areaTag / captureMode ride each capture into Slope.photoMeta so the
    * analysis and report layers can bucket hits per mode.
    */
-  const addPhoto = (uri: string, imported?: boolean) => {
+  const addPhoto = (uri: string, context: CaptureContext, imported?: boolean) => {
+    const { slope, areaTag, captureMode } = context;
     const inspectionId = ensureInspection();
-    attachRawPhotos(inspectionId, [{ uri, slope, areaTag, captureMode }]);
+    const inspection = useInspectionStore.getState().getById(inspectionId);
+    const known = photosRef.current.find((photo) => photo.uri === uri && resolveCapturedPhoto(photo, inspection));
+    if (!known && photosRef.current.some((photo) => photo.uri === uri && photo.attachmentId)) {
+      throw new Error('The original photo attachment was removed. This save cannot be applied to another attachment.');
+    }
+    const matches = inspection?.slopes.flatMap((sl) => sl.photoPaths.flatMap((path, index) => path === uri ? [{ slope: sl, index }] : [])) ?? [];
+    if (matches.length > 1 && !known) throw new Error('This file has multiple attachments. Open the specific photo to continue.');
+    const existing = known ? resolveCapturedPhoto(known, inspection)?.slope : matches[0]?.slope;
+    // A store subscriber or later filing step may throw after attachment.
+    // Retrying the prepared URI must reuse its saved evidence, not append it.
+    if (!existing) attachRawPhotos(inspectionId, [{ uri, slope, areaTag, captureMode }]);
+    const stored = useInspectionStore.getState().getById(inspectionId)
+      ?.slopes.find((s) => known ? s.id === known.slopeId : s.photoPaths.includes(uri));
+    const candidates = stored?.photoPaths.flatMap((path, index) => path === uri ? [index] : []) ?? [];
+    const photoIndex = known ? resolveCapturedPhoto(known, useInspectionStore.getState().getById(inspectionId))!.index
+      : candidates.length === 1 ? candidates[0] : -1;
+    if (!stored || photoIndex < 0) {
+      throw new Error('The photo could not be saved to the inspection.');
+    }
+    const savedMeta = stored.photoMeta?.find((m) => m.photoIndex === photoIndex);
+    const savedAreaTag = savedMeta?.areaTag ?? areaTag;
     // A collateral photo fills its claim-evidence zone by existing — the
     // checklist is never ticked by hand for a surface nobody photographed.
-    const zone = zoneForAreaTag(areaTag);
+    const zone = zoneForAreaTag(savedAreaTag);
     const job = useInspectionStore.getState().getById(inspectionId);
     if (zone && job?.kind === 'insurance_claim') {
       const prev = job.collateralEvidence?.[zone];
       setCollateralZone(inspectionId, zone, {
         checked: true,
-        photoIds: [...(prev?.photoIds ?? []), uri],
+        photoIds: [...new Set([...(prev?.photoIds ?? []), uri])],
       });
-    }
-    const stored = useInspectionStore
-      .getState()
-      .inspections.find((i) => i.id === inspectionId)
-      ?.slopes.find((s) => s.orientation === slope);
-    const photoIndex = stored ? stored.photoPaths.lastIndexOf(uri) : -1;
-    if (!stored || photoIndex < 0) {
-      throw new Error('The photo could not be saved to the inspection.');
     }
     const photo: CapturedPhoto = {
       uri,
-      slope,
-      areaTag,
-      captureMode,
+      slope: stored.orientation,
+      areaTag: savedAreaTag,
+      captureMode: savedMeta?.captureMode ?? captureMode,
       imported,
       inspectionId,
       slopeId: stored.id,
       photoIndex,
+      attachmentId: stored.photoAttachmentIds?.[photoIndex],
     };
-    photosRef.current = [...photosRef.current, photo];
+    if (!photosRef.current.some((p) => captureKey(p) === captureKey(photo))) photosRef.current = [...photosRef.current, photo];
     setPhotos(photosRef.current);
-    enqueueAnalysis(uri);
+    // A replay after successful analysis must not re-run/bill that analysis.
+    const recoveringInBackground = existing && useAnalysisQueueStore.getState().jobs.some(
+      (job) => job.inspectionId === inspectionId && job.slopeId === stored.id &&
+        (job.status === 'queued' || job.status === 'running'),
+    );
+    if (!stored.analyzedPhotoIndices?.includes(photoIndex) && !recoveringInBackground) enqueueAnalysis(captureKey(photo));
   };
 
   const acquireCamera = async (): Promise<boolean> => {
@@ -818,7 +1015,9 @@ function QuickInspectionNative() {
   };
 
   const capture = async () => {
-    if (!camRef.current || capturing) return;
+    if (!camRef.current || !recoveryReady || captureInFlightRef.current || pendingCaptureRef.current || !mountedRef.current) return;
+    captureInFlightRef.current = true;
+    const context = captureContext();
     setCapturing(true);
     // The chrome gets out of the way of the shot — and stays out until asked.
     if (chromeOpen && !keepOpen) setChromeOpen(false);
@@ -827,6 +1026,15 @@ function QuickInspectionNative() {
       if (!(await acquireCamera())) {
         throw new Error('The camera is busy — try again.');
       }
+      if (!mountedRef.current) {
+        cameraLock.current = false;
+        return;
+      }
+      const evidence = exposureEvidenceRef.current;
+      const exposureContext: CaptureContext = {
+        ...contextForSlope(context, evidence.slope),
+        ...evidence,
+      };
       let uri: string | undefined;
       try {
         // Capture near-lossless. The old 0.7 baked JPEG artifacts into the
@@ -839,12 +1047,19 @@ function QuickInspectionNative() {
         cameraLock.current = false;
       }
       if (!uri) throw new Error('No photo data');
-      const small = await prepareCapturedPhoto(uri);
-      fileCapture(small);
+      const small = await prepareCapturedPhoto(uri, { retainEvidence: false });
+      const pending = await stageCapture(small, exposureContext, targetIdRef.current);
+      pendingCaptureRef.current = pending;
+      await fileCapture(pending);
     } catch (e) {
-      Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
+      if (e instanceof CaptureStagingError) {
+        pendingCaptureRef.current = e.photo;
+        if (mountedRef.current) setSlopePrompt(e.photo.retentionRecovery?.copyCompleted === false
+          ? e.message : `${e.message} Choose its slope to retry saving.`);
+      } else if (mountedRef.current) Alert.alert('Capture failed', e instanceof Error ? e.message : 'Unknown error');
     } finally {
-      setCapturing(false);
+      captureInFlightRef.current = false;
+      if (mountedRef.current) setCapturing(false);
     }
   };
 
@@ -873,35 +1088,60 @@ function QuickInspectionNative() {
    * failure (unreadable HEIC, iCloud not-downloaded) is reported without
    * aborting the batch.
    *
-   * @param slopeChosen  the picker just answered — skip the gate. Needed
-   *   because the re-entry runs before React commits the new `slopeMode`, so
-   *   reading state here again would re-open the picker forever.
+   * @param chosenContext The picker's explicit answer, including the import's
+   *   original mode and subject. Never rely on a timeout to refresh React state.
    */
-  const runLibraryImport = async (slopeChosen = false) => {
-    if (importing) return;
+  const runLibraryImport = async (chosenContext?: CaptureContext) => {
+    if (importing || !recoveryReady || captureInFlightRef.current || pendingCaptureRef.current) return;
+    const context = chosenContext ?? captureContext();
     // A batch import files every asset under the current tag, so the tag has
-    // to be a chosen one BEFORE the picker opens. Auto mode with no compass fix
-    // is the untouched default — ask first, then import. (Imports with a live
-    // compass or a pinned slope go straight through; the shutter guard's
+    // to be a chosen one BEFORE the picker opens. An unavailable or unsettled
+    // compass cannot confirm the auto tag — ask first, then import. (Imports
+    // with a settled compass or a pinned slope go through; the shutter guard's
     // mismatch check does not apply because library photos were not taken
     // facing anything now.)
-    if (!slopeChosen && slopeMode === 'auto' && !compassSlope) {
-      pendingImportRef.current = true;
+    if (!chosenContext && slopeMode === 'auto' && compassSlope !== context.slope) {
+      pendingImportRef.current = context;
       setSlopePrompt('Which slope are the photos you are about to import of?');
       return;
     }
     setImporting(true);
     setImportProgress(null);
+    // All assets from this picker belong to the same destination, including
+    // if the route disappears before the first one can create its job.
+    let reservation: Pick<PendingCapture, 'targetId' | 'originTargetId' | 'createdHere'> | undefined;
     try {
       const result = await importFromLibrary({
+        retainEvidence: false,
         multiSelect: multiSelectImport,
         onProgress: (p) => {
           if (mountedRef.current) setImportProgress(p);
         },
-        onPhoto: (uri) => {
+        onPhoto: async (uri) => {
           // addPhoto throws if the store write fails — the service catches that
           // and records it as this asset's failure, then keeps going.
-          addPhoto(uri, true);
+          let pending: PendingCapture;
+          try {
+            pending = await stageCapture(uri, context, targetIdRef.current, true, reservation);
+          } catch (error) {
+            if (error instanceof CaptureStagingError) {
+              reservation = {
+                targetId: error.photo.targetId, originTargetId: error.photo.originTargetId, createdHere: error.photo.createdHere,
+              };
+              if (mountedRef.current && !pendingCaptureRef.current) {
+                pendingCaptureRef.current = error.photo;
+                setSlopePrompt(error.photo.retentionRecovery?.copyCompleted === false
+                  ? error.message : `${error.message} Choose its slope to retry saving.`);
+              }
+            }
+            throw error;
+          }
+          reservation = {
+            targetId: pending.targetId, originTargetId: pending.originTargetId, createdHere: pending.createdHere,
+          };
+          if (!mountedRef.current) return;
+          if (pendingCaptureRef.current) throw new Error('Photo retained for recovery after the current photo is saved.');
+          if (!await saveCapture(pending)) throw new Error('Photo retained for recovery. Confirm its slope to finish saving.');
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         },
       });
@@ -959,6 +1199,10 @@ function QuickInspectionNative() {
    * packet and proposal off until the details are real.
    */
   const finish = () => {
+    if (captureInFlightRef.current || pendingCaptureRef.current) {
+      captureExitNotice();
+      return;
+    }
     setReviewOpen(false);
     const inspectionId = targetIdRef.current;
     if (photos.length === 0 || !inspectionId) {
@@ -1024,6 +1268,10 @@ function QuickInspectionNative() {
   };
 
   const close = () => {
+    if (captureInFlightRef.current || pendingCaptureRef.current) {
+      captureExitNotice();
+      return;
+    }
     const inspectionId = targetIdRef.current;
     if (photos.length === 0 || !inspectionId) {
       router.back();
@@ -1067,8 +1315,10 @@ function QuickInspectionNative() {
 
   const openPhoto = (photo: CapturedPhoto, state: StripState) => {
     Haptics.selectionAsync().catch(() => {});
+    const target = resolveCapturedPhoto(photo, useInspectionStore.getState().getById(photo.inspectionId));
+    if (!target) { toast({ tone: 'warn', title: 'This attachment is no longer available' }); return; }
     if (state.status === 'failed') {
-      enqueueAnalysis(photo.uri);
+      enqueueAnalysis(captureKey(photo));
       return;
     }
     setReviewOpen(false);
@@ -1077,7 +1327,9 @@ function QuickInspectionNative() {
       params: {
         inspectionId: photo.inspectionId,
         slopeId: photo.slopeId,
-        photoIndex: String(photo.photoIndex),
+        photoIndex: String(target.index),
+        attachmentId: target.slope.photoAttachmentIds?.[target.index],
+        photoPath: target.slope.photoPaths[target.index],
       },
     });
   };

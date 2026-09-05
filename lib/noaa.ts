@@ -170,6 +170,12 @@ export async function fetchStormHistory({
   }
 
   const events: StormEvent[] = [];
+  // IEM can return distinct local-storm reports at the same coordinate and
+  // timestamp (and occasionally repeats a feature id). React map overlays,
+  // selection sets, and clustering all require a unique event identity, so
+  // preserve the provider/base id for the first record and deterministically
+  // suffix later occurrences in response order.
+  const idOccurrences = new Map<string, number>();
   for (const f of features) {
     const coords = f.geometry?.coordinates;
     if (!coords) continue;
@@ -190,8 +196,11 @@ export async function fetchStormHistory({
     // window and the Storm Watch 24 h scan on a storm that may be years old.
     const valid = props.valid ?? props.utc_valid;
     if (typeof valid !== 'string' || valid.length === 0) continue;
+    const baseId = String(f.id ?? `${lat},${lon},${valid}`);
+    const occurrence = (idOccurrences.get(baseId) ?? 0) + 1;
+    idOccurrences.set(baseId, occurrence);
     events.push({
-      id: String(f.id ?? `${lat},${lon},${valid}`),
+      id: occurrence === 1 ? baseId : `${baseId}#${occurrence}`,
       lat,
       lon,
       type: cls,

@@ -81,7 +81,7 @@ const MIN_BOX_PT = 28;
 // sun-readable (Drift #1) — SEVERITY_INK carries that per-tint choice rather
 // than assuming white always reads.
 const SEVERITY_TINT: Record<Severity, string> = {
-  none: colors.textSubtle,
+  none: colors.surfaceMuted,
   minor: brand.royal,
   moderate: brand.amber,
   severe: brand.burntDeep,

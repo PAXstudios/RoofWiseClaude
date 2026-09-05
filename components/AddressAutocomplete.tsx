@@ -31,6 +31,8 @@ import { PressableScale } from '@/components/PressableScale';
 import {
   brand,
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -538,14 +540,7 @@ export function AddressAutocomplete({
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.xs },
-  label: {
-    fontSize: fontSize.bodySm,
-    color: colors.textSubtle,
-    fontWeight: fontWeight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginLeft: spacing.xs,
-  },
+  label: { ...dataLabel, color: colors.textSubtle, marginLeft: spacing.xs },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -560,6 +555,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodyLg,
     color: colors.text,
     paddingVertical: 4,
@@ -581,8 +577,8 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.standard,
   },
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  primary: { fontSize: fontSize.bodyMd, color: colors.navy, fontWeight: fontWeight.medium },
-  secondary: { fontSize: fontSize.bodySm, color: colors.slate },
+  primary: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
+  secondary: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
   dropdownEmpty: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -603,7 +599,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   noticeWarn: { backgroundColor: colors.warnSoft },
-  noticeText: { flex: 1, color: colors.text, fontSize: fontSize.bodySm, lineHeight: 18 },
+  noticeText: { flex: 1, color: colors.text, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, lineHeight: 18 },
 
   // "Use my location" — a real 56pt control, not a caption-sized link.
   locateWrap: { gap: spacing.xs, marginTop: spacing.xs },
@@ -618,7 +614,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   locateBtnBusy: { opacity: 0.7 },
-  locateText: { color: brand.royalDeep, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  locateText: { color: brand.royalDeep, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   settingsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -630,5 +626,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.navy,
   },
-  settingsBtnText: { color: colors.navy, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  settingsBtnText: { color: colors.text, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 });

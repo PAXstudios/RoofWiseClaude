@@ -10,9 +10,8 @@
 // annotator, or the 700px downscale in the PDF. Stroke widths and text sizes
 // are fractions of the image's SHORTER side for the same reason.
 //
-// Independent of the inspection store on purpose: it is keyed by the photo's
-// URI (the same key `Slope.photoAnalysis` uses), so the two records never
-// have to be edited together.
+// Stored by durable photo attachment identity. URI remains file provenance;
+// it cannot distinguish duplicate attachments or a removed/reused image.
 
 export type AnnotationKind = 'pen' | 'arrow' | 'circle' | 'rect' | 'text';
 

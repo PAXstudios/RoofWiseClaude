@@ -1215,7 +1215,7 @@ function NoaaCrossCheck({ lookup, dolIso }: { lookup: StormLookup | null; dolIso
   if (lookup.status === 'no_match') {
     return (
       <View style={styles.warnBox}>
-        <Ionicons name="alert-circle" size={20} color={colors.warn} />
+        <Ionicons name="alert-circle" size={20} color={colors.warnInk} />
         <Text style={styles.warnText}>
           No NOAA storm on record within 5 mi of this address in the ±{DOL_MATCH_WINDOW_DAYS}{' '}
           days around that date. The carrier runs the same check — confirm the date with the
@@ -1243,7 +1243,7 @@ function NoaaCrossCheck({ lookup, dolIso }: { lookup: StormLookup | null; dolIso
       <Ionicons
         name={verdict.withinWindow72h ? 'checkmark-circle' : 'alert-circle'}
         size={20}
-        color={verdict.withinWindow72h ? colors.success : colors.warn}
+        color={verdict.withinWindow72h ? colors.successInk : colors.warnInk}
       />
       <View style={{ flex: 1, gap: spacing.xs }}>
         <Text style={verdict.withinWindow72h ? styles.noaaMatchText : styles.warnText}>
@@ -2153,12 +2153,12 @@ const styles = StyleSheet.create({
   noaaMatchText: {
     fontSize: fontSize.bodyMd,
     fontFamily: fontFamily.archivo.semibold,
-    color: colors.success,
+    color: colors.successInk,
     fontWeight: fontWeight.semibold,
   },
-  noaaMatchSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.success },
-  warnText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.warn, fontWeight: fontWeight.medium },
-  okText: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.success, fontWeight: fontWeight.medium },
+  noaaMatchSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.successInk },
+  warnText: { flex: 1, fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.warnInk, fontWeight: fontWeight.medium },
+  okText: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.successInk, fontWeight: fontWeight.medium },
 
   zoneCard: {
     backgroundColor: colors.surface,

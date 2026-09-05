@@ -90,6 +90,8 @@ export type LibraryImportResult = {
 };
 
 export type ImportFromLibraryArgs = {
+  /** False only when onPhoto owns a durable copy+journal transaction. */
+  retainEvidence?: boolean;
   /**
    * Called once per successfully normalized photo, in pick order. Attach it to
    * the store (with the caller's slope / areaTag / captureMode) and enqueue it
@@ -192,7 +194,7 @@ export async function importFromLibrary(
   /** Prepare one asset and hand it to the caller; records its own failure. */
   const processAsset = async (uri: string, index: number): Promise<void> => {
     try {
-      const small = await prepareCapturedPhoto(uri);
+      const small = await prepareCapturedPhoto(uri, { retainEvidence: args.retainEvidence });
       await onPhoto(small, { index, imported: true });
       imported += 1;
     } catch (e) {

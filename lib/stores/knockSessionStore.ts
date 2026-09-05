@@ -70,7 +70,7 @@ type KnockSessionState = {
     routeTarget?: KnockRouteTarget,
     opts?: { routeStops?: KnockRouteTarget[]; mileageTripId?: string; mileageTripOwned?: boolean },
   ) => KnockSession;
-  /** Aim (or re-aim) the active session — "add this storm area to my route". */
+  /** Visit this area now, keeping the previous current and pending stops next. */
   setRouteTarget: (target: KnockRouteTarget) => void;
   /**
    * Replace the multi-stop route. The knock planner's "Start this day" calls
@@ -127,17 +127,31 @@ export const useKnockSessionStore = create<KnockSessionState>()(
       },
 
       setRouteTarget: (target) =>
-        set((s) =>
-          s.activeSession
-            ? {
-                activeSession: {
-                  ...s.activeSession,
-                  routeTarget: target,
-                  routeStormAlertId: target.stormAlertId ?? s.activeSession.routeStormAlertId,
-                },
-              }
-            : s,
-        ),
+        set((s) => {
+          const active = s.activeSession;
+          if (!active) return s;
+          const stops = [...(active.routeStops?.length ? active.routeStops : active.routeTarget ? [active.routeTarget] : [])];
+          let index = Math.min(Math.max(0, active.currentStopIndex ?? 0), Math.max(0, stops.length - 1));
+          const found = stops.findIndex((stop) => stop.lat === target.lat && stop.lng === target.lng && stop.radiusMiles === target.radiusMiles);
+          let next = target;
+          if (found >= 0) {
+            // Re-select a saved stop without adding a duplicate or losing its
+            // provenance. Removing an earlier stop shifts the insertion slot.
+            next = { ...stops[found], ...target };
+            stops.splice(found, 1);
+            if (found < index) index -= 1;
+          }
+          stops.splice(index, 0, next);
+          return {
+            activeSession: {
+              ...active,
+              routeStops: stops,
+              currentStopIndex: index,
+              routeTarget: next,
+              routeStormAlertId: next.stormAlertId ?? active.routeStormAlertId,
+            },
+          };
+        }),
 
       setRouteStops: (stops, startIndex = 0) =>
         set((s) => {

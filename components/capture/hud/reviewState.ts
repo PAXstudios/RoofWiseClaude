@@ -3,6 +3,7 @@
 // into one thumbnail ring. No I/O, no React — shared by the screen, the
 // review drawer and the last-shot thumbnail so they can never disagree.
 
+import { readPhotoAnalysis } from '@/lib/services/photoAnalysisState';
 import type { PillTone } from '@/components/ui/Pill';
 import { isGeminiConfigured } from '@/lib/env';
 import type {
@@ -25,7 +26,19 @@ export type CapturedPhoto = {
   inspectionId: string;
   slopeId: string;
   photoIndex: number;
+  attachmentId?: string;
 };
+
+export const captureKey = (photo: CapturedPhoto): string => photo.attachmentId ?? photo.uri;
+
+/** Capture indices are historical positions; actions resolve the attachment. */
+export function resolveCapturedPhoto(photo: CapturedPhoto, inspection: Inspection | undefined) {
+  const slope = inspection?.slopes.find((sl) => sl.id === photo.slopeId);
+  if (!slope) return undefined;
+  const index = photo.attachmentId ? slope.photoAttachmentIds?.indexOf(photo.attachmentId) ?? -1
+    : slope.photoPaths.filter((uri) => uri === photo.uri).length === 1 ? slope.photoPaths.indexOf(photo.uri) : -1;
+  return index >= 0 && slope.photoPaths[index] === photo.uri ? { slope, index } : undefined;
+}
 
 /**
  * Screen-local analysis bookkeeping for photos the store has not (yet)
@@ -48,11 +61,11 @@ export function stripStateFor(
   local: LocalAnalysis | undefined,
 ): StripState {
   if (!isGeminiConfigured) return { status: 'no_ai' };
-  const slope = inspection?.slopes.find((s) => s.id === photo.slopeId);
-  const markersOnPhoto = slope
-    ? slope.damage.filter((m) => m.photoIndex === photo.photoIndex).length
-    : 0;
-  const stored = slope?.photoAnalysis?.[photo.uri];
+  const target = resolveCapturedPhoto(photo, inspection);
+  if (!target) return { status: 'failed', error: 'This attachment is no longer available.' };
+  const { slope, index } = target;
+  const markersOnPhoto = slope.damage.filter((m) => m.photoIndex === index).length;
+  const stored = readPhotoAnalysis(slope, index);
   // Done is done — the store knows before this screen's batch reconciles.
   if (stored?.status === 'done') {
     return { status: 'done', findingCount: stored.findingCount ?? markersOnPhoto };
@@ -67,7 +80,7 @@ export function stripStateFor(
       error: stored.error,
     };
   }
-  if (slope?.analyzedPhotoIndices?.includes(photo.photoIndex)) {
+  if (slope.analyzedPhotoIndices?.includes(index)) {
     return { status: 'done', findingCount: markersOnPhoto };
   }
   if (local) return { status: local.status, error: local.error };
@@ -112,7 +125,7 @@ export function summarizeSession(
   let failed = 0;
   let lastFailure: string | undefined;
   for (const p of photos) {
-    const s = stripStateFor(p, inspection, localAnalysis[p.uri]);
+    const s = stripStateFor(p, inspection, localAnalysis[captureKey(p)]);
     if (s.status === 'done') done += 1;
     else if (s.status === 'analyzing') analyzing += 1;
     else if (s.status === 'failed') {

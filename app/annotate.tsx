@@ -24,7 +24,7 @@
 // Same camera chrome as Quick Inspection (RailButton + smoke glass), so it
 // feels like a mode of the camera rather than a different app.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Image as RNImage,
   Pressable,
@@ -81,9 +81,10 @@ import {
 import { ANNOTATION_COLOR_HEX, describeAnnotations, fitRect, toNorm, toPx, type PxRect } from '@/lib/services/annotationSvg';
 import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import { useAnnotationStore } from '@/lib/stores/annotationStore';
+import { resolveAnnotationTarget, type AnnotationTargetInput } from '@/lib/services/annotationTarget';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useToastStore } from '@/lib/stores/toastStore';
-import { brand, colors, fontSize, fontWeight, hudMotion, motion, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { brand, colors, fontFamily, fontSize, fontWeight, hudMotion, motion, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 type Tool = AnnotationKind;
 
@@ -120,6 +121,7 @@ export default function AnnotateScreen() {
     slopeId?: string;
     photoIndex?: string;
     index?: string;
+    attachmentId?: string;
   }>();
 
   // The photo: by URI, or by the inspection / slope / index edit-detection
@@ -129,16 +131,20 @@ export default function AnnotateScreen() {
   const inspection = useInspectionStore((s) =>
     params.inspectionId ? s.inspections.find((i) => i.id === params.inspectionId) : undefined,
   );
-  const slope = inspection?.slopes.find((s) => s.id === params.slopeId);
-  const uri = params.uri || (Number.isInteger(index) && index >= 0 ? slope?.photoPaths[index] : undefined);
-  const markers = useMemo(
-    () => (slope && Number.isInteger(index) ? slope.damage.filter((m) => m.photoIndex === index) : []),
-    [slope, index],
-  );
+  const [identity, setIdentity] = useState<AnnotationTargetInput>();
+  const target = resolveAnnotationTarget(inspection, identity ?? {
+    uri: params.uri, slopeId: params.slopeId, attachmentId: params.attachmentId, index,
+  });
+  useEffect(() => {
+    if (!identity && target?.attachmentId) setIdentity({ uri: target.uri, slopeId: target.slopeId, attachmentId: target.attachmentId });
+  }, [identity, target]);
+  const uri = params.inspectionId ? target?.uri : params.uri;
+  const markers = target?.markers ?? [];
+  const slope = inspection?.slopes.find((slope) => slope.id === target?.slopeId);
 
   const setItems = useAnnotationStore((s) => s.set);
-  const [initial] = useState<Annotation[]>(() => (uri ? [...useAnnotationStore.getState().get(uri)] : EMPTY));
-  const [stored] = useState(() => (uri ? useAnnotationStore.getState().getRecord(uri) : undefined));
+  const [initial] = useState<Annotation[]>(() => (uri ? [...useAnnotationStore.getState().get(uri, target?.attachmentId)] : EMPTY));
+  const [stored] = useState(() => (uri ? useAnnotationStore.getState().getRecord(uri, target?.attachmentId) : undefined));
 
   // ── Tool state ──────────────────────────────────────────────────────────
   const [tool, setTool] = useState<Tool>('pen');
@@ -150,33 +156,28 @@ export default function AnnotateScreen() {
   const [history, setHistory] = useState<History>({ past: [], present: initial, future: [] });
   const present = history.present;
   const savedRef = useRef<Annotation[]>(initial);
+  const presentRef = useRef(present);
+  presentRef.current = present;
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
   const dirty = present !== savedRef.current && !(present.length === 0 && savedRef.current.length === 0);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
 
-  // `initial` above is a synchronous snapshot taken at mount — but the
-  // annotation store's AsyncStorage read is asynchronous (persist middleware,
-  // same class of race `useOnboardingHydrated` / `useProposalsHydrated` guard
-  // elsewhere in this app), so a screen mounted before that read resolves
-  // captures an EMPTY snapshot even when this photo has saved annotations.
-  // In the app this window is usually already closed by the time a roofer
-  // reaches this screen (the store hydrates once, near app boot) — but a cold
-  // launch straight into Annotate, or a slow read on web, can still hit it.
-  // Re-seed once, the instant hydration finishes, and only while the roofer
-  // hasn't drawn or undone anything yet — never clobber real work.
+  // Either store may finish hydration last. Subscribe to the resolved record,
+  // not just the annotation hydration event; never replace an edited draft.
+  const persistedItems = useAnnotationStore((s) => uri ? s.get(uri, target?.attachmentId) : EMPTY);
+  const seeded = useRef(initial.length > 0);
   useEffect(() => {
-    if (!uri || useAnnotationStore.persist.hasHydrated()) return;
-    const unsub = useAnnotationStore.persist.onFinishHydration(() => {
-      setHistory((h) => {
-        if (h.past.length > 0 || h.future.length > 0) return h;
-        const fresh = [...useAnnotationStore.getState().get(uri)];
-        if (fresh.length === 0) return h;
-        savedRef.current = fresh;
-        return { past: [], present: fresh, future: [] };
-      });
+    if (seeded.current || persistedItems.length === 0) return;
+    seeded.current = true;
+    setHistory((h) => {
+      if (h.past.length > 0 || h.future.length > 0) return h;
+      const fresh = [...persistedItems];
+      savedRef.current = fresh;
+      return { past: [], present: fresh, future: [] };
     });
-    return unsub;
-  }, [uri]);
+  }, [persistedItems]);
 
   const commit = (next: Annotation[]) =>
     setHistory((h) => ({ past: [...h.past, h.present], present: next, future: [] }));
@@ -509,20 +510,34 @@ export default function AnnotateScreen() {
     else router.back();
   };
 
-  const onSave = () => {
-    if (!uri) return;
-    setItems(uri, present, img.width > 0 && img.height > 0 ? { imageW: img.width, imageH: img.height } : undefined);
-    savedRef.current = present;
-    dirtyRef.current = false;
-    leavingRef.current = true;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    const n = present.length;
-    toast({
-      tone: 'success',
-      title: n === 0 ? 'Annotations cleared' : `Saved ${n} annotation${n === 1 ? '' : 's'}`,
-      body: n === 0 ? undefined : 'They show wherever this photo shows, and print in the report.',
-    });
-    router.back();
+  const onSave = async () => {
+    if (!uri || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await setItems(uri, present, img.width > 0 && img.height > 0 ? { imageW: img.width, imageH: img.height } : undefined, target?.attachmentId);
+      if (!saved) {
+        toast({ tone: 'warn', title: 'Photo changed', body: 'This attachment is no longer available. Your drawing has not been applied to another photo.' });
+        return;
+      }
+      savedRef.current = present;
+      if (presentRef.current !== present || leavingRef.current) return;
+      dirtyRef.current = false;
+      leavingRef.current = true;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      const n = present.length;
+      toast({
+        tone: 'success',
+        title: n === 0 ? 'Annotations cleared' : `Saved ${n} annotation${n === 1 ? '' : 's'}`,
+        body: n === 0 ? undefined : 'They show wherever this photo shows, and print in the report.',
+      });
+      router.back();
+    } catch {
+      toast({ tone: 'danger', title: 'Drawing not saved', body: 'Your draft is still here. Free device storage if needed, then tap Save to retry.' });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   const pickTool = (t: Tool) => {
@@ -589,7 +604,7 @@ export default function AnnotateScreen() {
   const canUndo = history.past.length > 0;
   const canRedo = history.future.length > 0;
   const where = slope
-    ? `Photo ${Number.isInteger(index) ? index + 1 : '?'} · ${slope.orientation} slope`
+    ? `Photo ${target ? target.index + 1 : '?'} · ${slope.orientation} slope`
     : null;
   const summary = present.length === 0 ? 'Nothing drawn yet' : describeAnnotations(present);
   const subtitle = where ? `${where} · ${summary}` : summary;
@@ -701,6 +716,7 @@ export default function AnnotateScreen() {
         <PressableScale
           style={styles.save}
           onPress={onSave}
+          disabled={saving}
           testID="annotate-save"
           accessibilityRole="button"
           accessibilityLabel={
@@ -711,7 +727,7 @@ export default function AnnotateScreen() {
         >
           <Ionicons name="checkmark" size={24} color={colors.textInverse} />
           <View>
-            <Text style={styles.saveText}>{dirty ? 'Save drawing' : 'Done'}</Text>
+            <Text style={styles.saveText}>{saving ? 'Saving…' : dirty ? 'Save drawing' : 'Done'}</Text>
             <Text style={styles.saveSub}>{summary}</Text>
           </View>
         </PressableScale>
@@ -874,8 +890,8 @@ const styles = StyleSheet.create({
     backgroundColor: brand.black2,
   },
   titleWrap: { flex: 1, gap: 1 },
-  title: { color: colors.textInverse, fontSize: fontSize.titleMd, fontWeight: fontWeight.bold },
-  subtitle: { color: colors.textInverse, opacity: 0.78, fontSize: fontSize.bodySm },
+  title: { color: colors.onMesh, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleMd, fontWeight: fontWeight.bold },
+  subtitle: { color: colors.onMesh, fontFamily: fontFamily.archivo.regular, opacity: 0.78, fontSize: fontSize.bodySm },
 
   canvasWrap: { flex: 1 },
   canvas: { flex: 1, backgroundColor: brand.black, overflow: 'hidden' },
@@ -939,8 +955,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     ...shadows.float,
   },
-  saveText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
-  saveSub: { color: colors.textInverse, opacity: 0.9, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  saveText: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  saveSub: { color: colors.textInverse, fontFamily: fontFamily.mono, opacity: 0.9, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   // Label sheet (white surface).
   textInput: {
@@ -951,6 +967,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     paddingHorizontal: spacing.lg,
     fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.regular,
     color: colors.text,
   },
   sheetRow: { flexDirection: 'row', gap: HUD_GAP, alignItems: 'center' },
@@ -963,7 +980,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sizeChipActive: { backgroundColor: colors.brand },
-  sizeChipText: { color: colors.text, fontWeight: fontWeight.bold },
+  sizeChipText: { color: colors.text, fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold },
   sizeChipTextActive: { color: colors.textInverse },
   placeBtn: {
     minHeight: touchTarget.preferred,
@@ -977,8 +994,8 @@ const styles = StyleSheet.create({
   placeTextOff: { color: colors.textMuted },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xxl, backgroundColor: colors.bg },
-  emptyTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, textAlign: 'center' },
-  emptyText: { fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, textAlign: 'center' },
+  emptyText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   emptyBtn: {
     minHeight: touchTarget.preferred,
     paddingHorizontal: spacing.xxl,

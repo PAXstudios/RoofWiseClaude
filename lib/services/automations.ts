@@ -33,6 +33,7 @@ import type {
 } from '../models/types';
 import { LEAD_STAGE_LABELS, leadStageColumn } from '../models/types';
 import { addressKey } from './propertyRecord';
+import { isAppointmentTimestamp } from './appointmentTime';
 import {
   MESSAGE_TEMPLATE_STAGE,
   useAutomationStore,
@@ -46,7 +47,7 @@ import { useEstimateStore } from '../stores/estimateStore';
 import { useTaskStore } from '../stores/taskStore';
 import { useActivityStore } from '../stores/activityStore';
 import { useNotificationStore, type AppNotificationKind } from '../stores/notificationStore';
-import { buildPipeline, stageIndex, startInspectionFromLead } from './pipeline';
+import { buildPipeline, inspectionsForLead, stageIndex, startInspectionFromLead } from './pipeline';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -168,7 +169,8 @@ export type AutomationAction =
       to: string;
       body: string;
     }
-  | { kind: 'create_job'; leadId: string; status: 'scheduled'; scheduledAt?: string };
+  | { kind: 'create_job'; leadId: string; status: 'scheduled'; scheduledAt: string }
+  | { kind: 'reschedule_job'; leadId: string; inspectionId: string; scheduledAt: string };
 
 // -----------------------------------------------------------------------------
 // Context — what a rule may look at
@@ -209,7 +211,7 @@ export function buildContext(now: number = Date.now()): AutomationContext {
     inspectionForLead: (id) => {
       if (!id) return undefined;
       const lead = leads.find((l) => l.id === id);
-      return inspections.find((i) => i.id === lead?.inspectionId || i.leadId === id);
+      return lead ? inspectionsForLead(lead, inspections)[0] : undefined;
     },
     proposalForJob: (jobId) =>
       jobId
@@ -523,13 +525,18 @@ export const AUTOMATION_RULES: AutomationRule[] = [
   {
     id: 'knock_booked_job',
     title: 'When a knock is Booked, create the job at Inspection scheduled',
-    detail: 'The appointment day becomes the job’s schedule; the lead links to it.',
+    detail: 'The date and time become the job’s schedule. Rebooking updates only an inspection that has not started.',
     events: ['knock_outcome'],
     defaultOn: true,
     evaluate: (e, ctx) => {
-      if (e.type !== 'knock_outcome' || e.outcome !== 'appointment' || !e.leadId) return [];
+      if (e.type !== 'knock_outcome' || (e.outcome !== 'appointment' && e.outcome !== 'inspection_scheduled') || !e.leadId) return [];
       const lead = ctx.leadById(e.leadId);
-      if (!lead || ctx.inspectionForLead(lead.id)) return [];
+      if (!lead || !isAppointmentTimestamp(e.followUpAt)) return [];
+      const existing = ctx.inspectionForLead(lead.id);
+      if (existing) {
+        if (existing.status !== 'scheduled' || existing.reportFinalizedAt || existing.scheduledAt === e.followUpAt) return [];
+        return [{ kind: 'reschedule_job', leadId: lead.id, inspectionId: existing.id, scheduledAt: e.followUpAt }];
+      }
       return [{ kind: 'create_job', leadId: lead.id, status: 'scheduled', scheduledAt: e.followUpAt }];
     },
   },
@@ -764,7 +771,17 @@ function applyAction(a: AutomationAction, ctx: AutomationContext, out: Applied):
       out.leadId = a.leadId;
       return;
     }
+    case 'reschedule_job': {
+      const store = useInspectionStore.getState();
+      const current = store.inspections.find((ins) => ins.id === a.inspectionId);
+      if (!current || current.status !== 'scheduled' || current.reportFinalizedAt || !isAppointmentTimestamp(a.scheduledAt)) return;
+      store.setScheduledAt(current.id, a.scheduledAt);
+      out.summary.push(`rescheduled ${current.reportId}`);
+      out.leadId = a.leadId;
+      return;
+    }
     case 'create_job': {
+      if (!isAppointmentTimestamp(a.scheduledAt)) return;
       const ins = startInspectionFromLead(a.leadId, { status: a.status, scheduledAt: a.scheduledAt });
       if (!ins) return;
       useActivityStore.getState().log({

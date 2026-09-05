@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -145,7 +146,7 @@ export default function Onboarding() {
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
             <View style={styles.brandMark}>
-              <Ionicons name="shield-checkmark" size={15} color={colors.textInverse} />
+              <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandLogo} resizeMode="cover" accessibilityLabel="RoofWise logo" />
             </View>
             <Text style={styles.brandName}>RoofWise</Text>
           </View>
@@ -328,7 +329,9 @@ const styles = StyleSheet.create({
     backgroundColor: brand.royal,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  brandLogo: { width: '100%', height: '100%' },
   brandName: {
     color: colors.onMesh,
     fontFamily: fontFamily.archivo.bold,

@@ -7,9 +7,11 @@
 // "colour fields with texture" rather than a flat CSS gradient — never
 // drifts screen to screen.
 
+import { useEffect } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { gradients } from '@/theme/tokens';
 
 export type MeshVariant = 'hero' | 'home' | 'cool' | 'night' | 'map';
@@ -36,7 +38,7 @@ const VARIANT_POINTS: Record<MeshVariant, { start: { x: number; y: number }; end
 
 // Grain sits low, only in the colour fields — the mock's own words. .16–.26
 // across screens; this is the house default (docs/DESIGN_1A.md §1).
-const GRAIN_OPACITY = 0.2;
+const GRAIN_OPACITY = 0.065;
 
 export function MeshBackground({
   variant = 'home',
@@ -49,6 +51,24 @@ export function MeshBackground({
   style?: StyleProp<ViewStyle>;
 }) {
   const { start, end } = VARIANT_POINTS[variant];
+  const drift = useSharedValue(0);
+
+  useEffect(() => {
+    drift.value = withRepeat(
+      withSequence(withTiming(1, { duration: 6500 }), withTiming(0, { duration: 6500 })),
+      -1,
+      true,
+    );
+  }, [drift]);
+
+  const driftStyle = useAnimatedStyle(() => ({
+    opacity: 0.2 + drift.value * 0.18,
+    transform: [
+      { translateX: -18 + drift.value * 36 },
+      { translateY: 10 - drift.value * 22 },
+      { scale: 1.05 + drift.value * 0.08 },
+    ],
+  }));
   return (
     <View style={[StyleSheet.absoluteFill, style]} pointerEvents="none">
       <LinearGradient
@@ -57,6 +77,15 @@ export function MeshBackground({
         end={end}
         style={StyleSheet.absoluteFill}
       />
+      <Animated.View style={[styles.driftField, driftStyle]}>
+        <LinearGradient
+          colors={['rgba(255,138,61,0)', 'rgba(156,58,94,0.72)', 'rgba(232,99,26,0.58)', 'rgba(18,53,184,0)']}
+          locations={[0, 0.38, 0.68, 1]}
+          start={{ x: 0, y: 0.2 }}
+          end={{ x: 1, y: 0.8 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
       {grain ? (
         <Image
           source={require('@/assets/textures/grain.png')}
@@ -70,3 +99,13 @@ export function MeshBackground({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  driftField: {
+    position: 'absolute',
+    left: '-15%',
+    right: '-15%',
+    top: '-30%',
+    bottom: '-30%',
+  },
+});

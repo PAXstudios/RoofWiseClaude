@@ -24,6 +24,8 @@ import { HUD_GAP } from './glass';
 import {
   pillFor,
   stripStateFor,
+  captureKey,
+  resolveCapturedPhoto,
   summarizeSession,
   type CapturedPhoto,
   type LocalAnalysis,
@@ -68,10 +70,13 @@ export function ReviewDrawer({
   // tap-sized icon competing with it for a gloved thumb.
   const onAnnotate = (p: CapturedPhoto) => {
     Haptics.selectionAsync().catch(() => {});
+    const target = resolveCapturedPhoto(p, inspection);
+    if (!target) return;
     onClose();
     router.push({
       pathname: '/annotate',
-      params: { uri: p.uri, inspectionId: p.inspectionId, slopeId: p.slopeId, index: String(p.photoIndex) },
+      params: { uri: p.uri, inspectionId: p.inspectionId, slopeId: p.slopeId,
+        attachmentId: p.attachmentId ?? target.slope.photoAttachmentIds?.[target.index], index: String(target.index) },
     });
   };
 
@@ -126,7 +131,7 @@ export function ReviewDrawer({
                 onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: !reducedMotion })}
               >
                 {photos.map((p) => {
-                  const state = stripStateFor(p, inspection, localAnalysis[p.uri]);
+                  const state = stripStateFor(p, inspection, localAnalysis[captureKey(p)]);
                   const pill = pillFor(state);
                   const a11y =
                     state.status === 'failed'
@@ -134,7 +139,7 @@ export function ReviewDrawer({
                       : `Photo ${p.photoIndex + 1}, ${shortAreaTag(p.areaTag)}, ${p.slope} slope, ${pill.label}. Tap to open. Long press to draw on it.`;
                   return (
                     <Pressable
-                      key={p.uri}
+                      key={captureKey(p)}
                       style={({ pressed }) => [styles.thumbCol, pressed && styles.pressed]}
                       onPress={() => onOpen(p, state)}
                       onLongPress={() => onAnnotate(p)}
@@ -158,7 +163,7 @@ export function ReviewDrawer({
                             <Ionicons name="images" size={11} color={colors.textInverse} />
                           </View>
                         )}
-                        <AnnotationCountDot uri={p.uri} />
+                        <AnnotationCountDot uri={p.uri} attachmentId={p.attachmentId} />
                       </View>
                       <Pill
                         label={pill.label}
@@ -194,8 +199,8 @@ export function ReviewDrawer({
 }
 
 /** Pencil + count, bottom-right of a thumbnail — only when this photo has a drawing on it. */
-function AnnotationCountDot({ uri }: { uri: string }) {
-  const n = useAnnotationStore((s) => s.byUri[uri]?.items.length ?? 0);
+function AnnotationCountDot({ uri, attachmentId }: { uri: string; attachmentId?: string }) {
+  const n = useAnnotationStore((s) => attachmentId ? s.count(uri, attachmentId) : 0);
   if (n === 0) return null;
   return (
     <View style={styles.annotateDot} pointerEvents="none">

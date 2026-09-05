@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -162,7 +163,7 @@ export default function Welcome() {
           >
             <Animated.View entering={FadeIn.duration(motion.enterMs)} style={styles.header}>
               <View style={styles.brandMark}>
-                <Ionicons name="shield-checkmark" size={20} color={colors.textInverse} />
+                <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandLogo} resizeMode="cover" accessibilityLabel="RoofWise logo" />
               </View>
               <Text style={styles.title}>
                 {isSignUp ? 'Create your\naccount' : 'Welcome\nback'}
@@ -391,7 +392,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
+    overflow: 'hidden',
   },
+  brandLogo: { width: '100%', height: '100%' },
   // Same one-off +4 hero size as app/onboarding.tsx's title — the two
   // screens share the mesh's exact 115° ramp (docs §2), so they share its
   // type scale too.

@@ -27,7 +27,8 @@ export type LiveFix = {
   /** Horizontal accuracy in meters, when the platform reports one. */
   accuracy: number | null;
   heading: number | null;
-  ts: number;
+  /** Native observation time; null means the platform did not supply one. */
+  ts: number | null;
 };
 
 /**
@@ -81,7 +82,8 @@ function onFix(loc: Location.LocationObject): void {
     lng: c.longitude,
     accuracy: typeof c.accuracy === 'number' ? c.accuracy : null,
     heading: typeof c.heading === 'number' ? c.heading : null,
-    ts: typeof loc.timestamp === 'number' ? loc.timestamp : Date.now(),
+    // Receiving coordinates now does not prove they were observed now.
+    ts: typeof loc.timestamp === 'number' ? loc.timestamp : null,
   };
 
   const ks = useKnockSessionStore.getState();

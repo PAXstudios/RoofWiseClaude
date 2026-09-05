@@ -13,6 +13,7 @@ import Svg, { Ellipse, G, Line, Path, Polygon, Rect, Text as SvgText } from 'rea
 import type { Annotation } from '@/lib/models/annotations';
 import type { DamageMarker } from '@/lib/models/types';
 import { annotationShapes, annotationToShapes, markerShapes, type PxRect, type Shape } from '@/lib/services/annotationSvg';
+import { fontFamily } from '@/theme/tokens';
 
 type Props = {
   /** Container size (pt). The <Svg> fills it. */
@@ -69,7 +70,15 @@ function shapeElement(s: Shape, key: string) {
       return (
         <G key={key}>
           <Rect x={s.bg.x} y={s.bg.y} width={s.bg.w} height={s.bg.h} rx={s.bg.rx} fill={s.bg.fill} />
-          <SvgText x={s.x} y={s.y} textAnchor="middle" fontSize={s.fontSize} fontWeight="700" fill={s.fill}>
+          <SvgText
+            x={s.x}
+            y={s.y}
+            textAnchor="middle"
+            fontFamily={fontFamily.archivo.bold}
+            fontSize={s.fontSize}
+            fontWeight="700"
+            fill={s.fill}
+          >
             {s.text}
           </SvgText>
         </G>

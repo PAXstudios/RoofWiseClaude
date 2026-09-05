@@ -23,6 +23,7 @@ import {
   type AnalysisResult,
 } from './gemini';
 import { deriveFunctional } from './functionalDamage';
+import { patchPhotoAnalysis, readPhotoAnalysis } from './photoAnalysisState';
 import { useInspectionStore } from '../stores/inspectionStore';
 import { useCorrectionsStore } from '../stores/correctionsStore';
 import { useTrainingQueueStore } from '../stores/trainingQueueStore';
@@ -147,11 +148,15 @@ async function runAnalyzeSlope(
   slopeId: string,
   opts: AnalyzeSlopeOptions = {},
 ): Promise<SlopeAnalysisResult> {
+  useInspectionStore.getState().ensurePhotoAttachmentIds(inspectionId, slopeId);
   const inspection = useInspectionStore.getState().inspections.find((i) => i.id === inspectionId);
-  const slope = inspection?.slopes.find((s) => s.id === slopeId);
-  if (!inspection || !slope) {
+  const savedSlope = inspection?.slopes.find((s) => s.id === slopeId);
+  if (!inspection || !savedSlope) {
     throw new Error('Slope not found');
   }
+  // Capture immutable request identities: capture may append to the store's
+  // slope object while this pass is suspended.
+  const slope = { ...savedSlope, photoPaths: [...savedSlope.photoPaths], photoAttachmentIds: [...(savedSlope.photoAttachmentIds ?? [])] };
 
   const todoIndexes = opts.photoIndexes
     ? opts.photoIndexes.filter((i) => i >= 0 && i < slope.photoPaths.length)
@@ -178,15 +183,16 @@ async function runAnalyzeSlope(
   // photo 1 is analyzing.
   for (const photoIndex of todoIndexes) {
     const uri = slope.photoPaths[photoIndex];
-    const prev = slope.photoAnalysis?.[uri];
+    const prev = readPhotoAnalysis(slope, photoIndex);
     if (prev?.status !== 'analyzing') {
-      setPhotoAnalysisState(inspectionId, slopeId, uri, { status: 'queued' });
+      setPhotoAnalysisState(inspectionId, slopeId, uri, { status: 'queued' }, slope.photoAttachmentIds[photoIndex]);
     }
   }
 
   for (let i = 0; i < todoIndexes.length; i++) {
     const photoIndex = todoIndexes[i];
     const uri = slope.photoPaths[photoIndex];
+    const attachmentId = slope.photoAttachmentIds[photoIndex];
     opts.onProgress?.({ done: i, total: todoIndexes.length, current: uri });
 
     if (opts.signal?.aborted) {
@@ -197,14 +203,24 @@ async function runAnalyzeSlope(
       break;
     }
 
-    const attempts = (slope.photoAnalysis?.[uri]?.attempts ?? 0) + 1;
-    setPhotoAnalysisState(inspectionId, slopeId, uri, { status: 'analyzing', attempts });
+    // Indices are only a request-time selection. Removing an earlier photo
+    // renumbers the live slope while file/model I/O is pending. A URI may
+    // appear twice or be removed and reattached; only the attachment ID lasts.
+    const target = livePhoto(inspectionId, slopeId, uri, attachmentId);
+    if (!target) continue;
+    const attempts = (readPhotoAnalysis(target.slope, target.index)?.attempts ?? 0) + 1;
+    setPhotoAnalysisState(inspectionId, slopeId, uri, { status: 'analyzing', attempts }, attachmentId);
     const photoMark = `analysis.photo.${inspectionId}.${slopeId}.${photoIndex}`;
     mark(photoMark);
 
     try {
       const base64 = await readPhotoBase64(uri);
-      const photoMeta = slope.photoMeta?.find((m) => m.photoIndex === photoIndex);
+      const beforeRequest = livePhoto(inspectionId, slopeId, uri, attachmentId);
+      if (!beforeRequest) {
+        clearMark(photoMark);
+        continue;
+      }
+      const photoMeta = beforeRequest.slope.photoMeta?.find((m) => m.photoIndex === beforeRequest.index);
       const captureMode = photoMeta?.captureMode ?? 'square_10x10';
       const analyzeOpts = {
         imageBase64: base64,
@@ -227,6 +243,15 @@ async function runAnalyzeSlope(
           : await analyzePhoto(analyzeOpts);
       results.push(r);
       modelUsed = r.modelUsed ?? modelUsed;
+
+      // Never attach a removed/rotated photo's response to its replacement.
+      // Resolve again AFTER the await, before any index-based store write.
+      const destination = livePhoto(inspectionId, slopeId, uri, attachmentId);
+      if (!destination) {
+        clearMark(photoMark);
+        continue;
+      }
+      const destinationIndex = destination.index;
 
       // --- AI threshold control (BACKLOG #6 + #11): per-category confidence
       // gate, applied exactly here — where Gemini markers are mapped onto the
@@ -253,10 +278,10 @@ async function runAnalyzeSlope(
       useInspectionStore.getState().replacePhotoMarkers(
         inspection.id,
         slope.id,
-        photoIndex,
+        destinationIndex,
         gatedMarkers,
       );
-      mergeFindingsForPhoto(inspectionId, slopeId, photoIndex, r);
+      mergeFindingsForPhoto(inspectionId, slopeId, destinationIndex, r);
       setPhotoAnalysisState(inspectionId, slopeId, uri, {
         status: 'done',
         attempts,
@@ -273,7 +298,7 @@ async function runAnalyzeSlope(
         collateralDamage: r.collateralDamage,
         shingleCount: r.shingleCount,
         squareCoverage: r.squareCoverage,
-      });
+      }, attachmentId);
       measure(photoMark, { metric: PHOTO_ANALYSIS_METRIC.photo, n: 1 });
 
       // Canonical review gate (PRODUCT_SYNTHESIS §1): ANY detection below the
@@ -286,6 +311,13 @@ async function runAnalyzeSlope(
           photoPath: uri,
           findings: r.findings,
           markers: r.markers,
+          reviewEvidence: {
+            attachmentId,
+            markers: gatedMarkers,
+            findings: r.findings,
+            analysisAt: readPhotoAnalysis(useInspectionStore.getState().getById(inspectionId)!
+              .slopes.find((sl) => sl.id === slopeId)!, destinationIndex)!.at,
+          },
         });
       }
 
@@ -307,16 +339,21 @@ async function runAnalyzeSlope(
 
       attached++;
     } catch (e) {
+      const failedTarget = livePhoto(inspectionId, slopeId, uri, attachmentId);
+      if (!failedTarget) {
+        clearMark(photoMark);
+        continue;
+      }
       const reason = describeAnalysisError(e);
       const status = e instanceof GeminiAnalysisError ? e.status : undefined;
       const retryable = isRetryableFailure(e);
-      failures.push({ photoIndex, uri, reason, status, retryable });
+      failures.push({ photoIndex: failedTarget.index, uri, reason, status, retryable });
       setPhotoAnalysisState(inspectionId, slopeId, uri, {
         status: 'failed',
         attempts,
         error: reason,
         errorStatus: status,
-      });
+      }, attachmentId);
       measure(photoMark, { metric: PHOTO_ANALYSIS_METRIC.photoFailed, n: 1 });
       if (__DEV__) {
         console.warn(`[analyzeSlope] photo ${photoIndex} failed: ${reason}`);
@@ -330,12 +367,14 @@ async function runAnalyzeSlope(
         const rest = todoIndexes.slice(i + 1);
         for (const idx of rest) {
           const restUri = slope.photoPaths[idx];
-          failures.push({ photoIndex: idx, uri: restUri, reason, status, retryable: true });
+          const restTarget = livePhoto(inspectionId, slopeId, restUri, slope.photoAttachmentIds[idx]);
+          if (!restTarget) continue;
+          failures.push({ photoIndex: restTarget.index, uri: restUri, reason, status, retryable: true });
           setPhotoAnalysisState(inspectionId, slopeId, restUri, {
             status: 'failed',
             error: `Not attempted — ${reason}`,
             errorStatus: status,
-          });
+          }, slope.photoAttachmentIds[idx]);
         }
         break;
       }
@@ -415,12 +454,12 @@ export function retryPhotoAnalysis(
  * "Not analyzed", not as "Queued".
  */
 export function getPhotoAnalysisState(
-  slope: Pick<Slope, 'photoPaths' | 'photoAnalysis' | 'analyzedPhotoIndices' | 'damage'>,
+  slope: Pick<Slope, 'photoPaths' | 'photoAttachmentIds' | 'photoAnalysis' | 'photoAnalysisByAttachment' | 'analyzedPhotoIndices' | 'damage'>,
   photoIndex: number,
 ): PhotoAnalysisState | undefined {
   const uri = slope.photoPaths[photoIndex];
   if (uri == null) return undefined;
-  const explicit = slope.photoAnalysis?.[uri];
+  const explicit = readPhotoAnalysis(slope, photoIndex);
   if (explicit) return explicit;
   if ((slope.analyzedPhotoIndices ?? []).includes(photoIndex)) {
     return {
@@ -438,14 +477,16 @@ export function getPhotoAnalysisState(
  * Defaults to every not-yet-analyzed photo on the slope.
  */
 export function markPhotosQueued(inspectionId: string, slopeId: string, uris?: string[]): void {
+  useInspectionStore.getState().ensurePhotoAttachmentIds(inspectionId, slopeId);
   const inspection = useInspectionStore.getState().inspections.find((i) => i.id === inspectionId);
   const slope = inspection?.slopes.find((s) => s.id === slopeId);
   if (!slope) return;
-  const targets = uris ?? pickPhotos(slope, true).map((i) => slope.photoPaths[i]);
-  for (const uri of targets) {
-    const prev = slope.photoAnalysis?.[uri];
+  const targets = uris ? slope.photoPaths.flatMap((uri, index) => uris.includes(uri) ? [index] : []) : pickPhotos(slope, true);
+  for (const index of targets) {
+    const uri = slope.photoPaths[index];
+    const prev = readPhotoAnalysis(slope, index);
     if (prev?.status === 'analyzing' || prev?.status === 'done') continue;
-    setPhotoAnalysisState(inspectionId, slopeId, uri, { status: 'queued' });
+    setPhotoAnalysisState(inspectionId, slopeId, uri, { status: 'queued' }, slope.photoAttachmentIds?.[index]);
   }
 }
 
@@ -459,29 +500,32 @@ export function markPhotosFailed(
   reason: string,
   uris?: string[],
 ): void {
+  useInspectionStore.getState().ensurePhotoAttachmentIds(inspectionId, slopeId);
   const inspection = useInspectionStore.getState().inspections.find((i) => i.id === inspectionId);
   const slope = inspection?.slopes.find((s) => s.id === slopeId);
   if (!slope) return;
-  const targets = uris ?? pickPhotos(slope, true).map((i) => slope.photoPaths[i]);
-  for (const uri of targets) {
-    if (slope.photoAnalysis?.[uri]?.status === 'done') continue;
-    setPhotoAnalysisState(inspectionId, slopeId, uri, { status: 'failed', error: reason });
+  const targets = uris ? slope.photoPaths.flatMap((uri, index) => uris.includes(uri) ? [index] : []) : pickPhotos(slope, true);
+  for (const index of targets) {
+    const uri = slope.photoPaths[index];
+    if (readPhotoAnalysis(slope, index)?.status === 'done') continue;
+    setPhotoAnalysisState(inspectionId, slopeId, uri, { status: 'failed', error: reason }, slope.photoAttachmentIds?.[index]);
   }
 }
 
 /**
- * Single writer for `slope.photoAnalysis`. Merges over the previous entry,
- * stamps `at`, and drops entries for URIs no longer in `photoPaths` (deleted
- * or rotated photos) so the record stays bounded by the photo count. Clears
- * `error` on any non-failed transition so a stale reason never outlives its
- * retry.
+ * Canonical attachment-state writer. Stamps `at`, rebuilds the unique-URI
+ * compatibility mirror and clears stale errors on retry. A legacy URI-only
+ * caller may update only a unique attachment; asynchronous passes carry ID.
  */
 export function setPhotoAnalysisState(
   inspectionId: string,
   slopeId: string,
   uri: string,
   patch: Partial<PhotoAnalysisState> & { status: PhotoAnalysisState['status'] },
+  attachmentId?: string,
 ): void {
+  const current = useInspectionStore.getState().getById(inspectionId)?.slopes.find((sl) => sl.id === slopeId);
+  if (!current?.photoAttachmentIds) useInspectionStore.getState().ensurePhotoAttachmentIds(inspectionId, slopeId);
   useInspectionStore.setState((state) => ({
     inspections: state.inspections.map((ins) => {
       if (ins.id !== inspectionId) return ins;
@@ -489,23 +533,10 @@ export function setPhotoAnalysisState(
         ...ins,
         slopes: ins.slopes.map((sl) => {
           if (sl.id !== slopeId) return sl;
-          const live = new Set(sl.photoPaths);
-          const next: Record<string, PhotoAnalysisState> = {};
-          for (const [key, value] of Object.entries(sl.photoAnalysis ?? {})) {
-            if (live.has(key)) next[key] = value;
-          }
-          const prev = next[uri];
-          const merged: PhotoAnalysisState = {
-            ...prev,
-            ...patch,
-            at: new Date().toISOString(),
-          };
-          if (patch.status !== 'failed') {
-            delete merged.error;
-            delete merged.errorStatus;
-          }
-          next[uri] = merged;
-          return { ...sl, photoAnalysis: next };
+          const index = attachmentId ? sl.photoAttachmentIds?.indexOf(attachmentId) ?? -1
+            : sl.photoPaths.filter((path) => path === uri).length === 1 ? sl.photoPaths.indexOf(uri) : -1;
+          if (index < 0 || sl.photoPaths[index] !== uri) return sl;
+          return patchPhotoAnalysis(sl, index, { ...patch, at: new Date().toISOString() });
         }),
       };
     }),
@@ -515,6 +546,15 @@ export function setPhotoAnalysisState(
 // -----------------------------------------------------------------------------
 // Internals
 // -----------------------------------------------------------------------------
+
+/** Resolve the current index only while the original evidence is still filed. */
+function livePhoto(inspectionId: string, slopeId: string, uri: string, attachmentId: string | undefined): { slope: Slope; index: number } | undefined {
+  const slope = useInspectionStore.getState().inspections
+    .find((ins) => ins.id === inspectionId)?.slopes.find((sl) => sl.id === slopeId);
+  if (!slope || !attachmentId) return undefined;
+  const index = slope.photoAttachmentIds?.indexOf(attachmentId) ?? -1;
+  return index < 0 || slope.photoPaths[index] !== uri ? undefined : { slope, index };
+}
 
 /** Read one photo as base64 with explicit, human-readable failure modes. */
 async function readPhotoBase64(uri: string): Promise<string> {
@@ -592,14 +632,15 @@ function restoreUnattempted(
 ): void {
   for (const idx of indexes) {
     const uri = before.photoPaths[idx];
-    const prev = before.photoAnalysis?.[uri];
+    if (!livePhoto(inspectionId, slopeId, uri, before.photoAttachmentIds?.[idx])) continue;
+    const prev = readPhotoAnalysis(before, idx);
     if (prev) {
-      setPhotoAnalysisState(inspectionId, slopeId, uri, prev);
+      setPhotoAnalysisState(inspectionId, slopeId, uri, prev, before.photoAttachmentIds?.[idx]);
     } else {
       setPhotoAnalysisState(inspectionId, slopeId, uri, {
         status: 'failed',
         error: 'Not attempted — analysis was cancelled. Retry when ready.',
-      });
+      }, before.photoAttachmentIds?.[idx]);
     }
   }
 }
@@ -690,7 +731,10 @@ function mergeFindingsForPhoto(
             : sl.scaleEstimates;
           const next = {
             ...sl,
-            aiFindings: [...(sl.aiFindings ?? []), ...result.findings],
+            aiFindings: [
+              ...(sl.aiFindings ?? []).filter((f) => f.photoAttachmentId !== sl.photoAttachmentIds?.[photoIndex]),
+              ...result.findings.map((f) => ({ ...f, photoPath: sl.photoPaths[photoIndex], photoAttachmentId: sl.photoAttachmentIds?.[photoIndex] })),
+            ],
             scaleEstimates,
           };
           // §1 functional damage, DERIVED from the evidence the model reported

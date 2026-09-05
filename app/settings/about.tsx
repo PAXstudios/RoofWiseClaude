@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, StyleSheet, Linking } from 'react-native';
+import { Image, ScrollView, View, Text, StyleSheet, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,7 +75,7 @@ export default function AboutScreen() {
           <View style={styles.brandCard}>
             <MeshBackground variant="hero" style={styles.brandMesh} />
             <View style={styles.brandMark}>
-              <Text style={styles.brandInitials}>RW</Text>
+              <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandLogo} resizeMode="cover" accessibilityLabel="RoofWise logo" />
             </View>
             <Text style={styles.brandName}>RoofWise</Text>
             <Text style={styles.brandTag}>The objective layer between roofing contractors and insurance carriers.</Text>
@@ -195,13 +195,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  brandInitials: {
-    color: colors.textInverse,
-    fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
-  },
+  brandLogo: { width: '100%', height: '100%' },
   brandName: {
     fontSize: fontSize.titleXl,
     fontWeight: fontWeight.bold,

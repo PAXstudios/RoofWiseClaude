@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { checkStormWatch } from './stormWatch';
 import { syncCorrections } from './correctionsSync';
+import { recoverPhotoCorrections, startPhotoCorrectionRecovery } from './savePhotoCorrection';
 import { syncLeads } from './leadSync';
 import { syncInspections, startInspectionWatcher } from './inspectionSync';
 import { syncKnocks, startKnockSyncWatcher } from './knockSync';
@@ -30,6 +31,9 @@ export function useBackgroundJobs() {
   const lastPhotosSync = useRef(0);
 
   useEffect(() => {
+    const stopCorrectionRecovery = startPhotoCorrectionRecovery();
+    // The watcher observes real startup edits but ignores hydration applies;
+    // inspection/lead sync entrypoints await their local hydration barriers.
     startInspectionWatcher();
     // Watches the knock-session, planner and do-not-knock stores: a route
     // end, a logged door or a plan change schedules a sync (20 s debounce),
@@ -48,7 +52,7 @@ export function useBackgroundJobs() {
         }
         if (now - lastSync.current > CORRECTIONS_INTERVAL_MS) {
           lastSync.current = now;
-          syncCorrections().catch(() => {});
+          recoverPhotoCorrections().then(() => syncCorrections()).catch(() => {});
         }
         if (
           useAuthStore.getState().session &&
@@ -93,6 +97,6 @@ export function useBackgroundJobs() {
     handle('active');
 
     const sub = AppState.addEventListener('change', handle);
-    return () => sub.remove();
+    return () => { sub.remove(); stopCorrectionRecovery(); };
   }, []);
 }

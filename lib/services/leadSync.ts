@@ -17,7 +17,7 @@
 // run the SQL migration yet).
 
 import { supabase } from '../supabase';
-import { useLeadStore } from '../stores/leadStore';
+import { leadHydrationState, useLeadStore, waitForLeadHydration } from '../stores/leadStore';
 import { useAuthStore } from '../auth/authStore';
 import type { Lead } from '../models/types';
 
@@ -51,6 +51,16 @@ export function syncLeads(): Promise<LeadSyncSummary> {
 }
 
 async function run(): Promise<LeadSyncSummary> {
+  try {
+    while (true) {
+      const observed = leadHydrationState();
+      await waitForLeadHydration();
+      const current = leadHydrationState();
+      if (observed.promise === current.promise && current.hydrated) break;
+    }
+  } catch (error) {
+    return { pushed: 0, pulled: 0, conflicts: 0, error: error instanceof Error ? error.message : 'Local leads unavailable. Retry.' };
+  }
   const user = useAuthStore.getState().user;
   if (!user) {
     return { pushed: 0, pulled: 0, conflicts: 0, error: 'Not signed in' };
@@ -61,13 +71,14 @@ async function run(): Promise<LeadSyncSummary> {
   let conflicts = 0;
 
   // 1) Push local pending changes — but never over a newer remote edit.
-  const pending = useLeadStore.getState().pending();
+  const snapshot = useLeadStore.getState();
+  const pending = snapshot.pending().map((lead) => ({ lead, revision: snapshot.revisions[lead.id] ?? 0 }));
   if (pending.length > 0) {
     const { data: remoteRows, error: peekError } = await supabase
       .from(TABLE)
       .select('*')
       .eq('user_id', user.id)
-      .in('id', pending.map((l) => l.id));
+      .in('id', pending.map(({ lead }) => lead.id));
     if (peekError) {
       return {
         pushed: 0,
@@ -77,28 +88,32 @@ async function run(): Promise<LeadSyncSummary> {
       };
     }
     const remoteById = new Map((remoteRows ?? []).map((r) => [String(r.id), r]));
-    const toPush: Lead[] = [];
-    for (const local of pending) {
+    const toPush: typeof pending = [];
+    for (const captured of pending) {
+      const { lead: local, revision } = captured;
+      const current = useLeadStore.getState();
+      if ((current.revisions[local.id] ?? 0) !== revision || current.deleted[local.id]) continue;
       const remote = remoteById.get(local.id);
       if (remote && ts(remote.updated_at) > ts(local.updatedAt ?? local.createdAt)) {
         // Edited later on another device: that edit stands, ours is superseded.
-        useLeadStore.getState().upsert({ ...rowToLead(remote), syncStatus: 'synced' });
-        conflicts++;
-        pulled++;
+        if (current.applyRemote(rowToLead(remote), revision)) {
+          conflicts++;
+          pulled++;
+        }
       } else {
-        toPush.push(local);
+        toPush.push(captured);
       }
     }
 
     if (toPush.length > 0) {
-      const { error } = await upsertRows(toPush.map((l) => leadToRow(l, user.id)));
+      const { error } = await upsertRows(toPush.map(({ lead }) => leadToRow(lead, user.id)));
       if (error) {
         if (isMissingTable(error.message)) {
           return { pushed: 0, pulled, conflicts, error: NOT_PROVISIONED };
         }
         return { pushed: 0, pulled, conflicts, error: error.message };
       }
-      useLeadStore.getState().markSynced(toPush.map((l) => l.id));
+      useLeadStore.getState().markSynced(Object.fromEntries(toPush.map(({ lead, revision }) => [lead.id, revision])));
       pushed = toPush.length;
     }
   }
@@ -118,23 +133,18 @@ async function run(): Promise<LeadSyncSummary> {
   }
 
   if (data) {
-    const upsert = useLeadStore.getState().upsert;
-    const localById = new Map(useLeadStore.getState().leads.map((l) => [l.id, l]));
     for (const row of data) {
       const remote = rowToLead(row);
-      const local = localById.get(remote.id);
+      const current = useLeadStore.getState();
+      const local = current.leads.find((lead) => lead.id === remote.id);
+      if (current.deleted[remote.id] || (local && local.syncStatus !== 'synced')) continue;
       if (!local) {
-        upsert(remote);
-        pulled++;
+        if (current.applyRemote(remote)) pulled++;
       } else {
         const localTs = ts(local.updatedAt ?? local.createdAt);
         const remoteTs = ts(remote.updatedAt ?? remote.createdAt);
         if (remoteTs > localTs) {
-          upsert({ ...remote, syncStatus: 'synced' });
-          pulled++;
-        } else if (remoteTs < localTs && local.syncStatus !== 'synced') {
-          // Edited here since step 1 ran; the next push carries it.
-          conflicts++;
+          if (current.applyRemote(remote)) pulled++;
         }
       }
     }

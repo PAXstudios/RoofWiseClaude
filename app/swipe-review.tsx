@@ -28,6 +28,10 @@ import {
   type ConfidenceStars,
 } from '@/lib/stores/correctionsStore';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { rejectReviewItem } from '@/lib/services/rejectReviewItem';
+import { resolveReviewEvidence } from '@/lib/services/reviewEvidence';
+import { completedReviewCorrection, recoverPhotoCorrections, reviewCorrectionId } from '@/lib/services/savePhotoCorrection';
+import { flushReviewPersistence } from '@/lib/services/reviewPersistence';
 import { useToastStore } from '@/lib/stores/toastStore';
 import {
   DAMAGE_CATEGORY_LABELS,
@@ -35,6 +39,8 @@ import {
 } from '@/lib/models/types';
 import {
   colors,
+  dataLabel,
+  fontFamily,
   fontSize,
   fontWeight,
   motion,
@@ -55,8 +61,6 @@ const STARS: ConfidenceStars[] = [1, 2, 3, 4, 5];
 
 type AwaitingCorrection = {
   itemId: string;
-  inspectionId: string;
-  knownCorrectionIds: string[];
 };
 
 export default function SwipeReview() {
@@ -68,6 +72,8 @@ export default function SwipeReview() {
   const toast = useToastStore((s) => s.show);
 
   const [index, setIndex] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   // Items handled in this session stay in the deck so the queue filter
   // shifting underneath us can't skip the next card.
   const [handledIds, setHandledIds] = useState<string[]>([]);
@@ -104,40 +110,23 @@ export default function SwipeReview() {
     const inspection = useInspectionStore
       .getState()
       .inspections.find((i) => i.id === item.inspectionId);
-    if (!inspection) return null;
-
-    const slope =
-      inspection.slopes.find((s) => s.id === item.slopeId) ??
-      inspection.slopes.find((s) => s.photoPaths.includes(item.photoPath));
-    if (!slope) return null;
-
-    // No fallback index: if the queued photo is gone (deleted, which renumbers
-    // photoPaths) the "next best" photo is a DIFFERENT photo, and editing it
-    // would file the reviewer's correction against the wrong detection.
-    const photoIndex = slope.photoPaths.indexOf(item.photoPath);
-    if (photoIndex < 0) return null;
-    return { slopeId: slope.id, photoIndex };
+    const { slope, photoIndex } = resolveReviewEvidence(inspection, item);
+    return { slopeId: slope.id, photoIndex, attachmentId: slope.photoAttachmentIds?.[photoIndex] };
   };
 
   /** Up-swipe: hand the detection to the marker editor, then ask for stars. */
-  const openCorrection = (item: TrainingItem) => {
+  const openCorrection = async (item: TrainingItem) => {
+    savingRef.current = true;
+    setSaving(true);
+    try {
+    // A prior failed save/restart resumes the committed edit, without changing it.
+    setHandledIds((prev) => prev.includes(item.id) ? prev : [...prev, item.id]);
+    await recoverPhotoCorrections();
+    const recovered = completedReviewCorrection(item.id);
+    if (recovered) { setPreviewStars(0); setRating({ correctionId: recovered.id, itemId: item.id }); return; }
     const target = resolveEditTarget(item);
-    if (!target) {
-      x.value = withSpring(0, motion.quick);
-      y.value = withSpring(0, motion.quick);
-      toast({
-        tone: 'warn',
-        title: 'Cannot open editor',
-        body: 'The original photo for this detection is no longer on this device.',
-      });
-      return;
-    }
 
-    awaitingRef.current = {
-      itemId: item.id,
-      inspectionId: item.inspectionId,
-      knownCorrectionIds: useCorrectionsStore.getState().corrections.map((c) => c.id),
-    };
+    awaitingRef.current = { itemId: item.id };
 
     router.push({
       pathname: '/edit-detection',
@@ -145,8 +134,20 @@ export default function SwipeReview() {
         inspectionId: item.inspectionId,
         slopeId: target.slopeId,
         photoIndex: String(target.photoIndex),
+        attachmentId: target.attachmentId,
+        photoPath: item.photoPath,
+        queueItemId: item.id,
       },
     });
+    } catch (error) {
+      x.value = withSpring(0, motion.quick);
+      y.value = withSpring(0, motion.quick);
+      toast({
+        tone: 'warn',
+        title: 'Cannot open editor',
+        body: error instanceof Error ? error.message : 'The original photo could not be opened.',
+      });
+    } finally { savingRef.current = false; setSaving(false); }
   };
 
   // Back from the editor: if a correction actually landed, ask how sure they are.
@@ -156,24 +157,24 @@ export default function SwipeReview() {
       if (!awaiting) return;
       awaitingRef.current = null;
 
-      const known = new Set(awaiting.knownCorrectionIds);
-      const fresh = useCorrectionsStore
-        .getState()
-        .corrections.find((c) => !known.has(c.id) && c.inspectionId === awaiting.inspectionId);
+      const fresh = completedReviewCorrection(awaiting.itemId);
 
       // No new correction → they backed out. Leave the card exactly where it was.
       if (!fresh) return;
 
-      setStatus(awaiting.itemId, 'reviewed');
       setPreviewStars(0);
       setRating({ correctionId: fresh.id, itemId: awaiting.itemId });
-    }, [setStatus]),
+    }, []),
   );
 
-  const commitRating = (stars: ConfidenceStars) => {
-    if (!rating) return;
+  const commitRating = async (stars: ConfidenceStars) => {
+    if (!rating || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setConfidence(rating.correctionId, stars, { via: 'swipe_correct' });
+    await flushReviewPersistence('roofwise.corrections.v1');
     toast({
       tone: 'success',
       title: 'Correction saved',
@@ -183,10 +184,13 @@ export default function SwipeReview() {
     setRating(null);
     setPreviewStars(0);
     advance(itemId);
+    } catch (error) {
+      toast({ tone: 'warn', title: 'Rating needs attention', body: error instanceof Error ? error.message : 'Could not save. Try again.' });
+    } finally { savingRef.current = false; setSaving(false); }
   };
 
   const dismissRating = () => {
-    if (!rating) return;
+    if (!rating || savingRef.current) return;
     // The correction itself is already saved by the editor — only the star is
     // being skipped, so no second toast here.
     Haptics.selectionAsync();
@@ -196,11 +200,43 @@ export default function SwipeReview() {
     advance(itemId);
   };
 
-  const handleVerdict = (verdict: Verdict, item: TrainingItem) => {
+  const handleVerdict = async (verdict: Verdict, item: TrainingItem) => {
+    if (savingRef.current) return;
+    if (verdict !== 'correct' && useInspectionStore.getState().getById(item.inspectionId)?.photoCorrections?.[reviewCorrectionId(item.id)]) {
+      toast({ tone: 'warn', title: 'Finish saving this correction', body: 'Tap Correct again to finish saving the existing decision.' });
+      return;
+    }
+    if (verdict !== 'reject' && useInspectionStore.getState().getById(item.inspectionId)?.reviewRejections?.[item.id]) {
+      x.value = withSpring(0, motion.quick);
+      y.value = withSpring(0, motion.quick);
+      toast({ tone: 'warn', title: 'Finish saving this rejection', body: 'Tap Reject again to finish saving the existing decision.' });
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     if (verdict === 'correct') {
-      openCorrection(item);
+      await openCorrection(item);
+      return;
+    }
+
+    if (verdict === 'reject') {
+      savingRef.current = true;
+      setSaving(true);
+      // Retain this card while the persisted queue status changes.
+      setHandledIds((prev) => prev.includes(item.id) ? prev : [...prev, item.id]);
+      try {
+        await rejectReviewItem(item.id);
+        toast({ tone: 'info', title: 'Marked not damage', body: 'Inspection evidence and review saved.' });
+        advance(item.id);
+      } catch (error) {
+        x.value = withSpring(0, motion.quick);
+        y.value = withSpring(0, motion.quick);
+        toast({ tone: 'warn', title: 'Review needs attention',
+          body: error instanceof Error ? error.message : 'Could not save this review. Try again.' });
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
+      }
       return;
     }
 
@@ -213,31 +249,26 @@ export default function SwipeReview() {
       return;
     }
 
-    const corrected =
-      verdict === 'accept' ? original : { findings: [], markers: [] };
+    const corrected = original;
 
     setStatus(item.id, 'reviewed');
     recordCorrection({
       inspectionId: item.inspectionId,
       photoId: `${item.slopeId ?? 'unknown'}#queue`,
       slopeId: item.slopeId,
-      correctionType: verdict === 'accept' ? 'swipe_accept' : 'swipe_reject',
+      correctionType: 'swipe_accept',
       categoriesAffected: Array.from(new Set(original.markers.map((m) => m.category))),
       originalDetection: original,
       correctedDetection: corrected,
       delta: { verdict },
     });
 
-    toast(
-      verdict === 'accept'
-        ? { tone: 'success', title: 'Accepted' }
-        : { tone: 'info', title: 'Marked not damage' },
-    );
+    toast({ tone: 'success', title: 'Accepted' });
     advance(item.id);
   };
 
   const pan = Gesture.Pan()
-    .enabled(!rating)
+    .enabled(!rating && !saving)
     .onUpdate((e) => {
       x.value = e.translationX;
       y.value = e.translationY;
@@ -579,6 +610,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
+    fontFamily: fontFamily.mono,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
     color: colors.navy,
@@ -601,9 +633,9 @@ const styles = StyleSheet.create({
   cardBehind: { position: 'absolute', top: 0, left: 0 },
   cardImage: { flex: 1, width: '100%' },
   cardMeta: { padding: spacing.lg, backgroundColor: colors.surface, gap: 4 },
-  cardHeader: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.orange, letterSpacing: 0.5 },
-  cardSub: { fontSize: fontSize.bodySm, color: colors.slate },
-  findingLine: { fontSize: fontSize.bodySm, color: colors.navy, marginTop: 2 },
+  cardHeader: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.accent },
+  cardSub: { ...dataLabel, color: colors.textMuted },
+  findingLine: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.text, marginTop: 2 },
 
   cueLayer: {
     ...StyleSheet.absoluteFill,
@@ -627,7 +659,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     ...shadows.card,
   },
-  cueText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, letterSpacing: 0.5 },
+  cueText: { ...dataLabel },
 
   hintRow: {
     flexDirection: 'row',
@@ -667,7 +699,7 @@ const styles = StyleSheet.create({
     gap: 4,
     ...shadows.card,
   },
-  actionLabel: { color: colors.text, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  actionLabel: { color: colors.text, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
 
   sheetScrim: { flex: 1, backgroundColor: colors.scrim, justifyContent: 'flex-end' },
   sheet: {
@@ -724,8 +756,8 @@ const styles = StyleSheet.create({
   // Sub-screen empty state: thin icon, 15pt message, one quiet button — no
   // icon-in-tinted-circle (spec empty-state pattern).
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
-  emptyTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
-  emptyBody: { fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center' },
+  emptyTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.navy },
+  emptyBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center' },
   doneBtn: {
     marginTop: spacing.lg,
     height: touchTarget.standard,

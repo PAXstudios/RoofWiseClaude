@@ -27,7 +27,7 @@ import type { DamageMarker } from '@/lib/models/types';
 import { describeAnnotations, fitRect } from '@/lib/services/annotationSvg';
 import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import { useAnnotationStore, useAnnotationsFor } from '@/lib/stores/annotationStore';
-import { colors, fontSize, fontWeight, motion, radii, spacing } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, motion, radii, spacing } from '@/theme/tokens';
 import { AnnotationLayer } from './AnnotationLayer';
 
 const MIN_SCALE = 1;
@@ -35,6 +35,7 @@ const MAX_SCALE = 4;
 
 type Props = {
   uri: string;
+  attachmentId?: string;
   /** The container — size it here (a tile, a card); the photo fills it. */
   style?: StyleProp<ViewStyle>;
   /** How the photo fills the container. Default `cover` (tiles); `contain` for a full view. */
@@ -56,6 +57,7 @@ type Props = {
 
 export function AnnotatedPhoto({
   uri,
+  attachmentId,
   style,
   contentFit = 'cover',
   markers,
@@ -67,8 +69,8 @@ export function AnnotatedPhoto({
   accessibilityLabel,
   children,
 }: Props) {
-  const items = useAnnotationsFor(uri);
-  const record = useAnnotationStore((s) => s.byUri[uri]);
+  const items = useAnnotationsFor(uri, attachmentId);
+  const record = useAnnotationStore((s) => s.getRecord(uri, attachmentId));
   const [box, setBox] = useState({ width: 0, height: 0 });
   const [img, setImg] = useState<{ width: number; height: number }>(() =>
     record && record.imageW > 0 && record.imageH > 0 ? { width: record.imageW, height: record.imageH } : { width: 0, height: 0 },
@@ -260,5 +262,5 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.scrim,
   },
-  badgeText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.bold },
+  badgeText: { color: colors.textInverse, fontFamily: fontFamily.mono, fontSize: fontSize.caption, fontWeight: fontWeight.bold },
 });

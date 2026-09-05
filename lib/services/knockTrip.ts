@@ -38,6 +38,16 @@ export function distanceMeters(a: LatLng, b: LatLng): number {
  */
 export const SAME_HOUSE_METERS = 15;
 
+/** GPS pins need a recent fix; permission alone does not locate this door. */
+export const KNOCK_FIX_MAX_AGE_MS = 30_000;
+
+/** Future/invalid timestamps are not fresh after a device-clock change. */
+export function isFreshKnockFix(fix: { ts: number | null } | null | undefined, now = Date.now()): boolean {
+  if (!fix || typeof fix.ts !== 'number' || !Number.isFinite(fix.ts) || fix.ts <= 0 || !Number.isFinite(now) || now <= 0) return false;
+  const age = now - fix.ts;
+  return age >= 0 && age <= KNOCK_FIX_MAX_AGE_MS;
+}
+
 /**
  * Movement below this is GPS jitter, not walking: a roofer standing at a door
  * for two minutes must not accrue distance. Matches the mileage store's own

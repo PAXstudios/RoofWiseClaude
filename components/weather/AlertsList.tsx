@@ -20,7 +20,7 @@ import { IconChip, type ChipTone } from '@/components/ui/IconChip';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import type { NwsAlert, NwsSeverity } from '@/lib/services/nwsAlerts';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   alerts: readonly NwsAlert[];
@@ -163,11 +163,11 @@ const styles = StyleSheet.create({
   cardPressed: { backgroundColor: colors.surfaceMuted },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headText: { flex: 1, gap: 2 },
-  event: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
-  area: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  headline: { fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 20 },
+  event: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
+  area: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
+  headline: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 20 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  metaText: { flexShrink: 1, fontSize: fontSize.bodySm, color: colors.textSubtle },
+  metaText: { ...dataLabel, flexShrink: 1, color: colors.textSubtle },
   metaChevron: { marginLeft: 'auto' },
   body: {
     gap: spacing.md,
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
   },
-  bodyText: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 19 },
+  bodyText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 19 },
   instruction: {
     gap: spacing.xs,
     padding: spacing.md,
@@ -183,11 +183,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warnSoft,
   },
   instructionLabel: {
-    fontSize: fontSize.caption,
-    fontWeight: fontWeight.bold,
+    ...dataLabel,
     color: colors.warn,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
 
   unavailable: {
@@ -196,5 +193,5 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.xs,
   },
-  unavailableText: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  unavailableText: { flex: 1, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -40,6 +40,8 @@ import { useToastStore } from '@/lib/stores/toastStore';
 import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
 import { overallAccuracy } from '@/lib/services/learning/localLearningEngine';
 import { DamageMarkerLayer } from '@/components/DamageMarkerLayer';
+import { beginPhotoCorrection, recoverPhotoCorrections, savePhotoCorrection } from '@/lib/services/savePhotoCorrection';
+import type { CorrectionSession } from '@/lib/services/correctionEvidence';
 
 let markerCounter = 0;
 function newMarkerId(): string {
@@ -68,32 +70,49 @@ function isHailCategory(c: DamageCategory): boolean {
 
 export default function EditDetectionView() {
   const router = useRouter();
-  const { inspectionId, slopeId, photoIndex } = useLocalSearchParams<{
+  const { inspectionId, slopeId, photoIndex, attachmentId, photoPath, queueItemId } = useLocalSearchParams<{
     inspectionId: string;
     slopeId: string;
     photoIndex: string;
+    attachmentId?: string;
+    photoPath?: string;
+    queueItemId?: string;
   }>();
   const index = Number(photoIndex ?? 0);
 
   const inspection = useInspectionStore((s) =>
     s.inspections.find((i) => i.id === inspectionId),
   );
-  const replacePhotoMarkers = useInspectionStore((s) => s.replacePhotoMarkers);
-  const recordCorrection = useCorrectionsStore((s) => s.record);
   const logActivity = useActivityStore((s) => s.log);
   const toast = useToastStore((s) => s.show);
 
-  const slope = inspection?.slopes.find((s) => s.id === slopeId);
-  const photoUri = slope?.photoPaths[index];
-
-  const photoMarkers = useMemo(() => {
-    if (!slope) return [];
-    return slope.damage.filter(
-      (m) => m.photoIndex === index || m.photoIndex === undefined,
-    );
-  }, [slope, index]);
-
-  const [draftMarkers, setDraftMarkers] = useState<DamageMarker[]>(photoMarkers);
+  const [session, setSession] = useState<CorrectionSession | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [draftMarkers, setDraftMarkers] = useState<DamageMarker[]>([]);
+  const initialPhoto = useRef({
+    attachmentId: attachmentId ?? inspection?.slopes.find((s) => s.id === slopeId)?.photoAttachmentIds?.[index],
+    photoPath: photoPath ?? inspection?.slopes.find((s) => s.id === slopeId)?.photoPaths[index],
+  });
+  useEffect(() => {
+    let alive = true;
+    const open = async () => {
+      try {
+        if (!queueItemId) await recoverPhotoCorrections();
+        const initial = beginPhotoCorrection({ inspectionId, slopeId, photoIndex: index,
+          attachmentId: initialPhoto.current.attachmentId, photoPath: initialPhoto.current.photoPath, queueItemId });
+        if (alive) { setSession(initial); setDraftMarkers(initial.markers); }
+      } catch (error) {
+        if (alive) setLoadError(error instanceof Error ? error.message : 'Could not open this photo.');
+      }
+    };
+    void open();
+    return () => { alive = false; };
+  }, [inspectionId, slopeId, index, attachmentId, queueItemId]);
+  const slope = inspection?.slopes.find((s) => s.id === (session?.slopeId ?? slopeId));
+  const photoUri = session?.photoPath;
+  const photoMarkers = session?.markers ?? [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [category, setCategory] = useState<DamageCategory>('hail_hits');
   const [severity, setSeverity] = useState<Severity>('moderate');
@@ -102,13 +121,13 @@ export default function EditDetectionView() {
   const [evidence, setEvidence] = useState<HitEvidence>('unclear');
   const [softSpot, setSoftSpot] = useState(false);
 
-  if (!inspection || !slope || !photoUri) {
+  if (!inspection || !slope || !photoUri || !session || loadError) {
     return (
       <SafeAreaView style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.empty}>
           <IconChip name="alert-circle-outline" tone="quiet" />
-          <Text style={styles.emptyText}>Photo not found.</Text>
+          <Text style={styles.emptyText}>{loadError ?? 'Opening photo…'}</Text>
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
             <Text style={styles.backBtnText}>Back</Text>
           </Pressable>
@@ -199,48 +218,18 @@ export default function EditDetectionView() {
     setSelectedId(null);
   };
 
-  const onSave = () => {
+  const onSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
     const originalMarkers = photoMarkers;
     const correctedMarkers = draftMarkers;
     const categoriesAffected = uniqueCategories([...originalMarkers, ...correctedMarkers]);
 
     const added = correctedMarkers.filter((m) => !originalMarkers.find((o) => o.id === m.id));
     const removed = originalMarkers.filter((o) => !correctedMarkers.find((m) => m.id === o.id));
-    const modified = correctedMarkers.filter((m) => {
-      const o = originalMarkers.find((x) => x.id === m.id);
-      return o && JSON.stringify(o) !== JSON.stringify(m);
-    });
-
-    const correctionType =
-      removed.length > 0 && added.length === 0
-        ? 'remove_marker'
-        : added.length > 0 && removed.length === 0
-        ? 'add_marker'
-        : 'edit';
-
-    replacePhotoMarkers(inspection.id, slope.id, index, correctedMarkers);
-
-    recordCorrection({
-      inspectionId: inspection.id,
-      photoId: `${slope.id}#${index}`,
-      slopeId: slope.id,
-      correctionType,
-      categoriesAffected,
-      originalDetection: {
-        findings: slope.aiFindings ?? [],
-        markers: originalMarkers,
-      },
-      correctedDetection: {
-        findings: slope.aiFindings ?? [],
-        markers: correctedMarkers,
-      },
-      delta: {
-        added: added.map((m) => m.id),
-        removed: removed.map((m) => m.id),
-        modified: modified.map((m) => m.id),
-      },
-      photoUrl: photoUri,
-    });
+    await savePhotoCorrection(session, correctedMarkers);
 
     logActivity({
       kind: 'analysis_ran',
@@ -265,9 +254,13 @@ export default function EditDetectionView() {
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.back();
+    } catch (error) {
+      toast({ tone: 'warn', title: 'Correction needs attention', body: error instanceof Error ? error.message : 'Could not save. Try again.' });
+    } finally { savingRef.current = false; setSaving(false); }
   };
 
   const onDiscard = () => {
+    if (savingRef.current) return;
     if (!dirty) {
       router.back();
       return;
@@ -294,7 +287,7 @@ export default function EditDetectionView() {
         )}
       </View>
 
-      <View style={styles.canvas}>
+      <View style={styles.canvas} pointerEvents={saving ? 'none' : 'auto'}>
         <DamageMarkerLayer
           photoUri={photoUri}
           markers={draftMarkers}
@@ -304,7 +297,7 @@ export default function EditDetectionView() {
         />
       </View>
 
-      <View style={styles.toolbar}>
+      <View style={styles.toolbar} pointerEvents={saving ? 'none' : 'auto'}>
         <Text style={styles.toolbarLabel}>
           {selectedHail
             ? 'Editing the selected hit — what did you see? Press it: soft under your finger?'
@@ -396,9 +389,9 @@ export default function EditDetectionView() {
         <Pressable
           style={[styles.saveBtn, !dirty && styles.saveBtnDisabled]}
           onPress={onSave}
-          disabled={!dirty}
+          disabled={!dirty || saving}
         >
-          <Text style={styles.saveBtnText}>Save corrections ({draftMarkers.length})</Text>
+          <Text style={styles.saveBtnText}>{saving ? 'Saving corrections…' : `Save corrections (${draftMarkers.length})`}</Text>
         </Pressable>
       </View>
     </SafeAreaView>

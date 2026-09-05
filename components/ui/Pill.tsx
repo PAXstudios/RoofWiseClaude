@@ -23,14 +23,16 @@ export type PillTone =
 
 export type PillSize = 'sm' | 'md';
 
-const TONES: Record<PillTone, { soft: string; ink: string; solid: string }> = {
-  neutral: { soft: colors.fillQuiet, ink: colors.textMuted, solid: colors.textMuted },
-  brand: { soft: colors.brandSoft, ink: brand.royalDeep, solid: colors.brand },
-  accent: { soft: colors.accentSoft, ink: brand.burntDeep, solid: colors.accent },
-  success: { soft: colors.successSoft, ink: colors.success, solid: colors.success },
-  warn: { soft: colors.warnSoft, ink: colors.warn, solid: colors.warn },
-  danger: { soft: colors.dangerSoft, ink: colors.danger, solid: colors.danger },
-  info: { soft: colors.infoSoft, ink: brand.royalDeep, solid: colors.info },
+// Bright solid fills need dark labels; soft fills need a deeper ink in the
+// same color family. Neither pairing can assume the status fill is an ink.
+const TONES: Record<PillTone, { soft: string; ink: string; solid: string; solidInk: string }> = {
+  neutral: { soft: colors.fillQuiet, ink: colors.textMuted, solid: colors.textMuted, solidInk: colors.textInverse },
+  brand: { soft: colors.brandSoft, ink: brand.royalDeep, solid: colors.brand, solidInk: colors.textInverse },
+  accent: { soft: colors.accentSoft, ink: colors.accentInk, solid: colors.accent, solidInk: colors.text },
+  success: { soft: colors.successSoft, ink: colors.successInk, solid: colors.success, solidInk: colors.text },
+  warn: { soft: colors.warnSoft, ink: colors.warnInk, solid: colors.warn, solidInk: colors.text },
+  danger: { soft: colors.dangerSoft, ink: colors.dangerInk, solid: colors.danger, solidInk: colors.textInverse },
+  info: { soft: colors.infoSoft, ink: brand.royalDeep, solid: colors.info, solidInk: colors.textInverse },
 };
 
 type Props = {
@@ -69,7 +71,7 @@ export function Pill({
 }: Props) {
   const t = TONES[tone];
   const bg = solid ? t.solid : t.soft;
-  const fg = solid ? colors.textInverse : t.ink;
+  const fg = solid ? t.solidInk : t.ink;
   const small = size === 'sm';
 
   return (

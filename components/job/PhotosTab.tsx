@@ -6,6 +6,7 @@
 // this tree, built by the annotations wave, so this tab uses it for real
 // rather than stubbing it).
 
+import { readPhotoAnalysis } from '@/lib/services/photoAnalysisState';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -162,6 +163,7 @@ type PhotoLogEntry = {
   slopeId: string;
   slopeLabel: string;
   photoIndex: number;
+  attachmentId?: string;
   areaTag?: string;
   analyzedAt?: string;
 };
@@ -177,12 +179,13 @@ function PhotoLog({ inspection }: { inspection: Inspection }) {
     for (const slope of inspection.slopes) {
       slope.photoPaths.forEach((uri, i) => {
         const meta = slope.photoMeta?.find((m) => m.photoIndex === i);
-        const st = slope.photoAnalysis?.[uri];
+        const st = readPhotoAnalysis(slope, i);
         out.push({
           uri,
           slopeId: slope.id,
           slopeLabel: slope.orientation,
           photoIndex: i,
+          attachmentId: slope.photoAttachmentIds?.[i],
           areaTag: meta?.areaTag,
           analyzedAt: st?.status === 'done' ? st.at : undefined,
         });
@@ -207,6 +210,7 @@ function PhotoLog({ inspection }: { inspection: Inspection }) {
             <View key={`${entry.slopeId}_${entry.photoIndex}`} style={styles.logTileWrap}>
               <AnnotatedPhoto
                 uri={entry.uri}
+                attachmentId={entry.attachmentId}
                 style={styles.logTile}
                 markers={markers}
                 onPress={() => setCaptionTarget(entry)}
@@ -263,6 +267,8 @@ function PhotoLog({ inspection }: { inspection: Inspection }) {
                   inspectionId: inspection.id,
                   slopeId: actionTarget.slopeId,
                   photoIndex: String(actionTarget.photoIndex),
+                  attachmentId: actionTarget.attachmentId,
+                  photoPath: actionTarget.uri,
                 },
               });
             }
@@ -280,6 +286,7 @@ function PhotoLog({ inspection }: { inspection: Inspection }) {
                   uri: actionTarget.uri,
                   inspectionId: inspection.id,
                   slopeId: actionTarget.slopeId,
+                  attachmentId: actionTarget.attachmentId,
                   index: String(actionTarget.photoIndex),
                 },
               });
@@ -386,7 +393,7 @@ function SlopeBlock({
   const functionalInfo = deriveFunctional(slope);
   const legacyAnalyzed = new Set(slope.analyzedPhotoIndices ?? []);
   const analyzedHere = slope.photoPaths.filter((uri, i) => {
-    const st = slope.photoAnalysis?.[uri];
+    const st = readPhotoAnalysis(slope, i);
     return st?.status === 'done' || (!st && legacyAnalyzed.has(i));
   }).length;
 
@@ -418,12 +425,14 @@ function SlopeBlock({
               <AnnotatedPhoto
                 key={i}
                 uri={uri}
+                attachmentId={slope.photoAttachmentIds?.[i]}
                 style={styles.photoTile}
                 markers={slope.damage.filter((m) => m.photoIndex === i)}
                 onPress={() =>
                   router.push({
                     pathname: '/photo-report',
-                    params: { inspectionId: inspection.id, slopeId: slope.id, photoIndex: String(i) },
+                    params: { inspectionId: inspection.id, slopeId: slope.id, photoIndex: String(i),
+                      attachmentId: slope.photoAttachmentIds?.[i], photoPath: uri },
                   })
                 }
               />
@@ -467,8 +476,8 @@ function SlopeBlock({
 
       {detected.length > 0 && (
         <View style={{ marginTop: spacing.md, gap: spacing.xs }}>
-          {detected.map((f) => (
-            <Text key={f.label} style={styles.cardSub}>
+          {detected.map((f, index) => (
+            <Text key={`${f.label}:${index}`} style={styles.cardSub}>
               • {DAMAGE_CATEGORY_LABELS[f.label]} × {f.count} ({f.confidence}%)
             </Text>
           ))}

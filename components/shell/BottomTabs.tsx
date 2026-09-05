@@ -1,20 +1,22 @@
-import { useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
-  withSequence,
+  cancelAnimation,
+  ReduceMotion,
   withSpring,
 } from 'react-native-reanimated';
 import { mobileBottomItems, type TabBarProps } from './navItems';
-import { brand, fontFamily, fontSize, motion, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, motion, navigationDock, radii, spacing, touchTarget } from '@/theme/tokens';
 
 // The floating pill tab bar — docs/DESIGN_1A.md §4. Off the bottom edge with
 // side margins (not edge-to-edge), full-pill radius, the active tab wearing
-// a soft burnt chip behind icon+label. Same tabPress/navigation contract as
+// a quiet paper/navy chip behind icon+label. Same tabPress/navigation contract as
 // before this reskin — only the paint changed.
 //
 // Rendered by expo-router's <Tabs tabBar={...}> in app/(tabs)/_layout.tsx, so
@@ -26,36 +28,71 @@ import { brand, fontFamily, fontSize, motion, radii, shadows, spacing, touchTarg
 // animation on Home. Re-tapping the focused tab only emits `tabPress` (a
 // screen may listen and scroll to top); it never navigates.
 export function BottomTabs({ state, descriptors, navigation }: TabBarProps) {
+  const tabRefs = useRef<Record<string, View | null>>({});
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const visibleItems = mobileBottomItems.flatMap((item) => {
+    const route = state.routes.find((candidate) => candidate.name === item.name);
+    return route ? [{ item, route }] : [];
+  });
+  const activeKey = state.routes[state.index]?.key;
+  const entryKey = visibleItems.some(({ route }) => route.key === focusedKey)
+    ? focusedKey
+    : visibleItems.some(({ route }) => route.key === activeKey)
+      ? activeKey
+      : visibleItems[0]?.route.key;
+
+  function activate(route: TabBarProps['state']['routes'][number]) {
+    Haptics.selectionAsync().catch(() => {});
+    const event = navigation.emit({
+      type: 'tabPress', target: route.key, canPreventDefault: true,
+    });
+    if (route.key === activeKey || event.defaultPrevented) return;
+    navigation.navigate(route.name, route.params);
+  }
+
   return (
     <SafeAreaView edges={['bottom']} style={styles.wrap} pointerEvents="box-none">
-      <View style={[styles.bar, shadows.float]}>
-        {mobileBottomItems.map((it) => {
-          const routeIndex = state.routes.findIndex((r) => r.name === it.name);
-          // Defensive: a nav item whose route file is missing renders nothing
-          // rather than a dead button.
-          if (routeIndex === -1) return null;
-          const route = state.routes[routeIndex];
-          const active = state.index === routeIndex;
-          const label = descriptors[route.key]?.options.title ?? it.label;
+      <View style={styles.bar} accessibilityRole="tablist" accessibilityLabel="Main navigation">
+        {visibleItems.map(({ item, route }, index) => {
+          const active = activeKey === route.key;
+          const label = descriptors[route.key]?.options.title ?? item.label;
 
           return (
             <TabButton
               key={route.key}
-              icon={it.icon}
+              icon={item.icon}
               label={label}
               active={active}
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
-                // Same contract as react-navigation's stock BottomTabBar: emit a
-                // preventable `tabPress`, then navigate only when not focused.
-                const event = navigation.emit({
-                  type: 'tabPress',
-                  target: route.key,
-                  canPreventDefault: true,
-                });
-                if (active || event.defaultPrevented) return;
-                navigation.navigate(route.name, route.params);
-              }}
+              onPress={() => activate(route)}
+              onFocusChange={Platform.OS === 'web'
+                ? (focused) => setFocusedKey(focused ? route.key : null)
+                : undefined}
+              webProps={Platform.OS === 'web' ? {
+                ref: (node) => { tabRefs.current[route.key] = node; },
+                tabIndex: entryKey === route.key ? 0 : -1,
+                onKeyDown: (event) => {
+                  // RN Web activates Enter on keyup. Space is only built in
+                  // for role=button, so tabs own Space exactly once here.
+                  if (event.key === ' ' || event.key === 'Spacebar') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (!event.repeat) activate(route);
+                    return;
+                  }
+                  const nextIndex = event.key === 'ArrowRight'
+                    ? (index + 1) % visibleItems.length
+                    : event.key === 'ArrowLeft'
+                      ? (index + visibleItems.length - 1) % visibleItems.length
+                      : event.key === 'Home' ? 0
+                        : event.key === 'End' ? visibleItems.length - 1 : null;
+                  if (nextIndex === null) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const next = visibleItems[nextIndex].route;
+                  tabRefs.current[next.key]?.focus();
+                  activate(next);
+                },
+              } : undefined}
               onLongPress={() => {
                 navigation.emit({ type: 'tabLongPress', target: route.key });
               }}
@@ -67,33 +104,52 @@ export function BottomTabs({ state, descriptors, navigation }: TabBarProps) {
   );
 }
 
+type DockKeyboardEvent = {
+  key: string;
+  repeat?: boolean;
+  preventDefault: () => void;
+  stopPropagation: () => void;
+};
+
+type WebTabProps = {
+  ref: (node: View | null) => void;
+  tabIndex: 0 | -1;
+  onKeyDown: (event: DockKeyboardEvent) => void;
+};
+
 function TabButton({
   icon,
   label,
   active,
   onPress,
   onLongPress,
+  onFocusChange,
+  webProps,
 }: {
   icon: any;
   label: string;
   active: boolean;
   onPress: () => void;
   onLongPress: () => void;
+  onFocusChange?: (focused: boolean) => void;
+  webProps?: WebTabProps;
 }) {
   // Filled icon variant when active (e.g. "home-outline" → "home").
   const activeIcon = String(icon).replace('-outline', '');
 
-  // Icon pops with a small spring (1 → 1.12 → 1) when the tab becomes active.
+  // A quiet settling motion marks the new destination. No bounce sequence,
+  // and Reduce Motion keeps the icon at its resting size.
+  const reduced = useReducedMotion();
+  const [focused, setFocused] = useState(false);
   const iconScale = useSharedValue(1);
 
   useEffect(() => {
-    if (active) {
-      iconScale.value = withSequence(
-        withSpring(1.12, motion.snappy),
-        withSpring(1, motion.snappy),
-      );
-    }
-  }, [active, iconScale]);
+    iconScale.value = reduced ? 1 : withSpring(
+      active ? navigationDock.selectedIconScale : 1,
+      { ...motion.snappy, reduceMotion: ReduceMotion.System },
+    );
+    return () => cancelAnimation(iconScale);
+  }, [active, iconScale, reduced]);
 
   const iconStyle = useAnimatedStyle(() => ({
     transform: [{ scale: iconScale.value }],
@@ -101,42 +157,65 @@ function TabButton({
 
   return (
     <Pressable
-      style={styles.tab}
+      {...webProps}
+      // RN Web otherwise paints the browser's rectangular focus outline on
+      // top of the intentional pill-shaped ring below. Keep one clear focus
+      // treatment, shaped exactly like the control.
+      style={[styles.tab, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
       onPress={onPress}
       onLongPress={onLongPress}
-      hitSlop={6}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
+      aria-selected={active}
       accessibilityLabel={label}
+      onFocus={() => { setFocused(true); onFocusChange?.(true); }}
+      onBlur={() => { setFocused(false); onFocusChange?.(false); }}
     >
-      <View style={[styles.tabChip, active && styles.tabChipActive]}>
+      {({ pressed }) => <View style={[
+        styles.tabChip,
+        active && styles.tabChipActive,
+        pressed && styles.tabChipPressed,
+        focused && styles.tabChipFocused,
+      ]}>
         <Animated.View style={iconStyle}>
           <Ionicons
             name={(active ? activeIcon : icon) as any}
-            size={22}
-            color={active ? brand.burntLight : 'rgba(242,240,231,0.6)'}
+            size={navigationDock.iconSize}
+            color={active ? colors.text : colors.textMuted}
           />
         </Animated.View>
-        <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
-      </View>
+        <Text numberOfLines={1} style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+      </View>}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { backgroundColor: 'transparent' },
+  // Opaque through the home-indicator inset so the full bottom edge is warm
+  // paper; a transparent wrapper exposed the orange stop in the screen mesh.
+  wrap: {
+    backgroundColor: navigationDock.ground,
+    paddingTop: navigationDock.topInset,
+    paddingHorizontal: navigationDock.edgeInset,
+    alignItems: 'center',
+  },
   bar: {
     flexDirection: 'row',
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-    minHeight: 66,
+    width: '100%',
+    maxWidth: navigationDock.maxWidth,
+    marginBottom: navigationDock.bottomInset,
+    minHeight: navigationDock.height,
     borderRadius: radii.pill,
-    backgroundColor: brand.royalInk,
-    paddingHorizontal: spacing.xs,
+    backgroundColor: navigationDock.surface,
+    borderWidth: 1,
+    borderColor: navigationDock.border,
+    paddingHorizontal: spacing.xs / 2,
     alignItems: 'center',
+    ...navigationDock.shadow,
   },
   tab: {
     flex: 1,
+    minWidth: touchTarget.standard,
     minHeight: touchTarget.standard,
     alignItems: 'center',
     justifyContent: 'center',
@@ -145,21 +224,27 @@ const styles = StyleSheet.create({
   tabChip: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingVertical: 9,
-    paddingHorizontal: spacing.sm,
+    alignSelf: 'stretch',
+    minHeight: touchTarget.standard,
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderWidth: 2,
+    borderColor: 'transparent',
     borderRadius: radii.pill,
   },
   tabChipActive: {
-    backgroundColor: 'rgba(232,99,26,0.18)',
+    backgroundColor: navigationDock.selectedFill,
   },
+  tabChipPressed: { backgroundColor: navigationDock.pressedFill },
+  tabChipFocused: { borderColor: navigationDock.focusRing },
   tabLabel: {
     fontFamily: fontFamily.archivo.medium,
     fontSize: fontSize.caption,
-    color: 'rgba(242,240,231,0.6)',
+    color: colors.textMuted,
   },
   tabLabelActive: {
     fontFamily: fontFamily.archivo.bold,
-    color: brand.burntLight,
+    color: colors.text,
   },
 });

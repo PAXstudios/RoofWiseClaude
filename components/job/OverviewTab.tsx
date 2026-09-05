@@ -5,10 +5,10 @@
 // here lived on the old single-scroll job page; nothing was cut, only
 // regrouped — see the wave report's per-section "where it went" table.
 
-import { useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { PressableScale } from '@/components/PressableScale';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
@@ -22,7 +22,7 @@ import { FindingsList } from './FindingsList';
 import { VoiceNoteRecorder } from '@/components/VoiceNoteRecorder';
 import { SignaturePad } from '@/components/SignaturePad';
 import { damageScoreFromEngine } from '@/lib/services/damageScore';
-import { formatDate, formatRelative } from '@/lib/format/date';
+import { formatDate } from '@/lib/format/date';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
 import { useToastStore } from '@/lib/stores/toastStore';
@@ -38,7 +38,6 @@ import {
 import type { JobAmount } from '@/lib/services/proposals';
 import { JOB_AMOUNT_SOURCE_LABELS } from '@/lib/services/proposals';
 import type { MissingDetails } from '@/lib/services/placeholderDetails';
-import { describeMissingDetails } from '@/lib/services/placeholderDetails';
 import type { DecisionEngineResult, HaagEngineResult, RoofwiseRecommendation } from '@/lib/services/decisionEngine';
 import { ROOFWISE_RECOMMENDATION_LABELS, SAFETY_RATING_LABELS } from '@/lib/services/decisionEngine';
 import {
@@ -59,7 +58,6 @@ import {
   fontFamily,
   fontSize,
   fontWeight,
-  gradients,
   radii,
   shadows,
   spacing,
@@ -119,6 +117,9 @@ export type NextAction = {
 };
 
 type Props = {
+  /** Job identity, alerts, and tabs share this ScrollView on Overview so the
+   * whole report body—not only the small area below the tabs—can move. */
+  header?: ReactNode;
   inspection: Inspection;
   haag: HaagEngineResult;
   decision: DecisionEngineResult;
@@ -150,9 +151,12 @@ type Props = {
   onSignInspector: (svg: string) => void;
   onGenerateHaagReport: () => void;
   onGenerateLongReport: () => void;
+  showClaimEvidence: boolean;
+  onClaimEvidenceShown: () => void;
 };
 
 export function OverviewTab({
+  header,
   inspection,
   haag,
   decision,
@@ -183,56 +187,38 @@ export function OverviewTab({
   onSignInspector,
   onGenerateHaagReport,
   onGenerateLongReport,
+  showClaimEvidence,
+  onClaimEvidenceShown,
 }: Props) {
   const scrollRef = useRef<ScrollView>(null);
-  const evidenceCardY = useRef(0);
+  const evidenceCardY = useRef<number | null>(null);
+  const bodyY = useRef<number | null>(null);
   const isClaim = inspection.kind === 'insurance_claim';
   const totalFindings = inspection.slopes.reduce(
     (a, sl) => a + (sl.aiFindings ?? []).filter((f) => f.detected).length,
     0,
   );
+  const evidenceSlope = inspection.slopes.find((slope) => slope.photoPaths.length > 0);
+  const evidencePhoto = evidenceSlope?.photoPaths[0];
+  const evidenceMarkers = evidenceSlope?.damage.filter((marker) => marker.photoIndex === 0) ?? [];
+  const evidenceConfidence = evidenceMarkers.length > 0
+    ? Math.round(evidenceMarkers.reduce((sum, marker) => sum + marker.confidence, 0) / evidenceMarkers.length)
+    : null;
 
-  const jumpToClaimEvidence = () =>
-    scrollRef.current?.scrollTo({ y: Math.max(0, evidenceCardY.current - spacing.xl), animated: true });
-
-  // The brittleness-gap Alert (with a real "Record now" that scrolls THIS
-  // tab's own ScrollView to the Claim Evidence card) lives here rather than
-  // in app/job/[id].tsx — this is the one place that owns the scroll ref the
-  // jump needs. `onGenerateHaagReport` / `onGenerateLongReport` are the raw
-  // generators; they still self-gate on `missing.any`.
-  const onGenerateHaagPress = () => {
-    if (!(isClaim && brittlenessGap)) {
-      onGenerateHaagReport();
-      return;
-    }
-    Alert.alert(
-      'Claim evidence is incomplete',
-      `${brittlenessGap}\n\nThe report discloses the gap either way — the adjuster will see it.`,
-      [
-        { text: 'Record now', style: 'cancel', onPress: jumpToClaimEvidence },
-        { text: 'Generate anyway', onPress: onGenerateHaagReport },
-      ],
-    );
-  };
-
-  const onGenerateLongPress = () => {
-    if (!(isClaim && brittlenessGap)) {
-      onGenerateLongReport();
-      return;
-    }
-    Alert.alert(
-      'Claim evidence is incomplete',
-      `${brittlenessGap}\n\nThe Long Report discloses the gap either way — the adjuster will see it.`,
-      [
-        { text: 'Record now', style: 'cancel', onPress: jumpToClaimEvidence },
-        { text: 'Generate anyway', onPress: onGenerateLongReport },
-      ],
-    );
-  };
+  // A header/menu request can mount Overview from another tab. Wait for both
+  // layout offsets, including the report header above this tab's body.
+  const jumpToClaimEvidence = useCallback(() => {
+    if (!showClaimEvidence || evidenceCardY.current == null || bodyY.current == null) return;
+    scrollRef.current?.scrollTo({ y: Math.max(0, bodyY.current + evidenceCardY.current - spacing.xl), animated: true });
+    onClaimEvidenceShown();
+  }, [showClaimEvidence, onClaimEvidenceShown]);
+  useEffect(jumpToClaimEvidence, [jumpToClaimEvidence]);
 
   return (
     <View style={styles.flex}>
-    <ScrollView ref={scrollRef} style={styles.flex} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+    <ScrollView ref={scrollRef} style={styles.flex} contentContainerStyle={styles.scrollFrame} keyboardShouldPersistTaps="handled">
+      {header}
+      <View style={styles.scroll} onLayout={(e) => { bodyY.current = e.nativeEvent.layout.y; jumpToClaimEvidence(); }}>
       {/* At a Glance — the four stat tiles from the reference apps. Each taps
           through to the tab that has the detail. */}
       <View style={styles.glanceGrid}>
@@ -348,6 +334,33 @@ export function OverviewTab({
         />
       )}
 
+      <View style={styles.evidenceHeading}>
+        <SectionHeader title="Photo evidence" />
+        <Text style={styles.evidenceCount}>{glance.photos} PHOTOS · {inspection.slopes.length} SLOPES</Text>
+      </View>
+      {evidencePhoto ? (
+        <PressableScale style={styles.evidenceCard} onPress={() => onOpenTab('photos')} accessibilityRole="button" accessibilityLabel="Open photo evidence">
+          <View style={styles.evidenceImageWrap}>
+            <Image source={{ uri: evidencePhoto }} style={styles.evidenceImage} contentFit="cover" />
+            <View style={styles.evidenceImageLabel}>
+              <Text style={styles.evidenceImageLabelText}>{evidenceSlope?.orientation.toUpperCase()} · IMG_0001</Text>
+            </View>
+          </View>
+          <View style={styles.evidenceSummary}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.evidenceTitle}>{evidenceMarkers.length} documented impact{evidenceMarkers.length === 1 ? '' : 's'} in this frame</Text>
+              <Text style={styles.evidenceSub}>Tap to review all evidence, markers, and slope photos.</Text>
+            </View>
+            {evidenceConfidence != null && (
+              <View style={styles.evidenceConfidence}>
+                <Text style={styles.evidenceConfidenceValue}>{(evidenceConfidence / 100).toFixed(2)}</Text>
+                <Text style={styles.evidenceConfidenceLabel}>CONF.</Text>
+              </View>
+            )}
+          </View>
+        </PressableScale>
+      ) : null}
+
       <SectionHeader title="Assessment" style={styles.sectionSpacing} />
       <DamageScoreCard result={damageScoreFromEngine(inspection, haag)} />
       <DamageScoreBar
@@ -408,6 +421,7 @@ export function OverviewTab({
         <View
           onLayout={(e) => {
             evidenceCardY.current = e.nativeEvent.layout.y;
+            jumpToClaimEvidence();
           }}
         >
           <RichCard icon="shield-checkmark-outline" iconTone="purple" title="Claim Evidence" contentStyle={styles.bodyRows}>
@@ -518,59 +532,44 @@ export function OverviewTab({
           </View>
         )}
       </RichCard>
-
+      {isClaim && brittlenessGap && <Text style={styles.gateHint}>Brittleness evidence is incomplete — the packet will disclose it.</Text>}
+      {engineFreshnessStale && <Text style={styles.gateHint}>This job changed since the last report. Regenerate its PDF before sending.</Text>}
+      {Platform.OS === 'web' && <Text style={styles.finalizedHint}>PDF export is available in RoofWise on iOS and Android.</Text>}
+      </View>
     </ScrollView>
 
-      {/* Sticky dual-button bar — outline "PDF" report action + primary
+      {/* Sticky dual-button bar — light "PDF" report action + primary
           report action, docs/DESIGN_1A.md §6's "04 Damage report" template.
-          Same two handlers as the old in-flow pair (`onGenerateLongPress` /
-          `onGenerateHaagPress`); only the position and paint changed — it
-          sits below the ScrollView rather than inside it, so it's always
+          Both actions use the same parent readiness gate as the header/menu.
+          The bar sits below the ScrollView, so it's always
           reachable without hunting for it at the end of a long scroll. */}
       <View style={styles.stickyFooter}>
-        {missing.any && (
-          <Text style={styles.gateHint}>
-            {describeMissingDetails(missing)} before generating — a packet cannot go to a carrier with placeholder
-            details.
-          </Text>
-        )}
-        {isClaim && brittlenessGap && <Text style={styles.gateHint}>Brittleness evidence is incomplete — the packet will disclose it.</Text>}
-        {inspection.reportFinalizedAt && (
-          <Text style={styles.finalizedHint}>Report last finalized {formatRelative(inspection.reportFinalizedAt)}</Text>
-        )}
-        {engineFreshnessStale && (
-          <Text style={styles.gateHint}>
-            This job changed since that report was finalized. The determination above is current; the signed PDF is
-            not — regenerate it before sending.
-          </Text>
-        )}
         <View style={styles.footerRow}>
           <PressableScale
-            style={[styles.outlineCta, (generatingLong || missing.any) && styles.ctaDisabled]}
-            disabled={generatingLong || missing.any}
+            style={[styles.outlineCta, (generating || generatingLong || missing.any) && styles.ctaDisabled]}
+            disabled={generating || generatingLong || missing.any}
             accessibilityRole="button"
             accessibilityLabel="Generate Long Report PDF"
-            accessibilityState={{ disabled: generatingLong || missing.any }}
-            onPress={onGenerateLongPress}
+            accessibilityState={{ disabled: generating || generatingLong || missing.any }}
+            onPress={onGenerateLongReport}
           >
-            <Ionicons name="reader-outline" size={18} color={colors.brand} />
+            <Ionicons name="reader-outline" size={18} color={colors.text} />
             <Text style={styles.outlineCtaText} numberOfLines={1}>
               {generatingLong ? 'Generating…' : 'Long Report'}
             </Text>
           </PressableScale>
 
           <PressableScale
-            style={[styles.reportCtaShadow, (generating || missing.any) && styles.ctaDisabled]}
-            disabled={generating || missing.any}
-            onPress={onGenerateHaagPress}
+            style={[styles.reportCtaShadow, (generating || generatingLong || missing.any) && styles.ctaDisabled]}
+            disabled={generating || generatingLong || missing.any}
+            onPress={onGenerateHaagReport}
             accessibilityRole="button"
             accessibilityLabel={isClaim ? 'Generate HAAG claim packet PDF' : 'Generate HAAG report PDF'}
-            accessibilityState={{ disabled: generating || missing.any }}
+            accessibilityState={{ disabled: generating || generatingLong || missing.any }}
           >
             <View style={styles.reportCtaClip}>
-              <LinearGradient colors={gradients.accent} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
               <View style={styles.reportCtaContent}>
-                <Ionicons name="document-text-outline" size={18} color={colors.textInverse} />
+                <Ionicons name="document-text-outline" size={18} color={colors.text} />
                 <Text style={styles.reportCtaText} numberOfLines={1}>
                   {generating ? 'Generating…' : isClaim ? 'HAAG Packet (PDF)' : 'HAAG Report (PDF)'}
                 </Text>
@@ -743,6 +742,7 @@ function GlanceTile({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  scrollFrame: { paddingBottom: spacing.xxxl },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
   sectionSpacing: { marginBottom: spacing.sm },
 
@@ -885,7 +885,7 @@ const styles = StyleSheet.create({
   footerRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   ctaDisabled: { opacity: 0.5 },
 
-  // Outline — the report action that isn't the primary send.
+  // Warm-paper secondary — 1A uses a light bottom action, never a blue one.
   outlineCta: {
     flex: 1,
     flexDirection: 'row',
@@ -895,21 +895,40 @@ const styles = StyleSheet.create({
     height: touchTarget.preferred,
     borderRadius: radii.button,
     borderWidth: 1.5,
-    borderColor: colors.brand,
-    backgroundColor: colors.surface,
+    borderColor: colors.hairline,
+    backgroundColor: colors.fillQuiet,
   },
-  outlineCtaText: { color: colors.brand, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold },
+  outlineCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold },
 
-  // Primary — the burnt-gradient CTA, same "one considered pair" as Home's
-  // hero row.
+  // Primary report control — warm paper with navy content, per owner review.
   reportCtaShadow: { flex: 1, borderRadius: radii.button, ...shadows.raised },
-  reportCtaClip: { height: touchTarget.preferred, borderRadius: radii.button, overflow: 'hidden' },
+  reportCtaClip: {
+    height: touchTarget.preferred,
+    borderRadius: radii.button,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.hairline,
+  },
   reportCtaContent: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
-  reportCtaText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.bold },
+  reportCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.bold },
 
   gateHint: { fontSize: fontSize.bodySm, color: colors.warn, fontWeight: fontWeight.medium, textAlign: 'center' },
   finalizedHint: { fontSize: fontSize.bodySm, color: colors.textSubtle, textAlign: 'center' },
 
   // The "cited storm event" info card — brand-tinted ground, per §6.
   citedEventCard: { backgroundColor: colors.brandSoft, borderColor: colors.brand },
+  evidenceHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs },
+  evidenceCount: { fontFamily: fontFamily.mono, fontWeight: fontWeight.semibold, fontSize: fontSize.caption, color: colors.textMuted, letterSpacing: 0.4 },
+  evidenceCard: { borderRadius: radii.card, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
+  evidenceImageWrap: { height: 210, backgroundColor: colors.surfaceMuted },
+  evidenceImage: { flex: 1 },
+  evidenceImageLabel: { position: 'absolute', left: spacing.md, top: spacing.md, paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: radii.sm, backgroundColor: 'rgba(11,26,92,0.84)' },
+  evidenceImageLabelText: { fontFamily: fontFamily.mono, fontWeight: fontWeight.semibold, fontSize: fontSize.caption, color: colors.onMesh },
+  evidenceSummary: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  evidenceTitle: { fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold, fontSize: fontSize.bodyMd, color: colors.text },
+  evidenceSub: { marginTop: spacing.xs, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, lineHeight: 18, color: colors.textMuted },
+  evidenceConfidence: { alignItems: 'flex-end' },
+  evidenceConfidenceValue: { fontFamily: fontFamily.archivo.extrabold, fontWeight: fontWeight.extrabold, fontSize: fontSize.titleSm, color: colors.accent },
+  evidenceConfidenceLabel: { fontFamily: fontFamily.mono, fontSize: fontSize.caption, color: colors.textMuted },
 });

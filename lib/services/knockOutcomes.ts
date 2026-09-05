@@ -151,7 +151,7 @@ export const KNOCK_OUTCOMES: KnockOutcomeMeta[] = [
     short: 'Booked',
     icon: 'calendar-outline',
     tone: 'brand',
-    next: 'Pick the day. The lead moves to Inspection Scheduled.',
+    next: 'Choose the appointment date and time. Existing scheduled inspections are updated; work already started stays unchanged.',
     group: 'follow_up',
     isContact: true,
     countsAsDoor: true,

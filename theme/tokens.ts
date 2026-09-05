@@ -93,7 +93,10 @@ export const colors = {
 
   text: '#0B1A5C',
   textMuted: '#546078',
-  textSubtle: '#8A8F9A',
+  // Small metadata and placeholders still need normal-text contrast: at
+  // least 4.5:1 on paper, white cards, muted inputs and quiet-fill tracks
+  // over paper. Keep this quieter than textMuted without fading the labels.
+  textSubtle: '#606673',
   textInverse: '#FFFFFF',
   // The mesh hero's "white" — a warm paper tint, never pure #FFFFFF over a
   // coloured gradient (docs/DESIGN_1A.md §1). Use for text/icons over
@@ -102,6 +105,7 @@ export const colors = {
 
   accent: brand.burnt,
   accentSoft: brand.burntSoft,
+  accentInk: '#8F3210',        // small text on accentSoft
   accentPressed: brand.burntDeep,
   // Burnt @ 50%, as a flat *fill* for disabled primary CTAs. Painting the wash
   // into the background (instead of element-level `opacity`) keeps the button
@@ -121,12 +125,15 @@ export const colors = {
 
   // Semantic colors stay separate from the brand hues so "good/warning/bad"
   // never collides with "this is a RoofWise accent".
-  success: '#1E9E62',
+  success: '#2BB673',
   successSoft: '#DCF3E8',
+  successInk: '#0F6B43',       // small text on successSoft
   warn: '#C77A0A',
   warnSoft: '#FBEED6',
+  warnInk: '#885006',          // small text on warnSoft
   danger: '#D93A3F',
   dangerSoft: '#FBE3E4',
+  dangerInk: '#B8262D',        // small text on dangerSoft
   info: brand.royal,
   infoSoft: brand.royalSoft,
 
@@ -308,6 +315,35 @@ export const touchTarget = {
   sticky: 88,        // sticky primary CTAs in thumb zone
 };
 
+// Light suspended navigation, refined from 1A's pill geometry. The owner's
+// device review keeps bottom chrome paper/navy, including on dark map screens.
+export const navigationDock = {
+  ground: colors.bg,
+  surface: colors.surface,
+  selectedFill: colors.brandSoft,
+  pressedFill: colors.fillQuiet,
+  border: colors.hairline,
+  focusRing: colors.text,
+  edgeInset: spacing.lg,
+  bottomInset: spacing.md,
+  topInset: spacing.sm,
+  height: 72,
+  maxWidth: 480,
+  iconSize: 22,
+  selectedIconScale: 1.06,
+  shadow: Platform.select({
+    ios: {
+      shadowColor: colors.navy,
+      shadowOpacity: 0.14,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 6 },
+    },
+    android: { elevation: 8 },
+    web: { boxShadow: '0 2px 4px rgba(11,26,92,0.06), 0 8px 24px rgba(11,26,92,0.12)' },
+    default: {},
+  }) as ViewStyle,
+};
+
 // iOS-subtle: cards lean on the grouped ground + hairline, not on shadow.
 const cardShadow: ViewStyle = Platform.select({
   ios: {
@@ -452,6 +488,7 @@ export const theme = {
   fontFamily,
   dataLabel,
   touchTarget,
+  navigationDock,
   shadows,
   breakpoints,
   motion,

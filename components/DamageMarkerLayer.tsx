@@ -28,7 +28,7 @@ type Props = {
 // Matches components/capture/LiveOverlay.tsx's SEVERITY_TINT/SEVERITY_INK —
 // the same finding should read the same color live and in the photo report.
 const SEVERITY_COLORS: Record<Severity, string> = {
-  none: colors.textSubtle,
+  none: colors.surfaceMuted,
   minor: brand.royal,
   moderate: brand.amber,
   severe: brand.burntDeep,

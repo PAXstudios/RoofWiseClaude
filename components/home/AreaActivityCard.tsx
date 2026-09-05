@@ -66,6 +66,7 @@ import {
   STORM_HISTORY_BROWSE_RADIUS_MILES,
   type StormLeadCluster,
 } from '@/lib/services/stormWatch';
+import { isValidLatLon } from '@/lib/services/stormCluster';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
@@ -716,7 +717,10 @@ export function AreaActivityCard() {
   // reports whichever number really got drawn, in both phases.
   const groundShowing = !HAS_BASEMAP_TILES || !tilesReady;
   const pinCap = groundShowing ? PLOT_PIN_CAP : MAX_STORM_PINS;
-  const stormPins = useMemo(() => stormEvents.slice(0, pinCap), [stormEvents, pinCap]);
+  const stormPins = useMemo(
+    () => stormEvents.filter((event) => isValidLatLon(event.lat, event.lon)).slice(0, pinCap),
+    [stormEvents, pinCap],
+  );
 
   /**
    * The floating insight — a REAL matchLeadsToStorm result, never a

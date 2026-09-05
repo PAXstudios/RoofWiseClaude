@@ -43,8 +43,9 @@ import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { analyzeSlope, getPhotoAnalysisState } from '@/lib/services/analyzeSlope';
 import { carrierBarsRead, thresholdFor } from '@/lib/services/haagThresholds';
+import { resolvePhotoReportTarget } from '@/lib/services/photoReportTarget';
 import { isGeminiConfigured } from '@/lib/env';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 
 const SEVERITY_TONE: Record<Severity, PillTone> = {
   none: 'neutral',
@@ -87,15 +88,17 @@ function summarize(markers: DamageMarker[]): CategoryRow[] {
 export default function PhotoReportScreen() {
   const router = useRouter();
   const toast = useToastStore((s) => s.show);
-  const { inspectionId, slopeId, photoIndex } = useLocalSearchParams<{
+  const { inspectionId, slopeId, attachmentId, photoPath } = useLocalSearchParams<{
     inspectionId: string;
     slopeId: string;
-    photoIndex: string;
+    attachmentId?: string;
+    photoPath?: string;
   }>();
-  const index = Number(photoIndex);
   const inspection = useInspectionStore((s) => s.inspections.find((i) => i.id === inspectionId));
-  const slope = inspection?.slopes.find((s) => s.id === slopeId);
-  const uri = Number.isInteger(index) && index >= 0 ? slope?.photoPaths[index] : undefined;
+  const target = resolvePhotoReportTarget(inspection, slopeId, attachmentId, photoPath);
+  const slope = target?.slope;
+  const index = target?.index ?? -1;
+  const uri = target?.uri;
   const [reanalyzing, setReanalyzing] = useState(false);
 
   const markers = useMemo(
@@ -132,6 +135,7 @@ export default function PhotoReportScreen() {
   const subject = state?.subject ?? (nonRoof ? 'unidentifiable' : 'roof_field');
   const zone = PHOTO_SUBJECT_ZONE[subject];
   const analyzed = state?.status === 'done';
+  const manuallyReviewed = state?.reviewSource === 'inspector';
 
   const reanalyze = async () => {
     if (reanalyzing) return;
@@ -141,7 +145,9 @@ export default function PhotoReportScreen() {
     }
     setReanalyzing(true);
     try {
-      await analyzeSlope(inspection.id, slope.id, { photoIndexes: [index] });
+      const current = resolvePhotoReportTarget(useInspectionStore.getState().getById(inspection.id), slopeId, attachmentId, photoPath);
+      if (!current) throw new Error('This attachment is no longer available.');
+      await analyzeSlope(inspection.id, current.slope.id, { photoIndexes: [current.index] });
       toast({ tone: 'success', title: 'Photo re-analyzed' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch (e) {
@@ -185,6 +191,7 @@ export default function PhotoReportScreen() {
         <View style={styles.photoCard}>
           <AnnotatedPhoto
             uri={uri}
+            attachmentId={slope.photoAttachmentIds?.[index]}
             style={styles.photoFill}
             contentFit="contain"
             zoomable
@@ -192,7 +199,7 @@ export default function PhotoReportScreen() {
             onPress={() =>
               router.push({
                 pathname: '/annotate',
-                params: { inspectionId: inspection.id, slopeId: slope.id, index: String(index) },
+                params: { inspectionId: inspection.id, slopeId: slope.id, index: String(index), uri, attachmentId: slope.photoAttachmentIds?.[index] },
               })
             }
             accessibilityLabel="Photo. Tap to draw on it or add a label."
@@ -214,7 +221,7 @@ export default function PhotoReportScreen() {
                     : state?.status === 'queued'
                       ? 'Queued'
                       : analyzed
-                        ? 'Analyzed'
+                        ? manuallyReviewed ? 'Reviewed by inspector' : 'Analyzed'
                         : 'Not analyzed'
               }
               tone={
@@ -272,7 +279,7 @@ export default function PhotoReportScreen() {
             {rows.length === 0 ? (
               <RichCard icon="checkmark-circle-outline" iconTone="green" title="No damage detected">
                 <Text style={styles.cardSub}>
-                  The model found no damage instances in this frame. If you can see damage, tap
+                  {manuallyReviewed ? 'The inspector review has no remaining damage markers in this frame.' : 'The model found no damage instances in this frame.'} If you can see damage, tap
                   Edit markers and add it — your correction trains the model.
                 </Text>
               </RichCard>
@@ -377,7 +384,7 @@ export default function PhotoReportScreen() {
         {/* Provenance — which model, how long. */}
         {state?.modelUsed && (
           <Text style={styles.provenance}>
-            Analyzed by {state.modelUsed}
+            {manuallyReviewed ? 'Original AI analysis by ' : 'Analyzed by '}{state.modelUsed}
             {state.latencyMs != null ? ` in ${(state.latencyMs / 1000).toFixed(1)}s` : ''}
             {state.attempts && state.attempts > 1 ? ` · attempt ${state.attempts}` : ''}
           </Text>
@@ -392,7 +399,8 @@ export default function PhotoReportScreen() {
             onPress={() =>
               router.push({
                 pathname: '/edit-detection',
-                params: { inspectionId: inspection.id, slopeId: slope.id, photoIndex: String(index) },
+                params: { inspectionId: inspection.id, slopeId: slope.id, photoIndex: String(index),
+                  attachmentId: slope.photoAttachmentIds?.[index], photoPath: uri },
               })
             }
           >
@@ -430,12 +438,13 @@ const styles = StyleSheet.create({
   headlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headlineTitle: {
     flex: 1,
+    fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
     color: colors.text,
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  subjectDetail: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
+  subjectDetail: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
   notice: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -466,11 +475,11 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hairline,
   },
   rowMain: { flex: 1, gap: 2 },
-  rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  cardSub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
-  cardFoot: { marginTop: spacing.xs, fontSize: fontSize.caption, color: colors.textSubtle },
-  provenance: { fontSize: fontSize.caption, color: colors.textSubtle, textAlign: 'center' },
+  rowTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  rowSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
+  cardSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  cardFoot: { ...dataLabel, marginTop: spacing.xs, color: colors.textSubtle },
+  provenance: { ...dataLabel, color: colors.textSubtle, textAlign: 'center' },
   actions: { flexDirection: 'row', gap: spacing.md },
   // 56pt actions for a gloved thumb (Drift #1).
   action: {
@@ -487,8 +496,8 @@ const styles = StyleSheet.create({
   },
   actionPressed: { opacity: 0.7 },
   actionBusy: { opacity: 0.5 },
-  actionText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  actionText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
-  emptyTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, textAlign: 'center' },
-  emptyText: { fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, textAlign: 'center' },
+  emptyText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
 });

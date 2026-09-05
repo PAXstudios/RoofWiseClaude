@@ -71,7 +71,6 @@ import type { SaveKnockResult } from '@/components/knock/saveKnock';
 import {
   endRoute,
   liveRouteMiles,
-  requestLocationAccess,
   setScreenMounted,
   startRoute,
   startWatching,
@@ -89,7 +88,7 @@ import {
   sessionStats,
   type OutcomeFilter,
 } from '@/lib/services/knockOutcomes';
-import { formatMiles } from '@/lib/services/knockTrip';
+import { formatMiles, isFreshKnockFix } from '@/lib/services/knockTrip';
 import { useActivityStore } from '@/lib/stores/activityStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useMapChrome } from '@/lib/stores/mapChromeStore';
@@ -164,6 +163,7 @@ export default function DoorKnockingScreen() {
 
   // Route timer — ticks only while a route runs.
   const [now, setNow] = useState(Date.now());
+  const fixFresh = gate === 'granted' && isFreshKnockFix(fix);
   useEffect(() => {
     if (!activeSession) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -190,12 +190,13 @@ export default function DoorKnockingScreen() {
     [follow, panTuck],
   );
 
+  const markAutoMove = panTuck.markAutoMove;
   const flyTo = useCallback(
     (lat: number, lng: number, delta?: number) => {
-      panTuck.markAutoMove();
+      markAutoMove();
       mapRef.current?.animateToRegion(regionForLatLon(lat, lng, delta ?? deltaRef.current), 450);
     },
-    [panTuck],
+    [markAutoMove],
   );
 
   // ---- data -----------------------------------------------------------
@@ -207,6 +208,14 @@ export default function DoorKnockingScreen() {
   const stopIndex = activeSession?.currentStopIndex ?? 0;
   const currentStop = stops[stopIndex] ?? null;
   const hasPlan = (activeSession?.routeStops?.length ?? 0) > 1;
+
+  // Route additions also work while this screen is already mounted beneath
+  // a plan page. initialRegion alone only positions a newly mounted map.
+  useEffect(() => {
+    if (!currentStop) return;
+    setFollow(false);
+    flyTo(currentStop.lat, currentStop.lng, Math.max(0.02, currentStop.radiusMiles / 30));
+  }, [currentStop, flyTo]);
 
   const activeKnocks = useMemo(
     () => (activeSession?.knocks ?? []).filter((k) => matchesFilter(k.outcome, filter)),
@@ -305,8 +314,10 @@ export default function DoorKnockingScreen() {
   );
 
   const onPinHere = () => {
-    if (!fix) {
-      toast({ tone: 'warn', title: 'Waiting for GPS', body: 'Tap the house on the map instead.' });
+    // Recheck at the tap: a label rendered before suspension is not evidence
+    // that this retained fix still describes the roofer's current door.
+    if (gate !== 'granted' || !fix || !isFreshKnockFix(fix)) {
+      toast({ tone: 'warn', title: 'Waiting for fresh GPS', body: 'Tap the house on the map, or wait for a current location fix.' });
       return;
     }
     dropPin(fix.lat, fix.lng, 'gps');
@@ -322,6 +333,14 @@ export default function DoorKnockingScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     setSelectedId(result.knock.id);
     const label = outcomeLabel(result.knock.outcome);
+    if (result.bookingSkipped) {
+      toast({
+        tone: 'warn',
+        title: 'Knock saved · appointment not changed',
+        body: 'This customer’s inspection has already started or finished. Open the lead to arrange another inspection.',
+      });
+      return;
+    }
     if (result.blockedBy) {
       // Saved anyway — the roofer decides — but said out loud.
       toast({
@@ -377,7 +396,20 @@ export default function DoorKnockingScreen() {
 
   const openSettings = () => {
     if (Platform.OS !== 'web' && typeof Linking.openSettings === 'function') {
-      Linking.openSettings().catch(() => {});
+      Linking.openSettings().catch(() => toast({ tone: 'warn', title: 'Could not open Settings', body: 'Open your device Settings, allow location for RoofWise, then tap Retry location.' }));
+    }
+  };
+
+  const retryLocation = async () => {
+    if (starting) return;
+    setStarting(true);
+    try {
+      const ok = await startWatching();
+      toast(ok
+        ? { tone: 'success', title: 'Location restored', body: 'Your route and pins are kept. Mileage resumes from the next GPS fix.' }
+        : { tone: 'warn', title: 'Location still unavailable', body: 'Check location access and device location services, then retry. Your route is kept.' });
+    } finally {
+      setStarting(false);
     }
   };
 
@@ -701,34 +733,30 @@ export default function DoorKnockingScreen() {
             </View>
           }
           footer={
-            !activeSession ? (
-              locationDenied ? (
+            locationDenied ? (
                 <View style={styles.deniedCard}>
                   <View style={styles.deniedHead}>
                     <Ionicons name="location-outline" size={22} color={colors.danger} />
                     <Text style={styles.deniedTitle}>Location is off</Text>
                   </View>
                   <Text style={styles.deniedBody}>
-                    Door knocking needs your location to place pins where you stand and to count the miles you
-                    walk.
+                    {activeSession ? 'Your route and pins are kept. ' : ''}
+                    GPS pins and mileage need location. {activeSession && initialRegion ? 'You can still tap a house on the map to log a manual pin.' : 'Choose a storm or saved area on Map to plan a route without GPS.'}
                   </Text>
+                  {Platform.OS === 'web' ? (
+                    <Text style={styles.deniedBody}>Allow location in this browser’s site settings, then retry.</Text>
+                  ) : null}
                   <View style={styles.deniedRow}>
-                    {gate === 'denied' ? (
                       <PressableScale
                         style={styles.deniedBtn}
-                        onPress={() => {
-                          requestLocationAccess()
-                            .then((g) => {
-                              if (g === 'granted') startWatching().catch(() => {});
-                            })
-                            .catch(() => {});
-                        }}
+                        onPress={() => void retryLocation()}
+                        disabled={starting}
                         accessibilityRole="button"
-                        accessibilityLabel="Ask for location again"
+                        accessibilityLabel="Retry location"
+                        accessibilityState={{ disabled: starting, busy: starting }}
                       >
-                        <Text style={styles.deniedBtnText}>Try again</Text>
+                        <Text style={styles.deniedBtnText}>{starting ? 'Retrying…' : 'Retry location'}</Text>
                       </PressableScale>
-                    ) : null}
                     {Platform.OS !== 'web' ? (
                       <PressableScale
                         style={[styles.deniedBtn, styles.deniedBtnPrimary]}
@@ -740,8 +768,20 @@ export default function DoorKnockingScreen() {
                       </PressableScale>
                     ) : null}
                   </View>
+                  <PressableScale
+                    style={[styles.deniedBtn, styles.deniedManualBtn]}
+                    onPress={activeSession && initialRegion ? () => {
+                      chrome.setDetent('peek');
+                      recentreRoute();
+                      toast({ tone: 'info', title: 'Tap the house on the map', body: 'Manual pins keep the point you choose. GPS mileage is unavailable until location returns.' });
+                    } : () => router.push('/(tabs)/map')}
+                    accessibilityRole="button"
+                    accessibilityLabel={activeSession && initialRegion ? 'Continue with map taps' : 'Choose a route area on Map'}
+                  >
+                    <Text style={styles.deniedBtnText}>{activeSession && initialRegion ? 'Continue with map taps' : 'Choose an area on Map'}</Text>
+                  </PressableScale>
                 </View>
-              ) : (
+            ) : !activeSession ? (
                 <PressableScale
                   style={[styles.cta, starting && styles.btnBusy]}
                   onPress={onStart}
@@ -758,17 +798,19 @@ export default function DoorKnockingScreen() {
                     </>
                   )}
                 </PressableScale>
-              )
             ) : (
+              <View>
+              {!fixFresh ? <Text style={styles.emptyText}>Waiting for a current GPS fix. You can still tap a house on the map.</Text> : null}
               <PressableScale
                 style={styles.cta}
                 onPress={onPinHere}
                 accessibilityRole="button"
-                accessibilityLabel="Drop a pin at my location"
+                accessibilityLabel={fixFresh ? 'Drop a pin at my location' : 'Waiting for fresh GPS; tap a house on the map'}
               >
                 <Ionicons name="location" size={24} color={colors.textInverse} />
-                <Text style={styles.ctaText}>Pin here</Text>
+                <Text style={styles.ctaText}>{fixFresh ? 'Pin here' : 'Waiting for fresh GPS'}</Text>
               </PressableScale>
+              </View>
             )
           }
         >
@@ -1066,6 +1108,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   deniedBtnPrimary: { backgroundColor: colors.brand },
+  deniedManualBtn: { flex: 0 },
   deniedBtnText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   deniedBtnPrimaryText: { color: colors.textInverse },
 });

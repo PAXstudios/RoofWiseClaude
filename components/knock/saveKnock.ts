@@ -27,6 +27,9 @@ import { outcomeLabel, outcomeMeta } from '@/lib/services/knockOutcomes';
 import { distanceMeters, SAME_HOUSE_METERS } from '@/lib/services/knockTrip';
 import { PLACEHOLDER_KNOCK_NAME, isPlaceholderAddress, isPlaceholderName } from '@/lib/services/placeholderDetails';
 import { addressKey } from '@/lib/services/propertyRecord';
+import { isAppointmentTimestamp } from '@/lib/services/appointmentTime';
+import { useInspectionStore } from '@/lib/stores/inspectionStore';
+import { inspectionsForLead } from '@/lib/services/pipeline';
 
 export type PinDraft = {
   lat: number;
@@ -51,6 +54,8 @@ export type SaveKnockResult = {
   leadUpdated: boolean;
   /** The lead exists but the address is a bare GPS pair — say so in the toast. */
   gpsOnly: boolean;
+  /** The door was recorded, but its linked inspection has already started. */
+  bookingSkipped?: boolean;
   /**
    * The pin sits on the do-not-knock list (a home, or inside an HOA zone).
    * The save still goes through — the roofer already knocked — but the
@@ -64,6 +69,8 @@ export type SaveKnockOptions = {
   existingKnockId?: string;
   /** History to seed a NEW knock with ("knock again" on an old pin). */
   seedHistory?: KnockHistoryEntry[];
+  /** The archived door's explicit customer link when logging a new visit. */
+  seedLeadId?: string;
 };
 
 /** "33.01980, -96.69890" — the honest address of a fix nobody could name. */
@@ -77,11 +84,12 @@ function stageIndex(stage: LeadStage): number {
 
 /**
  * The lead this door already has, if any: the one the knock created, else one
- * at the same street address, else one within a house-width of the pin.
+ * at the same street address, else an unambiguous nearby lead without a
+ * conflicting street address. GPS proximity cannot identify a neighbour.
  */
-function findLeadForDoor(leads: readonly Lead[], draft: PinDraft, existing: Knock | undefined): Lead | undefined {
-  if (existing?.createdLeadId) {
-    const byId = leads.find((l) => l.id === existing.createdLeadId);
+function findLeadForDoor(leads: readonly Lead[], draft: PinDraft, linkedLeadId: string | undefined): Lead | undefined {
+  if (linkedLeadId) {
+    const byId = leads.find((l) => l.id === linkedLeadId);
     if (byId) return byId;
   }
   if (draft.address) {
@@ -89,12 +97,19 @@ function findLeadForDoor(leads: readonly Lead[], draft: PinDraft, existing: Knoc
     const byAddress = leads.find((l) => !isPlaceholderAddress(l.address) && addressKey(l.address) === key);
     if (byAddress) return byAddress;
   }
-  return leads.find(
+  const nearby = leads.filter(
     (l) =>
+      // A known street/unit is stronger evidence than a wandering GPS fix.
+      // Exact address matches were handled above; two real addresses here
+      // therefore disagree and must remain separate pipeline customers.
+      (isPlaceholderAddress(draft.address) || isPlaceholderAddress(l.address)) &&
       typeof l.lat === 'number' &&
       typeof l.lng === 'number' &&
       distanceMeters({ lat: l.lat, lng: l.lng }, draft) <= SAME_HOUSE_METERS,
   );
+  // Choosing the first/nearest of multiple houses would make store order or
+  // GPS jitter decide whose stage, phone and follow-up get changed.
+  return nearby.length === 1 ? nearby[0] : undefined;
 }
 
 export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKnockResult | null {
@@ -104,7 +119,13 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
   const existing = opts.existingKnockId ? session.knocks.find((k) => k.id === opts.existingKnockId) : undefined;
 
   const meta = outcomeMeta(draft.outcome);
+  if (meta.id === 'appointment' && !isAppointmentTimestamp(draft.followUpAt)) return null;
   const leadStore = useLeadStore.getState();
+  // Both active edits and archived revisits retain only a live customer link.
+  // Corrections keep that identity; deletion clears it instead of persisting
+  // a dangling reference. Seed identity belongs only to a new archived visit.
+  const priorLeadId = existing ? existing.createdLeadId : opts.seedLeadId;
+  const linkedLeadId = leadStore.leads.some((l) => l.id === priorLeadId) ? priorLeadId : undefined;
   const activity = useActivityStore.getState();
   const now = new Date().toISOString();
   const gpsOnly = !draft.address;
@@ -121,15 +142,20 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
   let lead: Lead | null = null;
   let leadCreated = false;
   let leadUpdated = false;
+  let bookingSkipped = false;
 
   if (wantsLead) {
-    const found = findLeadForDoor(leadStore.leads, draft, existing);
+    const found = findLeadForDoor(leadStore.leads, draft, linkedLeadId);
     if (found) {
       lead = found;
+      const linkedInspection = inspectionsForLead(found, useInspectionStore.getState().inspections)[0];
+      const bookingStartedWork = meta.id === 'appointment' && linkedInspection &&
+        (linkedInspection.status !== 'scheduled' || !!linkedInspection.reportFinalizedAt);
+      bookingSkipped = !!bookingStartedWork;
       const target = meta.leadStage;
       // Forward only: a knock never walks a lead backwards, and a lost lead
       // that answers the door again is genuinely reopened.
-      if (target && (found.stage === 'lost' || stageIndex(target) > stageIndex(found.stage))) {
+      if (!bookingStartedWork && target && (found.stage === 'lost' || stageIndex(target) > stageIndex(found.stage))) {
         leadStore.setStage(found.id, target);
         leadUpdated = true;
       }
@@ -145,7 +171,7 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
         leadStore.updateDetails(found.id, patch);
         leadUpdated = true;
       }
-      if (meta.setsFollowUp && draft.followUpAt) {
+      if (!bookingStartedWork && meta.setsFollowUp && draft.followUpAt) {
         leadStore.setFollowUp(found.id, draft.followUpAt);
         leadUpdated = true;
       }
@@ -182,7 +208,7 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
     outcome: draft.outcome,
     notes,
     followUpAt: meta.setsFollowUp ? draft.followUpAt : undefined,
-    createdLeadId: lead?.id ?? existing?.createdLeadId,
+    createdLeadId: lead?.id ?? linkedLeadId,
     contactName: draft.contactName?.trim() || undefined,
     contactPhone: draft.contactPhone?.trim() || undefined,
     propertyRecord: draft.propertyRecord ?? existing?.propertyRecord,
@@ -233,7 +259,7 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
       leadId: lead.id,
       message: `${leadHeadline(meta.id, draft)} — ${where}`,
     });
-  } else if (lead && (meta.id === 'signed' || meta.id === 'appointment' || meta.id === 'inspected')) {
+  } else if (lead && !bookingSkipped && (meta.id === 'signed' || meta.id === 'appointment' || meta.id === 'inspected')) {
     // A door that moved an existing lead forward is news too.
     activity.log({
       kind: 'knock_converted_to_lead',
@@ -253,7 +279,7 @@ export function saveKnock(draft: PinDraft, opts: SaveKnockOptions = {}): SaveKno
     leadCreated,
   });
 
-  return { knock, lead, leadCreated, leadUpdated, gpsOnly, blockedBy };
+  return { knock, lead, leadCreated, leadUpdated, gpsOnly, blockedBy, bookingSkipped };
 }
 
 /** The activity line for an outcome that touched the pipeline. */
