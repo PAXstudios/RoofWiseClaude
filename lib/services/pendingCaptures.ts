@@ -25,6 +25,12 @@ export type PendingCapture = {
   discardRequested?: boolean;
 };
 
+/** A recovery callback may rediscover the capture currently being staged.
+ * Only a different owned URI represents another capture that must block it. */
+export function hasConflictingPendingCapture(current: PendingCapture | null, next: PendingCapture): boolean {
+  return current !== null && current.uri !== next.uri;
+}
+
 const KEY = 'roofwise.pending-captures.v1';
 const listeners = new Set<() => void>();
 // Exceptional, unaccepted stages whose file cannot safely be rolled back.

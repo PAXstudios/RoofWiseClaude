@@ -139,6 +139,13 @@ function installLivePump(ui, ownership, analyze) {
 
 async function main() {
   let services = processModules();
+  const pendingIdentity = { uri: 'file:///documents/photo-evidence/import.jpg' };
+  assert.equal(services.journal.hasConflictingPendingCapture(null, pendingIdentity), false);
+  assert.equal(services.journal.hasConflictingPendingCapture(pendingIdentity, pendingIdentity), false,
+    'the recovery listener rediscovering the active album import cannot reject its own photo');
+  assert.equal(services.journal.hasConflictingPendingCapture(
+    { uri: 'file:///documents/photo-evidence/other.jpg' }, pendingIdentity,
+  ), true, 'a genuinely different pending photo still blocks the import queue');
   const durable = await services.evidence.retainPhotoEvidence('file:///cache/roof.heic');
   assert.match(durable, /^file:\/\/\/documents\/photo-evidence\/.+\.heic$/);
   assert.equal(disk.get(durable), 'real-photo-bytes');

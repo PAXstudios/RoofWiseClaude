@@ -45,7 +45,7 @@ import { flushInspectionPersistence } from '@/lib/services/inspectionPersistence
 import {
   readPendingCaptures, writePendingCapture, removePendingCapture,
   stageCapture, subscribePendingCaptures, CaptureStagingError, type CaptureContext, type PendingCapture,
-  resumePendingCapture, discardPendingCapture,
+  resumePendingCapture, discardPendingCapture, hasConflictingPendingCapture,
 } from '@/lib/services/pendingCaptures';
 import {
   importFromLibrary,
@@ -1140,7 +1140,13 @@ function QuickInspectionNative() {
             targetId: pending.targetId, originTargetId: pending.originTargetId, createdHere: pending.createdHere,
           };
           if (!mountedRef.current) return;
-          if (pendingCaptureRef.current) throw new Error('Photo retained for recovery after the current photo is saved.');
+          // Writing the safety journal notifies the recovery subscriber. It
+          // may rediscover this exact import before stageCapture returns; that
+          // is the same owned photo, not a second capture blocking the queue.
+          // A genuinely different pending photo must still stop the batch.
+          if (hasConflictingPendingCapture(pendingCaptureRef.current, pending)) {
+            throw new Error('Photo retained for recovery after the current photo is saved.');
+          }
           if (!await saveCapture(pending)) throw new Error('Photo retained for recovery. Confirm its slope to finish saving.');
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         },
