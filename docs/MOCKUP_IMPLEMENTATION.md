@@ -16,6 +16,8 @@ The startup draws a roofline, then first-time users can take the four-scene
 roofing tour, skip to account options, or enter as a guest. The walkthrough
 respects Reduce Motion. See `docs/DESIGN_1A.md` for the current visual guide.
 
+[Open the rounded SDK 58 phone preview](https://expo.dev/accounts/roofwise/projects/roofwise/updates/d9b9d691-d36b-4beb-8940-1106522c041c). Returning users can open Menu → RoofWise tour.
+
 The sections below record earlier deliveries.
 
 ## Scope

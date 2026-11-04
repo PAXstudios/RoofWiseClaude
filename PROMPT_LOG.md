@@ -3537,3 +3537,9 @@ A third fresh critic passed 93 synchronous gate scenarios but reproduced a deepe
 **Home.** Quick inspection / New job, Weather, Tools & services, Area activity, Recent jobs, Saved estimates, Pipeline, Today / Plan, Tasks and Recent activity appear in the requested sequence. Existing setup materials are available under Tools & services. Task rows open the owning job or lead, including older inspections for the same lead.
 
 **Review and scope.** The supplied screen is the composition reference for the illustrative design study displayed in chat. The working app uses existing services, real workspace data, the five-tab navigation and 49 original route files. Focused checks cover property cover selection, job/task ownership, entry hydration, guest and required-auth paths, tour replay and reduced motion. Native visual, sensor and gesture review remains in BACKLOG. Context Summary refreshed after #129–#134.
+
+### [2026-11-04] #135 — Publish rounded RoofWise preview
+
+Published application source `20fad37c44685478c300bdd38de70ab67f80d10a` to the existing RoofWise Expo preview after typecheck, zero-warning lint, 15 regression suites, Expo Doctor 20/20 and configured iOS/Android/web export. Both native bundles include the nine existing approved client configuration values. All 49 original route files remain. Expo reports group `d9b9d691-d36b-4beb-8940-1106522c041c`, runtime `exposdk:58.0.0`, branch `preview`. iOS update `01a1a8a4-a29b-72b9-8d80-64c526fadc2a`, Android update `01a1a8a4-a29b-7434-8c24-a1bd769c86cf`. Physical-device appearance and gestures remain to be reviewed.
+
+https://expo.dev/accounts/roofwise/projects/roofwise/updates/d9b9d691-d36b-4beb-8940-1106522c041c
