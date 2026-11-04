@@ -53,3 +53,12 @@ References:
 - https://expo.dev/changelog/sdk-58
 - https://expo.dev/blog/how-to-upgrade-to-sdk-58
 - https://docs.expo.dev/router/migrate/sdk-57-to-58/
+
+## Published SDK 58 preview
+
+[Open the SDK 58 Courtside preview](https://expo.dev/accounts/roofwise/projects/roofwise/updates/85c5d06c-452c-4652-a407-3323916d1e2e).
+The existing `preview` channel/environment now has update group
+`85c5d06c-452c-4652-a407-3323916d1e2e`, runtime `exposdk:58.0.0`, from source
+commit `bae0d6b171f86715ea07fd465a1ab8119fbd00b6`.
+Fresh iOS/Android/web exports and configured-value checks pass. Use this new
+update link with the owner's SDK 58 Expo Go; the earlier SDK 57 link is unchanged.

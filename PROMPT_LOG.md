@@ -35,6 +35,14 @@ The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captur
 
 ---
 
+## Runtime correction after summary #129
+
+The owner's current Expo Go requires SDK 58. The existing app is upgraded in
+#130 and republished in #131 with runtime `exposdk:58.0.0`. This supersedes the
+SDK 57 stack/delivery details in the older Context Summary below. Current app
+source: `bae0d6b171f86715ea07fd465a1ab8119fbd00b6`. Current preview:
+https://expo.dev/accounts/roofwise/projects/roofwise/updates/85c5d06c-452c-4652-a407-3323916d1e2e
+
 ## Context Summary
 
 > Last refreshed: 2026-11-03 (after entry #129).
@@ -3526,3 +3534,13 @@ A third fresh critic passed 93 synchronous gate scenarios but reproduced a deepe
 **Verification:** TypeScript, zero-warning lint, installed-SDK compatibility, full dependency-tree validation and all 14 regression suites pass. Online Expo Doctor passes 20/20. Updated dock tests exercise SDK 58 emitter/route-key navigation and keyboard repeat handling; annotation tests cover cancellation, delayed confirmation and save continuation. A test using the installed SDK's actual screen-option transform and visibility hook keeps Settings reachable and reproduces the old hidden-route redirect as a negative control. Expo public config reports SDK 58.0.0 and the original RoofWise project. All 49 original routes remain. Fresh configured native/web export and the replacement preview are the remaining publication gates at this commit; the handoff must report their observed results rather than reuse the SDK 57 link.
 
 **Documentation:** Current agent/runtime guidance and the backlog reflect SDK 58; `docs/SDK58_UPGRADE.md` records migrations and source references. The old SDK 57 patch-refresh item is superseded. Existing physical-phone camera/sensor/gesture/share and live-service checks remain open. No replacement app, new backend, native build, PR or merge is introduced.
+
+### [2026-11-03] #131 — Publish the SDK 58 Courtside successor preview
+
+**Goal:** Complete the already-authorized existing-project preview publication after the owner's SDK 58 mismatch. The earlier update group remains an SDK 57 artifact; the owner needs a new link.
+
+**Export validation:** A cache-cleared configured Expo export succeeds for iOS, Android and web, with all 55 generated static routes including aliases. The existing nine client configuration values are present in both native bundles; values are withheld from output and git. Expo config reports SDK 58.0.0, the original project and the SDK-version runtime policy. Application code exactly matches verified GitHub source commit `bae0d6b171f86715ea07fd465a1ab8119fbd00b6`; its local/remote trees match. All 14 suites, TypeScript, zero-warning lint, dependency checks and Expo Doctor 20/20 passed before publication.
+
+**Publication:** EAS reports Published for group `85c5d06c-452c-4652-a407-3323916d1e2e` on existing project `b1fdcacc-a354-499a-842c-0f5ce6fa2e68`, branch/channel `preview`, environment `preview`, runtime **`exposdk:58.0.0`**. iOS update: `01a1a4c4-71a7-7c4c-a66a-38e56df5eb80`; Android update: `01a1a4c4-71a7-7501-ae29-c221f5e36875`. Native bundles and update metadata identify SDK 58 rather than the incompatible SDK 57 update. Preview: https://expo.dev/accounts/roofwise/projects/roofwise/updates/85c5d06c-452c-4652-a407-3323916d1e2e
+
+**Limits:** The user's phone must open this new preview to verify launch, native capture, sensors, gestures and sharing. No simulator or physical device is controlled from this Linux workspace, and publishing is not proof of those results. The code preserves Courtside, all 49 source route files, the five visible tabs and existing services/data. No new project/backend, App Store/TestFlight build, merge or PR is part of the fix.

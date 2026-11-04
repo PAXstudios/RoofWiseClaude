@@ -96,5 +96,8 @@ The owner's phone now reports Expo Go SDK 58.0.0. The SDK 57 update linked above
 cannot run in that client. The existing app is upgraded to SDK 58 with its
 Courtside design and all 49 original routes preserved. See
 [SDK 58 upgrade details](SDK58_UPGRADE.md) and PROMPT_LOG #130 for compatibility
-changes and validation. A new preview with runtime `exposdk:58.0.0` is required;
-the final handoff must use that replacement update's link.
+changes and validation. The replacement preview is now published with runtime
+`exposdk:58.0.0`, from app source `bae0d6b171f86715ea07fd465a1ab8119fbd00b6`:
+[Open the SDK 58 preview](https://expo.dev/accounts/roofwise/projects/roofwise/updates/85c5d06c-452c-4652-a407-3323916d1e2e).
+Use this link with the owner's current Expo Go. Native/web exports, 14 suites,
+TypeScript, lint and Expo Doctor 20/20 pass; the physical-phone pass remains.
