@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform, type ViewInstance } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,14 +21,14 @@ import { colors, fontFamily, fontSize, motion, navigationDock, radii, spacing, t
 //
 // Rendered by expo-router's <Tabs tabBar={...}> in app/(tabs)/_layout.tsx, so
 // it receives the navigator's live `state` (which tab is focused) and
-// `navigation` (how to switch). A tap dispatches NAVIGATE to the tab's own
-// router, which the TabRouter resolves as a JUMP_TO: the current tab stays
+// `emitter` and `navigateToTab` (SDK 58's tab bar contract). A tap sends the
+// declared route key to the tab navigator: the current tab stays
 // mounted, the destination is mounted once (lazy) and then reused — no more
 // stack push/pop, no NOAA re-fetch on the Map tab, no replayed entrance
 // animation on Home. Re-tapping the focused tab only emits `tabPress` (a
 // screen may listen and scroll to top); it never navigates.
-export function BottomTabs({ state, descriptors, navigation }: TabBarProps) {
-  const tabRefs = useRef<Record<string, View | null>>({});
+export function BottomTabs({ state, descriptors, emitter, navigateToTab }: TabBarProps) {
+  const tabRefs = useRef<Record<string, ViewInstance | null>>({});
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const visibleItems = mobileBottomItems.flatMap((item) => {
     const route = state.routes.find((candidate) => candidate.name === item.name);
@@ -43,11 +43,11 @@ export function BottomTabs({ state, descriptors, navigation }: TabBarProps) {
 
   function activate(route: TabBarProps['state']['routes'][number]) {
     Haptics.selectionAsync().catch(() => {});
-    const event = navigation.emit({
+    const event = emitter.emit({
       type: 'tabPress', target: route.key, canPreventDefault: true,
     });
     if (route.key === activeKey || event.defaultPrevented) return;
-    navigation.navigate(route.name, route.params);
+    navigateToTab(route.key);
   }
 
   return (
@@ -71,20 +71,21 @@ export function BottomTabs({ state, descriptors, navigation }: TabBarProps) {
                 ref: (node) => { tabRefs.current[route.key] = node; },
                 tabIndex: entryKey === route.key ? 0 : -1,
                 onKeyDown: (event) => {
+                  const key = event.key ?? event.nativeEvent?.key;
                   // RN Web activates Enter on keyup. Space is only built in
                   // for role=button, so tabs own Space exactly once here.
-                  if (event.key === ' ' || event.key === 'Spacebar') {
+                  if (key === ' ' || key === 'Spacebar') {
                     event.preventDefault();
                     event.stopPropagation();
-                    if (!event.repeat) activate(route);
+                    if (!(event.repeat ?? event.nativeEvent?.repeat)) activate(route);
                     return;
                   }
-                  const nextIndex = event.key === 'ArrowRight'
+                  const nextIndex = key === 'ArrowRight'
                     ? (index + 1) % visibleItems.length
-                    : event.key === 'ArrowLeft'
+                    : key === 'ArrowLeft'
                       ? (index + visibleItems.length - 1) % visibleItems.length
-                      : event.key === 'Home' ? 0
-                        : event.key === 'End' ? visibleItems.length - 1 : null;
+                      : key === 'Home' ? 0
+                        : key === 'End' ? visibleItems.length - 1 : null;
                   if (nextIndex === null) return;
                   event.preventDefault();
                   event.stopPropagation();
@@ -94,7 +95,7 @@ export function BottomTabs({ state, descriptors, navigation }: TabBarProps) {
                 },
               } : undefined}
               onLongPress={() => {
-                navigation.emit({ type: 'tabLongPress', target: route.key });
+                emitter.emit({ type: 'tabLongPress', target: route.key });
               }}
             />
           );
@@ -105,14 +106,15 @@ export function BottomTabs({ state, descriptors, navigation }: TabBarProps) {
 }
 
 type DockKeyboardEvent = {
-  key: string;
+  key?: string;
   repeat?: boolean;
+  nativeEvent?: { key?: string; repeat?: boolean };
   preventDefault: () => void;
   stopPropagation: () => void;
 };
 
 type WebTabProps = {
-  ref: (node: View | null) => void;
+  ref: (node: ViewInstance | null) => void;
   tabIndex: 0 | -1;
   onKeyDown: (event: DockKeyboardEvent) => void;
 };

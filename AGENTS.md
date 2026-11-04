@@ -1,6 +1,6 @@
 # RoofWise agent contract
 
-RoofWise is an existing Expo SDK 57 application. Continue the current app in
+RoofWise is an existing Expo SDK 58 application. Continue the current app in
 place: do not scaffold a replacement, rewrite navigation, remove features, or
 substitute mock data for working stores and services.
 

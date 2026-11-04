@@ -961,10 +961,16 @@ function Row({
 
   // RN Web handles Enter on switches, but reserves Space for button roles.
   const webSwitchProps = Platform.OS === 'web' && checked !== undefined ? {
-    onKeyDown: (event: React.KeyboardEvent) => {
-      if (event.key !== ' ' && event.key !== 'Spacebar') return;
+    onKeyDown: (event: {
+      key?: string;
+      repeat?: boolean;
+      nativeEvent?: { key?: string; repeat?: boolean };
+      preventDefault(): void;
+    }) => {
+      const key = event.key ?? event.nativeEvent?.key;
+      if (key !== ' ' && key !== 'Spacebar') return;
       event.preventDefault();
-      if (!disabled && !event.repeat) onPress();
+      if (!disabled && !(event.repeat ?? event.nativeEvent?.repeat)) onPress();
     },
   } : {};
 

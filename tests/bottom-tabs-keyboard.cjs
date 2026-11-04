@@ -59,12 +59,13 @@ const { BottomTabs } = load('components/shell/BottomTabs.tsx', {
 });
 
 const routes = mobileBottomItems.map(item => ({ name: item.name, key: item.name + '-key', params: { preserved: item.name } }));
-const props = { state: { index: 0, routes }, descriptors: {}, navigation: {
+const props = { state: { index: 0, routes }, descriptors: {}, emitter: {
   emit(event) { events.push(event); return { defaultPrevented: prevented }; },
-  navigate(name, params) {
-    navigations.push({ name, params });
-    props.state.index = props.state.routes.findIndex(route => route.name === name);
-  },
+}, navigateToTab(routeKey) {
+  const route = props.state.routes.find(route => route.key === routeKey);
+  assert.ok(route, 'SDK 58 tab activation receives a declared route key');
+  navigations.push({ name: route.name, params: route.params, routeKey });
+  props.state.index = props.state.routes.findIndex(route => route.key === routeKey);
 } };
 let events = [], navigations = [], prevented = false, focused = null, controls;
 function render() {
@@ -161,6 +162,21 @@ resetCalls();
 key(1, 'ArrowRight');
 assert.equal(navigations[0].name, 'plan', 'Arrows skip missing route files');
 console.log('PASS hidden Settings fallback and missing-route navigation');
+
+// SDK 58's Strict API also types keyboard events with nativeEvent payloads.
+states.clear();
+props.state = { index: 0, routes };
+render();
+resetCalls();
+controls[0].props.onKeyDown({ nativeEvent: { key: 'ArrowRight' }, preventDefault() {}, stopPropagation() {} });
+assert.equal(navigations[0].routeKey, routes[1].key);
+assert.equal(props.state.index, 1);
+render();
+resetCalls();
+controls[1].props.onKeyDown({ nativeEvent: { key: ' ', repeat: true }, preventDefault() {}, stopPropagation() {} });
+assert.equal(navigations.length, 0, 'Nested repeat payload cannot reactivate a held Space');
+assert.equal(events.length, 0);
+console.log('PASS SDK 58 emitter/route-key navigation and Strict API keyboard payloads');
 
 for (const nativeOS of ['ios', 'android']) {
   os = nativeOS;

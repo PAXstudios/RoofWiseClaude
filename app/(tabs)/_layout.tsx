@@ -84,9 +84,9 @@ export default function TabsLayout() {
         <Tabs.Screen name="map" options={{ title: 'Map' }} />
         <Tabs.Screen name="plan" options={{ title: 'Plan' }} />
         <Tabs.Screen name="train" options={{ title: 'Train' }} />
-        {/* Settings is a route inside the group (router.push('/settings')
-            from Home), never a tab: href null keeps it off every bar. */}
-        <Tabs.Screen name="settings" options={{ title: 'Settings', href: null }} />
+        {/* Custom bars select only the five navItems. Keep Settings declared
+            and reachable: SDK 58 redirects href:null routes back to Home. */}
+        <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
       </Tabs>
     </SafeAreaView>
   );

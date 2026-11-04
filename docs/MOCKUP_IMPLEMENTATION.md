@@ -89,3 +89,12 @@ Fresh iOS/Android bundles include all nine configured preview client values;
 verification withheld their values. This publication makes the existing app
 available for physical-device review; it does not replace those device checks
 or constitute an App Store/TestFlight release.
+
+## SDK 58 compatibility follow-up
+
+The owner's phone now reports Expo Go SDK 58.0.0. The SDK 57 update linked above
+cannot run in that client. The existing app is upgraded to SDK 58 with its
+Courtside design and all 49 original routes preserved. See
+[SDK 58 upgrade details](SDK58_UPGRADE.md) and PROMPT_LOG #130 for compatibility
+changes and validation. A new preview with runtime `exposdk:58.0.0` is required;
+the final handoff must use that replacement update's link.

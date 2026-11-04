@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   View,
@@ -134,7 +135,7 @@ export function ModeStrip({
 
   // Keep the active tag in view when the coach (or a slope change) picks one
   // that sits off the right edge of the row.
-  const tagScroll = useRef<ScrollView>(null);
+  const tagScroll = useRef<ScrollViewInstance>(null);
   const [tagX, setTagX] = useState<Record<string, number>>({});
   useEffect(() => {
     const x = tagX[areaTag];

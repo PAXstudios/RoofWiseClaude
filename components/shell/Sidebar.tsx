@@ -19,7 +19,7 @@ import { fontFamily,
   touchTarget,
 } from '@/theme/tokens';
 
-export function Sidebar({ state, descriptors, navigation }: TabBarProps) {
+export function Sidebar({ state, descriptors, emitter, navigateToTab }: TabBarProps) {
   return (
     <View style={styles.rail}>
       <View style={styles.brandRow}>
@@ -44,13 +44,13 @@ export function Sidebar({ state, descriptors, navigation }: TabBarProps) {
               key={route.key}
               style={[styles.item, active && styles.itemActive]}
               onPress={() => {
-                const event = navigation.emit({
+                const event = emitter.emit({
                   type: 'tabPress',
                   target: route.key,
                   canPreventDefault: true,
                 });
                 if (active || event.defaultPrevented) return;
-                navigation.navigate(route.name, route.params);
+                navigateToTab(route.key);
               }}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}

@@ -36,11 +36,10 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, usePreventRemove } from 'expo-router';
 // SDK 57: expo-router no longer depends on the standalone `@react-navigation/native`
 // package — it vendors React Navigation internally and re-exports it from this
 // public subpath (same pattern as `expo-router/stack`, `expo-router/tabs`, etc.).
-import type { NavigationAction } from 'expo-router/react-navigation';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -111,7 +110,6 @@ const EMPTY: Annotation[] = [];
 
 export default function AnnotateScreen() {
   const router = useRouter();
-  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const toast = useToastStore((s) => s.show);
@@ -482,32 +480,42 @@ export default function AnnotateScreen() {
 
   // ── Leaving with unsaved work ───────────────────────────────────────────
   const leavingRef = useRef(false);
-  const pendingAction = useRef<NavigationAction | null>(null);
-  useEffect(() => {
-    const unsub = navigation.addListener('beforeRemove', (e) => {
-      if (!dirtyRef.current || leavingRef.current) return;
-      e.preventDefault();
-      pendingAction.current = e.data.action;
-      setConfirmBack(true);
-    });
-    return unsub;
-  }, [navigation]);
+  const [allowExit, setAllowExit] = useState(false);
+  const pendingResume = useRef<(() => void) | null>(null);
+  // SDK 58 resumes blocked removal through repeat(), which disables the
+  // current prevention before re-dispatching the original action.
+  const disablePrevention = usePreventRemove(dirty && !allowExit, ({ repeat }) => {
+    if (!dirtyRef.current || leavingRef.current) {
+      setAllowExit(true);
+      repeat();
+      return;
+    }
+    pendingResume.current = repeat;
+    setConfirmBack(true);
+  });
 
   const onBack = () => {
     if (dirtyRef.current) {
-      pendingAction.current = null;
+      pendingResume.current = null;
       setConfirmBack(true);
       return;
     }
     router.back();
   };
 
+  // ConfirmSheet closes before its delayed onConfirm. Capture the blocked
+  // continuation in this render so onClose cannot erase the approved action.
+  const resumeOnDiscard = pendingResume.current;
   const discardAndLeave = () => {
     leavingRef.current = true;
-    const action = pendingAction.current;
-    pendingAction.current = null;
-    if (action) navigation.dispatch(action);
-    else router.back();
+    setAllowExit(true);
+    const resume = resumeOnDiscard;
+    pendingResume.current = null;
+    if (resume) resume();
+    else {
+      disablePrevention();
+      router.back();
+    }
   };
 
   const onSave = async () => {
@@ -798,7 +806,7 @@ export default function AnnotateScreen() {
         cancelLabel="Keep drawing"
         onConfirm={discardAndLeave}
         onClose={() => {
-          pendingAction.current = null;
+          pendingResume.current = null;
           setConfirmBack(false);
         }}
       />

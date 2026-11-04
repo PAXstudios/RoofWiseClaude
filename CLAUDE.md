@@ -35,7 +35,7 @@ entry number. When the user asks "what's next," answer from BACKLOG.md.
 
 ## Stack
 
-- **Framework:** Expo SDK 57, React Native 0.86, React 19.2, TypeScript 6, expo-router 57 (file-based). **New Architecture is ON** (`newArchEnabled: true`) — Expo Go 52+ runs nothing else; never turn it off to make something compile. Reanimated 4.5 + `react-native-worklets` 0.10 (babel plugin is `react-native-worklets/plugin`, last in the list — note SDK 57's `babel-preset-expo` also auto-injects it; the explicit entry is kept and is harmless). Upgraded SDK 51→54 in #55 and **SDK 54→57 in #105**, each time because the App Store's Expo Go moved to the newer SDK and Expo Go carries only the latest runtime. The durable escape from this SDK-chase is an EAS **Build** (pinned SDK), gated on the Apple Developer account — see BACKLOG.
+- **Framework:** Expo SDK 58, React Native 0.88, React 19.3, TypeScript 6, expo-router 58 (file-based). **New Architecture is ON** (`newArchEnabled: true`) — Expo Go 52+ runs nothing else; never turn it off to make something compile. Reanimated 4.7 + `react-native-worklets` 0.13 (babel plugin is `react-native-worklets/plugin`, last in the list — note SDK 57's `babel-preset-expo` also auto-injects it; the explicit entry is kept and is harmless). Upgraded SDK 51→54 in #55 and **SDK 54→57 in #105**, each time because the App Store's Expo Go moved to the newer SDK and Expo Go carries only the latest runtime. **SDK 57→58 in #130** follows the owner's screenshot showing Expo Go SDK 58 rejecting the SDK 57 preview; see `docs/SDK58_UPGRADE.md`. The durable escape from this SDK-chase is an EAS **Build** (pinned SDK), gated on the Apple Developer account — see BACKLOG.
 - **State:** Zustand stores with `persist` + AsyncStorage. Per-feature store under `lib/stores/`.
 - **Backend:** Supabase (auth + Postgres + Storage). Client at `lib/supabase.ts`. Auth store at `lib/auth/authStore.ts`.
 - **AI vision:** Gemini **newest Flash** (`gemini-3.8-flash` as of 2026-09-02) via Google AI Studio direct REST (`lib/services/gemini.ts`). Model is env-configurable (`EXPO_PUBLIC_GEMINI_MODEL`) with a deprecation-proof fallback chain (3.8 → 3.7 → 3.5 → 2.5-flash) that walks ONLY on 404/"no longer available"; every result records `modelUsed`. **`gemini-2.5-pro` is retired for new API keys** (HTTP 404) — it killed every analysis on the first device run. Drift Warning #9.
@@ -125,7 +125,7 @@ Pulled from `PROMPT_LOG.md`. The full list is canonical there; this is the short
 ```sh
 # Dev
 npm install                       # or: npm ci  (preferred when lockfile is current)
-npx expo install --check          # verify native module versions match SDK 57
+npx expo install --check          # verify native module versions match SDK 58
 npx expo-doctor                   # 18 checks; must stay green after any dependency change
 npx expo start --clear            # clear Metro cache; press i for iOS Expo Go, a for Android
 npm run typecheck                 # tsc --noEmit

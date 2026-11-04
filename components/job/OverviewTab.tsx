@@ -6,7 +6,7 @@
 // regrouped — see the wave report's per-section "where it went" table.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { PressableScale } from '@/components/PressableScale';
@@ -190,7 +190,7 @@ export function OverviewTab({
   showClaimEvidence,
   onClaimEvidenceShown,
 }: Props) {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const evidenceCardY = useRef<number | null>(null);
   const bodyY = useRef<number | null>(null);
   const isClaim = inspection.kind === 'insurance_claim';

@@ -14,9 +14,9 @@ export type NavItem = {
 // Spec IA: 5 bottom tabs — Home / Leads / Map / Plan / Train (Drift #2).
 //
 // The shell chrome (BottomTabs / Sidebar) no longer navigates by href: it is
-// rendered by expo-router's <Tabs tabBar={...}> and switches tabs through the
-// navigator's own `navigation.navigate(route.name)`, which the TabRouter
-// treats as a JUMP_TO — the destination screen stays mounted between visits.
+// rendered by expo-router's <Tabs tabBar={...}> and switches tabs through
+// SDK 58's `navigateToTab(route.key)` callback. The destination screen stays
+// mounted between visits; the emitter preserves tabPress prevention.
 // `href` is kept for callers OUTSIDE the navigator (router.push / navigate /
 // dismissTo from Home, the storm-alert sheet, notification taps). Home is
 // '/(tabs)', NOT '/': in expo-router 6 '/' resolves to the root redirect
@@ -40,7 +40,7 @@ export const mobileBottomItems = navItems;
 // one on either.
 type TabsProps = ComponentProps<typeof Tabs>;
 
-/** What `<Tabs tabBar={(props) => ...}>` hands the bar: state, descriptors, navigation, insets. */
+/** SDK 58 tab bar props: state, descriptors, emitter, navigateToTab, insets. */
 export type TabBarProps = Parameters<NonNullable<TabsProps['tabBar']>>[0];
 
 type TabScreenOptions = Exclude<

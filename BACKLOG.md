@@ -13,14 +13,14 @@ entry does not count as tracked.
 
 ## Now (committed next steps, in order — see docs/PRODUCT_SYNTHESIS.md §5 for the full rationale)
 
-**Current task boundary (#124): design only on the existing Codex app.** The
+**Current task boundary (#130): preserve Courtside and upgrade the existing
+Codex app to SDK 58 so the owner can open it in the installed Expo Go.** The
 product backlog below is not a request to add features, configure native builds
-or deploy a new app. Keep those items separate from the Courtside reskin.
+or deploy a replacement app. The existing-project preview update is authorized.
 
 
 - [ ] **Courtside device verification:** check bundled condensed fonts, white camera/settings/slope controls, orange shutter, selected-tab contrast, and the original onboarding's horizontal swipes/vertical content scroll with larger text on a short iPhone/Android screen. Source and build results are documented in #124–#125; device behavior is not inferred from screenshots. Customer/export additions were removed in #124. — #123–#125
 
-- [ ] **SDK 57 patch-version refresh:** online Expo Doctor currently passes 20/21 checks and recommends 28 package patch updates. Installed-SDK dependency compatibility, TypeScript, lint, regressions and web export pass. Keep upgrades outside the design-only change; apply and verify the coordinated patch set separately. — #128
 
 
 - [ ] **Gauntlet native proof:** on the owner's iPhone, exercise Pipeline drag/Move, camera capture and compass confirmation, duplicate/imported photo review, swipe reject/correct, annotation after deletion/reorder, keyboard sheets, VoiceOver labels, PDF share, force-quit recovery and cache purge. Source/fault-injection critics pass; this is the remaining real-output gate. — #119
@@ -151,6 +151,8 @@ or deploy a new app. Keep those items separate from the Courtside reskin.
 - [ ] Circle-to-focus secondary Gemini pass ("2D virtual chalk") — Camera prompt via synthesis
 
 ## Done (most recent first)
+
+- [x] **SDK 57 patch refresh superseded by SDK 58 alignment:** all managed dependencies now match SDK 58, the full dependency tree has no problems, and Expo Doctor passes 20/20. The upgrade addresses the owner's SDK 58 Expo Go mismatch. — closed by #130
 
 - [x] **Design 1A: the whole app reskinned onto the Claude Design mock** — palette/gradient/type foundation (`docs/DESIGN_1A.md`, `MeshBackground`, Archivo, floating pill tab bar) + six agent waves covering every screen (Home/Job, Storm Tracer/Door Knocking/Knock Planner, Pipeline/Lead detail/New Job/New Lead, camera HUD, onboarding/welcome, everything else); fixed `DamageMarkerLayer`'s severity-color drift from `LiveOverlay` during integration — closed by #108 (supersedes the "Home aurora redesign" item below, which explored a different, unchosen direction)
 - [x] **Map control system (Storm Tracer + Knock mode)** — tuck-away glass rail, one layers sheet, a drawer with detents and the 88pt CTA pinned at every detent, summary chip, legend strip, hold-to-follow, a pins list in Knock mode; nothing removed — closed by #100 (Wave I)

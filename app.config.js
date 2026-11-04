@@ -40,8 +40,8 @@ module.exports = {
       supportsTablet: true,
       bundleIdentifier: 'com.roofwise.app',
       usesAppleSignIn: true,
-      // SDK 54 / RN 0.81 floor.
-      deploymentTarget: '15.1',
+      // SDK 58 / RN 0.88 minimum supported iOS version.
+      deploymentTarget: '16.4',
       config: {
         googleMapsApiKey,
       },
