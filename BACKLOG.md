@@ -21,8 +21,6 @@ deploy a replacement app. Existing-branch push and preview publication are
 authorized by the owner's earlier instructions.
 
 
-- [ ] **Publish the brand-color preview:** source and the unconfigured iOS/Android/web export are verified in #132. Automatic approval review rejected export/publication with existing EAS client values, even after checking the recorded #129 approval and unchanged RoofWise destination. Obtain a fresh explicit confirmation covering the same client API keys and Supabase public configuration in downloadable app bundles before resuming configured export and preview publication. Keep the current live preview unchanged until then. — #132
-
 - [ ] **Courtside device verification:** check the revised navy masthead/dock, tinted headers/cards, colored tools, bundled fonts, camera/settings/slope controls, orange shutter, selected-tab contrast, and the original onboarding's horizontal swipes/vertical content scroll with larger text on a short iPhone/Android screen. Source and build results are documented in #124–#125; device behavior is not inferred from screenshots. Customer/export additions were removed in #124. — #123–#125
 
 
@@ -155,6 +153,8 @@ authorized by the owner's earlier instructions.
 - [ ] Circle-to-focus secondary Gemini pass ("2D virtual chalk") — Camera prompt via synthesis
 
 ## Done (most recent first)
+
+- [x] **Brand-color Expo preview published:** fresh explicit owner approval covers the existing client configuration; configured iOS/Android/web export passes and group `e1b081e7-0434-45c1-8b16-a0394f5ef9c8` is published on the original `preview` channel with SDK 58, from source `e35b3cd`. Native review remains open. — #133
 
 - [x] **SDK 57 patch refresh superseded by SDK 58 alignment:** all managed dependencies now match SDK 58, the full dependency tree has no problems, and Expo Doctor passes 20/20. The upgrade addresses the owner's SDK 58 Expo Go mismatch. — closed by #130
 

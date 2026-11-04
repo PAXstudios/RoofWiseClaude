@@ -125,3 +125,22 @@ blocked the configured export despite the recorded earlier approval; the SDK 58
 preview linked above still shows the previous design. Publication requires a
 fresh explicit confirmation for the existing client configuration in downloadable
 bundles. No fresh browser/native visual pass is claimed.
+
+
+## Published brand-color preview — November 4, 2026
+
+The owner explicitly approved publishing the existing client API keys and
+Supabase public configuration in downloadable bundles to the existing RoofWise
+Expo preview. This resolves the #132 configured-export gate. A fresh configured
+iOS/Android/web export passes; all nine existing client values are present in
+both native bundles, with values withheld from logs and git.
+
+[Open the brand-color preview](https://expo.dev/accounts/roofwise/projects/roofwise/updates/e1b081e7-0434-45c1-8b16-a0394f5ef9c8).
+Published application source: `e35b3cdd9462c7eabdff72c653d5d3090fac85e7`.
+Existing project/channel/environment: `@roofwise/roofwise`, `preview`, `preview`.
+Runtime: `exposdk:58.0.0`. Both iOS and Android are published. This is the
+successor to the earlier white-ground SDK 58 preview above.
+
+The generated six-screen board shown in chat is an illustrative design preview,
+not screenshots of the running app. Native layout, camera/sensors, gestures,
+sharing and live-service checks remain in BACKLOG.
