@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useMemo, useState } from 'react';
 import {
   ScrollView,
@@ -80,9 +81,7 @@ export default function InspectionsList() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
+        <BackOrMenu color={colors.text} style={styles.headerBtn} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Inspections</Text>
           <Text style={styles.sub}>{inspections.length} total</Text>

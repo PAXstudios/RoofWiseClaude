@@ -17,6 +17,7 @@ import { colors } from '@/theme/tokens';
 import { useAuthStore } from '@/lib/auth/authStore';
 import { useBackgroundJobs } from '@/lib/services/lifecycleHooks';
 import { useAutomationTicks } from '@/lib/services/automationHooks';
+import { RooflineIntro } from '@/components/onboarding/RooflineIntro';
 import { ToastHost } from '@/components/ToastHost';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { install as installDiagnostics, DiagnosticsGate } from '@/lib/services/diagnostics';
@@ -148,6 +149,7 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
         </ErrorBoundary>
         <ToastHost />
+        <RooflineIntro />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

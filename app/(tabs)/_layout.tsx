@@ -1,5 +1,5 @@
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
-import { Tabs, Redirect } from 'expo-router';
+import { Tabs, Redirect, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { BottomTabs } from '@/components/shell/BottomTabs';
@@ -9,6 +9,7 @@ import type { TabBarProps, TabHeaderProps } from '@/components/shell/navItems';
 import { useResponsive } from '@/theme/useResponsive';
 import { colors } from '@/theme/tokens';
 import { useAuthStore } from '@/lib/auth/authStore';
+import { useOnboardingHydrated, useOnboardingStore } from '@/lib/stores/onboardingStore';
 import { env } from '@/lib/env';
 import { MeshBackground } from '@/components/ui/MeshBackground';
 
@@ -39,13 +40,20 @@ export default function TabsLayout() {
   const session = useAuthStore((s) => s.session);
   const { isDesktop } = useResponsive();
 
-  if (!initialized) {
+  const currentRoute = useSegments().join('/');
+  const isHome = currentRoute === '(tabs)' || currentRoute === '(tabs)/index';
+  const onboarded = useOnboardingStore((s) => s.completed);
+  const onboardingReady = useOnboardingHydrated();
+
+  if (!initialized || (isHome && !onboardingReady)) {
     return (
       <View style={[styles.root, styles.center]}>
         <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
+
+  if (isHome && !onboarded) return <Redirect href="/onboarding" />;
 
   // Drift #12: redirect only when auth is actually required.
   if (!session && env.REQUIRE_AUTH) {
@@ -66,10 +74,8 @@ export default function TabsLayout() {
         // closest match to the stack behaviour the Slot shell had.
         backBehavior="history"
         screenOptions={{
-          // Desktop web (>= breakpoints.lg): Sidebar rail on the left plus the
-          // TopBar header above the scene. Phones and tablets keep the native
-          // glove-first bottom bar and no navigator header.
-          headerShown: isDesktop,
+          // Keep brand and navigation accessible while each tab scrolls.
+          headerShown: true,
           header: renderHeader,
           tabBarPosition: isDesktop ? 'left' : 'bottom',
           // Mount each tab on first focus, then keep it.

@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -22,3 +23,10 @@ export const useOnboardingStore = create<State>()(
     },
   ),
 );
+
+// Entry routes share the same hydration signal, including direct Home links.
+const subscribeHydration = (notify: () => void) => useOnboardingStore.persist.onFinishHydration(notify);
+const serverHydrated = () => false;
+export function useOnboardingHydrated() {
+  return useSyncExternalStore(subscribeHydration, useOnboardingStore.persist.hasHydrated, serverHydrated);
+}

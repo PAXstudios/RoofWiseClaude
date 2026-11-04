@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   RefreshControl,
-  useWindowDimensions,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -42,6 +41,8 @@ import { AnalysisQueueChip } from '@/components/AnalysisQueueChip';
 import { PressableScale } from '@/components/PressableScale';
 import { AnimatedCounter } from '@/components/motion';
 import { AreaActivityCard } from '@/components/home/AreaActivityCard';
+import { HomeTasks } from '@/components/home/HomeTasks';
+import { EmptyHomeSection } from '@/components/home/EmptyHomeSection';
 import { TodayModule, useTodayAgenda } from '@/components/home/TodayModule';
 import { QuickActionsSheet } from '@/components/sheets/QuickActionsSheet';
 import { selectUnreadCount, useNotificationStore } from '@/lib/stores/notificationStore';
@@ -77,7 +78,6 @@ import {
   shadows,
   spacing,
   touchTarget,
-  typography,
 } from '@/theme/tokens';
 
 function tap() {
@@ -134,7 +134,6 @@ const STATUS_PILL_TONE: Record<InspectionStatus, PillTone> = {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const inspections = useInspectionStore((s) => s.inspections);
@@ -223,6 +222,7 @@ export default function HomeScreen() {
   // The "+" opens the Quick Actions sheet (owner's reference app), not a
   // system Alert — every fast path on one grid, in the thumb zone.
   const [quickOpen, setQuickOpen] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
   const onQuickAdd = () => setQuickOpen(true);
 
   // Optional first name — null when we genuinely have nothing, so the
@@ -333,8 +333,8 @@ export default function HomeScreen() {
         <Rise index={0}>
           <View style={styles.headerRow}>
             <PressableScale accessibilityRole="button" accessibilityLabel="Open profile and settings" onPress={() => router.push('/settings')} style={styles.identity}>
-              <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandLogo} contentFit="contain" />
               <Text style={styles.greeting}>{greeting}</Text>
+              <Text accessibilityRole="header" style={styles.headline}>Your workday</Text>
             </PressableScale>
             <View style={styles.headerActions}>
               <HeaderIconButton icon="add" label="Quick add: inspection, job, lead, or estimate" onPress={() => { tap(); onQuickAdd(); }} />
@@ -350,9 +350,6 @@ export default function HomeScreen() {
           </View>
         </Rise>
 
-        <View style={styles.headlineWrap}>
-          <Text accessibilityRole="header" style={[styles.headline, width < 360 && styles.headlineCompact]}>Your workday</Text>
-        </View>
         <PressableScale accessibilityRole="button" accessibilityLabel="Search jobs, addresses and customers" onPress={() => router.push('/search')} style={styles.searchEntry}>
           <Ionicons name="search-outline" size={20} color={colors.textMuted} />
           <Text style={styles.searchEntryText}>Search jobs, addresses, customers</Text>
@@ -387,23 +384,6 @@ export default function HomeScreen() {
 
       </View>
 
-      {!activeAlert && __DEV__ && (
-        <Pressable
-          style={styles.debugStorm}
-          onPress={() =>
-            injectAlert({
-              eventKind: 'hail',
-              areaLabel: 'Plano, TX · 75024',
-              propertyCount: 3,
-              hailSizeInches: 1.75,
-            })
-          }
-        >
-          <Ionicons name="bug-outline" size={14} color={colors.textMuted} />
-          <Text style={styles.debugStormText}>Inject demo storm alert</Text>
-        </Pressable>
-      )}
-
       {/* Courtside's paired actions preserve the original capture and job flows. */}
       <Rise index={2} style={styles.heroRow}>
         <PressableScale style={[styles.heroCta, styles.primaryAction]} accessibilityRole="button" accessibilityLabel="Quick Inspection. Camera to AI to claim packet." onPress={() => { tap(); router.push('/quick-inspection'); }}>
@@ -416,12 +396,20 @@ export default function HomeScreen() {
         </PressableScale>
       </Rise>
 
-      {agenda.hasItems && <Rise index={3}><TodayModule agenda={agenda} /></Rise>}
-      <SectionHeader title="Tools & services"/>
+      <Rise index={3} style={styles.heroSlot}>
+        <Animated.View style={heroParallaxStyle}>
+          <WeatherHero scrollY={scrollY} />
+        </Animated.View>
+      </Rise>
 
-      {/* Tools — directly under the two hero CTAs (owner 2026-09-03): the
-          four things a roofer opens between jobs, each its own saturated
-          tile. Knock Planner is the storm-hit-streets finder. */}
+      <SectionHeader
+        title="Tools & services"
+        action={inspections.length === 0 ? {
+          label: showSetup ? 'Hide setup' : 'Setup guide',
+          onPress: () => setShowSetup((visible) => !visible),
+        } : undefined}
+      />
+
       <Rise index={3} style={styles.toolGrid}>
         <ToolTile
           icon="thunderstorm"
@@ -453,34 +441,13 @@ export default function HomeScreen() {
         />
       </Rise>
 
-      {/* Live field intelligence retains its own honest loading and error states. */}
-      <Rise index={3}>
-        <AreaActivityCard />
-      </Rise>
-
-        <Rise index={1} style={styles.heroSlot}>
-          <Animated.View style={heroParallaxStyle}>
-            <WeatherHero scrollY={scrollY} />
-          </Animated.View>
-        </Rise>
-      {/* Revenue / Leads / Pipeline now live in the header stat row (above,
-          inside the mesh hero) rather than a second copy down here — one
-          number per metric, not two that could drift. */}
-
-      {/* Field tools — crafted cells, colour-chipped per tool. */}
-
-      <Rise index={6} style={styles.stack}>
-        <AnalysisQueueChip />
-      </Rise>
-
-      <Rise index={6}>
-        <AICalibrationCard />
-      </Rise>
+      <AnalysisQueueChip />
+      <AICalibrationCard />
 
       {/* Density: with no jobs yet, the first session renders structured,
           honest setup content instead of a column of "No X yet" voids.
           Every state below is read from a real store (Drift #5). */}
-      {inspections.length === 0 && (
+      {inspections.length === 0 && showSetup && (
         <Rise index={7}>
           <View style={styles.sectionHeaderRow}>
             <SectionTitle title="Get set up" />
@@ -515,7 +482,7 @@ export default function HomeScreen() {
         </Rise>
       )}
 
-      {inspections.length === 0 && (
+      {inspections.length === 0 && showSetup && (
         <Rise index={8}>
           <SectionHeader title="What RoofWise does" style={styles.sectionHeaderSpacing} />
           <View style={styles.groupCard}>
@@ -553,13 +520,12 @@ export default function HomeScreen() {
         </Rise>
       )}
 
-      {/* Recent Jobs — rendered only when jobs exist; the setup module above
-          owns the first-run state. Real inspection photos via expo-image; no
-          photo gets a crafted gradient tile, never a stock image. */}
-      {inspections.length > 0 && (
+      <AreaActivityCard />
+
+      {inspections.length > 0 ? (
         <Rise index={7}>
           <SectionHeader
-            title="Recent Jobs"
+            title="Recent jobs"
             action={{ label: 'View all', onPress: () => router.push('/inspections') }}
             style={styles.sectionHeaderSpacing}
           />
@@ -575,6 +541,8 @@ export default function HomeScreen() {
                 <View key={ins.id} style={styles.recentCardShadow}>
                   <PressableScale
                     style={styles.recentCard}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open job, ${ins.customerName}, ${ins.address}`}
                     onPress={() => router.push(`/job/${ins.id}` as any)}
                   >
                     {firstPhoto ? (
@@ -617,42 +585,12 @@ export default function HomeScreen() {
             })}
           </ScrollView>
         </Rise>
-      )}
-
-      {/* Pipeline mini — stage-GROUP cards with a colour-matched progress
-          bar, occupied groups only (Drift #5). */}
-      {pipelineStages.length > 0 && (
-        <Rise index={8}>
-          <SectionHeader title="Pipeline" style={styles.sectionHeaderSpacing} />
-          <View style={styles.pipelineRow}>
-            {pipelineStages.map(({ group, label, count }, i) => {
-              const tone = PIPELINE_TONES[i % PIPELINE_TONES.length];
-              const progress = pipelineTotal > 0 ? count / pipelineTotal : 0;
-              return (
-                <View key={group} style={styles.pipelineCard}>
-                  <AnimatedCounter
-                    value={count}
-                    style={[styles.pipelineCount, { color: CHIP_TONES[tone].fg }]}
-                  />
-                  <Text style={[styles.pipelineLabel, dataLabel]} numberOfLines={2}>
-                    {label}
-                  </Text>
-                  <ProgressBar
-                    progress={progress}
-                    tone={tone}
-                    height={6}
-                    style={styles.pipelineBar}
-                    accessibilityLabel={`${label}, ${count} of ${pipelineTotal} items`}
-                  />
-                </View>
-              );
-            })}
-          </View>
-        </Rise>
+      ) : (
+        <EmptyHomeSection title="Recent jobs" message="Your jobs will appear here." action={{ label: 'New job', onPress: () => router.push('/new-job') }} />
       )}
 
       {/* Saved Estimates */}
-      {estimates.length > 0 && (
+      {estimates.length > 0 ? (
         <View>
           <SectionHeader title="Saved estimates" style={styles.sectionHeaderSpacing} />
           <ScrollView
@@ -693,14 +631,51 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
         </View>
+      ) : (
+        <EmptyHomeSection title="Saved estimates" message="No estimates saved yet." action={{ label: 'Estimator', onPress: () => router.push('/estimator') }} />
       )}
 
-      {/* Activity — hidden until real events exist; lifecycle hooks fill it
-          from the first job onward. */}
-      {recentActivity.length > 0 && (
+      {/* Pipeline mini — stage-GROUP cards with a colour-matched progress
+          bar, occupied groups only (Drift #5). */}
+      {pipelineStages.length > 0 ? (
+        <Rise index={8}>
+          <SectionHeader title="Pipeline" style={styles.sectionHeaderSpacing} />
+          <View style={styles.pipelineRow}>
+            {pipelineStages.map(({ group, label, count }, i) => {
+              const tone = PIPELINE_TONES[i % PIPELINE_TONES.length];
+              const progress = pipelineTotal > 0 ? count / pipelineTotal : 0;
+              return (
+                <View key={group} style={styles.pipelineCard}>
+                  <AnimatedCounter
+                    value={count}
+                    style={[styles.pipelineCount, { color: CHIP_TONES[tone].fg }]}
+                  />
+                  <Text style={[styles.pipelineLabel, dataLabel]} numberOfLines={2}>
+                    {label}
+                  </Text>
+                  <ProgressBar
+                    progress={progress}
+                    tone={tone}
+                    height={6}
+                    style={styles.pipelineBar}
+                    accessibilityLabel={`${label}, ${count} of ${pipelineTotal} items`}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        </Rise>
+      ) : (
+        <EmptyHomeSection title="Pipeline" message="No active leads or jobs." action={{ label: 'Open pipeline', onPress: () => router.push('/(tabs)/leads') }} />
+      )}
+
+      <TodayModule agenda={agenda} />
+      <HomeTasks tasks={tasks} items={pipelineItems} inspections={inspections} />
+
+      {recentActivity.length > 0 ? (
         <View>
           <SectionHeader
-            title="Recent Activity"
+            title="Recent activity"
             action={{ label: 'View all', onPress: () => router.push('/activity') }}
             style={styles.sectionHeaderSpacing}
           />
@@ -740,7 +715,27 @@ export default function HomeScreen() {
             })}
           </View>
         </View>
+      ) : (
+        <EmptyHomeSection title="Recent activity" message="Job and inspection updates will appear here." />
       )}
+
+      {!activeAlert && __DEV__ && (
+        <Pressable
+          style={styles.debugStorm}
+          onPress={() =>
+            injectAlert({
+              eventKind: 'hail',
+              areaLabel: 'Plano, TX · 75024',
+              propertyCount: 3,
+              hailSizeInches: 1.75,
+            })
+          }
+        >
+          <Ionicons name="bug-outline" size={14} color={colors.textMuted} />
+          <Text style={styles.debugStormText}>Inject demo storm alert</Text>
+        </Pressable>
+      )}
+
     </Animated.ScrollView>
 
     <QuickActionsSheet visible={quickOpen} onClose={() => setQuickOpen(false)} />
@@ -903,9 +898,10 @@ const styles = StyleSheet.create({
     marginTop: -spacing.md,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
-    gap: spacing.lg,
-
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
+    borderBottomLeftRadius: radii.xl,
+    borderBottomRightRadius: radii.xl,
     overflow: 'hidden',
     backgroundColor: colors.navy,
   },
@@ -917,13 +913,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  identity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: touchTarget.standard },
-  brandLogo: { width: 36, height: 36 },
-  greeting: { flex: 1, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.medium, color: colors.onDarkMuted },
-  headlineWrap: { position: 'relative', overflow: 'hidden', paddingVertical: spacing.xs },
-  headline: { ...typography.heading, fontSize: fontSize.heroCompact, lineHeight: 44, color: colors.textInverse },
-  headlineCompact: { fontSize: fontSize.display, lineHeight: fontSize.heroCompact },
-  searchEntry: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: touchTarget.standard, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.control, backgroundColor: colors.surface },
+  identity: { flex: 1, alignItems: 'flex-start', justifyContent: 'center', gap: spacing.xs, minHeight: touchTarget.standard },
+  greeting: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.onDarkMuted },
+  headline: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.titleLg, color: colors.textInverse },
+  searchEntry: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: touchTarget.standard, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.pill, backgroundColor: colors.surface },
   searchEntryText: { flex: 1, color: colors.textMuted, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm },
   primaryAction: { backgroundColor: colors.accent },
   newJobAction: { backgroundColor: colors.brand },
@@ -940,7 +933,7 @@ const styles = StyleSheet.create({
   iconBtnFill: {
     width: touchTarget.small,
     height: touchTarget.small,
-    borderRadius: radii.control,
+    borderRadius: radii.pill,
     backgroundColor: colors.navyRaised,
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: colors.navyBorder,
@@ -952,7 +945,7 @@ const styles = StyleSheet.create({
   heroStatsRow: { gap: spacing.sm, flexDirection: 'row', alignItems: 'stretch' },
   heroStat: { flex: 1, minHeight: touchTarget.preferred, gap: spacing.sm, padding: spacing.md, borderWidth: 1, borderColor: colors.navyBorder, borderRadius: radii.md, backgroundColor: colors.navyRaised },
   heroStatValue: {
-    fontSize: fontSize.titleXl,
+    fontSize: fontSize.titleSm,
     fontFamily: fontFamily.heading,
     color: colors.textInverse,
     letterSpacing: -0.5,

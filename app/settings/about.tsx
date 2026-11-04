@@ -1,4 +1,4 @@
-import { Image, ScrollView, View, Text, StyleSheet, Linking } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
 import { IconChip } from '@/components/ui/IconChip';
+import { RoofWiseBrand } from '@/components/ui/RoofWiseBrand';
 import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { MeshBackground } from '@/components/ui/MeshBackground';
@@ -74,10 +75,7 @@ export default function AboutScreen() {
               one (docs/DESIGN_1A.md §2). */}
           <View style={styles.brandCard}>
             <MeshBackground variant="hero" style={styles.brandMesh} />
-            <View style={styles.brandMark}>
-              <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandLogo} resizeMode="cover" accessibilityLabel="RoofWise logo" />
-            </View>
-            <Text style={styles.brandName}>RoofWise</Text>
+            <RoofWiseBrand />
             <Text style={styles.brandTag}>The objective layer between roofing contractors and insurance carriers.</Text>
             <Text style={styles.version}>Version {VERSION}</Text>
           </View>
@@ -188,22 +186,6 @@ const styles = StyleSheet.create({
     ...shadows.hero,
   },
   brandMesh: { borderRadius: radii.card },
-  brandMark: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  brandLogo: { width: '100%', height: '100%' },
-  brandName: {
-    fontSize: fontSize.titleXl,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
-    color: colors.onMesh,
-  },
   brandTag: {
     fontSize: fontSize.bodyMd,
     fontFamily: fontFamily.archivo.regular,

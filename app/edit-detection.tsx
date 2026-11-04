@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -128,9 +129,7 @@ export default function EditDetectionView() {
         <View style={styles.empty}>
           <IconChip name="alert-circle-outline" tone="quiet" />
           <Text style={styles.emptyText}>{loadError ?? 'Opening photo…'}</Text>
-          <Pressable style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backBtnText}>Back</Text>
-          </Pressable>
+          <BackOrMenu />
         </View>
       </SafeAreaView>
     );

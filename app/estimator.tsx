@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useState } from 'react';
 import {
   View,
@@ -186,13 +187,11 @@ export default function CostEstimatorScreen() {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
       <View style={styles.header}>
-        <Pressable
-          onPress={() => (step === 0 ? router.back() : setStep((step - 1) as Step))}
-          hitSlop={10}
-          style={styles.headerBtn}
-        >
-          <Ionicons name={step === 0 ? 'close' : 'chevron-back'} size={24} color={colors.navy} />
-        </Pressable>
+        <BackOrMenu
+          onBack={step === 0 ? undefined : () => setStep((step - 1) as Step)}
+          hasLocalBack={step > 0}
+          icon={step === 0 ? 'close' : 'chevron-back'}
+        />
         <View style={{ flex: 1 }}>
           <Text style={styles.stepCount}>Step {step + 1} of 4</Text>
           <Text style={styles.stepTitle}>{['Address', 'Roof measurement', 'Damage scope', 'Result'][step]}</Text>

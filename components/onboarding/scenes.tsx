@@ -21,6 +21,7 @@ import Animated, {
   Easing,
   cancelAnimation,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
@@ -54,6 +55,7 @@ export type SceneProps = { active: boolean };
 /* ─────────────────────────── 1 · Storm lands ─────────────────────────── */
 
 export function StormScene({ active }: SceneProps) {
+  const reduced = useReducedMotion();
   const sweep = useSharedValue(0);
   const blips = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
 
@@ -62,6 +64,11 @@ export function StormScene({ active }: SceneProps) {
       cancelAnimation(sweep);
       sweep.value = 0;
       blips.forEach((b) => { cancelAnimation(b); b.value = 0; });
+      return;
+    }
+    if (reduced) {
+      sweep.value = 0.15;
+      blips.forEach((b) => { b.value = 0.15; });
       return;
     }
     sweep.value = withRepeat(
@@ -76,7 +83,7 @@ export function StormScene({ active }: SceneProps) {
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [active, reduced]);
 
   const sweepStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${sweep.value * 360}deg` }],
@@ -232,7 +239,7 @@ export function VerdictScene({ active }: SceneProps) {
   // the same table the engine uses (8, the carrier standard; see
   // docs/THRESHOLD_PROVENANCE.md), so the pitch can never teach a number the
   // packet does not argue.
-  const barStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
+  const barStyle = useAnimatedStyle(() => ({ width: `${fill.value * (12 / GAUGE_MAX_HITS) * 100}%` }));
   const countStyle = useAnimatedStyle(() => ({ opacity: fill.value }));
   const stampStyle = useAnimatedStyle(() => ({
     opacity: stamp.value,
@@ -244,7 +251,7 @@ export function VerdictScene({ active }: SceneProps) {
       <View style={styles.verdictCard}>
         <Text style={styles.verdictLabel}>ARCHITECTURAL ASPHALT</Text>
         <Text style={styles.verdictRule}>
-          HAAG threshold · {ASPHALT_THRESHOLD}+ hits per test square (carrier standard)
+          Carrier threshold · {ASPHALT_THRESHOLD}+ hits per test square
         </Text>
 
         <View style={styles.gaugeTrack}>
@@ -254,13 +261,13 @@ export function VerdictScene({ active }: SceneProps) {
         </View>
 
         <View style={styles.gaugeLegend}>
-          <Animated.Text style={[styles.gaugeCount, countStyle]}>12 hits observed</Animated.Text>
+          <Animated.Text style={[styles.gaugeCount, countStyle]}>Example: 12 hits</Animated.Text>
           <Text style={styles.gaugeThresholdLabel}>threshold {ASPHALT_THRESHOLD}</Text>
         </View>
       </View>
 
       <Animated.View style={[styles.stamp, stampStyle]} pointerEvents="none">
-        <Text style={styles.stampText}>CLAIM-WORTHY</Text>
+        <Text style={styles.stampText}>THRESHOLD MET</Text>
       </Animated.View>
     </View>
   );
@@ -336,7 +343,7 @@ export function PacketScene({ active }: SceneProps) {
         ))}
         <View style={styles.sheetStampRow}>
           <View style={styles.sheetStamp}>
-            <Text style={styles.sheetStampText}>HAAG CERTIFIED</Text>
+            <Text style={styles.sheetStampText}>INSPECTION REPORT</Text>
           </View>
         </View>
       </Animated.View>
@@ -422,7 +429,7 @@ const styles = StyleSheet.create({
   },
   detectionTagText: {
     color: colors.textInverse,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: 9,
     fontWeight: fontWeight.bold,
     letterSpacing: 0.6,
@@ -444,7 +451,7 @@ const styles = StyleSheet.create({
   },
   verdictLabel: {
     color: colors.text,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
     letterSpacing: 1,
@@ -453,7 +460,7 @@ const styles = StyleSheet.create({
   verdictRule: {
     color: colors.text,
     opacity: 1,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.caption,
   },
   gaugeTrack: {
@@ -481,14 +488,14 @@ const styles = StyleSheet.create({
   gaugeLegend: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
   gaugeCount: {
     color: colors.text,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.semibold,
   },
   gaugeThresholdLabel: {
     color: colors.text,
     opacity: 1,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.caption,
   },
   stamp: {
@@ -503,7 +510,7 @@ const styles = StyleSheet.create({
   },
   stampText: {
     color: colors.success,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.bold,
     fontSize: fontSize.bodyMd,
     letterSpacing: 1.4,
@@ -541,7 +548,7 @@ const styles = StyleSheet.create({
   },
   sheetStampText: {
     color: colors.success,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.semibold,
     fontSize: 8,
     fontWeight: fontWeight.bold,
     letterSpacing: 0.8,

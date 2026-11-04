@@ -5,6 +5,19 @@ and requested **design changes only**. The verified existing source is
 `PAXstudios/RoofWiseClaude`, branch `codex/design-1a-completion`, commit
 `8abaed78f94c7833d2045e7660846467333ebbf2`.
 
+## Current phone design
+
+The November 4 update uses the owner's Hotels references for rounded corners,
+compact type, pill-shaped actions and a photo-led job profile. Home moves
+from the two inspection/job actions through Weather, Tools & services, Area
+activity, Recent jobs, Saved estimates, Pipeline, Today, Tasks and Recent
+activity. A pinned menu opens the main destinations, account choices and tour.
+The startup draws a roofline, then first-time users can take the four-scene
+roofing tour, skip to account options, or enter as a guest. The walkthrough
+respects Reduce Motion. See `docs/DESIGN_1A.md` for the current visual guide.
+
+The sections below record earlier deliveries.
+
 ## Scope
 
 Apply the selected [Courtside reference](references/RoofWise-Courtside.png) to

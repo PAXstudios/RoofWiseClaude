@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useEffect, useState } from 'react';
 import {
   View,
@@ -11,7 +12,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
@@ -137,14 +137,14 @@ export default function NewLead() {
     router.dismissTo('/(tabs)/leads');
   };
 
-  const onCancel = () => {
+  const confirmExit = (leave: () => void) => {
     if (customerName || address) {
       Alert.alert('Discard lead?', 'Your draft will be lost.', [
         { text: 'Keep editing', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: () => router.back() },
+        { text: 'Discard', style: 'destructive', onPress: leave },
       ]);
     } else {
-      router.back();
+      leave();
     }
   };
 
@@ -152,15 +152,7 @@ export default function NewLead() {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
       <View style={styles.header}>
-        <PressableScale
-          onPress={onCancel}
-          hitSlop={8}
-          style={styles.headerBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-        >
-          <Ionicons name="close" size={26} color={colors.text} />
-        </PressableScale>
+        <BackOrMenu icon="close" onBack={() => confirmExit(router.back)} beforeLeave={confirmExit} />
         <Text style={styles.title}>New lead</Text>
       </View>
 

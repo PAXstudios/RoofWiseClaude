@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -676,13 +677,12 @@ export default function NewJobWizard() {
       <Stack.Screen options={MODAL_SCREEN_OPTIONS} />
       <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <Pressable onPress={onBack} hitSlop={10} style={styles.headerBtn}>
-            <Ionicons
-              name={stepIndex === 0 ? 'close' : 'chevron-back'}
-              size={26}
-              color={colors.navy}
-            />
-          </Pressable>
+          <BackOrMenu
+            onBack={onBack}
+            hasLocalBack={stepIndex > 0}
+            beforeLeave={dirty ? confirmDiscard : undefined}
+            icon={stepIndex === 0 ? 'close' : 'chevron-back'}
+          />
           <View style={{ flex: 1 }}>
             <Text style={styles.headerStep}>Step {stepIndex + 1} of {steps.length}</Text>
             <Text style={styles.headerTitle}>{STEP_TITLES[stepKey]}</Text>

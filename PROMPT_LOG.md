@@ -35,47 +35,20 @@ The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captur
 
 ---
 
-## Runtime correction after summary #129
-
-The owner's current Expo Go requires SDK 58. The existing app is upgraded in
-#130 and republished in #131 with runtime `exposdk:58.0.0`. This supersedes the
-SDK 57 stack/delivery details in the older Context Summary below. Current app
-source: `bae0d6b171f86715ea07fd465a1ab8119fbd00b6`. Current preview:
-https://expo.dev/accounts/roofwise/projects/roofwise/updates/85c5d06c-452c-4652-a407-3323916d1e2e
-
 ## Context Summary
 
-> Last refreshed: 2026-11-03 (after entry #129).
+> Refreshed November 4, 2026 for #134.
 
-**Current owner instruction (#124–#129):** RoofWise is already built in Codex.
-Apply **Courtside design changes only** to that existing code. Do not create an
-app, add features/routes, alter business logic, configure another backend or
-change build profiles. The owner subsequently asked to see the live app,
-completed Expo device authentication and explicitly approved publishing the
-preview with its existing client API keys and Supabase public configuration.
-That permits the existing project's EAS preview update, not unrelated native
-builds or feature work. The source is `PAXstudios/RoofWiseClaude` →
-`codex/design-1a-completion`; the published application code is
-`4454a9a9d0868a052f8d2db05e53eec213e063c3`, based on the original Codex
-`8abaed78f94c7833d2045e7660846467333ebbf2` source.
-
-**Current appearance:** Courtside supersedes historical dark-mesh Design 1A.
-White pages, navy ink, burnt orange primary actions, blue accents, light-gray
-cards, thin borders, compact corners and quiet shadows. Bundled Barlow
-Condensed display/heading fonts complement Archivo body/control text. Decorative
-blue/orange roof cuts carry the selected graphic language. See
-`docs/DESIGN_1A.md`, `docs/MOCKUP_IMPLEMENTATION.md`, and
-`docs/references/RoofWise-Courtside.png` for the current authority.
-
-**Scope correction:** #123 added six customer/resource/tools/export routes while
-interpreting the earlier broad request. #124 removes those additions from the
-final design change set. All **49 original route files** remain and no routes
-are added. All existing `lib/` services, stores and models, package manifests,
-EAS profiles, bundle IDs and backend/API contracts match the Codex base. The
-original four-screen onboarding, content, handlers and animations are retained
-with new styling. Quick Actions retains its original destinations; its header
-entry avoids covering small-phone content. The original development-only storm
-injection control is retained; release builds still boot with empty real stores.
+RoofWise is the existing Expo app in `PAXstudios/RoofWiseClaude` on
+`codex/design-1a-completion`. The owner selected Courtside, then strengthened
+its blue, navy and burnt-orange palette (#132). In #134 the owner's hotel-app
+references guide rounded surfaces, smaller typography and property photography.
+A roofline entrance introduces the skippable tour, and optional sign-in allows
+local guest work. See the opening section of `docs/DESIGN_1A.md` for Home's
+module order, navigation controls and brand treatment. Preserve all 49 original
+routes, live service/data contracts and the five-tab workspace. The owner
+authorized this source branch and the existing RoofWise Expo preview with
+its current client configuration (#128, #129, #133).
 
 **Product:** Existing roofing inspection and CRM app for a gloved roofer in sun.
 Five tabs: Home / Pipeline (existing Leads route) / Map / Plan / Train. Home keeps
@@ -88,7 +61,7 @@ pipeline automations, storm maps/history, Knock Planner/routes/outcomes,
 appointments, mileage, weather, training review, voice notes, settings, company
 branding, pricing, backup and synchronization.
 
-**Stack:** Expo SDK 57 / RN 0.86 / React 19.2 / TypeScript 6, New Architecture,
+**Stack:** Expo SDK 58 / RN 0.88 / React 19.3 / TypeScript 6, New Architecture,
 Expo Router, Zustand + AsyncStorage, Supabase and the existing configurable
 Gemini Flash client. Do not change AI provider/model policy, material thresholds,
 13-category taxonomy, confidence semantics, or the pure decision engine as part
@@ -104,30 +77,12 @@ and lead sync; keyboard-safe sheets and accessible controls; coherent Pipeline
 filter/sort/Move behavior; native knock identity/booking/route data integrity.
 Do not discard this work or go back to the stale default branch.
 
-**Verification boundary:** Automated suites exercise production source in
-isolated fixtures; browser previews use empty isolated storage. Native mounted
-camera/sensor/gesture/PDF/force-quit and live-service proof remains a device gate,
-not something screenshots establish. #123's broad app passed 13 suites/55 route
-checks. #124's final design-only state restores the original 12 suites/49 routes;
-its final checks are recorded in that entry. #128 also passes TypeScript,
-lint, the 12 original suites and web export. Online Expo Doctor flags SDK 57
-patch updates (20/21); dependencies remain unchanged. #129 exports fresh iOS,
-Android and web bundles with the existing EAS preview configuration and verifies
-all nine configured values in each native bundle without printing their values.
-Publication is not physical-device proof. No sample records are inserted.
-
-**Delivery:** The owner authorized the existing Codex branch publication
-(#126–#128) and the Expo preview upload (#129). The Courtside update is published
-to the existing `@roofwise/roofwise` project
-`b1fdcacc-a354-499a-842c-0f5ce6fa2e68`, channel/branch `preview`, environment
-`preview`, runtime `exposdk:57.0.0`, update group
-`eec6ec75-40eb-41d2-a3a6-f730c7c55fa2`. iOS update:
-`01a1a4a3-5e77-7cd9-890e-a6f97cdc8182`; Android update:
-`01a1a4a3-5e77-761a-a56f-b1a0a56eb6bf`. Preview:
-https://expo.dev/accounts/roofwise/projects/roofwise/updates/eec6ec75-40eb-41d2-a3a6-f730c7c55fa2
-No credentials, login codes or configuration values belong in git. No new
-project/backend, native package, build profile, App Store/TestFlight release,
-merge or PR is part of this preview publication.
+**Verification and delivery:** #133 published the prior color update from
+`e35b3cd` to the RoofWise preview channel in group
+`e1b081e7-0434-45c1-8b16-a0394f5ef9c8` on runtime `exposdk:58.0.0`.
+The regression suites exercise real source with isolated fixtures. Native
+camera, sensors, gestures and sharing require device review. Subsequent
+entries record export, publication and verification of the rounded design.
 
 Open product work remains in `BACKLOG.md`; it is not authorization to expand
 this redesign. Historical entries below retain prior decisions and their dates.
@@ -3570,3 +3525,15 @@ A third fresh critic passed 93 synchronous gate scenarios but reproduced a deepe
 **Publication:** EAS reports Published for existing project `b1fdcacc-a354-499a-842c-0f5ce6fa2e68`, branch/channel `preview`, environment `preview`, runtime `exposdk:58.0.0`, group `e1b081e7-0434-45c1-8b16-a0394f5ef9c8`. iOS update: `01a1a862-8256-74f7-ab15-629896ab3ab8`; Android update: `01a1a862-8256-7617-9805-8cc1c71ba430`. Both records identify source `e35b3cdd9462c7eabdff72c653d5d3090fac85e7`. Preview: https://expo.dev/accounts/roofwise/projects/roofwise/updates/e1b081e7-0434-45c1-8b16-a0394f5ef9c8
 
 **Limits / continuity:** This closes the configured-publication gate and supersedes the earlier preview for reviewing the new colors. It does not establish native camera/sensor/gesture/share behavior. All 49 source routes, five tabs and existing service/data contracts remain; no new backend, app-store/TestFlight build, merge or PR is created. Existing device checks remain open in BACKLOG. No credentials or client values are committed.
+
+### [2026-11-04] #134 — Rounded field workspace, animated entry and photo-led job profiles
+
+**Owner request.** Apply the supplied Hotels mobile references to the existing RoofWise app, including rounded edges, compact type, prominent job property photos and glass navigation. Add a roofing animation at startup, a skippable animated tour and guest entry. Reorder the dashboard, place Tasks before Recent activity, and display a background-free logo alongside the RoofWise name.
+
+**Presentation.** Shared cards use 22pt corners, controls 16pt and primary actions 28pt. Archivo headings and the compact type scale support system text sizing. The light bottom dock marks its selected destination with a short orange line. The transparent vector roof-and-bolt lockup appears in workspace chrome, entry, About and the shared proposal. Job Overview features a responsive property cover, with a compact version on working tabs. An inspector-selected cover or listing image qualifies. Missing or unavailable media leads to the existing chooser.
+
+**Entry and navigation.** The opening roofline draws over the mounting application. A four-scene tour explains storm reports, slope photos, assessment and reporting. Users can skip the tour, enter the local workspace as a guest or sign in. Returning users can replay the tour from the workspace menu. Guest access uses the existing optional-auth mode, and system Reduce Motion bypasses the launch animation. The pinned workspace header and standalone detail fallbacks provide the frosted circular menu. Wizards preserve local step-back behavior and draft confirmation.
+
+**Home.** Quick inspection / New job, Weather, Tools & services, Area activity, Recent jobs, Saved estimates, Pipeline, Today / Plan, Tasks and Recent activity appear in the requested sequence. Existing setup materials are available under Tools & services. Task rows open the owning job or lead, including older inspections for the same lead.
+
+**Review and scope.** The supplied screen is the composition reference for the illustrative design study displayed in chat. The working app uses existing services, real workspace data, the five-tab navigation and 49 original route files. Focused checks cover property cover selection, job/task ownership, entry hydration, guest and required-auth paths, tour replay and reduced motion. Native visual, sensor and gesture review remains in BACKLOG. Context Summary refreshed after #129–#134.

@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet } from 'react-native';
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MeshBackground } from '@/components/ui/MeshBackground';
@@ -35,27 +34,18 @@ type Props = {
  * glove-sized throughout.
  */
 export function ScreenHeader({ title, subtitle, back, right }: Props) {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
-  const onBack = typeof back === 'function' ? back : back ? () => router.back() : undefined;
+
 
   // Sub-screen: inline title after a plain chevron.
-  if (onBack) {
+  if (back) {
     return (
       <View
         style={[styles.inlineRow, { marginTop: -insets.top, paddingTop: insets.top }]}
       >
         <StatusBar style="dark" />
         <MeshBackground variant="cool" />
-        <Pressable
-          onPress={onBack}
-          hitSlop={8}
-          style={styles.backBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="chevron-back" size={26} color={colors.onMesh} />
-        </Pressable>
+        <BackOrMenu onBack={typeof back === 'function' ? back : undefined} />
         <View style={styles.titleBlock}>
           <Text style={styles.inlineTitle} numberOfLines={1}>
             {title}
@@ -74,7 +64,7 @@ export function ScreenHeader({ title, subtitle, back, right }: Props) {
   // Tab root: large title on the grouped ground.
   return (
     <View
-      style={[styles.largeWrap, { marginTop: -insets.top, paddingTop: insets.top + spacing.sm }]}
+      style={styles.largeWrap}
     >
       <StatusBar style="dark" />
       <MeshBackground variant="home" />
@@ -95,6 +85,7 @@ export function ScreenHeader({ title, subtitle, back, right }: Props) {
 
 const styles = StyleSheet.create({
   largeWrap: {
+    paddingTop: spacing.sm,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
     overflow: 'hidden',
@@ -123,12 +114,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.headerBorder,
-  },
-  backBtn: {
-    width: touchTarget.standard,
-    height: touchTarget.standard,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   titleBlock: { flex: 1 },
   inlineTitle: {

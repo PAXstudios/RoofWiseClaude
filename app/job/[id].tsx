@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { PressableScale } from '@/components/PressableScale';
 import { formatDateShort, formatRelative, isValidDate } from '@/lib/format/date';
 import { useRef, useState } from 'react';
@@ -46,7 +47,7 @@ import { describeMissingDetails, missingJobDetails } from '@/lib/services/placeh
 import { CustomerDetailsSheet } from '@/components/sheets/CustomerDetailsSheet';
 import { CoverPhotoSheet } from '@/components/sheets/CoverPhotoSheet';
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
-import { coverPhotoUri, roofAgePrefill } from '@/lib/services/propertyRecord';
+import { propertyCoverUri, roofAgePrefill } from '@/lib/services/propertyRecord';
 import { SlopePickerSheet } from '@/components/capture/SlopePickerSheet';
 import { transcribeAudio } from '@/lib/services/transcribeAudio';
 import { useToastStore } from '@/lib/stores/toastStore';
@@ -89,7 +90,6 @@ import {
   fontFamily,
   fontSize,
   fontWeight,
-  gradients,
   radii,
   shadows,
   spacing,
@@ -212,9 +212,7 @@ export default function JobDetail() {
         <View style={styles.empty}>
           <Ionicons name="alert-circle-outline" size={28} color={colors.textSubtle} />
           <Text style={styles.emptyTitle}>Job not found</Text>
-          <PressableScale style={styles.secondaryBtn} onPress={() => router.back()}>
-            <Text style={styles.secondaryBtnText}>Back</Text>
-          </PressableScale>
+          <BackOrMenu />
         </View>
       </SafeAreaView>
     );
@@ -252,7 +250,7 @@ export default function JobDetail() {
     toast({ tone: 'success', title: 'Follow-up set', body: formatDateShort(when) });
   };
 
-  const heroPhoto = coverPhotoUri(inspection);
+  const heroPhoto = propertyCoverUri(inspection);
 
   const openCapture = () => router.push({ pathname: '/quick-inspection', params: { jobId: inspection.id } });
 
@@ -558,6 +556,25 @@ export default function JobDetail() {
     }
   };
 
+  const scoreRow = (
+    <View style={styles.reportScoreRow}>
+      <View>
+        <Text style={styles.reportScoreLabel}>DAMAGE SCORE</Text>
+        <Text style={styles.reportScore}>{damageScore.assessed ? damageScore.score : '—'}</Text>
+      </View>
+      <View style={styles.reportScoreBody}>
+        <View style={styles.reportScoreTrack}>
+          <LinearGradient colors={[brand.burntLight, brand.burntDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.reportScoreFill, { width: damageScore.assessed ? `${damageScore.score}%` : '0%' }]} />
+        </View>
+        <View style={styles.reportScoreMeta}>
+          <Text style={styles.reportScoreEnd}>0</Text>
+          <View style={styles.reportBandPill}><Text style={styles.reportBandText}>{damageScore.assessed ? damageScore.bandLabel : 'NOT ASSESSED'}</Text></View>
+          <Text style={styles.reportScoreEnd}>100</Text>
+        </View>
+      </View>
+    </View>
+  );
+
   const jobChrome = (
     <>
       {missing.any && (
@@ -579,13 +596,14 @@ export default function JobDetail() {
         </PressableScale>
       )}
 
-      <CompactHero
+      <JobProfileHeader
+        expanded={tab === 'overview'}
         photoUri={heroPhoto}
         onChangePhoto={() => setCoverSheet(true)}
         reportId={inspection.reportId}
         customerName={missing.name ? 'Customer not set' : inspection.customerName}
         address={missing.address ? 'Address not set' : inspection.address}
-        oneLiner={propertyOneLiner(inspection)}
+        oneLiner={[propertyOneLiner(inspection), insurancePolicyLine].filter(Boolean).join(' · ')}
         band={hasEvidence ? haag.claim_viability : undefined}
         recommendation={hasEvidence ? haag.roofwise_recommendation : undefined}
         stageLabel={stagePillLabel}
@@ -595,6 +613,8 @@ export default function JobDetail() {
         daysLabel={daysLabel}
         amount={amount}
       />
+
+      {tab === 'overview' && <View style={styles.overviewScore}>{scoreRow}</View>}
 
       <JobTabs
         tabs={VISIBLE_TABS.map((t) =>
@@ -618,15 +638,10 @@ export default function JobDetail() {
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="dark" />
       <MeshBackground variant="cool" />
-      {/* 1A screen 04 is one continuous report masthead: controls, address,
-          property context, then the scored bar. The real tabbed workflow
-          remains directly beneath it so Measure/Photos/Proposal/Tasks are
-          not sacrificed to match the static artboard. */}
+      {/* Overview scrolls the cover and score together. Keep the toolbar reachable. */}
       <View style={styles.reportHero}>
         <View style={styles.reportHeroTopRow}>
-          <PressableScale onPress={() => router.back()} hitSlop={10} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
-            <Ionicons name="chevron-back" size={24} color={colors.onMesh} />
-          </PressableScale>
+          <BackOrMenu color={colors.onMesh} style={styles.headerBtn} />
           <Text style={styles.headerReportId} numberOfLines={1}>REPORT {inspection.reportId}</Text>
           <View style={{ flex: 1 }} />
           {pendingHere > 0 && (
@@ -648,24 +663,13 @@ export default function JobDetail() {
             <Ionicons name="ellipsis-horizontal" size={22} color={colors.onMesh} />
           </PressableScale>
         </View>
-        <Text style={styles.reportAddress} numberOfLines={2}>{missing.address ? 'Address not set' : inspection.address}</Text>
-        <Text style={styles.reportPropertyLine} numberOfLines={2}>{propertyOneLiner(inspection)}{insurancePolicyLine ? ` · ${insurancePolicyLine}` : ''}</Text>
-        <View style={styles.reportScoreRow}>
-          <View>
-            <Text style={styles.reportScoreLabel}>DAMAGE SCORE</Text>
-            <Text style={styles.reportScore}>{damageScore.assessed ? damageScore.score : '—'}</Text>
-          </View>
-          <View style={styles.reportScoreBody}>
-            <View style={styles.reportScoreTrack}>
-              <LinearGradient colors={[brand.burntLight, brand.burntDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.reportScoreFill, { width: damageScore.assessed ? `${damageScore.score}%` : '0%' }]} />
-            </View>
-            <View style={styles.reportScoreMeta}>
-              <Text style={styles.reportScoreEnd}>0</Text>
-              <View style={styles.reportBandPill}><Text style={styles.reportBandText}>{damageScore.assessed ? damageScore.bandLabel : 'NOT ASSESSED'}</Text></View>
-              <Text style={styles.reportScoreEnd}>100</Text>
-            </View>
-          </View>
-        </View>
+        {tab !== 'overview' && (
+          <>
+            <Text style={styles.reportAddress} numberOfLines={2}>{missing.address ? 'Address not set' : inspection.address}</Text>
+            <Text style={styles.reportPropertyLine} numberOfLines={2}>{propertyOneLiner(inspection)}{insurancePolicyLine ? ` · ${insurancePolicyLine}` : ''}</Text>
+            {scoreRow}
+          </>
+        )}
       </View>
 
       <View style={styles.jobBody}>
@@ -918,18 +922,47 @@ async function pickEvidencePhoto(onPicked: (uri: string) => void) {
   }
 }
 
-const HERO_PHOTO_SIZE = 76;
+function PropertyCover({
+  uri,
+  expanded,
+  onPress,
+}: {
+  uri?: string;
+  expanded: boolean;
+  onPress: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const showPhoto = !!uri && !failed;
+  const label = !uri ? 'Add property photo' : failed ? 'Choose another photo' : 'Change property photo';
 
-/**
- * The job page's compact hero: cover photo, customer + address, a one-line
- * property summary, the stage pill (tap → StageSheet), when it was last
- * updated, how long it has sat in that stage, and the job's amount by the
- * signed → sent → estimate → lead precedence (`lib/services/proposals.ts`
- * `jobAmount`). Replaces the old JobHero's big cinematic photo — the full
- * claim-viability verdict now lives in the Overview tab's HAAG Verdict card;
- * this keeps only a small band pill so the hero stays scannable.
- */
-function CompactHero({
+  return (
+    <PressableScale
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={[
+        styles.cover,
+        expanded ? (showPhoto ? styles.coverExpanded : styles.coverEmpty) : styles.coverCompact,
+      ]}
+    >
+      {showPhoto && (
+        <Image
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          onError={() => setFailed(true)}
+        />
+      )}
+      <View style={[styles.coverAction, showPhoto && styles.coverBadge]}>
+        <Ionicons name="camera-outline" size={20} color={showPhoto ? colors.textInverse : colors.tileBlueInk} />
+        {expanded && <Text style={[styles.coverActionText, showPhoto && styles.coverActionInverse]}>{label}</Text>}
+      </View>
+    </PressableScale>
+  );
+}
+
+function JobProfileHeader({
+  expanded,
   photoUri,
   onChangePhoto,
   reportId,
@@ -945,6 +978,7 @@ function CompactHero({
   daysLabel,
   amount,
 }: {
+  expanded: boolean;
   photoUri?: string;
   onChangePhoto: () => void;
   reportId: string;
@@ -960,23 +994,12 @@ function CompactHero({
   daysLabel?: string;
   amount: { value: number } | null;
 }) {
+  const cover = <PropertyCover key={photoUri ?? 'empty'} uri={photoUri} expanded={expanded} onPress={onChangePhoto} />;
   return (
     <View style={[styles.heroCard, shadows.card]}>
+      {expanded && cover}
       <View style={styles.heroTopRow}>
-        <PressableScale style={styles.heroPhotoWrap} onPress={onChangePhoto} accessibilityRole="button" accessibilityLabel="Change the job photo">
-          {photoUri ? (
-            <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
-          ) : (
-            <LinearGradient colors={gradients.clearDay} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-              <View style={styles.heroPhotoPlaceholder}>
-                <Ionicons name="home-outline" size={28} color={colors.textInverse} style={{ opacity: 0.5 }} />
-              </View>
-            </LinearGradient>
-          )}
-          <View style={styles.heroPhotoBadge}>
-            <Ionicons name="camera-outline" size={12} color={colors.textInverse} />
-          </View>
-        </PressableScale>
+        {!expanded && cover}
 
         <View style={styles.heroInfo}>
           <Text style={styles.heroEyebrow} numberOfLines={1}>
@@ -985,11 +1008,11 @@ function CompactHero({
           <Text style={styles.heroCustomer} numberOfLines={1}>
             {customerName}
           </Text>
-          <Text style={styles.heroAddress} numberOfLines={1}>
+          <Text style={styles.heroAddress} numberOfLines={expanded ? 2 : 1}>
             {address}
           </Text>
           {(oneLiner || (band && recommendation)) && (
-            <Text style={styles.heroOneLiner} numberOfLines={1}>
+            <Text style={styles.heroOneLiner} numberOfLines={expanded ? 2 : 1}>
               {[oneLiner, band && recommendation ? ROOFWISE_RECOMMENDATION_LABELS[recommendation] : undefined]
                 .filter(Boolean)
                 .join(' · ')}
@@ -1049,6 +1072,13 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 2,
     marginBottom: spacing.sm,
+  },
+  overviewScore: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.card,
+    backgroundColor: colors.brandSoft,
   },
   reportScoreRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.lg },
   reportScoreLabel: { ...dataLabel, color: colors.textMuted, opacity: 1 },
@@ -1122,38 +1152,42 @@ const styles = StyleSheet.create({
   missingTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, color: colors.text },
   missingBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginTop: 2 },
 
-  // ── Compact hero ──────────────────────────────────────────────────────────
   heroCard: {
     marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
+    marginVertical: spacing.md,
     backgroundColor: colors.surface,
-    borderRadius: radii.card,
+    borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  heroTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  heroPhotoWrap: {
-    width: HERO_PHOTO_SIZE,
-    height: HERO_PHOTO_SIZE,
-    borderRadius: radii.md,
+    borderColor: colors.border,
     overflow: 'hidden',
-    backgroundColor: brand.royalInk,
   },
-  heroPhotoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  heroPhotoBadge: {
-    position: 'absolute',
-    right: 4,
-    bottom: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  cover: {
+    overflow: 'hidden',
+    backgroundColor: colors.brandSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.scrim,
   },
+  coverExpanded: { width: '100%', aspectRatio: 1.65, maxHeight: 360 },
+  coverEmpty: { width: '100%', minHeight: touchTarget.preferred },
+  coverCompact: { width: touchTarget.standard, height: touchTarget.standard, borderRadius: radii.md },
+  coverAction: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  coverBadge: {
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.sm,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.navy,
+  },
+  coverActionText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, color: colors.tileBlueInk },
+  coverActionInverse: { color: colors.textInverse },
   heroInfo: { flex: 1, gap: 1 },
   heroEyebrow: { ...dataLabel, color: colors.textSubtle },
   heroCustomer: { fontSize: fontSize.titleSm, fontFamily: fontFamily.archivo.bold, color: colors.text, letterSpacing: -0.2 },
@@ -1166,7 +1200,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
-    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
   stagePillBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: touchTarget.small },
   heroMeta: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.caption, color: colors.textSubtle },

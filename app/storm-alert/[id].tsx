@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { formatDateTime } from '@/lib/format/date';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
@@ -65,9 +66,7 @@ export default function StormAlertDetail() {
         <View style={styles.empty}>
           <Ionicons name="alert-circle-outline" size={36} color={colors.slate} />
           <Text style={styles.emptyText}>Alert not found.</Text>
-          <Pressable style={styles.secondaryBtn} onPress={() => router.back()}>
-            <Text style={styles.secondaryBtnText}>Back</Text>
-          </Pressable>
+          <BackOrMenu />
         </View>
       </SafeAreaView>
     );
@@ -143,9 +142,7 @@ export default function StormAlertDetail() {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.textInverse} />
-        </Pressable>
+        <BackOrMenu color={colors.textInverse} style={styles.headerBtn} />
         <Text style={styles.headerTitle}>Storm Alert</Text>
         <Pressable onPress={onDismiss} hitSlop={10} style={styles.headerBtn}>
           <Ionicons name="close" size={22} color={colors.textInverse} />

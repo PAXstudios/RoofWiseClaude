@@ -6,21 +6,20 @@ the existing Codex app should change. Reference:
 `docs/references/RoofWise-Courtside.png`. Current scope:
 `docs/MOCKUP_IMPLEMENTATION.md`.
 
-The owner's November 4 refinement requests more brand color and clearer visual
-separation. Use navy for the Home masthead and navigation, blue-tinted workflow
-headers and module headers, white cards on a cool blue-gray grouped canvas, and
-burnt orange for priority actions and selected navigation. Tool surfaces use
-coordinated blue, orange and navy pairs. Keep semantic status colors meaningful.
-Use flat fills, restrained borders, consistent control shapes and the existing
-logo. The Home heading is “Your workday”; remove its oversized slogan and roof
-cut decoration. Use bundled Barlow Condensed for headings and upright readouts,
-Archivo for controls, section titles, body copy and compact metadata. Values
-live in `theme/tokens.ts`; decorative graphics are never evidence.
+The November 4 phone references refine Courtside. Follow the Hotels screens'
+curved card edges, compact text, rounded search fields, fine dividers and
+prominent photography. RoofWise keeps navy ink, royal blue workflow surfaces
+and burnt orange for priority actions. Use the transparent roof-and-bolt mark
+beside the RoofWise wordmark. Preserve accessible text scaling and field-ready
+touch targets. The menu uses a round translucent control where backward
+navigation is unavailable.
 
-Preserve all existing routes, features, stores, handlers and data. Keep the five
-tabs, 56pt touch minimum and 88pt sticky primary actions. Do not add features,
-change API contracts, configure a new app/backend or change build/distribution
-setup for this task. This authority supersedes the historical dark mesh below.
+The launch sequence and skippable tour use original roofing motion. Signed-out
+inspectors may continue locally under the existing optional-auth configuration.
+The Home order after Quick inspection and New job is Weather, Tools & services,
+Area activity, Recent jobs, Saved estimates, Pipeline, Today/Plan, Tasks, and
+Recent activity. Job Overview leads with a large genuine property cover.
+The historical design language below records earlier iterations.
 
 ---
 

@@ -14,9 +14,6 @@ import Animated, {
 import { mobileBottomItems, type TabBarProps } from './navItems';
 import { fontFamily, fontSize, motion, navigationDock, radii, spacing, touchTarget } from '@/theme/tokens';
 
-// The navy dock uses a burnt-orange selected state and rounded rectangles.
-// Only presentation changes; the SDK 58 navigation contract stays intact.
-//
 // Rendered by expo-router's <Tabs tabBar={...}> in app/(tabs)/_layout.tsx, so
 // it receives the navigator's live `state` (which tab is focused) and
 // `emitter` and `navigateToTab` (SDK 58's tab bar contract). A tap sends the
@@ -177,6 +174,7 @@ function TabButton({
         pressed && styles.tabChipPressed,
         focused && styles.tabChipFocused,
       ]}>
+        {active && <View style={styles.indicator} />}
         <Animated.View style={iconStyle}>
           <Ionicons
             name={(active ? activeIcon : icon) as any}
@@ -184,53 +182,49 @@ function TabButton({
             color={active ? navigationDock.selectedInk : navigationDock.inactiveInk}
           />
         </Animated.View>
-        <Text numberOfLines={1} style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+        <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
       </View>}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  // Keep the home-indicator inset on the surrounding grouped canvas.
   wrap: {
-    backgroundColor: navigationDock.ground,
-    paddingTop: navigationDock.topInset,
-    paddingHorizontal: navigationDock.edgeInset,
+    backgroundColor: navigationDock.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: navigationDock.border,
     alignItems: 'center',
   },
   bar: {
     flexDirection: 'row',
+    alignItems: 'stretch',
     width: '100%',
     maxWidth: navigationDock.maxWidth,
-    marginBottom: navigationDock.bottomInset,
     minHeight: navigationDock.height,
-    borderRadius: radii.card,
-    backgroundColor: navigationDock.surface,
-    borderWidth: 1,
-    borderColor: navigationDock.border,
-    paddingHorizontal: spacing.xs / 2,
-    alignItems: 'center',
-    ...navigationDock.shadow,
+    paddingHorizontal: spacing.xs,
   },
   tab: {
     flex: 1,
     minWidth: touchTarget.standard,
     minHeight: touchTarget.standard,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.xs,
   },
   tabChip: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'stretch',
-    minHeight: touchTarget.standard,
     gap: spacing.xs,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
     borderWidth: 2,
     borderColor: 'transparent',
     borderRadius: radii.control,
+  },
+  indicator: {
+    position: 'absolute',
+    top: 0,
+    width: spacing.xxxl,
+    height: 3,
+    borderRadius: radii.pill,
+    backgroundColor: navigationDock.indicator,
   },
   tabChipActive: {
     backgroundColor: navigationDock.selectedFill,
@@ -241,6 +235,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.archivo.medium,
     fontSize: fontSize.caption,
     color: navigationDock.inactiveInk,
+    textAlign: 'center',
   },
   tabLabelActive: {
     fontFamily: fontFamily.archivo.bold,

@@ -6,7 +6,7 @@
 // record's photos, any captured photo, a new shot, or one from the library.
 // Picks from the camera/library are COPIED into the app's document directory
 // (the picker hands back a cache URI the OS may purge). Never stock imagery:
-// with no record and no photos the hero keeps its gradient placeholder.
+// without a listing or chosen cover the profile offers to add a property photo.
 
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -18,14 +18,14 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { PressableScale } from '@/components/PressableScale';
 import type { IoniconName } from '@/components/ui/IconChip';
 import type { CoverPhoto, Inspection } from '@/lib/models/types';
-import { coverPhotoSource, coverPhotoUri, zillowPhotoUrl } from '@/lib/services/propertyRecord';
+import { coverPhotoSource, propertyCoverUri, zillowPhotoUrl } from '@/lib/services/propertyRecord';
 import { colors, dataLabel, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 type Props = {
   visible: boolean;
   inspection: Pick<Inspection, 'id' | 'coverPhoto' | 'propertyRecord' | 'slopes'>;
   onClose: () => void;
-  /** undefined = back to the automatic choice (record photo, else first capture). */
+  /** undefined = back to the automatic choice (property record photo, when available). */
   onChoose: (cover: CoverPhoto | undefined) => void;
 };
 
@@ -50,8 +50,8 @@ export function CoverPhotoSheet({ visible, inspection, onClose, onChoose }: Prop
     if (!visible) setBusy(null);
   }, [visible]);
 
-  const current = coverPhotoUri(inspection, 'card');
-  const source = coverPhotoSource(inspection);
+  const current = propertyCoverUri(inspection, 'card');
+  const source = current ? coverPhotoSource(inspection) : 'none';
   const zillowPhotos = inspection.propertyRecord?.status === 'found' ? inspection.propertyRecord.imageUrls ?? [] : [];
   const captured = inspection.slopes.flatMap((sl) => sl.photoPaths);
 
@@ -99,7 +99,7 @@ export function CoverPhotoSheet({ visible, inspection, onClose, onChoose }: Prop
         source === 'zillow'
           ? 'Showing the Zillow listing photo.'
           : source === 'capture'
-            ? 'Showing the first captured photo.'
+            ? 'Showing the job photo you chose.'
             : source === 'library'
               ? 'Showing a photo you chose.'
               : 'No photo yet — pick one below.'

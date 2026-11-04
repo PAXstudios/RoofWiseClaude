@@ -9,7 +9,7 @@
 
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+import { RoofWiseBrand } from '@/components/ui/RoofWiseBrand';
 import { navItems, type TabBarProps } from './navItems';
 import { fontFamily,
   colors,
@@ -24,8 +24,7 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab }: TabBarPr
   return (
     <View style={styles.rail}>
       <View style={styles.brandRow}>
-        <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandMark} contentFit="contain" />
-        <Text style={styles.brandName}>RoofWise</Text>
+        <RoofWiseBrand inverse />
       </View>
 
       <View style={styles.nav}>
@@ -88,15 +87,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.sm,
     marginBottom: spacing.xxl,
-  },
-  brandMark: {
-    width: 40,
-    height: 40,
-  },
-  brandName: { fontFamily: fontFamily.archivo.bold,
-    fontSize: fontSize.titleMd,
-    fontWeight: fontWeight.bold,
-    color: colors.textInverse,
   },
   nav: { gap: spacing.xs },
   item: {

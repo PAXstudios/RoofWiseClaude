@@ -1,3 +1,4 @@
+import { RoofWiseBrand } from '@/components/ui/RoofWiseBrand';
 import { useEffect, useMemo } from 'react';
 import {
   ScrollView,
@@ -131,12 +132,7 @@ export default function HomeownerProposalView() {
         )}
 
         <View style={styles.contentCard}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandMark}>
-              <Text style={styles.brandInitials}>RW</Text>
-            </View>
-            <Text style={styles.brandName}>RoofWise</Text>
-          </View>
+          <RoofWiseBrand />
 
           <Text style={styles.heading}>
             Your roofing proposal
@@ -263,10 +259,6 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
 
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  brandMark: { width: 36, height: 36, borderRadius: radii.md, backgroundColor: colors.orange, alignItems: 'center', justifyContent: 'center' },
-  brandInitials: { fontFamily: fontFamily.archivo.bold, color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
-  brandName: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.navy },
 
   heading: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.titleXl, fontWeight: fontWeight.regular, color: colors.navy, marginTop: spacing.md },
   address: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyLg, color: colors.slate },

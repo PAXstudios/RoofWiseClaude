@@ -13,15 +13,12 @@ entry does not count as tracked.
 
 ## Now (committed next steps, in order — see docs/PRODUCT_SYNTHESIS.md §5 for the full rationale)
 
-**Current task boundary (#132): refine the existing Courtside app with stronger
-RoofWise brand color, clearer surface hierarchy and professional typography.**
-Preserve all routes, handlers, real data, SDK 58 configuration and the existing
-preview project. The product backlog below is not a request to add features or
-deploy a replacement app. Existing-branch push and preview publication are
-authorized by the owner's earlier instructions.
+**Current task boundary (#134).** Apply the owner's rounded mobile design,
+guest entry, skippable animated roofing tour, dashboard order, property covers
+and persistent menu in the existing SDK 58 app.
 
 
-- [ ] **Courtside device verification:** check the revised navy masthead/dock, tinted headers/cards, colored tools, bundled fonts, camera/settings/slope controls, orange shutter, selected-tab contrast, and the original onboarding's horizontal swipes/vertical content scroll with larger text on a short iPhone/Android screen. Source and build results are documented in #124–#125; device behavior is not inferred from screenshots. Customer/export additions were removed in #124. — #123–#125
+- [ ] **Courtside device verification:** check the rounded surfaces and dock, menu and back behavior on direct entry, startup animation, guest and tour replay, Home section order, property covers, colored tools and bundled fonts, camera/settings/slope controls, orange shutter, selected-tab contrast, and the original onboarding's horizontal swipes/vertical content scroll with larger text on a short iPhone/Android screen. Source and build results are documented in #124–#125; device behavior is not inferred from screenshots. Customer/export additions were removed in #124. — #123–#125
 
 
 

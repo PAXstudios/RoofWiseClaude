@@ -10,6 +10,9 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { RoofWiseBrand } from '@/components/ui/RoofWiseBrand';
+import { WorkspaceMenu } from './WorkspaceMenu';
+import { useResponsive } from '@/theme/useResponsive';
 import { navItems, type TabHeaderProps } from './navItems';
 import {
   colors, fontFamily,
@@ -22,6 +25,16 @@ import {
 
 export function TopBar({ route, options }: TabHeaderProps) {
   const router = useRouter();
+  const { isDesktop } = useResponsive();
+
+  if (!isDesktop) {
+    return (
+      <View style={styles.mobileBar}>
+        <RoofWiseBrand />
+        <WorkspaceMenu />
+      </View>
+    );
+  }
 
   // Settings is a route inside the group but not a nav item, so fall back to
   // the screen's own title before the raw route name.
@@ -51,12 +64,24 @@ export function TopBar({ route, options }: TabHeaderProps) {
           <Ionicons name="camera-outline" size={20} color={colors.textInverse} />
           <Text style={styles.btnPrimaryText}>Quick Inspection</Text>
         </Pressable>
+        <WorkspaceMenu />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  mobileBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: touchTarget.standard,
+    paddingLeft: spacing.xl,
+    paddingRight: spacing.sm,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

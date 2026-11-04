@@ -24,6 +24,7 @@
 // Same camera chrome as Quick Inspection (RailButton + smoke glass), so it
 // feels like a mode of the camera rather than a different app.
 
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useEffect, useRef, useState } from 'react';
 import {
   Image as RNImage,
@@ -600,9 +601,7 @@ export default function AnnotateScreen() {
           <IconChip name="image-outline" tone="quiet" size="md" />
           <Text style={styles.emptyTitle}>Photo not found</Text>
           <Text style={styles.emptyText}>It may have been deleted, or the link is stale.</Text>
-          <PressableScale style={styles.emptyBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
-            <Text style={styles.emptyBtnText}>Back</Text>
-          </PressableScale>
+          <BackOrMenu />
         </View>
       </View>
     );

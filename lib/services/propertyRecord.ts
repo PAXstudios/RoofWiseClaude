@@ -58,19 +58,19 @@ export function recordCardUrl(record: PropertyRecord | undefined): string | unde
 
 type CoverSource = Pick<Inspection, 'coverPhoto' | 'propertyRecord' | 'slopes'>;
 
-/**
- * The photo that fronts a job, in order: what the inspector chose → the
- * Zillow lead photo → the first captured photo → nothing (the screen draws
- * its gradient placeholder). Pure; every surface reads through this.
- */
-export function coverPhotoUri(ins: CoverSource, size: 'hero' | 'card' = 'hero'): string | undefined {
+/** House photo for the property profile. Inspection evidence only qualifies
+ * when the inspector explicitly chooses it as the cover. */
+export function propertyCoverUri(ins: Pick<CoverSource, 'coverPhoto' | 'propertyRecord'>, size: 'hero' | 'card' = 'hero'): string | undefined {
   const chosen = ins.coverPhoto?.uri;
   if (chosen) {
     return ins.coverPhoto?.source === 'zillow' ? zillowPhotoUrl(chosen, size === 'hero' ? 960 : 576) : chosen;
   }
-  const fromRecord = size === 'hero' ? recordHeroUrl(ins.propertyRecord) : recordCardUrl(ins.propertyRecord);
-  if (fromRecord) return fromRecord;
-  return ins.slopes.flatMap((sl) => sl.photoPaths)[0];
+  return size === 'hero' ? recordHeroUrl(ins.propertyRecord) : recordCardUrl(ins.propertyRecord);
+}
+
+/** Job list thumbnails can also use the job's first captured photo. */
+export function coverPhotoUri(ins: CoverSource, size: 'hero' | 'card' = 'hero'): string | undefined {
+  return propertyCoverUri(ins, size) ?? ins.slopes.flatMap((sl) => sl.photoPaths)[0];
 }
 
 /** Which source `coverPhotoUri` resolved to — for the "Change photo" sheet. */

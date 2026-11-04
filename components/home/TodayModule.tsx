@@ -9,11 +9,11 @@ import { Pill, type PillTone } from '@/components/ui/Pill';
 import { useInspectionStore } from '@/lib/stores/inspectionStore';
 import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
-import { useTaskStore } from '@/lib/stores/taskStore';
-import type { Inspection, Lead, Task } from '@/lib/models/types';
+import { EmptyHomeSection } from './EmptyHomeSection';
+import type { Inspection, Lead } from '@/lib/models/types';
 import { fontFamily, colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 import { daysInStage, goingColdLeads } from '@/components/pipeline/chain';
-import { followUpsDue, inspectionsToday, tasksDueToday, dayBounds } from './todayAgenda';
+import { followUpsDue, inspectionsToday, dayBounds } from './todayAgenda';
 
 /** How many rows Home shows before handing off to Plan. */
 const MAX_ROWS = 6;
@@ -32,7 +32,6 @@ export type TodayAgenda = {
   inspections: Inspection[];
   followUps: Lead[];
   cold: Lead[];
-  tasksDue: Task[];
   rows: Row[];
   /** Rows beyond `MAX_ROWS`, surfaced as "N more in Plan". */
   overflow: number;
@@ -40,17 +39,11 @@ export type TodayAgenda = {
   hasItems: boolean;
 };
 
-/**
- * The day's real next actions, read from the same stores Plan reads.
- * Empty on a quiet day — the caller hides the module rather than rendering
- * "nothing today" between the hero and the map (Drift #4's rule for the
- * storm hero applies: never a stale placeholder in the cockpit).
- */
+/** Scheduled inspections, follow-ups and the active route shown on Home. */
 export function useTodayAgenda(): TodayAgenda {
   const inspections = useInspectionStore((s) => s.inspections);
   const leads = useLeadStore((s) => s.leads);
   const activeRoute = useKnockSessionStore((s) => s.activeSession);
-  const tasks = useTaskStore((s) => s.tasks);
 
   return useMemo(() => {
     const now = new Date();
@@ -58,7 +51,6 @@ export function useTodayAgenda(): TodayAgenda {
     const todays = inspectionsToday(inspections, now);
     const due = followUpsDue(leads, now, inspections);
     const cold = goingColdLeads(leads, now.getTime());
-    const dueTasks = tasksDueToday(tasks, now);
 
     const rows: Row[] = [];
     for (const ins of todays) {
@@ -96,50 +88,29 @@ export function useTodayAgenda(): TodayAgenda {
         href: `/lead/${lead.id}`,
       });
     }
-    if (dueTasks.length > 0) {
-      const overdue = dueTasks.some((t) => t.dueAt && new Date(t.dueAt).getTime() < start);
-      const rest = dueTasks.length - 1;
-      rows.push({
-        key: 'tasks_due',
-        icon: 'checkbox-outline',
-        tone: 'purple',
-        title: `${dueTasks.length} task${dueTasks.length === 1 ? '' : 's'} due today`,
-        sub: rest > 0 ? `${dueTasks[0].title} +${rest} more` : dueTasks[0].title,
-        pill: { label: overdue ? 'Overdue' : 'Due today', tone: overdue ? 'danger' : 'info' },
-        // No single tasks screen yet — the Pipeline board is where every
-        // task lives (a card's x/y count, and TasksCard on its lead/job).
-        href: '/(tabs)/leads',
-      });
-    }
-
     return {
       inspections: todays,
       followUps: due,
       cold,
-      tasksDue: dueTasks,
       rows: rows.slice(0, MAX_ROWS),
       overflow: Math.max(0, rows.length - MAX_ROWS),
       routeLive: !!activeRoute,
       hasItems: rows.length > 0 || !!activeRoute,
     };
-  }, [inspections, leads, activeRoute, tasks]);
+  }, [inspections, leads, activeRoute]);
 }
 
-/**
- * Home's "Today" module — the audit's single highest-impact IA fix: the
- * roofer's next actions at the top of the cockpit instead of two tabs away.
- * Every row lands on the job or the lead it names. Render it only when
- * `agenda.hasItems` — an empty module has nothing honest to say here.
- */
 export function TodayModule({ agenda }: { agenda: TodayAgenda }) {
   const router = useRouter();
+  if (!agenda.hasItems) {
+    return <EmptyHomeSection title="Today" message="Nothing scheduled for today." action={{ label: 'Plan', onPress: () => router.push('/(tabs)/plan') }} />;
+  }
   const counts = [
     agenda.inspections.length > 0 &&
       `${agenda.inspections.length} inspection${agenda.inspections.length === 1 ? '' : 's'}`,
     agenda.followUps.length > 0 &&
       `${agenda.followUps.length} follow-up${agenda.followUps.length === 1 ? '' : 's'}`,
     agenda.cold.length > 0 && `${agenda.cold.length} going cold`,
-    agenda.tasksDue.length > 0 && `${agenda.tasksDue.length} task${agenda.tasksDue.length === 1 ? '' : 's'} due`,
   ]
     .filter((s): s is string => Boolean(s))
     .join(' · ');

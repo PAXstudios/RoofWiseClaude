@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useMemo, useState } from 'react';
 import {
   View,
@@ -104,9 +105,7 @@ export default function AnalyzeView() {
         <View style={styles.empty}>
           <IconChip name="alert-circle-outline" tone="quiet" />
           <Text style={styles.emptyText}>Slope not found.</Text>
-          <Pressable style={styles.secondaryBtn} onPress={() => router.back()}>
-            <Text style={styles.secondaryBtnText}>Back</Text>
-          </Pressable>
+          <BackOrMenu />
         </View>
       </SafeAreaView>
     );
@@ -212,9 +211,7 @@ export default function AnalyzeView() {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
+        <BackOrMenu style={styles.headerBtn} />
         <View style={{ flex: 1 }}>
           <Text style={styles.reportId}>{inspection.reportId} · {slope.orientation}</Text>
           <Text style={styles.title}>Analyze slope</Text>

@@ -1,7 +1,8 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { Children, useMemo, useState, type ReactNode } from 'react';
 import { Alert, ScrollView, View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Rect } from 'react-native-svg';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -138,7 +139,6 @@ function monthsBetween(start: Date, end: Date): string[] {
 }
 
 export default function ReportsScreen() {
-  const router = useRouter();
   const inspections = useInspectionStore((s) => s.inspections);
   const proposals = useProposalStore((s) => s.proposals);
   const leads = useLeadStore((s) => s.leads);
@@ -307,9 +307,7 @@ export default function ReportsScreen() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
+        <BackOrMenu color={colors.text} style={styles.headerBtn} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Reports</Text>
           <Text style={styles.sub}>{rangeLabel} performance</Text>

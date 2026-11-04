@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -343,9 +344,7 @@ export default function SwipeReview() {
       <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-            <Ionicons name="chevron-back" size={26} color={colors.navy} />
-          </Pressable>
+          <BackOrMenu style={styles.headerBtn} />
           <Text style={styles.headerTitle}>Swipe Review</Text>
         </View>
         <View style={styles.empty}>
@@ -368,9 +367,7 @@ export default function SwipeReview() {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="close" size={24} color={colors.navy} />
-        </Pressable>
+        <BackOrMenu icon="close" style={styles.headerBtn} />
         <Text style={styles.headerTitle}>
           {index + 1} of {deck.length}
         </Text>

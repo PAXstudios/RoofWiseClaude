@@ -1,17 +1,6 @@
-// Onboarding — the product loop, told in four animated beats.
-//
-// Design intent (1A "Field Standard", docs/DESIGN_1A.md §2/§6): the full
-// 5-stop meshHero ramp (ink → royalBright → magenta → burnt, the warmest
-// variant in the system) behind glass foreground — replaces the old flat
-// black + Aurora-orb hero. Every scene animates one real step of the
-// RoofWise loop so a contractor understands what they bought before they
-// ever sign in. Skip is always available and always lands on auth —
-// onboarding never traps anyone.
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,16 +16,18 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, {
-  Easing,
   FadeIn,
   FadeInDown,
+  useReducedMotion,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
   withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { RoofWiseBrand } from '@/components/ui/RoofWiseBrand';
+import { useAuthStore } from '@/lib/auth/authStore';
+import { env } from '@/lib/env';
 import { MeshBackground } from '@/components/ui/MeshBackground';
 import {
   PacketScene,
@@ -72,30 +63,30 @@ type Scene = {
 const SCENES: Scene[] = [
   {
     key: 'storm',
-    eyebrow: 'Step 01 · Storm intel',
-    title: 'Know the\nminute it hits',
-    body: 'RoofWise watches NOAA for hail and wind across your service area, then shows you exactly which properties sit under the swath.',
+    eyebrow: '1 of 4 · Storm reports',
+    title: 'Find storm-affected roofs',
+    body: 'Check reported hail and wind near your service area before planning a visit.',
     Illustration: StormScene,
   },
   {
     key: 'scan',
-    eyebrow: 'Step 02 · AI inspection',
-    title: 'Walk it once.\nMiss nothing.',
-    body: 'Point the camera. AI reads every shingle across all 13 damage categories and marks each finding with a severity and a confidence score.',
+    eyebrow: '2 of 4 · Inspection',
+    title: 'Photograph each slope',
+    body: 'Frame the test square, photograph the shingles, and review the damage marked in each image.',
     Illustration: ScanScene,
   },
   {
     key: 'verdict',
-    eyebrow: 'Step 03 · HAAG protocol',
-    title: 'Thresholds,\nnot opinions',
-    body: 'Findings are measured against the material-specific Haag criteria your carrier already uses — so the verdict is the standard, not your word against theirs.',
+    eyebrow: '3 of 4 · Assessment',
+    title: 'Review the findings',
+    body: 'Compare confirmed hits with the threshold for the roof material. The example shows an architectural asphalt test square.',
     Illustration: VerdictScene,
   },
   {
     key: 'packet',
-    eyebrow: 'Step 04 · Claim packet',
-    title: 'Evidence they\ncan’t wave away',
-    body: 'Leave the driveway with a certified report: annotated photos, storm verification, thresholds met, and signatures. Ready for the adjuster.',
+    eyebrow: '4 of 4 · Report',
+    title: 'Assemble the roof report',
+    body: 'Bring the slope photos, measurements and reviewed findings into one report for the property.',
     Illustration: PacketScene,
   },
 ];
@@ -104,17 +95,27 @@ export default function Onboarding() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const complete = useOnboardingStore((s) => s.complete);
+  const session = useAuthStore((s) => s.session);
+  const previouslyCompleted = useOnboardingStore((s) => s.completed);
+  const reducedMotion = useReducedMotion();
   const listRef = useRef<FlatList<Scene>>(null);
   const [index, setIndex] = useState(0);
 
   const isLast = index === SCENES.length - 1;
 
-  // Onboarding is never a gate. Finishing and skipping both land on auth;
-  // the only difference is whether the user saw the pitch.
   const leave = useCallback(() => {
     complete();
-    router.replace('/welcome');
-  }, [complete, router]);
+    if (session || (previouslyCompleted && !env.REQUIRE_AUTH)) {
+      router.dismissTo('/(tabs)');
+    } else {
+      router.replace('/welcome');
+    }
+  }, [complete, previouslyCompleted, router, session]);
+
+  const enterWorkspace = () => {
+    complete();
+    router.dismissTo('/(tabs)');
+  };
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -131,33 +132,25 @@ export default function Onboarding() {
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    listRef.current?.scrollToOffset({ offset: (index + 1) * width, animated: true });
+    listRef.current?.scrollToOffset({ offset: (index + 1) * width, animated: !reducedMotion });
   };
 
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="dark" />
-      {/* The system's one signature background — full 5-stop ramp, warmest
-          variant in the app (docs/DESIGN_1A.md §2, "Onboarding 1 / Sign-in"
-          row). Replaces the old flat-black + Aurora-orb hero. */}
       <MeshBackground variant="hero" />
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <View style={styles.topBar}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandMark}>
-              <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandLogo} resizeMode="cover" accessibilityLabel="RoofWise logo" />
-            </View>
-            <Text style={styles.brandName}>RoofWise</Text>
-          </View>
+          <RoofWiseBrand />
 
           <Pressable
             onPress={leave}
             hitSlop={12}
             style={styles.skip}
             accessibilityRole="button"
-            accessibilityLabel="Skip onboarding and go to sign in"
+            accessibilityLabel="Skip onboarding"
           >
             <Text style={styles.skipText}>Skip</Text>
           </Pressable>
@@ -201,41 +194,15 @@ export default function Onboarding() {
             </Pressable>
           </Animated.View>
 
-          <Pressable onPress={leave} hitSlop={10} style={styles.secondary}>
-            <Text style={styles.secondaryText}>
-              {isLast ? 'I’ll explore first' : 'I already have an account'}
-            </Text>
-          </Pressable>
+          {!session && !env.REQUIRE_AUTH && (
+            <Pressable onPress={enterWorkspace} accessibilityRole="button" style={styles.secondary}>
+              <Text style={styles.secondaryText}>Continue as guest</Text>
+            </Pressable>
+          )}
         </View>
       </SafeAreaView>
     </View>
   );
-}
-
-/**
- * Slow ambient drift on the scene art — a few points of translate on the
- * ambient loop, so the hero reads as parallax depth over the mesh rather
- * than a static cutout.
- */
-function AmbientDrift({ children }: { children: React.ReactNode }) {
-  const t = useSharedValue(0);
-
-  useEffect(() => {
-    t.value = withRepeat(
-      withTiming(1, { duration: motion.ambientMs, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true, // reverse so the drift never snaps back
-    );
-  }, [t]);
-
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: t.value * 6 },
-      { translateY: t.value * -8 },
-    ],
-  }));
-
-  return <Animated.View style={style}>{children}</Animated.View>;
 }
 
 function SceneSlide({ scene, active, width }: { scene: Scene; active: boolean; width: number }) {
@@ -248,9 +215,7 @@ function SceneSlide({ scene, active, width }: { scene: Scene; active: boolean; w
       showsVerticalScrollIndicator
     >
       <View style={styles.stageWrap}>
-        <AmbientDrift>
-          <Illustration active={active} />
-        </AmbientDrift>
+        <Illustration active={active} />
       </View>
 
       {active && (
@@ -329,27 +294,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  brandMark: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    backgroundColor: brand.royal,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  brandLogo: { width: '100%', height: '100%' },
-  brandName: {
-    color: colors.onMesh,
-    fontFamily: fontFamily.archivo.bold,
-    fontWeight: fontWeight.bold,
-    fontSize: fontSize.bodyLg,
-    letterSpacing: -0.3,
-  },
-  // Smoke fill/border — the over-ART glass pair (docs/DESIGN_1A.md, see
-  // GlassCard's `onArt`) — reads over every part of the ramp, unlike the
-  // flat `glass.fillLow` tuned for a solid black ground.
   skip: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
@@ -380,42 +324,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   copy: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
     alignItems: 'flex-start',
     alignSelf: 'stretch',
     gap: spacing.sm,
     paddingBottom: spacing.xl,
   },
-  // The "STEP 01 · CAPTURE" convention (docs/DESIGN_1A.md §3/§5). dataLabel's
-  // own doc note: on a mesh hero, use an inverse (light) tone rather than a
-  // brand hue — the copy block sits low on the ramp, near its magenta/burnt
-  // tail, where `brand.burnt` text would nearly disappear into the ground.
-  eyebrow: {
-    ...dataLabel,
-    color: colors.onMesh,
-    opacity: 0.85,
-  },
-  // fontSize.display (34) kept rather than the mock's 44px ceiling — these
-  // titles are hand-wrapped to exactly two lines per scene; 44px risks a
-  // third wrap on a 390px-wide phone. A one-off +4 nudge over `display`
-  // (docs §3: "extend display upward... via a one-off style, not a new
-  // token") gives the hero more presence than the in-app default without
-  // breaking that two-line rhythm.
+  eyebrow: { ...dataLabel, color: colors.tileBlueInk },
   title: {
-    color: colors.onMesh,
-    fontFamily: fontFamily.display,
-    fontWeight: fontWeight.regular,
-    fontSize: fontSize.heroCompact,
-    textTransform: 'uppercase',
-    letterSpacing: -1.2,
-    lineHeight: 42,
+    color: colors.text,
+    fontFamily: fontFamily.archivo.bold,
+    fontSize: fontSize.titleLg,
   },
   body: {
-    color: colors.onMesh,
-    opacity: 0.78,
+    color: colors.textMuted,
     fontFamily: fontFamily.archivo.regular,
-    fontWeight: fontWeight.regular,
-    fontSize: fontSize.bodyLg,
-    lineHeight: 25,
+    fontSize: fontSize.bodyMd,
+    lineHeight: 22,
   },
 
   footer: { flexShrink: 0, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.md },
@@ -429,7 +357,7 @@ const styles = StyleSheet.create({
   // brand-tinted `shadows.hero` is the "coloured shadow" §6 calls for.
   cta: {
     height: touchTarget.sticky,
-    borderRadius: radii.button,
+    borderRadius: radii.pill,
     backgroundColor: brand.burnt,
     flexDirection: 'row',
     alignItems: 'center',

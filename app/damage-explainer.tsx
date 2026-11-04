@@ -1,6 +1,7 @@
-import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
+import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { RichCard } from '@/components/ui/RichCard';
 import {
@@ -157,15 +158,12 @@ const DAMAGE_INFO: Record<
 };
 
 export default function DamageExplainerScreen() {
-  const router = useRouter();
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
+        <BackOrMenu style={styles.headerBtn} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Damage explainer</Text>
           <Text style={styles.sub}>What each HAAG category looks like</Text>

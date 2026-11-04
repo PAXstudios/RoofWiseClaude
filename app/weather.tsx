@@ -16,6 +16,7 @@
  * with the permission-denied state named and routed to the fix.
  */
 
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -146,7 +147,6 @@ const SAFETY_CHIP: Record<SafetyRating, { bg: string; ink: string; icon: Ionicon
 /* ═══════════════════════════ screen ═══════════════════════════════════ */
 
 export default function WeatherScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const saved = useWeatherLocationsStore((s) => s.locations);
@@ -193,14 +193,7 @@ export default function WeatherScreen() {
           this band is the flat ink the gradients start from. */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.xs }]}>
         <View style={styles.headerRow}>
-          <PressableScale
-            style={styles.headerBtn}
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="chevron-back" size={26} color={colors.text} />
-          </PressableScale>
+          <BackOrMenu color={colors.text} style={styles.headerBtn} />
           <View style={styles.headerTitle}>
             <Text style={styles.headerKicker}>WEATHER</Text>
             <Text style={styles.headerName} numberOfLines={1}>

@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { PressableScale } from '@/components/PressableScale';
 import { FadeSlideIn } from '@/components/motion';
 import { MeshBackground } from '@/components/ui/MeshBackground';
@@ -107,9 +108,7 @@ export default function LeadDetail() {
         <View style={styles.empty}>
           <Ionicons name="alert-circle-outline" size={28} color={colors.textSubtle} />
           <Text style={styles.emptyText}>Lead not found.</Text>
-          <PressableScale style={styles.textBtn} onPress={() => router.back()}>
-            <Text style={styles.textBtnLabel}>Back</Text>
-          </PressableScale>
+          <BackOrMenu />
         </View>
       </SafeAreaView>
     );
@@ -277,15 +276,7 @@ export default function LeadDetail() {
           warmer hero. */}
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
-          <PressableScale
-            onPress={() => router.back()}
-            hitSlop={8}
-            style={styles.heroIconBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-          >
-            <Ionicons name="chevron-back" size={22} color={colors.onMesh} />
-          </PressableScale>
+          <BackOrMenu color={colors.onMesh} style={styles.heroIconBtn} />
           <Text style={styles.heroEyebrow} numberOfLines={1}>
             {linkedInspection ? `LEAD · ${linkedInspection.reportId}` : 'LEAD'}
           </Text>

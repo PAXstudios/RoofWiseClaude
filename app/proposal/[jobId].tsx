@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -124,9 +125,7 @@ export default function ProposalView() {
         <View style={styles.empty}>
           <IconChip name="alert-circle-outline" tone="quiet" />
           <Text style={styles.emptyText}>Job not found.</Text>
-          <Pressable style={styles.secondaryBtn} onPress={() => router.back()}>
-            <Text style={styles.secondaryBtnText}>Back</Text>
-          </Pressable>
+          <BackOrMenu />
         </View>
       </SafeAreaView>
     );
@@ -232,9 +231,7 @@ export default function ProposalView() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
+        <BackOrMenu style={styles.headerBtn} />
         <View style={{ flex: 1 }}>
           <Text style={styles.reportId}>{inspection.reportId}</Text>
           <Text style={styles.title}>Proposal</Text>

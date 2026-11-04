@@ -94,12 +94,12 @@ export function RichCard({
           {(title || subtitle) && (
             <View style={styles.headerText}>
               {title && (
-                <Text style={styles.title} numberOfLines={1}>
+                <Text style={styles.title}>
                   {title}
                 </Text>
               )}
               {subtitle && (
-                <Text style={styles.subtitle} numberOfLines={2}>
+                <Text style={styles.subtitle}>
                   {subtitle}
                 </Text>
               )}
@@ -131,7 +131,6 @@ export function RichCard({
         <View
           style={[
             padded && styles.bodyPad,
-            padded && hasHeader && styles.bodyUnderHeader,
             contentStyle,
           ]}
         >
@@ -225,7 +224,6 @@ const styles = StyleSheet.create({
   },
 
   bodyPad: { padding: spacing.lg },
-  bodyUnderHeader: { paddingTop: spacing.lg },
 
   footer: {
     backgroundColor: colors.surfaceMuted,

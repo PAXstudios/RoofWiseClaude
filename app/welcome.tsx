@@ -1,16 +1,6 @@
-// Auth — the terminus of onboarding.
-//
-// Same mesh-and-glass world as the onboarding scenes so the handoff is
-// seamless (1A "Field Standard", docs/DESIGN_1A.md §2 — the "Onboarding 1 /
-// Sign-in" row shares onboarding's exact 115°/full-ramp `hero` variant);
-// the app itself then opens on the paper ground. Three ways in (Apple,
-// Google, email) and a name is required on sign-up: it goes on every HAAG
-// report and proposal this inspector produces, so we ask once, here.
-
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -32,6 +22,8 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
+import { RoofWiseBrand } from '@/components/ui/RoofWiseBrand';
+import { useOnboardingStore } from '@/lib/stores/onboardingStore';
 import { MeshBackground } from '@/components/ui/MeshBackground';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { AppleSignInButton } from '@/components/AppleSignInButton';
@@ -56,17 +48,31 @@ type Mode = 'signin' | 'signup';
 
 export default function Welcome() {
   const router = useRouter();
+  const complete = useOnboardingStore((s) => s.complete);
+  const session = useAuthStore((s) => s.session);
   const signIn = useAuthStore((s) => s.signInWithEmail);
   const signUp = useAuthStore((s) => s.signUpWithEmail);
   const sendReset = useAuthStore((s) => s.sendPasswordReset);
   const loading = useAuthStore((s) => s.loading);
   const toast = useToastStore((s) => s.show);
 
-  const [mode, setMode] = useState<Mode>('signup');
+  const [mode, setMode] = useState<Mode>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      complete();
+      router.dismissTo('/(tabs)');
+    }
+  }, [complete, router, session]);
+
+  const enterAsGuest = () => {
+    complete();
+    router.dismissTo('/(tabs)');
+  };
 
   const isSignUp = mode === 'signup';
 
@@ -105,14 +111,14 @@ export default function Welcome() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       if (isSignUp) {
-        await signUp(email.trim(), password, name);
-        toast({ tone: 'success', title: `Welcome, ${name.trim().split(/\s+/)[0]}` });
+        const signedIn = await signUp(email.trim(), password, name);
+        if (!signedIn) {
+          toast({ tone: 'info', title: 'Check your email', body: 'Confirm your account, then sign in.' });
+          setMode('signin');
+        }
       } else {
         await signIn(email.trim(), password);
       }
-      // dismissTo: pops to the existing tab shell when there is one; when
-      // Welcome is the only route it pops-and-adds, i.e. behaves as replace.
-      router.dismissTo('/(tabs)');
     } catch (e) {
       toast({
         tone: 'danger',
@@ -162,18 +168,29 @@ export default function Welcome() {
             showsVerticalScrollIndicator={false}
           >
             <Animated.View entering={FadeIn.duration(motion.enterMs)} style={styles.header}>
-              <View style={styles.brandMark}>
-                <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandLogo} resizeMode="cover" accessibilityLabel="RoofWise logo" />
-              </View>
+              <RoofWiseBrand />
               <Text style={styles.title}>
-                {isSignUp ? 'Create your\naccount' : 'Welcome\nback'}
+                {isSignUp ? 'Create an account' : 'Sign in to RoofWise'}
               </Text>
               <Text style={styles.subtitle}>
                 {isSignUp
-                  ? 'Your name goes on every report you send to a carrier.'
-                  : 'Sign in to pick up where you left off.'}
+                  ? 'Use your name on the inspection reports you prepare.'
+                  : 'Sign in to sync your jobs and inspections.'}
               </Text>
             </Animated.View>
+
+            {!env.REQUIRE_AUTH && (
+              <Pressable
+                style={styles.explore}
+                onPress={enterAsGuest}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityHint="Opens the workspace on this device"
+              >
+                <Text style={styles.exploreText}>Continue as guest</Text>
+                <Ionicons name="arrow-forward" size={18} color={colors.tileBlueInk} />
+              </Pressable>
+            )}
 
             <Animated.View
               entering={FadeInDown.duration(motion.enterMs).delay(60)}
@@ -314,8 +331,8 @@ export default function Welcome() {
                   <ActivityIndicator color={colors.text} />
                 ) : (
                   <>
-                    <Text style={styles.ctaText}>{isSignUp ? 'Create account' : 'Sign in'}</Text>
-                    <Ionicons name="arrow-forward" size={19} color={colors.text} />
+                    <Text style={[styles.ctaText, (!canSubmit || loading) && { color: colors.textMuted }]}>{isSignUp ? 'Create account' : 'Sign in'}</Text>
+                    <Ionicons name="arrow-forward" size={19} color={canSubmit ? colors.textInverse : colors.textMuted} />
                   </>
                 )}
               </Pressable>
@@ -326,21 +343,6 @@ export default function Welcome() {
                 </Pressable>
               )}
             </Animated.View>
-
-            {/* Drift #12: when auth isn't required, let people look around. */}
-            {!env.REQUIRE_AUTH && (
-              <Animated.View entering={FadeInDown.duration(motion.enterMs).delay(260)}>
-                <Pressable
-                  style={styles.explore}
-                  onPress={() => router.dismissTo('/(tabs)')}
-                  accessibilityRole="button"
-                  accessibilityLabel="Explore the app without an account"
-                >
-                  <Text style={styles.exploreText}>Explore without an account</Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.onMesh} style={styles.exploreIcon} />
-                </Pressable>
-              </Animated.View>
-            )}
 
             <Text style={styles.legal}>
               By continuing you agree to the RoofWise Terms of Service and Privacy Policy.
@@ -384,27 +386,11 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.lg },
 
   header: { gap: spacing.sm, marginTop: spacing.md },
-  brandMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: brand.royal,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-    overflow: 'hidden',
-  },
-  brandLogo: { width: '100%', height: '100%' },
-  // Same one-off +4 hero size as app/onboarding.tsx's title — the two
-  // screens share the mesh's exact 115° ramp (docs §2), so they share its
-  // type scale too.
   title: {
-    color: colors.onMesh,
-    fontFamily: fontFamily.heading,
-    fontWeight: fontWeight.regular,
-    fontSize: fontSize.display + 4,
-    letterSpacing: -1.2,
-    lineHeight: 42,
+    color: colors.text,
+    fontFamily: fontFamily.archivo.bold,
+    fontSize: fontSize.titleLg,
+    marginTop: spacing.lg,
   },
   subtitle: {
     color: colors.onMesh,
@@ -539,6 +525,10 @@ const styles = StyleSheet.create({
   },
 
   explore: {
+    backgroundColor: colors.surface,
+    borderColor: colors.headerBorder,
+    borderWidth: 1,
+    borderRadius: radii.pill,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -546,13 +536,11 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.standard,
   },
   exploreText: {
-    color: colors.onMesh,
-    opacity: 0.6,
-    fontFamily: fontFamily.archivo.medium,
+    color: colors.tileBlueInk,
+    fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.medium,
     fontSize: fontSize.bodyMd,
   },
-  exploreIcon: { opacity: 0.6 },
 
   legal: {
     color: colors.onMesh,

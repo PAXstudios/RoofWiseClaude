@@ -3,11 +3,10 @@
 // editable customer-message templates rule 10 offers. Nothing here can send
 // anything — the engine only ever prepares a message; a screen offers it.
 
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AUTOMATION_RULES, type AutomationRuleId } from '@/lib/services/automations';
@@ -53,7 +52,6 @@ function relativeTime(iso: string): string {
 }
 
 export default function AutomationsScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const enabledMap = useAutomationStore((s) => s.enabled);
   const setEnabled = useAutomationStore((s) => s.setEnabled);
@@ -74,9 +72,7 @@ export default function AutomationsScreen() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
+        <BackOrMenu color={colors.text} style={styles.headerBtn} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Automations</Text>
           <Text style={styles.sub}>{onCount} of {AUTOMATION_RULES.length} rules on</Text>

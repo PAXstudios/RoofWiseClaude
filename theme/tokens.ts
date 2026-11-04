@@ -212,16 +212,14 @@ export const gradients = {
 } satisfies Record<string, GradientStops>;
 
 export const radii = {
-  sm: 8,
-  md: 12,
-  card: 12,
-  lg: 20,
-  xl: 24,
+  sm: 10,
+  md: 16,
+  card: 22,
+  lg: 24,
+  xl: 32,
   pill: 999,
-
-  // iOS-17 control shapes — buttons and inputs stop being full pills.
-  button: 10,
-  control: 10,
+  button: 28,
+  control: 16,
 };
 
 export const spacing = {
@@ -234,28 +232,29 @@ export const spacing = {
   xxxl: 32,
 };
 
-// Type ramp from spec — Apple-system font, named sizes only.
+// Compact screen titles leave room for property photography and field data.
+// Keep small captions and control labels legible at default accessibility size.
 export const fontSize = {
   caption: 11,
   bodySm: 13,
-  bodyMd: 15,
-  bodyLg: 17,
-  titleSm: 22,    // intentionally 22, not 18 — from real usage
-  titleMd: 20,
-  titleLg: 24,
-  titleXl: 28,
-  display: 34,
-  hero: 48,
-  heroCompact: 40,
-  score: 64,
+  bodyMd: 14,
+  bodyLg: 16,
+  titleSm: 18,
+  titleMd: 19,
+  titleLg: 22,
+  titleXl: 24,
+  display: 28,
+  hero: 36,
+  heroCompact: 30,
+  score: 56,
 
   // Backwards-compatible aliases used in existing components.
   xs: 11,
   sm: 13,
-  md: 15,
-  lg: 18,
-  xl: 22,
-  xxl: 28,
+  md: 14,
+  lg: 16,
+  xl: 18,
+  xxl: 24,
 };
 
 export const fontWeight = {
@@ -281,7 +280,7 @@ export const fontWeight = {
 // weight lines up for platforms that only honor one of the two).
 export const fontFamily = {
   display: 'RoofWiseDisplay',
-  heading: 'RoofWiseHeading',
+  heading: 'Archivo_700Bold',
   archivo: {
     regular: 'Archivo_400Regular',
     medium: 'Archivo_500Medium',
@@ -296,8 +295,7 @@ export const fontFamily = {
   }) as string,
 };
 
-// Condensed display lettering is reserved for headlines and key readouts.
-// Body copy and controls retain Archivo for readability in the field.
+// Keep display lettering for brand moments. Screen headings use upright Archivo.
 export const typography = {
   display: {
     fontFamily: fontFamily.display,
@@ -331,34 +329,20 @@ export const touchTarget = {
   sticky: 88,        // sticky primary CTAs in thumb zone
 };
 
-// Navy anchors navigation; burnt orange identifies the current destination.
+// A short orange marker and filled glyph identify the current tab.
 export const navigationDock = {
-  ground: colors.bg,
-  surface: colors.navy,
-  selectedFill: colors.accent,
-  selectedInk: colors.textInverse,
-  inactiveInk: colors.onDarkMuted,
-  pressedFill: colors.navyRaised,
-  border: colors.navyBorder,
-  focusRing: colors.textInverse,
-  edgeInset: spacing.sm,
-  bottomInset: spacing.xs,
-  topInset: spacing.sm,
-  height: 72,
+  surface: colors.surface,
+  selectedFill: colors.surface,
+  selectedInk: colors.navy,
+  inactiveInk: colors.textMuted,
+  pressedFill: colors.brandSoft,
+  border: colors.border,
+  indicator: colors.accent,
+  focusRing: colors.brand,
+  height: touchTarget.preferred,
   maxWidth: 480,
   iconSize: 22,
   selectedIconScale: 1.06,
-  shadow: Platform.select({
-    ios: {
-      shadowColor: colors.navy,
-      shadowOpacity: 0.14,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 6 },
-    },
-    android: { elevation: 8 },
-    web: { boxShadow: '0 2px 4px rgba(11,26,92,0.06), 0 8px 24px rgba(11,26,92,0.12)' },
-    default: {},
-  }) as ViewStyle,
 };
 
 // iOS-subtle: cards lean on the grouped ground + hairline, not on shadow.

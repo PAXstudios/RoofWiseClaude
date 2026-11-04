@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useMemo, useState } from 'react';
 import {
   View,
@@ -116,9 +117,7 @@ export default function SearchScreen() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
+        <BackOrMenu style={styles.headerBtn} />
         <View style={styles.searchRow}>
           <Ionicons name="search" size={18} color={colors.slate} />
           <TextInput

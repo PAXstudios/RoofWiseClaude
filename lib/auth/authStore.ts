@@ -27,7 +27,7 @@ type AuthState = {
   signInWithEmail: (email: string, password: string) => Promise<void>;
   /** `fullName` is required at the UI layer; it becomes Supabase user
    *  metadata and seeds the inspector profile that HAAG reports cite. */
-  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<boolean>;
   signInWithAppleIdToken: (idToken: string, nonce?: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -68,7 +68,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     assertConfigured(set);
     set({ loading: true, error: null });
     const name = fullName.trim();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: name } },
@@ -82,6 +82,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const store = useInspectorProfileStore.getState();
       if (!store.profile.fullName) store.update({ fullName: name });
     }
+    return Boolean(data.session);
   },
 
   signInWithAppleIdToken: async (idToken, nonce) => {

@@ -22,6 +22,7 @@
 // a position, a street, or a house (Drift #5): no fix → "waiting", no
 // geocoder → "GPS only", no record → the reason.
 
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -563,15 +564,7 @@ export default function DoorKnockingScreen() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={10}
-          style={styles.headerBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
+        <BackOrMenu style={styles.headerBtn} />
         <View style={styles.headerText}>
           <Text style={styles.title}>Door Knocking</Text>
           <Text style={styles.statsLine} numberOfLines={1}>

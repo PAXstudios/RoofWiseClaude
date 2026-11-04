@@ -1,3 +1,4 @@
+import { BackOrMenu } from '@/components/shell/WorkspaceMenu';
 import { useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -207,7 +208,6 @@ const webStyles = StyleSheet.create({
 });
 
 function MileageNative() {
-  const router = useRouter();
   const active = useMileageStore((s) => s.active);
   const trips = useMileageStore((s) => s.trips);
   const start = useMileageStore((s) => s.start);
@@ -335,9 +335,7 @@ function MileageNative() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.navy} />
-        </Pressable>
+        <BackOrMenu style={styles.headerBtn} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Mileage</Text>
           <Text style={styles.sub}>

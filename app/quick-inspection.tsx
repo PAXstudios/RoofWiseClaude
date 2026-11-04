@@ -1,3 +1,4 @@
+import { WorkspaceMenu } from '@/components/shell/WorkspaceMenu';
 // Quick Inspection — the camera.
 //
 // A clean viewfinder by default (the iOS-17-Camera idea): the shutter, the
@@ -31,6 +32,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   Stack,
   useFocusEffect,
+  useCanGoBack,
   useLocalSearchParams,
   useRootNavigationState,
   useRouter,
@@ -236,6 +238,7 @@ function sleep(ms: number): Promise<void> {
 
 function QuickInspectionNative() {
   const router = useRouter();
+  const canGoBack = useCanGoBack();
   const { jobId } = useLocalSearchParams<{ jobId?: string }>();
   const attachRawPhotos = useInspectionStore((s) => s.attachRawPhotos);
   const createInspection = useInspectionStore((s) => s.create);
@@ -1391,9 +1394,11 @@ function QuickInspectionNative() {
           <Pressable style={styles.permBtn} onPress={requestPermission}>
             <Text style={styles.permBtnText}>Enable camera</Text>
           </Pressable>
-          <Pressable onPress={() => router.back()} style={styles.permLink}>
-            <Text style={styles.linkText}>Not now</Text>
-          </Pressable>
+          {canGoBack ? (
+            <Pressable onPress={() => router.back()} style={styles.permLink}>
+              <Text style={styles.linkText}>Not now</Text>
+            </Pressable>
+          ) : <WorkspaceMenu />}
         </View>
       </SafeAreaView>
     );
