@@ -570,7 +570,7 @@ function AddActualSheet({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   body: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
-  intro: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  intro: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
   sectionSpacing: { marginBottom: spacing.sm },
 
   buildCta: {
@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card,
   },
-  placeholderText: { color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },
+  placeholderText: { fontFamily: fontFamily.archivo.regular, color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },
 
   cardBody: { gap: spacing.sm },
   cardTopRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
@@ -616,24 +616,24 @@ const styles = StyleSheet.create({
   previewText: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.semibold, color: colors.brand },
 
   sigBox: { backgroundColor: colors.fillQuiet, borderRadius: radii.control, padding: spacing.sm },
-  cardSub: { fontSize: fontSize.bodyMd, color: colors.textMuted },
+  cardSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted },
 
-  signBody: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
+  signBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
 
   budgetBody: { gap: spacing.md },
   bandStrip: { borderRadius: radii.control, padding: spacing.md, gap: 2 },
   bandValue: { fontSize: fontSize.titleMd, fontFamily: fontFamily.archivo.bold, fontVariant: ['tabular-nums'] },
-  bandLabel: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
+  bandLabel: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold },
   budgetRow: { flexDirection: 'row', gap: spacing.md },
   statCell: { flex: 1, gap: 1 },
   statValue: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, color: colors.text, fontVariant: ['tabular-nums'] },
-  statLabel: { fontSize: fontSize.caption, color: colors.textSubtle, textTransform: 'uppercase', letterSpacing: 0.4 },
+  statLabel: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle, textTransform: 'uppercase', letterSpacing: 0.4 },
 
   actualsList: { gap: spacing.xs },
   actualRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
-  actualLabel: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
-  actualSub: { fontSize: fontSize.caption, color: colors.textSubtle },
-  actualAmount: { fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
+  actualLabel: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
+  actualSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle },
+  actualAmount: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
   removeBtn: { width: touchTarget.small, height: touchTarget.small, alignItems: 'center', justifyContent: 'center' },
 
   addActualBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: touchTarget.standard, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
@@ -642,15 +642,15 @@ const styles = StyleSheet.create({
   kindRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   kindChip: { minHeight: touchTarget.small, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: colors.fillQuiet, alignItems: 'center', justifyContent: 'center' },
   kindChipActive: { backgroundColor: colors.brand },
-  kindChipText: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
+  kindChipText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.text },
   kindChipTextActive: { color: colors.textInverse },
-  amountInput: { minHeight: touchTarget.standard, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, padding: spacing.md, backgroundColor: colors.fillQuiet, borderRadius: radii.control },
-  labelInput: { minHeight: touchTarget.standard, fontSize: fontSize.bodyMd, color: colors.text, padding: spacing.md, backgroundColor: colors.fillQuiet, borderRadius: radii.control },
+  amountInput: { fontFamily: fontFamily.archivo.bold, minHeight: touchTarget.standard, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, padding: spacing.md, backgroundColor: colors.fillQuiet, borderRadius: radii.control },
+  labelInput: { fontFamily: fontFamily.archivo.regular, minHeight: touchTarget.standard, fontSize: fontSize.bodyMd, color: colors.text, padding: spacing.md, backgroundColor: colors.fillQuiet, borderRadius: radii.control },
   saveActualBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, height: touchTarget.standard, borderRadius: radii.button, backgroundColor: colors.brand },
   saveActualText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold },
 
   docRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   docBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: touchTarget.standard, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
   docBtnText: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, color: colors.text },
-  docNote: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: spacing.sm, lineHeight: 15 },
+  docNote: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle, marginTop: spacing.sm, lineHeight: 15 },
 });

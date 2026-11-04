@@ -269,7 +269,7 @@ export default function LeadDetail() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <MeshBackground variant="cool" />
 
       {/* The bluer, no-orange cut of the mesh (docs/DESIGN_1A.md §2/§6) —
@@ -820,7 +820,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: glass.border,
   },
-  heroActionPrimary: { backgroundColor: colors.onMesh, borderWidth: 0 },
+  heroActionPrimary: { backgroundColor: colors.brandSoft, borderWidth: 0 },
   heroActionDisabled: { opacity: 0.4 },
   heroActionText: {
     fontSize: fontSize.caption,

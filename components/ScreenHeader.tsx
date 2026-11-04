@@ -12,6 +12,7 @@ import {
   fontWeight,
   spacing,
   touchTarget,
+  typography,
 } from '@/theme/tokens';
 
 type Props = {
@@ -44,7 +45,7 @@ export function ScreenHeader({ title, subtitle, back, right }: Props) {
       <View
         style={[styles.inlineRow, { marginTop: -insets.top, paddingTop: insets.top }]}
       >
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <MeshBackground variant="cool" />
         <Pressable
           onPress={onBack}
@@ -75,7 +76,7 @@ export function ScreenHeader({ title, subtitle, back, right }: Props) {
     <View
       style={[styles.largeWrap, { marginTop: -insets.top, paddingTop: insets.top + spacing.sm }]}
     >
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <MeshBackground variant="home" />
       <View style={styles.largeRow}>
         <Text style={styles.largeTitle} numberOfLines={1}>
@@ -97,6 +98,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
     overflow: 'hidden',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   largeRow: {
     flexDirection: 'row',
@@ -104,10 +107,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   largeTitle: {
+    ...typography.heading,
     flex: 1,
-    fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
     color: colors.onMesh,
     letterSpacing: -0.5,
   },
@@ -120,6 +121,8 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingBottom: spacing.xs,
     overflow: 'hidden',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   backBtn: {
     width: touchTarget.standard,
@@ -138,7 +141,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.regular,
-    color: 'rgba(242, 240, 231, 0.72)',
+    color: colors.textMuted,
     marginTop: 2,
   },
 });

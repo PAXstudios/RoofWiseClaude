@@ -41,7 +41,8 @@ import {
 } from '@/theme/tokens';
 import { HAAG_THRESHOLDS } from '@/lib/services/haagThresholds';
 
-const STAGE = 260;
+export const ONBOARDING_SCENE_SIZE = 260;
+const STAGE = ONBOARDING_SCENE_SIZE;
 
 /** The number the verdict scene teaches — the engine's own, never a copy. */
 const ASPHALT_THRESHOLD = HAAG_THRESHOLDS.architectural_asphalt.hitsPerTestSquare;
@@ -104,12 +105,12 @@ export function StormScene({ active }: SceneProps) {
             cy={STAGE / 2}
             r={(STAGE / 2) * r - 2}
             fill="none"
-            stroke={glass.border}
+            stroke={glass.lightBorder}
             strokeWidth={1}
           />
         ))}
-        <Line x1={6} y1={STAGE / 2} x2={STAGE - 6} y2={STAGE / 2} stroke={glass.border} strokeWidth={1} />
-        <Line x1={STAGE / 2} y1={6} x2={STAGE / 2} y2={STAGE - 6} stroke={glass.border} strokeWidth={1} />
+        <Line x1={6} y1={STAGE / 2} x2={STAGE - 6} y2={STAGE / 2} stroke={glass.lightBorder} strokeWidth={1} />
+        <Line x1={STAGE / 2} y1={6} x2={STAGE / 2} y2={STAGE - 6} stroke={glass.lightBorder} strokeWidth={1} />
       </Svg>
 
       <Animated.View style={[StyleSheet.absoluteFill, sweepStyle]}>
@@ -436,13 +437,13 @@ const styles = StyleSheet.create({
     width: '92%',
     borderRadius: radii.lg,
     padding: spacing.lg,
-    backgroundColor: glass.smokeFill,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: glass.smokeBorder,
+    borderColor: colors.border,
     gap: spacing.sm,
   },
   verdictLabel: {
-    color: colors.textInverse,
+    color: colors.text,
     fontFamily: fontFamily.mono,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
@@ -450,15 +451,15 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   verdictRule: {
-    color: colors.textInverse,
-    opacity: 0.62,
+    color: colors.text,
+    opacity: 1,
     fontFamily: fontFamily.mono,
     fontSize: fontSize.caption,
   },
   gaugeTrack: {
     height: 14,
     borderRadius: 7,
-    backgroundColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: colors.border,
     overflow: 'hidden',
     marginTop: spacing.sm,
     justifyContent: 'center',
@@ -479,14 +480,14 @@ const styles = StyleSheet.create({
   },
   gaugeLegend: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
   gaugeCount: {
-    color: colors.textInverse,
+    color: colors.text,
     fontFamily: fontFamily.mono,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.semibold,
   },
   gaugeThresholdLabel: {
-    color: colors.textInverse,
-    opacity: 0.5,
+    color: colors.text,
+    opacity: 1,
     fontFamily: fontFamily.mono,
     fontSize: fontSize.caption,
   },
@@ -517,11 +518,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     borderWidth: 1,
   },
-  sheetBack: { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: glass.border },
-  sheetMid: { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: glass.border },
+  sheetBack: { backgroundColor: colors.brandSoft, borderColor: colors.border },
+  sheetMid: { backgroundColor: colors.surfaceMuted, borderColor: colors.border },
   sheetFront: {
-    backgroundColor: '#F7F8FC',
-    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     padding: spacing.lg,
     gap: spacing.sm,
   },
@@ -529,7 +530,7 @@ const styles = StyleSheet.create({
   sheetMark: { width: 22, height: 22, borderRadius: 7, backgroundColor: brand.royal },
   sheetHeaderBars: { flex: 1, gap: 4 },
   sheetHeaderBar: { height: 6, borderRadius: 3, backgroundColor: brand.royalInk, opacity: 0.8, width: '74%' },
-  sheetRow: { height: 7, borderRadius: 4, backgroundColor: '#C9CEE0' },
+  sheetRow: { height: 7, borderRadius: 4, backgroundColor: colors.borderStrong },
   sheetStampRow: { marginTop: 'auto', alignItems: 'flex-end' },
   sheetStamp: {
     borderWidth: 2,

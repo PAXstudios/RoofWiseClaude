@@ -1021,8 +1021,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.text,
     letterSpacing: -0.5,
   },

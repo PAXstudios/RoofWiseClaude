@@ -901,7 +901,7 @@ function PipelineCard({
   // amount picked out in burnt-light — the one place the board celebrates
   // instead of nagging (docs/DESIGN_1A.md §6). Board only, so the dense List
   // view keeps its flat white-card language.
-  const dark = variant === 'board' && leadStageColumn(item.stage) === 'signed';
+  const dark = false; // The approved mockup keeps signed cards on a white surface.
   const topBadge = cardTopBadge(item, tone);
   const origin = pipelineOrigin(item);
 
@@ -1291,13 +1291,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
     overflow: 'hidden',
-    backgroundColor: brand.royalInk,
+    backgroundColor: colors.surface,
   },
   mastheadTopRow: { flexDirection: 'row', alignItems: 'center' },
   mastheadHeading: { flex: 1 },
   summaryEyebrow: { ...dataLabel, color: colors.onMesh, opacity: 0.68 },
   compactMasthead: { paddingTop: spacing.md, paddingBottom: spacing.md },
-  compactTitle: { fontSize: fontSize.titleXl },
+  compactTitle: { fontFamily: fontFamily.heading, fontSize: fontSize.titleXl },
   compactToolbar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
   compactSegmentedWrap: { flex: 1, paddingHorizontal: 0, paddingVertical: 0 },
   filterTrigger: { minHeight: touchTarget.standard, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.button, backgroundColor: colors.fillQuiet },
@@ -1311,15 +1311,15 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: glass.borderStrong,
+    borderColor: colors.border,
   },
   mastheadTitle: {
     marginTop: spacing.xs,
     fontSize: fontSize.display,
-    fontFamily: fontFamily.archivo.extrabold,
-    fontWeight: fontWeight.extrabold,
+    fontFamily: fontFamily.heading,
+    fontWeight: fontWeight.regular,
     color: colors.onMesh,
     letterSpacing: -0.8,
   },
@@ -1340,7 +1340,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
   },
   mastheadFilterActive: { backgroundColor: colors.surface },
   mastheadFilterText: { color: colors.onMesh, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption },
@@ -1352,7 +1352,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
   },
   mastheadSortText: { color: colors.onMesh, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption },
 
@@ -1584,7 +1584,7 @@ const styles = StyleSheet.create({
   },
   // Signed column, board view only — solid ink fill, the one card on the
   // board that celebrates instead of nagging (docs/DESIGN_1A.md §6).
-  cardDark: { backgroundColor: brand.royalInk, borderColor: brand.royalInk },
+  cardDark: { backgroundColor: colors.surface, borderColor: colors.border },
   cardAccent: { width: 4, borderTopLeftRadius: radii.card, borderBottomLeftRadius: radii.card },
   cardBody: { flex: 1, padding: spacing.lg, gap: spacing.sm },
   cardOpen: { gap: spacing.sm },
@@ -1594,7 +1594,7 @@ const styles = StyleSheet.create({
   topBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radii.control },
   topBadgeText: { ...dataLabel },
   topBadgeId: { ...dataLabel, color: colors.textSubtle },
-  topBadgeIdDark: { color: colors.onMesh, opacity: 0.6 },
+  topBadgeIdDark: { color: colors.textMuted },
 
   cardTopRow: { flexDirection: 'row', gap: spacing.md },
   cardThumb: { width: 52, height: 52, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },

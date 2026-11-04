@@ -394,8 +394,8 @@ const styles = StyleSheet.create({
   reportId: { fontSize: fontSize.caption, fontFamily: fontFamily.mono, color: colors.slate, fontWeight: fontWeight.semibold },
   title: {
     fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.navy,
   },
 
@@ -471,8 +471,8 @@ const styles = StyleSheet.create({
   },
   grandValue: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.extrabold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.display,
     color: colors.orange,
   },
 

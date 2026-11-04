@@ -16,31 +16,31 @@
 // defined once here, so no HUD component reaches for `brand.royal` itself.
 
 import { StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
-import { brand, colors, fontFamily, fontSize, fontWeight, glass, radii, touchTarget } from '@/theme/tokens';
+import { brand, colors, fontFamily, fontSize, fontWeight, radii, touchTarget } from '@/theme/tokens';
 
 /** A 56pt round smoke-glass button. */
 export const hudDisc: ViewStyle = {
   width: touchTarget.standard,
   height: touchTarget.standard,
   borderRadius: radii.pill,
-  backgroundColor: glass.smokeFill,
+  backgroundColor: colors.surface,
   borderWidth: StyleSheet.hairlineWidth * 2,
-  borderColor: glass.smokeBorder,
+  borderColor: colors.borderStrong,
   alignItems: 'center',
   justifyContent: 'center',
 };
 
 /** The same surface as a rounded rectangle (pills, strips, drawers). */
 export const hudPanel: ViewStyle = {
-  backgroundColor: glass.smokeFill,
+  backgroundColor: colors.surface,
   borderWidth: StyleSheet.hairlineWidth * 2,
-  borderColor: glass.smokeBorder,
+  borderColor: colors.borderStrong,
 };
 
 /** Chosen state for an on/off TOGGLE: white fill, ink text. */
 export const hudActive: ViewStyle = {
-  backgroundColor: colors.surface,
-  borderColor: colors.surface,
+  backgroundColor: colors.brandSoft,
+  borderColor: colors.brand,
 };
 
 /**
@@ -54,20 +54,20 @@ export const hudSelected: ViewStyle = {
   borderColor: brand.royal,
 };
 
-export const hudInk = colors.textInverse;
+export const hudInk = colors.text;
 export const hudInkActive = colors.text;
 /** Text/glyph colour on a `hudSelected` fill — the mesh system's "white". */
-export const hudSelectedInk = colors.onMesh;
+export const hudSelectedInk = colors.textInverse;
 
 export const hudLabel: TextStyle = {
-  color: colors.textInverse,
+  color: colors.text,
   fontSize: fontSize.bodySm,
   fontWeight: fontWeight.semibold,
   fontFamily: fontFamily.archivo.semibold,
 };
 
 export const hudCaption: TextStyle = {
-  color: colors.textInverse,
+  color: colors.text,
   opacity: 0.78,
   fontSize: fontSize.caption,
   fontWeight: fontWeight.semibold,

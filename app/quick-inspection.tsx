@@ -36,6 +36,7 @@ import {
   useRouter,
 } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { prepareCapturedPhoto } from '@/lib/services/imagePipeline';
@@ -1382,7 +1383,7 @@ function QuickInspectionNative() {
       <SafeAreaView style={styles.permRoot} edges={['top', 'bottom']}>
         <Stack.Screen options={SCREEN_OPTIONS} />
         <View style={styles.permWrap}>
-          <Ionicons name="camera-outline" size={40} color={colors.textInverse} />
+          <Ionicons name="camera-outline" size={40} color={colors.brand} />
           <Text style={styles.permTitle}>Camera access needed</Text>
           <Text style={styles.permBody}>
             RoofWise uses the camera to capture roof photos for HAAG-protocol analysis.
@@ -1483,14 +1484,14 @@ function QuickInspectionNative() {
         <Ionicons
           name={slopeMode === 'auto' ? 'compass-outline' : 'pin'}
           size={18}
-          color={colors.textInverse}
+          color={colors.text}
         />
         <Text style={styles.slopePillSlope}>{slope}</Text>
         <Text style={styles.slopePillText} numberOfLines={1}>
           {slopeStatus}
           {photos.length > 0 ? ` · ${photos.length}` : ''}
         </Text>
-        <Ionicons name="chevron-down" size={16} color={colors.textInverse} />
+        <Ionicons name="chevron-down" size={16} color={colors.text} />
       </Pressable>
 
       <RailButton
@@ -1613,6 +1614,7 @@ function QuickInspectionNative() {
   return (
     <View style={styles.root}>
       <Stack.Screen options={SCREEN_OPTIONS} />
+      <StatusBar style="dark" />
       <CameraView
         ref={camRef}
         style={StyleSheet.absoluteFill}
@@ -1623,6 +1625,7 @@ function QuickInspectionNative() {
         animateShutter={!liveOverlay}
         onCameraReady={() => setCameraReady(true)}
       />
+      <View pointerEvents="none" style={[styles.statusGround, { height: insets.top }]} />
 
       {/* Viewfinder layers — grid, live boxes, level — all non-interactive. */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -1766,6 +1769,7 @@ function QuickInspectionNative() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: brand.black },
+  statusGround: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.surface },
   pressed: { opacity: 0.75 },
 
   // ── Primary chrome ─────────────────────────────────────────────────────
@@ -1793,7 +1797,7 @@ const styles = StyleSheet.create({
   // dataLabel's caption size: this is the one thing a roofer reads at a
   // glance, not an auxiliary meta tag.
   slopePillSlope: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
     fontFamily: fontFamily.mono,
@@ -1803,7 +1807,7 @@ const styles = StyleSheet.create({
   // literal data-label case: mono, uppercase, tracked.
   slopePillText: {
     ...dataLabel,
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.85,
     flexShrink: 1,
   },
@@ -1823,7 +1827,7 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   captionText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,
@@ -1863,17 +1867,17 @@ const styles = StyleSheet.create({
   rail: { position: 'absolute', right: spacing.lg },
   instruments: { position: 'absolute', left: spacing.lg, maxWidth: '60%' },
 
-  permRoot: { flex: 1, backgroundColor: colors.navy },
+  permRoot: { flex: 1, backgroundColor: colors.bg },
   permWrap: { flex: 1, padding: spacing.xxl, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   permTitle: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     textAlign: 'center',
   },
   permBody: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.82,
     fontSize: fontSize.bodyMd,
     fontFamily: fontFamily.archivo.regular,
@@ -1900,5 +1904,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
   },
-  linkText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular },
+  linkText: { color: colors.brand, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular },
 });

@@ -243,8 +243,8 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   emptyTitle: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.semibold,
-    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.navy,
     marginTop: spacing.sm,
   },

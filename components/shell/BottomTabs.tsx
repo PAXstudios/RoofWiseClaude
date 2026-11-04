@@ -181,7 +181,7 @@ function TabButton({
           <Ionicons
             name={(active ? activeIcon : icon) as any}
             size={navigationDock.iconSize}
-            color={active ? colors.text : colors.textMuted}
+            color={active ? navigationDock.selectedInk : colors.textMuted}
           />
         </Animated.View>
         <Text numberOfLines={1} style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     maxWidth: navigationDock.maxWidth,
     marginBottom: navigationDock.bottomInset,
     minHeight: navigationDock.height,
-    borderRadius: radii.pill,
+    borderRadius: radii.card,
     backgroundColor: navigationDock.surface,
     borderWidth: 1,
     borderColor: navigationDock.border,
@@ -245,6 +245,6 @@ const styles = StyleSheet.create({
   },
   tabLabelActive: {
     fontFamily: fontFamily.archivo.bold,
-    color: colors.text,
+    color: navigationDock.selectedInk,
   },
 });

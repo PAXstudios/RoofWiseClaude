@@ -360,9 +360,9 @@ const styles = StyleSheet.create({
   // The dial's own "big location line" — the mock's heaviest number gets the
   // heaviest cut of Archivo (docs/DESIGN_1A.md §3).
   value: {
-    fontFamily: fontFamily.archivo.extrabold,
+    fontFamily: fontFamily.display,
     fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
+    fontWeight: fontWeight.regular,
     color: colors.text,
     fontVariant: ['tabular-nums'],
     letterSpacing: -1,

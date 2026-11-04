@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  brandingChevron: { fontSize: fontSize.titleMd, color: colors.textSubtle },
+  brandingChevron: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.titleMd, color: colors.textSubtle },
   toggleText: { flex: 1 },
   toggleLabel: {
     fontSize: fontSize.bodyMd,

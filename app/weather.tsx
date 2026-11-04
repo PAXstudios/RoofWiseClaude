@@ -94,7 +94,7 @@ import {
   useWeatherLocationsStore,
   type WeatherLocation,
 } from '@/lib/stores/weatherLocationsStore';
-import {
+import { fontFamily,
   brand,
   colors,
   fontSize,
@@ -187,7 +187,7 @@ export default function WeatherScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
 
       {/* Header on the sky. The pager pages carry their own hero gradient, so
           this band is the flat ink the gradients start from. */}
@@ -199,7 +199,7 @@ export default function WeatherScreen() {
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <Ionicons name="chevron-back" size={26} color={colors.textInverse} />
+            <Ionicons name="chevron-back" size={26} color={colors.text} />
           </PressableScale>
           <View style={styles.headerTitle}>
             <Text style={styles.headerKicker}>WEATHER</Text>
@@ -215,7 +215,7 @@ export default function WeatherScreen() {
               accessibilityLabel="Manage saved locations"
             >
               <View style={styles.headerBtnFill}>
-                <Ionicons name="list" size={20} color={colors.textInverse} />
+                <Ionicons name="list" size={20} color={colors.text} />
               </View>
             </PressableScale>
           )}
@@ -226,7 +226,7 @@ export default function WeatherScreen() {
             accessibilityLabel="Add a location"
           >
             <View style={styles.headerBtnFill}>
-              <Ionicons name="add" size={24} color={colors.textInverse} />
+              <Ionicons name="add" size={24} color={colors.text} />
             </View>
           </PressableScale>
         </View>
@@ -1208,13 +1208,13 @@ function describe(err: unknown): string {
 /* ═══════════════════════════ styles ═══════════════════════════════════ */
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: brand.royalInk },
+  root: { flex: 1, backgroundColor: colors.bg },
 
   header: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
     gap: spacing.xs,
-    backgroundColor: brand.royalInk,
+    backgroundColor: colors.surface,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   headerBtn: {
@@ -1227,23 +1227,23 @@ const styles = StyleSheet.create({
     width: touchTarget.small,
     height: touchTarget.small,
     borderRadius: radii.pill,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.border,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: { flex: 1, gap: 2 },
-  headerKicker: {
+  headerKicker: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
     letterSpacing: 1.2,
-    color: colors.brandSoft,
+    color: colors.textMuted,
   },
-  headerName: {
+  headerName: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
-    color: colors.textInverse,
+    color: colors.text,
     letterSpacing: -0.3,
   },
   dots: { paddingBottom: spacing.xs },
@@ -1260,7 +1260,7 @@ const styles = StyleSheet.create({
   },
   heroBody: { padding: spacing.xl, gap: spacing.lg },
   placeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
-  placeText: { flex: 1, fontSize: fontSize.bodySm, color: colors.brandSoft, lineHeight: 18 },
+  placeText: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodySm, color: colors.brandSoft, lineHeight: 18 },
 
   flagRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   nowChip: {
@@ -1274,7 +1274,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: glass.smokeBorder,
   },
-  nowChipText: {
+  nowChipText: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
     letterSpacing: 1.2,
@@ -1288,28 +1288,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
   },
-  safetyChipText: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, letterSpacing: 0.6 },
+  safetyChipText: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.caption, fontWeight: fontWeight.bold, letterSpacing: 0.6 },
 
   readingRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
-  temp: {
+  temp: { fontFamily: fontFamily.archivo.regular,
     fontSize: TEMP_SIZE,
     lineHeight: TEMP_SIZE,
     fontWeight: fontWeight.regular,
     color: colors.textInverse,
     fontVariant: ['tabular-nums'],
   },
-  tempUnit: { fontSize: fontSize.titleXl, fontWeight: fontWeight.regular, color: colors.textInverse },
+  tempUnit: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.titleXl, fontWeight: fontWeight.regular, color: colors.textInverse },
   readingMeta: { flex: 1, paddingBottom: spacing.sm, gap: 2 },
   conditionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  condition: {
+  condition: { fontFamily: fontFamily.archivo.bold,
     flex: 1,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.textInverse,
     letterSpacing: -0.2,
   },
-  metaPrimary: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
-  metaSecondary: { fontSize: fontSize.bodySm, color: colors.brandSoft, fontVariant: ['tabular-nums'] },
+  metaPrimary: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
+  metaSecondary: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.brandSoft, fontVariant: ['tabular-nums'] },
 
   tileRow: { flexDirection: 'row', gap: spacing.sm },
   tile: {
@@ -1323,17 +1323,17 @@ const styles = StyleSheet.create({
     borderColor: glass.smokeBorder,
     gap: 2,
   },
-  tileValue: {
+  tileValue: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
     fontVariant: ['tabular-nums'],
   },
-  tileUnit: { fontSize: fontSize.caption, fontWeight: fontWeight.regular, color: colors.brandSoft },
-  tileLabel: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, letterSpacing: 0.6, color: colors.brandSoft },
+  tileUnit: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, fontWeight: fontWeight.regular, color: colors.brandSoft },
+  tileLabel: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.caption, fontWeight: fontWeight.bold, letterSpacing: 0.6, color: colors.brandSoft },
 
   sunRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
   sunItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  sunText: { fontSize: fontSize.bodySm, color: colors.brandSoft },
+  sunText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.brandSoft },
   sunTime: { color: colors.textInverse, fontWeight: fontWeight.semibold, fontVariant: ['tabular-nums'] },
 
   notice: { gap: spacing.lg },
@@ -1347,7 +1347,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: glass.smokeBorder,
   },
-  noticeTitle: {
+  noticeTitle: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.textInverse,
@@ -1366,7 +1366,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: glass.smokeBorder,
   },
-  noticeCtaText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
+  noticeCtaText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textInverse },
 
   // ── Light content ─────────────────────────────────────────────────────
   content: { paddingHorizontal: spacing.lg, gap: spacing.xl },
@@ -1374,21 +1374,21 @@ const styles = StyleSheet.create({
 
   roofWork: { gap: spacing.sm },
   windowRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  windowText: { flex: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, lineHeight: 20 },
-  reason: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  windowText: { fontFamily: fontFamily.archivo.semibold, flex: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, lineHeight: 20 },
+  reason: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
 
   stormRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.lg, flexWrap: 'wrap' },
   stormStat: { gap: 2 },
-  stormValue: {
+  stormValue: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.titleXl,
-    fontWeight: fontWeight.semibold,
+    fontWeight: fontWeight.regular,
     color: colors.text,
     letterSpacing: -1,
     fontVariant: ['tabular-nums'],
   },
-  stormLabel: { fontSize: fontSize.caption, fontWeight: fontWeight.bold, color: colors.textSubtle, letterSpacing: 0.7 },
+  stormLabel: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.caption, fontWeight: fontWeight.bold, color: colors.textSubtle, letterSpacing: 0.7 },
   stormLatest: { flex: 1, minWidth: 120, paddingBottom: spacing.xs },
-  stormLatestText: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  stormLatestText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
 
   detailsWrap: {},
   detailRow: {
@@ -1399,8 +1399,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   detailRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
-  detailLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
-  detailValue: { fontSize: fontSize.bodyMd, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  detailLabel: { fontFamily: fontFamily.archivo.medium, flex: 1, fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
+  detailValue: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, fontVariant: ['tabular-nums'] },
 
   // ── Sheets ────────────────────────────────────────────────────────────
   sheet: { flex: 1, backgroundColor: colors.bg },
@@ -1412,7 +1412,7 @@ const styles = StyleSheet.create({
     paddingRight: spacing.xs,
     minHeight: touchTarget.standard,
   },
-  sheetTitle: {
+  sheetTitle: { fontFamily: fontFamily.archivo.bold,
     flex: 1,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
@@ -1426,9 +1426,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheetBody: { padding: spacing.lg, gap: spacing.lg },
-  sheetHint: { fontSize: fontSize.bodySm, color: colors.textSubtle, lineHeight: 18, paddingHorizontal: spacing.xs },
+  sheetHint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textSubtle, lineHeight: 18, paddingHorizontal: spacing.xs },
   sheetError: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs, paddingHorizontal: spacing.xs },
-  sheetErrorText: { flex: 1, fontSize: fontSize.bodySm, color: colors.danger, lineHeight: 18 },
+  sheetErrorText: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodySm, color: colors.danger, lineHeight: 18 },
   sheetFooter: { padding: spacing.lg, paddingTop: spacing.sm },
   saveShadow: { borderRadius: radii.button, ...shadows.raised },
   saveDisabled: { opacity: 0.5 },
@@ -1441,11 +1441,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     overflow: 'hidden',
   },
-  saveText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  saveText: { fontFamily: fontFamily.archivo.semibold, color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
 
   manageEmpty: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xl },
-  manageEmptyTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, marginTop: spacing.xs },
-  manageEmptyBody: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
+  manageEmptyTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text, marginTop: spacing.xs },
+  manageEmptyBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
   manageRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1456,8 +1456,8 @@ const styles = StyleSheet.create({
   },
   manageSep: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: spacing.lg },
   manageText: { flex: 1, gap: 2 },
-  manageLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  manageAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  manageLabel: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  manageAddress: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
   manageBtn: {
     minWidth: touchTarget.standard,
     height: touchTarget.standard,
@@ -1467,6 +1467,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
   },
   manageRemove: { backgroundColor: colors.dangerSoft },
-  manageRemoveText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.danger },
-  manageCancel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium, color: colors.textMuted },
+  manageRemoveText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.danger },
+  manageCancel: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium, color: colors.textMuted },
 });

@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   stopMain: { flex: 1, gap: 2 },
   stopTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   stopSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
-  stopScore: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.accent },
+  stopScore: { fontFamily: fontFamily.display, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.accent },
   // Sticky 88pt primary (Drift #1).
   primaryBtn: {
     flexDirection: 'row',

@@ -376,8 +376,8 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.display,
     color: colors.orange,
   },
   // "HAIL SIZE" / "IN RANGE" — the mock's stat-label convention (§3).

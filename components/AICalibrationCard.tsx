@@ -6,7 +6,7 @@ import { computeProfile } from '@/lib/services/learning/userCorrectionProfile';
 import { overallAccuracy } from '@/lib/services/learning/localLearningEngine';
 import { RichCard } from '@/components/ui/RichCard';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { colors, fontSize, fontWeight } from '@/theme/tokens';
+import { fontFamily, colors, fontSize, fontWeight } from '@/theme/tokens';
 
 /**
  * AI accuracy on the roofer's own jobs — hides entirely below 5 corrections
@@ -45,7 +45,7 @@ export function AICalibrationCard() {
 }
 
 const styles = StyleSheet.create({
-  accuracy: {
+  accuracy: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.tilePurpleInk,

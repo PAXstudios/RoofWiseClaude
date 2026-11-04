@@ -28,7 +28,7 @@ import {
   type TileMapType,
 } from '@/lib/services/mapTiles';
 import { isTileSessionValid, useMapTilesStore } from '@/lib/stores/mapTilesStore';
-import { colors, fontSize, fontWeight, glass, radii, spacing } from '@/theme/tokens';
+import { fontFamily, colors, fontSize, fontWeight, glass, radii, spacing } from '@/theme/tokens';
 
 /** How often a mounted map re-asks for a session while it has none — this is
  *  what makes imagery light up on its own once the key allows the API. The
@@ -180,13 +180,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: glass.frostBorder,
   },
-  mark: {
+  mark: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
     color: colors.text,
     letterSpacing: 0.2,
   },
-  copyright: {
+  copyright: { fontFamily: fontFamily.archivo.medium,
     flexShrink: 1,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.medium,

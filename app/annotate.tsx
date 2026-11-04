@@ -878,7 +878,7 @@ function SizeChip({ name, active, onPress }: { name: AnnotationTextSizeName; act
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: brand.black },
+  root: { flex: 1, backgroundColor: colors.bg },
   pressed: { opacity: 0.75 },
 
   topBar: {
@@ -887,7 +887,7 @@ const styles = StyleSheet.create({
     gap: HUD_GAP,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: brand.black2,
+    backgroundColor: colors.surface,
   },
   titleWrap: { flex: 1, gap: 1 },
   title: { color: colors.onMesh, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleMd, fontWeight: fontWeight.bold },
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
   railGap: { height: spacing.xs },
 
   dock: {
-    backgroundColor: brand.black2,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     gap: spacing.md,
@@ -990,11 +990,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   placeBtnOff: { backgroundColor: colors.fillDisabled },
-  placeText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  placeText: { fontFamily: fontFamily.archivo.bold, color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
   placeTextOff: { color: colors.textMuted },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xxl, backgroundColor: colors.bg },
-  emptyTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, textAlign: 'center' },
+  emptyTitle: { fontFamily: fontFamily.heading, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.text, textAlign: 'center' },
   emptyText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   emptyBtn: {
     minHeight: touchTarget.preferred,
@@ -1004,5 +1004,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyBtnText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  emptyBtnText: { fontFamily: fontFamily.archivo.semibold, color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 });

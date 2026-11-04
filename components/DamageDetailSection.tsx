@@ -31,7 +31,7 @@ import {
   type Severity,
   type Slope,
 } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { fontFamily, colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 const SEVERITY_TONE: Record<Severity, PillTone> = {
   none: 'neutral',
@@ -229,7 +229,7 @@ export function DamageDetailSection({ inspection }: { inspection: Inspection }) 
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.md },
-  coverage: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  coverage: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
@@ -240,9 +240,9 @@ const styles = StyleSheet.create({
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   cardMain: { flex: 1, gap: 2 },
-  cardTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
-  cardSub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
-  rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  cardTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
+  cardSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  rowTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   slopeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   // 56pt chips — a gloved thumb opens the photo (Drift #1).
   slopeChip: {
@@ -254,8 +254,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  slopeChipDir: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.text },
-  slopeChipCount: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  slopeChipDir: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.text },
+  slopeChipCount: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
   collateralRow: {
     minHeight: touchTarget.standard,
     flexDirection: 'row',
@@ -266,5 +266,5 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   empty: { alignItems: 'center', gap: spacing.sm, padding: spacing.lg },
-  emptyText: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
+  emptyText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
 });

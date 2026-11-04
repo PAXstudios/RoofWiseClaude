@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
   narrative: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 21, marginBottom: spacing.sm },
   statRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
-  statValue: { fontFamily: fontFamily.archivo.extrabold, fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.accent },
+  statValue: { fontFamily: fontFamily.display, fontSize: fontSize.titleLg, fontWeight: fontWeight.regular, color: colors.accent },
   // "doors planned" / "claim-grade roofs" under the number — the mock's stat-label convention.
   statLabel: { ...dataLabel, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
   areaHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, minHeight: touchTarget.preferred },
@@ -719,5 +719,5 @@ const styles = StyleSheet.create({
   stopMain: { flex: 1, gap: 2 },
   stopTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   stopSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
-  stopScore: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.accent },
+  stopScore: { fontFamily: fontFamily.display, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.accent },
 });

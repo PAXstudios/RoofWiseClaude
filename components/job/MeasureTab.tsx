@@ -96,8 +96,8 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   pitchLabel: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, color: colors.text },
-  pitchSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 1 },
-  body2: { fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
+  pitchSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 1 },
+  body2: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
   estimateBtn: {
     flexDirection: 'row',
     alignItems: 'center',

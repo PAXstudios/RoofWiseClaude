@@ -19,7 +19,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Map, MapPolygon, type Region } from '@/components/map/Map';
 import { regionForBounds, unionBounds } from '@/lib/services/roofOverhead';
 import type { PropertyIntelSlope, SlopeOrientation } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
+import { fontFamily, colors, fontSize, fontWeight, radii, spacing } from '@/theme/tokens';
 
 type Bounds = { sw: { lat: number; lng: number }; ne: { lat: number; lng: number } };
 
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   },
   map: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   noFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
-  noFrameText: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
+  noFrameText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
   badge: {
     position: 'absolute',
     left: spacing.sm,
@@ -139,12 +139,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  badgeText: { color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
+  badgeText: { fontFamily: fontFamily.archivo.semibold, color: colors.textInverse, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
   legend: { gap: spacing.xs },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   swatch: { width: 12, height: 12, borderRadius: 3 },
-  legendDir: { width: 40, fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.text },
-  legendSquares: { width: 64, fontSize: fontSize.bodySm, color: colors.text, fontVariant: ['tabular-nums'] },
-  legendPitch: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted },
-  legendNote: { fontSize: fontSize.caption, color: colors.textSubtle },
+  legendDir: { fontFamily: fontFamily.archivo.bold, width: 40, fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.text },
+  legendSquares: { fontFamily: fontFamily.archivo.regular, width: 64, fontSize: fontSize.bodySm, color: colors.text, fontVariant: ['tabular-nums'] },
+  legendPitch: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted },
+  legendNote: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle },
 });

@@ -23,7 +23,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { SignaturePad } from '@/components/SignaturePad';
 import { PostSignatureActions } from '@/components/pipeline/PostSignatureActions';
 import { findLinkedLead, nextStageFor } from '@/components/pipeline/chain';
-import {
+import { fontFamily,
   colors,
   fontSize,
   fontWeight,
@@ -265,12 +265,12 @@ const styles = StyleSheet.create({
 
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   brandMark: { width: 36, height: 36, borderRadius: radii.md, backgroundColor: colors.orange, alignItems: 'center', justifyContent: 'center' },
-  brandInitials: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
-  brandName: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.navy },
+  brandInitials: { fontFamily: fontFamily.archivo.bold, color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold },
+  brandName: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.navy },
 
-  heading: { fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy, marginTop: spacing.md },
-  address: { fontSize: fontSize.bodyLg, color: colors.slate },
-  metaLine: { fontSize: fontSize.bodySm, color: colors.slate },
+  heading: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.titleXl, fontWeight: fontWeight.regular, color: colors.navy, marginTop: spacing.md },
+  address: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyLg, color: colors.slate },
+  metaLine: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.slate },
 
   totalCard: {
     backgroundColor: colors.navy,
@@ -279,25 +279,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.md,
   },
-  totalLabel: { color: 'rgba(240,240,228,0.78)', fontSize: fontSize.bodySm, textTransform: 'uppercase', letterSpacing: 0.5 },
-  totalAmount: { color: colors.orange, fontSize: 44, fontWeight: fontWeight.bold, marginTop: spacing.sm },
-  totalSub: { color: colors.cream, fontSize: fontSize.bodyMd, marginTop: spacing.sm },
+  totalLabel: { fontFamily: fontFamily.archivo.regular, color: 'rgba(240,240,228,0.78)', fontSize: fontSize.bodySm, textTransform: 'uppercase', letterSpacing: 0.5 },
+  totalAmount: { fontFamily: fontFamily.archivo.bold, color: colors.orange, fontSize: 44, fontWeight: fontWeight.bold, marginTop: spacing.sm },
+  totalSub: { fontFamily: fontFamily.archivo.regular, color: colors.cream, fontSize: fontSize.bodyMd, marginTop: spacing.sm },
 
   sectionSpace: { marginTop: spacing.lg },
-  body: { fontSize: fontSize.bodyMd, color: colors.navy, lineHeight: 22 },
+  body: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.navy, lineHeight: 22 },
 
   lineItems: { backgroundColor: colors.surfaceMuted, borderRadius: radii.card, padding: spacing.lg, marginTop: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  itemLabel: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium, color: colors.navy },
-  itemSub: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
-  itemValue: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  itemLabel: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodyMd, fontWeight: fontWeight.medium, color: colors.navy },
+  itemSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  itemValue: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
 
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 2, borderTopColor: colors.navy, marginTop: spacing.md, paddingTop: spacing.md },
-  totalRowLabel: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.navy },
-  totalRowValue: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.orange },
+  totalRowLabel: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.navy },
+  totalRowValue: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.orange },
 
-  terms: { fontSize: fontSize.bodySm, color: colors.slate, lineHeight: 20, fontStyle: 'italic' },
+  terms: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.slate, lineHeight: 20, fontStyle: 'italic' },
 
   inspectorCard: {
     flexDirection: 'row',
@@ -308,8 +308,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     marginTop: spacing.md,
   },
-  inspectorName: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
-  inspectorMeta: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
+  inspectorName: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.navy },
+  inspectorMeta: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
 
   signedCard: {
     flexDirection: 'row',
@@ -320,11 +320,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     marginTop: spacing.lg,
   },
-  signedTitle: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.success },
-  signedBody: { fontSize: fontSize.bodyMd, color: colors.navy, marginTop: 2 },
+  signedTitle: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.success },
+  signedBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.navy, marginTop: 2 },
   contractorSpace: { marginTop: spacing.lg },
 
-  footer: { fontSize: fontSize.caption, color: colors.slate, textAlign: 'center', marginTop: spacing.lg },
+  footer: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.slate, textAlign: 'center', marginTop: spacing.lg },
 
   exitFab: {
     position: 'absolute',
@@ -339,6 +339,6 @@ const styles = StyleSheet.create({
   },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
-  emptyTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.navy },
-  emptyBody: { fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },
+  emptyTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleMd, fontWeight: fontWeight.bold, color: colors.navy },
+  emptyBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.slate, textAlign: 'center' },
 });

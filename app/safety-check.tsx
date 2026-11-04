@@ -16,7 +16,6 @@ import {
   fontFamily,
   fontSize,
   fontWeight,
-  glass,
   radii,
   shadows,
   spacing,
@@ -56,7 +55,7 @@ export default function SafetyCheckScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.textInverse} />
+          <Ionicons name="chevron-back" size={26} color={colors.text} />
         </Pressable>
         <Text style={styles.title}>Safety check</Text>
       </View>
@@ -121,7 +120,7 @@ export default function SafetyCheckScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.navy },
+  root: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -140,13 +139,13 @@ const styles = StyleSheet.create({
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,
-    color: colors.textInverse,
+    color: colors.text,
   },
 
   scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl },
 
   heroCard: {
-    backgroundColor: glass.fillLow,
+    backgroundColor: colors.surfaceMuted,
     borderRadius: radii.card,
     padding: spacing.xxl,
     alignItems: 'center',
@@ -154,8 +153,8 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.onMesh,
   },
   heroBody: {
@@ -167,7 +166,7 @@ const styles = StyleSheet.create({
   },
 
   list: {
-    backgroundColor: glass.fillLow,
+    backgroundColor: colors.surfaceMuted,
     borderRadius: radii.card,
     padding: spacing.lg,
   },
@@ -178,7 +177,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     minHeight: touchTarget.preferred,
   },
-  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: glass.border },
+  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   itemIconOff: { opacity: 0.55 },
   itemText: {
     flex: 1,

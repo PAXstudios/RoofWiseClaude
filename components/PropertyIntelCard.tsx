@@ -12,7 +12,7 @@ import {
 } from '@/lib/services/propertyIntel';
 import { Pill, type PillTone } from '@/components/ui/Pill';
 import { RoofOverheadView } from '@/components/RoofOverheadView';
-import {
+import { fontFamily,
   colors,
   fontSize,
   fontWeight,
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   eyebrowGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  eyebrow: {
+  eyebrow: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
     fontWeight: fontWeight.semibold,
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   headlineRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
-  squares: {
+  squares: { fontFamily: fontFamily.archivo.bold,
     fontSize: 52,
     lineHeight: 52,
     fontWeight: fontWeight.bold,
@@ -249,9 +249,9 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   headlineMeta: { flex: 1, paddingBottom: 4, gap: 2 },
-  unit: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
-  sub: { fontSize: fontSize.bodySm, color: colors.textSubtle },
-  emptyHeadline: { fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.textMuted },
+  unit: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
+  sub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textSubtle },
+  emptyHeadline: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.textMuted },
   // The four biggest elevations at a glance — what the inspector is about to walk.
   facesRow: {
     flexDirection: 'row',
@@ -260,20 +260,20 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   faceCell: { flex: 1, gap: 1 },
-  faceDir: {
+  faceDir: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.caption,
     color: colors.textSubtle,
     fontWeight: fontWeight.semibold,
     letterSpacing: 0.4,
   },
-  faceSquares: {
+  faceSquares: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleSm,
     fontWeight: fontWeight.bold,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  facePitch: { fontSize: fontSize.caption, color: colors.textMuted },
-  caption: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  facePitch: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textMuted },
+  caption: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
   actions: {
     flexDirection: 'row',
     gap: spacing.lg,
@@ -288,24 +288,24 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   actionPressed: { opacity: 0.6 },
-  actionText: { fontSize: fontSize.bodyMd, color: colors.brand, fontWeight: fontWeight.semibold },
+  actionText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, color: colors.brand, fontWeight: fontWeight.semibold },
   actionTextQuiet: { color: colors.textMuted },
   details: { gap: spacing.sm, marginTop: -spacing.xs },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  detailDir: {
+  detailDir: { fontFamily: fontFamily.archivo.semibold,
     width: 56,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     color: colors.text,
   },
-  detailSquares: {
+  detailSquares: { fontFamily: fontFamily.archivo.regular,
     width: 72,
     fontSize: fontSize.bodySm,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  detailPitch: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted },
-  footnote: {
+  detailPitch: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted },
+  footnote: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.caption,
     color: colors.textSubtle,
     lineHeight: 15,

@@ -30,7 +30,7 @@ import Animated, {
 import type { CoachProgress } from '@/lib/services/captureCoach';
 import { reportWorkletError } from '@/lib/services/uiRuntimeGuard';
 import type { CoachDetent } from '@/lib/stores/captureChromeStore';
-import { colors, dataLabel, fontFamily, fontSize, fontWeight, glass, motion, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, dataLabel, fontFamily, fontSize, fontWeight, motion, radii, spacing, touchTarget } from '@/theme/tokens';
 import { HUD_GAP, hudPanel } from './glass';
 
 const DETENTS: CoachDetent[] = ['peek', 'half', 'full'];
@@ -169,7 +169,7 @@ export function CoachDrawer({
             <Ionicons
               name={active.done ? 'checkmark-circle' : 'ellipse-outline'}
               size={18}
-              color={active.done ? colors.success : colors.textInverse}
+              color={active.done ? colors.success : colors.text}
             />
             <Text style={styles.title} numberOfLines={1}>
               {active.step.title}
@@ -194,7 +194,7 @@ export function CoachDrawer({
           <Ionicons
             name={detent === 'full' ? 'chevron-down' : 'chevron-up'}
             size={24}
-            color={colors.textInverse}
+            color={colors.text}
           />
         </Pressable>
       </View>
@@ -216,7 +216,7 @@ export function CoachDrawer({
               accessibilityRole="button"
               accessibilityLabel="Previous step"
             >
-              <Ionicons name="chevron-back" size={22} color={colors.textInverse} />
+              <Ionicons name="chevron-back" size={22} color={colors.text} />
               <Text style={styles.navText}>Prev</Text>
             </Pressable>
             <Pressable
@@ -236,7 +236,7 @@ export function CoachDrawer({
                 accessibilityRole="button"
                 accessibilityLabel="Show every step"
               >
-                <Ionicons name="list" size={22} color={colors.textInverse} />
+                <Ionicons name="list" size={22} color={colors.text} />
                 <Text style={styles.navText}>All</Text>
               </Pressable>
             )}
@@ -257,7 +257,7 @@ export function CoachDrawer({
               <Ionicons
                 name={p.done ? 'checkmark-circle' : 'ellipse-outline'}
                 size={22}
-                color={p.done ? colors.success : colors.textInverse}
+                color={p.done ? colors.success : colors.text}
               />
               <View style={styles.rowMain}>
                 <Text style={[styles.rowTitle, i === activeIndex && styles.rowTitleActive]} numberOfLines={1}>
@@ -278,7 +278,7 @@ export function CoachDrawer({
             accessibilityRole="button"
             accessibilityLabel="Turn guided capture off"
           >
-            <Ionicons name="eye-off-outline" size={18} color={colors.textInverse} />
+            <Ionicons name="eye-off-outline" size={18} color={colors.text} />
             <Text style={styles.dismissText}>Turn guided capture off</Text>
           </Pressable>
         </ScrollView>
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   },
   header: { paddingHorizontal: spacing.sm },
   grabberRow: { alignItems: 'center', paddingTop: spacing.xs },
-  grabber: { width: 36, height: 4, borderRadius: radii.pill, backgroundColor: glass.borderStrong },
+  grabber: { width: 36, height: 4, borderRadius: radii.pill, backgroundColor: colors.borderStrong },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: HUD_GAP },
   headerBody: { flex: 1, minHeight: touchTarget.standard, justifyContent: 'center', gap: 2, paddingHorizontal: spacing.xs },
   headerBtn: {
@@ -323,25 +323,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.button,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
   },
   // The mock's "STEP 01 · CAPTURE" convention (docs/DESIGN_1A.md §3) — mono,
   // uppercase, wide tracking.
   eyebrow: {
     ...dataLabel,
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.72,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   title: {
     flex: 1,
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.bold,
     fontFamily: fontFamily.archivo.bold,
   },
   shots: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.mono,
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
 
   card: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: spacing.md },
   hint: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.9,
     fontSize: fontSize.bodyMd,
     fontFamily: fontFamily.archivo.regular,
@@ -366,14 +366,14 @@ const styles = StyleSheet.create({
     height: touchTarget.standard,
     paddingHorizontal: spacing.md,
     borderRadius: radii.button,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
   },
   // Next is the step the roofer is most likely to want — it takes the white
   // "chosen" fill and the room.
   navBtnNext: { flex: 1, backgroundColor: colors.surface },
   navBtnOff: { opacity: 0.35 },
   navText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,
@@ -396,24 +396,24 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.button,
   },
-  rowActive: { backgroundColor: glass.fillHigh },
+  rowActive: { backgroundColor: colors.surfaceMuted },
   rowMain: { flex: 1, gap: 1 },
   rowTitle: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,
   },
   rowTitleActive: { fontWeight: fontWeight.bold, fontFamily: fontFamily.archivo.bold },
   rowHint: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.75,
     fontSize: fontSize.caption,
     fontFamily: fontFamily.archivo.regular,
     lineHeight: 15,
   },
   rowShots: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.mono,
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   dismissText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,

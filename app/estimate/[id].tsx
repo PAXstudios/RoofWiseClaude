@@ -215,8 +215,8 @@ const styles = StyleSheet.create({
   fact: { flex: 1, gap: 2 },
   factValue: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.display,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
@@ -289,8 +289,8 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
   emptyTitle: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.text,
     textAlign: 'center',
   },

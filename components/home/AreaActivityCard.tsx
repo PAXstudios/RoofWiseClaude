@@ -72,7 +72,7 @@ import { useLeadStore } from '@/lib/stores/leadStore';
 import { useServiceAreaStore } from '@/lib/stores/serviceAreaStore';
 import { useStormAlertStore } from '@/lib/stores/stormAlertStore';
 import type { Lead } from '@/lib/models/types';
-import {
+import { fontFamily,
   colors,
   fontSize,
   fontWeight,
@@ -1155,7 +1155,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  segLabel: {
+  segLabel: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     color: colors.textMuted,
@@ -1224,7 +1224,7 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
   },
-  emptyCtaText: {
+  emptyCtaText: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     color: colors.text,
@@ -1247,13 +1247,13 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.standard,
   },
   insightText: { flex: 1, gap: 1 },
-  insightLabel: {
+  insightLabel: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
     color: colors.accent,
     letterSpacing: 0.8,
   },
-  insightHeadline: {
+  insightHeadline: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
     color: colors.text,
@@ -1269,7 +1269,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
   },
-  statusText: {
+  statusText: { fontFamily: fontFamily.archivo.medium,
     flex: 1,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.medium,

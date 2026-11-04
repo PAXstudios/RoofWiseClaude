@@ -10,7 +10,7 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { navItems, type TabBarProps } from './navItems';
-import {
+import { fontFamily,
   colors,
   fontSize,
   fontWeight,
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  brandName: {
+  brandName: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.navy,
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
   itemActive: { backgroundColor: colors.brandSoft },
-  itemLabel: {
+  itemLabel: { fontFamily: fontFamily.archivo.medium,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.medium,
     color: colors.textMuted,

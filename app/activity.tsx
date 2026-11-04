@@ -244,8 +244,8 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     fontSize: fontSize.titleXl,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.navy,
   },
   clearBtn: { minHeight: touchTarget.standard, paddingHorizontal: spacing.sm, justifyContent: 'center' },
@@ -301,8 +301,8 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.semibold,
-    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.navy,
     marginTop: spacing.sm,
   },

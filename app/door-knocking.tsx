@@ -978,7 +978,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerText: { flex: 1 },
-  title: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleXl, fontWeight: fontWeight.bold, color: colors.navy },
+  title: { fontFamily: fontFamily.heading, fontSize: fontSize.titleXl, fontWeight: fontWeight.regular, color: colors.navy },
   statsLine: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.slate, marginTop: 2 },
 
   // Full-bleed map under a hairline — the route IS the screen.
@@ -1021,7 +1021,7 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
     paddingBottom: touchTarget.sticky * 2,
   },
-  waitingTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.onMesh },
+  waitingTitle: { fontFamily: fontFamily.heading, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.onMesh },
   waitingBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.onMesh, opacity: 0.78, textAlign: 'center' },
 
   // Drawer header: stats, then the meta line with Next / Wrap (56pt each).
@@ -1096,7 +1096,7 @@ const styles = StyleSheet.create({
     borderColor: colors.dangerSoft,
   },
   deniedHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  deniedTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.titleSm, fontWeight: fontWeight.semibold, color: colors.text },
+  deniedTitle: { fontFamily: fontFamily.heading, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.text },
   deniedBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, lineHeight: 20 },
   deniedRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   deniedBtn: {

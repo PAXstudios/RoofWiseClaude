@@ -470,8 +470,8 @@ const styles = StyleSheet.create({
   headerBtn: { minWidth: touchTarget.standard, minHeight: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
   title: {
     fontSize: fontSize.titleXl,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.navy,
   },
   sub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.mono, color: colors.slate, marginTop: 2 },
@@ -524,8 +524,8 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.semibold,
-    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.navy,
   },
   cardSub: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.slate },

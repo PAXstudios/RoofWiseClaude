@@ -1,6 +1,6 @@
 import { Link, Stack } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, fontSize, fontWeight, spacing } from '@/theme/tokens';
+import { fontFamily, colors, fontSize, fontWeight, spacing } from '@/theme/tokens';
 
 export default function NotFound() {
   return (
@@ -24,13 +24,13 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     backgroundColor: colors.bg,
   },
-  title: {
+  title: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     color: colors.text,
     marginBottom: spacing.md,
   },
-  link: {
+  link: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.md,
     color: colors.brand,
     fontWeight: fontWeight.semibold,

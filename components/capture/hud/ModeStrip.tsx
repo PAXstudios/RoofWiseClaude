@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   chipActive: hudSelected,
   pressed: { opacity: 0.75 },
   chipText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.bold,
     fontFamily: fontFamily.archivo.bold,
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
   },
   tagText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,

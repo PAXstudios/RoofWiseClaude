@@ -37,58 +37,79 @@ The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captur
 
 ## Context Summary
 
-> Last refreshed: 2026-09-04 (after entry #119).
+> Last refreshed: 2026-11-03 (after entry #124).
 
-**Latest local work (#109–#119):** Design 1A's remaining field/shared surfaces and supplied RoofWise identity are implemented; Job Overview scrolls as one continuous body; Job actions use the shared sheet; Pipeline is a unified narrow-column Kanban with working search/filter/sort and safe Move behavior when columns are hidden. The Astra builder/critic gauntlet hardened PDF readiness/finalization/sharing, capture-time slope decisions, durable photo acceptance and restart recovery, storm-to-door identity/booking/routes, keyboard-safe shared sheets, accessible controls/contrast, and the AI analysis-review-correction chain. Photo evidence now has durable attachment identity rather than mutable index/URI ownership; ambiguous legacy evidence is retained only as historical audit, not active report damage. Reject and correction actions reconcile markers, findings, counts, functional status and real HAAG/PDF input with stale/finalized/persistence guards and idempotent recovery. Fault-injected production-source suites, TypeScript, lint and diff checks pass. Native gesture/camera/keyboard/VoiceOver/force-quit proof and full current web export remain open (the host is critically short of disk). Existing cache-photo migration and reference-aware cleanup are tracked in BACKLOG. These local changes have not been pushed by the gauntlet.
+**Current owner instruction (#124):** RoofWise is already built in Codex. Apply
+**Courtside design changes only** to that existing code. Do not create an app,
+add features/routes, alter business logic, configure a backend, change build
+profiles or begin distribution work for this request. The verified existing
+Codex branch is `PAXstudios/RoofWiseClaude` → `codex/design-1a-completion`, head
+`8abaed78f94c7833d2045e7660846467333ebbf2` (verified read-only on November 3).
+The working redesign is based on that exact source.
 
-**Product in one line:** RoofWise is the objective layer between roofing contractors and insurance carriers — AI vision + HAAG-protocol-compliant claim packets on a mobile device.
+**Current appearance:** Courtside supersedes historical dark-mesh Design 1A.
+White pages, navy ink, burnt orange primary actions, blue accents, light-gray
+cards, thin borders, compact corners and quiet shadows. Bundled Barlow
+Condensed display/heading fonts complement Archivo body/control text. Decorative
+blue/orange roof cuts carry the selected graphic language. See
+`docs/DESIGN_1A.md`, `docs/MOCKUP_IMPLEMENTATION.md`, and
+`docs/references/RoofWise-Courtside.png` for the current authority.
 
-**Codebase:** Expo SDK 57 / RN 0.86 / React 19.2 / TypeScript 6, New Architecture ON, Reanimated 4.5, expo-router 57. Source-of-truth spec is `docs/SPEC.md`; HAAG logic is `docs/HAAG_DECISION_ENGINE.md`; the damage score is `docs/DAMAGE_SCORE.md`; threshold provenance is `docs/THRESHOLD_PROVENANCE.md`; the knock-finder formula is `docs/KNOCK_OPPORTUNITIES.md`; the visual design system is `docs/DESIGN_1A.md` (new, #108 — if this doc and old styling disagree, the doc wins, same role `HAAG_DECISION_ENGINE.md` plays for logic).
+**Scope correction:** #123 added six customer/resource/tools/export routes while
+interpreting the earlier broad request. #124 removes those additions from the
+final design change set. All **49 original route files** remain and no routes
+are added. All existing `lib/` services, stores and models, package manifests,
+EAS profiles, bundle IDs and backend/API contracts match the Codex base. The
+original four-screen onboarding, content, handlers and animations are retained
+with new styling. Quick Actions retains its original destinations; its header
+entry avoids covering small-phone content. The original development-only storm
+injection control is retained; release builds still boot with empty real stores.
 
-**Persona we build for:** A roofer in gloves on a hot roof — ≥56pt targets, sticky 88pt CTAs, sun contrast, voice on free text, confirm sheets on destructive actions, no precision gestures.
+**Product:** Existing roofing inspection and CRM app for a gloved roofer in sun.
+Five tabs: Home / Pipeline (existing Leads route) / Map / Plan / Train. Home keeps
+Quick Inspection + New Job, search, notifications, profile/settings, real metrics,
+weather/area activity, recent records and Quick Actions. Existing capabilities
+include native capture/import, compass/pinned slopes and frame modes, live
+analysis/coach/review, annotations, HAAG assessment/report readiness, roof
+measurements, estimates, proposals/signatures, job tabs/budgets/tasks, leads and
+pipeline automations, storm maps/history, Knock Planner/routes/outcomes,
+appointments, mileage, weather, training review, voice notes, settings, company
+branding, pricing, backup and synchronization.
 
-**Visual identity (#108, "Design 1A"):** the app was reskinned end-to-end onto a Claude-Design mock the owner named "design 1a" (one of eight competing directions in the export — 1b/1c/2a–2d exist but were not chosen). New palette: warm paper ground (`colors.bg` `#F2F0E7`), `royalInk`/`royalBright`/`magenta`/`burnt`/`amber` on `brand`; a 5-stop mesh `LinearGradient` + grain-texture overlay (`components/ui/MeshBackground.tsx`, five named variants — hero/home/cool/night/map) replaces the old `Aurora`/`stormNight` hero treatment; Archivo (`@expo-google-fonts/archivo`, gated behind `expo-splash-screen`) replaces the system sans everywhere; a monospace uppercase `dataLabel` convention marks eyebrows/stat labels/ids; `BottomTabs` floats as a pill. Six agents built it wave-by-wave (disjoint file ownership, same pattern as Waves F–J): P1 Home+Job, P2 Storm Tracer/Door Knocking/Knock Planner, P3 Pipeline board/Lead detail/New Job/New Lead, P4 camera HUD, P5 onboarding/welcome, P6 everything else (Settings, Reports, Estimator, Mileage, Plan, Train, every shared `ui`/`sheets` primitive). **Not yet touched** (named gap, not silently dropped): `pitch-gauge.tsx`, `do-not-knock.tsx`, `swipe-review.tsx`, `annotate.tsx`, `photo-report.tsx`, `SignaturePad`, `VoiceNoteRecorder`, `AddressAutocomplete`, `WeatherHero`, `components/photo/*`, `components/weather/*` — still on the pre-1A system font. Verified web-only (headless Playwright, zero console errors, tree-wide typecheck/lint clean); **no on-device iOS/Android run yet** — that's the next real test.
+**Stack:** Expo SDK 57 / RN 0.86 / React 19.2 / TypeScript 6, New Architecture,
+Expo Router, Zustand + AsyncStorage, Supabase and the existing configurable
+Gemini Flash client. Do not change AI provider/model policy, material thresholds,
+13-category taxonomy, confidence semantics, or the pure decision engine as part
+of a reskin. Source authorities remain `docs/SPEC.md`,
+`docs/HAAG_DECISION_ENGINE.md`, `docs/DAMAGE_SCORE.md`, and
+`docs/THRESHOLD_PROVENANCE.md`.
 
-**Where we are today (through entry #108; #96–#107 below predate the reskin and describe behavior, not current visual styling):**
-- **Distribution:** EAS Update → Expo Go on the owner's iPhone (`runtimeVersion` policy `sdkVersion`, keys in the EAS `preview` environment). The owner handed over an Expo token this session (exposed — rotate before launch), so this container publishes: **the phone is on the #94 update** (`01f6b8df-…`); #95 publishes next. The publish recipe and the EXPO_PUBLIC Babel-cache gotcha (a newly added key inlines as `undefined` unless caches are cleared and the exported `.hbc` is grepped for the key's value — it shipped the Census key as missing once) are in CLAUDE.md. A ⚡ standing trigger in BACKLOG fires the TestFlight/native-capability sequence the moment an Apple Developer account exists.
-- **Home (#92):** hero CTAs (Quick Inspection + New Job), then a 2×2 gradient tool grid — Storm Tracer / Knock Planner / Estimator / Mileage; bell + search in the header; "+" opens Quick Actions.
-- **The determination chain, end to end (#65–#84):** capture (real compass slope tag, guided coach, live 10×10 guide) → per-photo Gemini analysis (`gemini.ts`: 13 categories, per-hit HAAG §1 evidence class, non-roof subject + collateral, shingle count, coverage; **test squares run the tiled pass** — full frame + 2×2 at full resolution, Settings toggle) → `analyzeSlope` applies the roofer's per-category confidence floor ∧ the learned threshold, persists per-photo state, derives `slope.functional` from exposed-asphalt / open-fracture evidence **or the inspector's soft-spot confirmation** (`DamageMarker.softSpot`), re-derived on every marker edit → `decisionEngine.ts` (pure): `hail_hits_per_square` is a RATE (non-roof and single-shingle photos excluded), **§2 asphalt ≥ 8 functional hits per test square (carrier standard, owner decision #69)**, §3 gates now fed by the job's collateral checklist (layers / substrate exposure / brittleness), every count stated against both carrier bars (8 / 10) → `damageScore.ts` 0–100 with the band from the §4 verdict → HAAG packet / Long Report / proposal, all **gated on a real customer + address** (placeholder jobs cannot ship a packet) and on analyzed evidence (no verdict before photos).
-- **Money chain (#80, #84):** lead ↔ job linked (`Inspection.leadId` / `Lead.inspectionId`); New Job lands on the job; convert-to-inspection advances the stage only when the wizard saves; proposal sent/signed advance the lead; **signing needs an explicit 88pt Accept & sign**; a signed proposal is never demoted; the dead `roofwise.app/p/<token>` share URL is gone (share the PDF; preview in-app); post-signature "What's next". Every pipeline card has Call / Text / Email / Directions / Book; Leads | Jobs segment; Home Today module; job and lead details are editable (`CustomerDetailsSheet`).
-- **Business configuration (#84, Wave C):** the roofer's price book (`pricingStore`, Settings → Pricing; estimates/proposals carry its revision), company branding on every PDF, CSV/PDF report export, dated mileage export, Settings → AI thresholds.
-- **Knock Planner (#81–#83, #88, #92–#93):** one button → 24 months of NWS reports within 100 mi (IEM per-point, ~1.5 s for 1,553 reports at Plano) → 3-mi cells with a landed report → Knock Score `100·(p/0.75)^0.45·storm^0.25·housing^0.3·access·canvassed·ownJobs`, per-roof claim-grade probability, **"knock 40 doors → at least M at 80 %"** (binomial), P(≥5), doors-for-5, a greedy 8-hour-day trip plan, Gemini phrasing the engine's numbers (never its own). Census ACS housing is **live** (key wired in #88, `source=acs`). Since #92 it is called **Knock Planner**, shows ranked areas in seconds and enriches in place behind a branded search animation; since #93 it is a mini-app: `knockPlanRunner.ts` runs detached from the screen (bell + local push when the plan is ready, a Diagnostics entry when it fails), every run is a dated `KnockPlan` page (`app/knock-plan/[id].tsx` + `PlanView`) with per-area status, live "knocked here" counts, Storm Tracer / Directions / Route, recently-sold homes → New job / New lead / Route, notes, delete. Entry points: Home tile, Quick Actions, Storm Tracer chip, Plan row.
-- **Door knocking (#95, Wave E):** SalesRabbit-style — tap a house → pin sheet with twelve outcomes (`lib/services/knockOutcomes.ts`), each asking only what it needs; saving creates or forward-only updates a lead with its follow-up; a pin within 15 m of a knock on this route updates that house with history; colour-disc markers (`KnockPinMarker`) on the Knock screen and the Map tab; one module-level GPS watcher (`components/knock/sessionTracker.ts`) feeds the walked path and a "Door knocking" mileage trip (foreground only — the end sheet says so); the planner's "Start day N" puts the stops on the session (`routeStops`) through `startRoute`; the watcher resumes on cold start. Six owner-facing UX decisions are listed in #95.
-- **Notifications (#93):** `notificationStore` (dedupe by key so "working" becomes "ready" in place) + `app/notifications.tsx` (In progress / Due now / Recent) + the Home bell with an unread badge; writers: the plan runner, the analysis queue, Storm Watch; push taps route to the plan.
-- **Property records — Zillow via APIllow (#89–#90, #94):** the house photo fronts every job / lead / estimate / card (`coverPhotoUri`: inspector pick → Zillow → first capture), editable hero (`CoverPhotoSheet`), a record card (facts, For sale / Sold / Rental badge, listing-agent Call/Email, roof-measurement sanity check), roof age prefilled from the listing/build year with provenance and a stepper; recently-sold homes → leads; Zestimate chip. **Free tier = 50 lookups/month** — every lookup goes through the 30-day per-address cache (`propertyRecordStore`); there are no permit records, said plainly. Lead → Convert hydrates the New Job wizard from the lead via `?leadId` (#94).
-- **Engine decisions (#87):** the brittleness tick → BORDERLINE (not FAIL); the mat-exposure tick is scoped to damaged slopes only.
-- **Storm Tracer (#71, #76, #81):** one map, storms follow the viewport, quantised overlay selection (inferred pan-crash fix, unconfirmed), address + my-location search, range/peril/magnitude, inches glyphs, **date scrubber** chips, "Where to knock?" chip; storm alerts (50 mi, damaging hail ≥1" / wind ≥70 mph) say where it hit and hand the roofer a route.
-- **Sheets and motion (#78, #82):** `BottomSheet` primitive (spring, dim, grabber, drag-to-dismiss from the header, **scrolling body**), Quick Actions "+" on Home, "Add Photos To…" before a standalone capture, photo long-press actions, `ConfirmSheet` on destructive actions.
-- **Sync (#80, Wave A):** last-editor-wins on the client's `updated_at` with peek-before-push; the `*_touch` triggers were dropped **live** on `epghfumtuxrhonbpnbmr` (migrations `20260903120000` / `20260903120100` applied via the Supabase MCP); corrections → Supabase with backoff; photo sync drains on its own clock; persist `version: 1` + migrate on four stores.
-- **Property intelligence (#67, #74):** Google Solar measures every job on creation; `roofPlanes()` clusters facets; estimator/proposal/report read one number; satellite overhead with per-face rectangles.
-- **Camera HUD (#96, Wave J):** one clean viewfinder, an 88pt shutter, chrome that tucks away and returns with one tap.
-- **Knock Planner intelligence (#97–#98, Waves G/H):** calibration from real doors, "Neighbours of my jobs," Zillow new-roof years in the maths, a page-freeze fixed at the root; auto-plan on a damaging storm; do-not-knock homes/zones; the plan's days surface on the Plan tab.
-- **Knocking data in Supabase (#99, Wave F):** every door, route, plan and no-knock entry syncs live (7 tables, 6 views, GeoJSON RPC), owner-visible by user on a map.
-- **One map control system (#100, Wave I):** a tuck-away rail, one layers sheet, a drawer with detents — shared by Storm Tracer and Knock mode.
-- **Knock Planner screen (#101, Wave K):** drop a pin / address / my-location, a 3–50 mi radius dial with a live ring, an on-screen time estimate, leave-while-running.
-- **Photo annotations (#102, Wave N):** pen/arrow/circle/box/label on any inspection photo, kept as data, printed in the HAAG packet.
-- **One Pipeline board (#103, Wave L):** leads and jobs on one Kanban board; a lead becomes a job the moment the inspection starts; an automation engine moves work along on its own.
-- **Job page as tabs (#104, Wave M):** Overview · Measure · Photos · Proposal · Tasks, a budget, saved proposals (PDF · Sign · Share), work-order/material-list PDFs.
-- **Platform (#105):** Expo SDK 54 → 57 (RN 0.86, React 19.2, TS 6, Reanimated 4.5) so the app runs in the App Store's current Expo Go; `expo-doctor` 21/21, typecheck/lint/web-export green. The SDK-chase is a standing cost of distributing via EAS Update into Expo Go — the durable fix is an EAS **Build** the moment the Apple Developer account lands (⚡ standing trigger, #57).
-- **Storm Tracer → Knock Planner bridge (#107):** select/multi-select storm-hit pins, save them as areas (deduped, persisted), start a knock route from the selection; Directions (external maps app hand-off) wired into every pin type.
+**Preserved hardening (#113–#122):** stable attachment-owned evidence and
+annotations; durable journal-before-copy capture/filing/restart recovery;
+review/reject/correction provenance and ordered persistence; finalized-report
+readiness, generation and native attachment sharing; revision-aware inspection
+and lead sync; keyboard-safe sheets and accessible controls; coherent Pipeline
+filter/sort/Move behavior; native knock identity/booking/route data integrity.
+Do not discard this work or go back to the stale default branch.
 
-**Verified live vs inferred (be honest about which):** Solar measurement, IEM per-point storm fetch (incl. the 100-mi/24-month planner pull), Census geocoder **and ACS tract housing**, APIllow lookups (photos, year built, nearby sold), the Gemini analysis schema and the planner's brief (from Node with the EAS keys), Places/geocoding, the two Supabase migrations — exercised live from the container. Pure engines (decision, damage score, knock opportunities, knock outcomes, knock trip maths, tile merge, storm days, §3 gate mapping) have scratch assertion suites; headless web walks cover the planner, plan page, notifications, Home tiles, record cards, Lead → Convert and the door-knocking route end to end. **Not** verified on the device since #86: the Map pan-crash fix, the compass, the search animation at 60 fps, the door-knocking screen (map tap, custom markers, real miles), Zillow photos through Expo Go, the local push. All BACKLOG "Now" items for the owner's phone.
+**Verification boundary:** Automated suites exercise production source in
+isolated fixtures; browser previews use empty isolated storage. Native mounted
+camera/sensor/gesture/PDF/force-quit and live-service proof remains a device gate,
+not something screenshots establish. #123's broad app passed 13 suites/55 route
+checks. #124's final design-only state restores the original 12 suites/49 routes;
+its final checks are recorded in that entry. No sample records are inserted.
 
-**Known environment gotchas:**
-- Multi-agent runs: six background agents completed this session (Waves A–E + the audit); one (Wave C) hung on an `mcp__ccd_session__spawn_task` call after finishing — tell agents never to call it. **Commit an agent's files by explicit path only** — #93's `git add -A` swept Wave E's half-finished files into a commit that did not typecheck on its own (#95).
-- `.env.local` here carries Maps/Weather/Geocoding/Supabase, the Gemini MODEL name, the Census key and the APIllow key, but not the Gemini API key; the phone build gets every key from EAS `preview`. Publishing parks `.env.local` so EAS's env is what gets inlined.
-- The headless web export cannot reach the IEM through the container proxy (Chromium ignores HTTPS_PROXY); Node can. Web boots are for rendering and navigation, not network features. Dynamic routes (`/knock-plan/[id]`, `/lead/[id]`) need `history.pushState` from a loaded page — a direct `goto` 404s on the static server. Stop the server with `fuser -k 8099/tcp`, never `pkill -f` (it matches the parent shell and kills the chain).
-- User's Mac: working clone is `~/Documents/RoofWiseClaude`; a stale clone at `~/RoofWiseClaude` may hold Metro on 8081 — `pkill -f expo` before testing.
-- Every API key and token pasted in chat is exposed — rotate before production (BACKLOG ⚡ PRE-LAUNCH trigger).
+**Delivery:** Work is local and reviewable. `AGENTS.md` forbids push, merge or PR
+without an explicit owner request; publication to the existing Codex branch is
+a separate final action. Do not configure another app/backend to deliver a
+visual update. This session has no Expo login or injected API keys; that is not
+evidence that the owner's already-built app lacks its existing configuration.
+Read-only native JS export succeeded before the scope clarification; no native
+package or build-profile change was made. Do not pursue the missing development
+client dependency or Apple setup for the current design-only request.
 
-**What's mocked / placeholder:**
-- Nothing. App boots empty per Drift Warning #5. The price book's starting numbers are labelled placeholders and `customized` stays false until edited.
-
-**What's parked:**
-- LiDAR + ARKit native implementation (Drift #10 — buttons exist, honest copy), Apple Sign In, true background execution, geofenced mileage auto-tracking, native voice-to-text — full list in `CLAUDE.md` "Known parked items". The traced roof outline (Solar `dataLayers` mask), the §3 matching gate (`appearance_match_impossible`, never populated) and the HIGH viability band decision are BACKLOG. Background location for door-knocking miles (foreground only today) is the standing trigger's first item.
+Open product work remains in `BACKLOG.md`; it is not authorization to expand
+this redesign. Historical entries below retain prior decisions and their dates.
 
 ---
 
@@ -3383,3 +3404,72 @@ A third fresh critic passed 93 synchronous gate scenarios but reproduced a deepe
 **Change:** Completed the interrupted short-phone Pipeline layout: at 700 points of usable height or less, the masthead condenses, Board/List and search remain on-screen, and secondary stage/focus/sort controls move into the existing accessible bottom sheet. The same real filtered records feed Board and List; unfiltered long-press movement, the all-stage Move sheet, lost-stage confirmation, search, sorting, deep links, and lead/job navigation remain intact. Completed the queued light paper navigation dock and its keyboard behavior, then removed RN Web's duplicate rectangular focus outline so the intentional pill-shaped focus ring is the single visible indicator.
 
 **Verification:** All 12 checked-in regression suites pass, including 65 sync mutation-race scenarios and the rendered bottom-dock keyboard contract. Tree-wide TypeScript, Expo lint, and `git diff --check` pass. No new feature analysis, agent round, mock data, commit, or push was started.
+
+### [2026-11-03] #123 — Courtside design throughout the existing app
+
+**Prompt:** Apply the selected Higgsfield design to RoofWise, keep all existing features, add screens where needed, and apply the style to existing workflows. The owner then corrected the selection: “Actually use this one” — Courtside, generation `ba2cc28e-874c-4d6e-8765-e5ada0d385d5`.
+
+**Intent / Goal:** Use the selected visual system in the actual Expo application without replacing the app with a mock, changing evidence rules, or losing shipped features.
+
+**Decisions:**
+- Courtside supersedes historical dark-mesh Design 1A: white grounds, navy ink, burnt-orange actions, blue secondary actions, thin borders, compact cards, quieter shadows and angular roof cuts. The reference is retained in `docs/references/RoofWise-Courtside.png`; current authority and coverage are documented in `docs/DESIGN_1A.md` and `docs/MOCKUP_IMPLEMENTATION.md`.
+- Bundled OFL Barlow Condensed display/heading fonts complement the existing Archivo body font and load through the existing splash gate. Remaining system-font style declarations across feature pages, job tabs, report summaries and weather are explicitly mapped onto the same font system. No runtime package was added. Splash/adaptive icon grounds match the white app. The unfinished, unused expo-video addition from the paused implementation was removed before handoff; package manifests/lock return to the baseline dependency set.
+- Home retains real metrics, weather/area activity, recent records and Quick Inspection + New Job. It now follows Courtside's compact paired actions, search entry and geometric masthead. Existing search, bell, profile and Quick Actions remain reachable. Quick Actions moves to a 56pt header button so a floating control cannot cover field tools on small phones. A development-only fake storm injector was removed; real storm alerts and all their behavior remain.
+- Shared headers, cards, sheets, navigation, heading/readout styles and field controls carry the same system across all 49 original route files. Capture retains its durable context/filing, compass, mode/tag selectors, live overlay, coach, import/review and settings; its controls become light, blue selections keep inverse ink, and the shutter becomes orange. Photo canvases and real weather/map imagery remain purposeful media surfaces.
+- Six new route files add All Tools, Customers, Customer Profile, Resource Center, Resource Detail and Model Improvement. They are connected through Home/Quick Actions/Settings. Customer history derives only from explicit lead/job identity, rejecting ambiguous reverse links; it does not create a parallel customer store. Resources make conservative documentation guidance available. Optional COCO export starts off, omits images/customer fields, checks current attachment identity and refuses evidence that changed since review.
+- Onboarding preserves swipe/Next/Skip/completion and adds Previous across seven truthful explanatory pages, including the original storm-intelligence capability. No fake photos, counts, prices, model confidence or insurance approval claims were introduced.
+
+**Constraint verification:** Drift #1/#2/#3/#4/#5/#6/#7/#8/#9/#10/#11/#12/#13 checked: field targets and sticky actions retained; five tabs and both hero CTAs retained; real-alert gating and empty states retained; canonical taxonomy, HAAG thresholds, decision engine, Gemini provider, auth flag, native AR/LiDAR gates, evidence ownership and sync contracts unchanged. No cloud configuration or credentials changed.
+
+**Verification:** TypeScript, Expo lint (zero warnings), `git diff --check`, offline installed-SDK dependency compatibility, Expo Doctor **21/21**, web export (**61 static routes including aliases**) and all **13** regression suites pass. New production-source tests cover ambiguous customer linking, search, attachment identity, stale/rejected review exclusion, pixel-box conversion/clipping and private-field omission. Color checks caught and fixed solid orange/warning pill contrast. A Chromium check booted all **55 route files** in an isolated empty workspace with **zero page errors, blank pages or horizontal document overflow**; real All Tools → Customers, search, Resource Detail, onboarding and Quick Actions controls pass. The export permission is off by default, changes by click/Space, and surfaces an empty-export error visibly on web. Mobile, small-phone and desktop visual checks caught and corrected small-phone title/tool-label wrapping and a light-header notification icon. Native camera/sensors, gestures, permission behavior, PDF share, force-quit recovery and live configured services remain the existing on-device/external gate in BACKLOG.
+
+**Files:** Theme/shared UI, existing feature presentation files, six new routes, customer/export helpers, bundled references/fonts, `tests/customer-training-exports.cjs`, current design/implementation docs, BACKLOG and this log. All original route files remain. No production deploy, push, merge or PR is performed for this change.
+
+
+### [2026-11-03] #124 — Courtside styling only on the existing Codex app
+
+**Prompt:** “Continue.” Then the owner clarified: “You should be making the changes in the the current code as it exist do you know where it is. It is in codex. The app is already built. I just want you to apply the design changes”.
+
+**Intent / Goal:** Apply the selected Courtside appearance to the already-built RoofWise code. Keep the existing product, routes, data and behavior.
+
+**Source verification:** `git ls-remote` confirms `PAXstudios/RoofWiseClaude` branch `codex/design-1a-completion` is at `8abaed78f94c7833d2045e7660846467333ebbf2`, exactly the base of this working redesign. The stale repository default branch was not used. The changes are in the local checkout; no remote branch is represented as updated.
+
+**Scope correction:** Removed the six customer/resource/tools/export routes and their five helpers/stores, FieldScreen primitive and extra regression suite introduced in #123. Removed their navigation entries. Restored the existing four-screen onboarding, wording, actions and animation structure, applying the white palette and condensed display lettering to it and its original illustrations. Restored the original Quick Actions destinations, development-only diagnostic control and shared back-handler behavior. The paired main actions and header entry for Quick Actions remain visual layout changes. Every existing workflow is retained.
+
+**Final delta from the current Codex source:** all 49 original route files; zero added or missing routes; no changes in `lib/`, package.json, package-lock.json, eas.json or QuickActionsSheet. Changes cover the theme, local fonts/license, shared UI and existing screen presentation, the selected visual reference, documentation and white splash/adaptive-icon grounds. No new backend, app, AI provider, API contract, dependency or distribution configuration.
+
+**Verification:** TypeScript, Expo lint (zero warnings), git diff checks, all original 12 regression suites and web export pass. All 49 route files boot in an isolated empty browser context with no page errors, blank pages or document overflow. Existing Quick Actions → New Lead, search, Next and Skip in the original onboarding pass. The preview and route evidence were replaced with the design-only state. Current Context Summary refreshed after five entries since #119.
+
+**Stopped work:** Before the scope clarification, read-only iOS/Android/web JS export completed and EAS whoami returned not logged in. No native package was installed, no build profile was modified and no cloud build/update/deployment was started. Missing development-client or Apple-account setup is outside this design task and must not be pursued from “continue”.
+
+**Delivery:** Local design changes are ready for review. AGENTS.md requires an explicit owner request before pushing, merging or opening a PR. No remote write has occurred. The existing Codex branch is the target for the final approved push; no new application is needed.
+
+### [2026-11-03] #125 — Resume Courtside and protect short-screen onboarding
+
+**Prompt:** “Continue the RoofWise build from the new design. There was an error in the previous chat”.
+
+**Intent / Goal:** Recover the existing Courtside checkout and continue the design-only change on the already-built app. No exact prior error trace was available, so no previous-chat failure is represented as diagnosed.
+
+**Change:** Each of the original four onboarding pages now has its own vertical ScrollView inside the existing horizontal pager. Art retains its actual height with room for its ambient drift, and long copy can scroll on short screens or with larger system text. The fixed Next/Get started, Skip and account actions retain their handlers and touch sizes. The Home heading below 360pt inherits the bundled condensed display font rather than unexpectedly overriding it with regular Archivo. Radar grid lines use the existing blue light-surface border token instead of white glass lines on white. BACKLOG's device checklist now reflects the design-only scope after #124.
+
+**Verification:** TypeScript, Expo lint, all 12 original production-source regression suites, installed-SDK dependency compatibility in offline mode, Expo Doctor (21/21), fresh web export (55 generated routes including aliases), and git diff checks pass. All 49 original route files remain, with zero added/removed. The bundled display font's advance widths at 40pt are 215.64pt and 196.18pt for the two Home headline lines, within the 232pt text space on a 320pt screen at default font scale. No stores, services, models, dependency manifests, EAS profiles, API contracts or backend configuration changed from the Codex base.
+
+**Verification limits:** The cloud browser could not connect to the checkout's local preview, so prior #124 browser screenshots/checks were not relabeled as a new browser pass. Physical-device art/text layout, nested gestures, camera/sensors, sharing and live services remain unverified. The online dependency lookup timed out through the session proxy; the installed-SDK check passed offline. No credentials were requested or changed.
+
+**Constraint verification / delivery:** Drift #1–#13 retain their existing contracts, including both Home hero actions, five tabs, canonical damage taxonomy, material thresholds, real-store behavior, auth and evidence ownership. The change remains local on `codex/roofwise-170-screen-implementation`; no push, merge, PR, Expo update or deployment was performed. The existing target branch `codex/design-1a-completion` was found through the connected GitHub read API. AGENTS.md still requires an explicit owner request for publication.
+
+### [2026-11-03] #126 — Owner authorizes the Courtside push
+
+**Prompt:** “Yes!!” in direct response to “May I push the update to `codex/design-1a-completion`?”
+
+**Intent / Goal:** Publish the verified existing-app Courtside redesign and short-screen fixes to that existing Codex branch. This explicit approval satisfies AGENTS.md's push requirement and supersedes the historical branch restriction for this operation.
+
+**Publication procedure:** The remote target was read at `8abaed78f94c7833d2045e7660846467333ebbf2`, the exact ancestor of the reviewed design commits. Push by normal fast-forward, without force, and verify the resulting remote SHA before reporting success. This entry records authorization; the handoff reports the observed publication result. No merge, PR, Expo update, native build or production deployment is requested.
+
+**Verification:** No application code changed since #125's successful TypeScript, lint, 12 regression suites, installed-SDK check, Expo Doctor 21/21 and web export. All 49 original route files and unchanged backend/service contracts remain. The physical-device checklist stays open in BACKLOG.
+
+### [2026-11-03] #127 — Publish through the connected GitHub account
+
+**Prompt:** Complete the already-authorized Courtside push.
+
+**Delivery decision:** Command-line Git can read the repository but its push failed before authentication because no CLI username/credential is configured. The connected GitHub account can write Git objects. Publish the exact verified final tree through that connection as one commit on top of the existing target, compare its tree SHA with the local tree, and update `codex/design-1a-completion` with an expected-head check and no force. This retains the original 49 routes and excludes the abandoned extra features from the published diff. No application code changes or repeated approval are needed for this transport fallback. The handoff will report the verified remote ref; native/Expo distribution remains outside this push.

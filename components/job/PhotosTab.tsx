@@ -536,17 +536,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card,
   },
-  placeholderText: { color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },
+  placeholderText: { fontFamily: fontFamily.archivo.regular, color: colors.textMuted, fontSize: fontSize.bodyMd, textAlign: 'center' },
 
-  photoLogIntro: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: -spacing.xs },
+  photoLogIntro: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: -spacing.xs },
   logGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   logTileWrap: { width: '48%', gap: 2 },
   logTile: { width: '100%', height: 110, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
   logTagRow: { position: 'absolute', left: 6, bottom: 6, right: 6 },
   logTag: { alignSelf: 'flex-start', backgroundColor: colors.scrim, borderRadius: radii.pill, paddingHorizontal: spacing.sm, paddingVertical: 2, maxWidth: '100%' },
-  logTagText: { color: colors.textInverse, fontSize: 10, fontWeight: fontWeight.semibold },
-  logCaption: { fontSize: fontSize.bodySm, color: colors.text, marginTop: 2 },
-  logTime: { fontSize: fontSize.caption, color: colors.textSubtle },
+  logTagText: { fontFamily: fontFamily.archivo.semibold, color: colors.textInverse, fontSize: 10, fontWeight: fontWeight.semibold },
+  logCaption: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.text, marginTop: 2 },
+  logTime: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle },
 
   actionRow: {
     flexDirection: 'row',
@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
   },
   actionRowText: { flex: 1, fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, color: colors.text },
 
-  captionInput: {
+  captionInput: { fontFamily: fontFamily.archivo.regular,
     minHeight: 96,
     fontSize: fontSize.bodyMd,
     color: colors.text,
@@ -600,10 +600,10 @@ const styles = StyleSheet.create({
 
   testSquare: { backgroundColor: colors.fillQuiet, borderRadius: radii.control, padding: spacing.md, gap: 2, marginTop: spacing.md },
   testSquareLabel: { ...dataLabel, color: colors.textSubtle },
-  testSquareLine: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
+  testSquareLine: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.medium },
   functionalYes: { color: colors.danger, fontWeight: fontWeight.semibold },
-  testSquareRule: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  testSquareRule: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
 
-  cardSub: { fontSize: fontSize.bodyMd, color: colors.textMuted },
-  reasoning: { fontSize: fontSize.bodySm, color: colors.textMuted, fontStyle: 'italic', marginTop: spacing.sm },
+  cardSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted },
+  reasoning: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, fontStyle: 'italic', marginTop: spacing.sm },
 });

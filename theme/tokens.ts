@@ -2,22 +2,17 @@ import { Platform, ViewStyle } from 'react-native';
 
 // RoofWise brand palette — single source of truth. No raw hex anywhere else.
 //
-// BRAND 1A "Field Standard" (2026-09-03) — docs/DESIGN_1A.md is the full
-// contract (mesh gradient formula, per-screen mapping, what NOT to change).
-// Royal blue + a magenta mesh transition + warmed burnt orange, on a warm
-// paper ground instead of the old cool light-gray. The legacy `navy` /
-// `orange` / `cream` names are kept and REPOINTED at the new palette so every
-// existing screen rebrands without touching 40 files. New work should prefer
-// the explicit names (`royal`, `burnt`, `ink`, …).
+// Courtside, selected November 3, 2026: white, navy, blue and burnt orange.
+// Historical names stay compatible with existing feature components.
 
 export const brand = {
   // Royal blue — primary identity. Saturated enough to read on black,
   // dark enough to pass contrast on white.
-  royal: '#1235B8',
-  royalBright: '#2447E8',     // brighter blue — mesh 50% stop, wind-LSR dots
-  royalDeep: '#1B31A8',
-  royalInk: '#0B1A5C',        // deep navy anchor — mesh 0/40%, dark surfaces, ink text
-  royalSoft: '#EBEDF7',       // tint for light surfaces
+  royal: '#006BB6',
+  royalBright: '#157FC4',     // brighter blue — mesh 50% stop, wind-LSR dots
+  royalDeep: '#005691',
+  royalInk: '#14283F',        // deep navy anchor — mesh 0/40%, dark surfaces, ink text
+  royalSoft: '#EAF3FA',       // tint for light surfaces
 
   // Magenta — the mesh gradient's transition stop between blue and orange
   // (62–82%). The mock varies the exact hue by screen (deep/warm/violet);
@@ -27,10 +22,10 @@ export const brand = {
 
   // Burnt orange — accent + primary CTA. Deliberately burnt, not neon,
   // so it reads as a considered pair to the blue rather than a warning.
-  burnt: '#E8631A',
-  burntDeep: '#C1490E',
-  burntLight: '#FF8A3D',      // light highlight — active tab icon, glow accents
-  burntSoft: '#FBE7DD',
+  burnt: '#C05528',
+  burntDeep: '#A7431E',
+  burntLight: '#CA5C2E',      // light highlight — active tab icon, glow accents
+  burntSoft: '#FFF0E8',
   amber: '#FFC43D',           // caution/moderate — granule loss, moderate score badge
 
   // Dark scale (onboarding). True black for OLED depth, iOS-style.
@@ -48,8 +43,8 @@ export const glass = {
   border: 'rgba(255,255,255,0.14)',
   borderStrong: 'rgba(255,255,255,0.24)',
   // On white surfaces, glass tints toward the brand rather than pure grey.
-  lightFill: 'rgba(43,78,245,0.06)',
-  lightBorder: 'rgba(43,78,245,0.14)',
+  lightFill: 'rgba(0,107,182,0.06)',
+  lightBorder: 'rgba(0,107,182,0.14)',
 
   // ── Over ART (gradients, radar, photography) ────────────────────────────
   // `fill` / `lightFill` are tuned for a FLAT ground: a 6–10% wash is enough
@@ -79,29 +74,29 @@ export const colors = {
   // iOS grouped ground — white cards sit on this so content reads as content
   // even when compact. 1A: a warm PAPER ground (not cool gray) — cards stay
   // pure white so the paper still reads as a ground, not a tint on the cards.
-  bg: '#F2F0E7',
+  bg: '#FFFFFF',
   surface: '#FFFFFF',
   // Neutrals carry a slight warm/paper bias so they read as chosen, not defaulted.
-  surfaceMuted: '#EDEBE0',
-  border: '#DDDED1',
-  borderStrong: '#C7C8B8',
+  surfaceMuted: '#F5F7FA',
+  border: '#E3E9F0',
+  borderStrong: '#C6D2DE',
 
   // Chrome fills — ink at low alpha so they sit on any light surface.
   hairline: 'rgba(11,26,92,0.10)',      // separators, bar borders
   barFill: 'rgba(255,255,255,0.92)',    // tab/nav bars (rgba stands in for blur)
   fillQuiet: 'rgba(11,26,92,0.05)',     // grey-fill secondary buttons, segmented tracks
 
-  text: '#0B1A5C',
-  textMuted: '#546078',
+  text: '#14283F',
+  textMuted: '#52647A',
   // Small metadata and placeholders still need normal-text contrast: at
   // least 4.5:1 on paper, white cards, muted inputs and quiet-fill tracks
   // over paper. Keep this quieter than textMuted without fading the labels.
-  textSubtle: '#606673',
+  textSubtle: '#5C6978',
   textInverse: '#FFFFFF',
   // The mesh hero's "white" — a warm paper tint, never pure #FFFFFF over a
   // coloured gradient (docs/DESIGN_1A.md §1). Use for text/icons over
   // MeshBackground where `textInverse` would read as an off-brand pure white.
-  onMesh: '#F2F0E7',
+  onMesh: '#14283F',
 
   accent: brand.burnt,
   accentSoft: brand.burntSoft,
@@ -131,6 +126,7 @@ export const colors = {
   warn: '#C77A0A',
   warnSoft: '#FBEED6',
   warnInk: '#885006',          // small text on warnSoft
+  warnOnSolid: brand.black2,
   danger: '#D93A3F',
   dangerSoft: '#FBE3E4',
   dangerInk: '#B8262D',        // small text on dangerSoft
@@ -157,14 +153,14 @@ export const colors = {
   //   blue   8.4:1   green 5.5:1   orange 6.6:1   purple 7.5:1
   // Use the ink for the glyph/label ON its ground — never on white, and
   // never swap inks between grounds.
-  tileBlue: '#E1E8FF',
-  tileBlueInk: '#1B31A8',
+  tileBlue: '#EAF3FA',
+  tileBlueInk: '#005691',
   tileGreen: '#D8F2E5',
   tileGreenInk: '#0F6B43',
   tileOrange: '#FCE6DA',
   tileOrangeInk: '#8F3210',
-  tilePurple: '#ECE5FD',
-  tilePurpleInk: '#5230A0',
+  tilePurple: '#EAF3FA',
+  tilePurpleInk: '#005691',
 };
 
 // ── Gradients ─────────────────────────────────────────────────────────────
@@ -194,8 +190,8 @@ export const gradients = {
   /** Home tool tiles — one saturated family per tool, white type on top. */
   tileStorm: [brand.royal, brand.royalDeep] as const,
   tileKnock: [brand.burnt, brand.burntDeep] as const,
-  tileEstimate: ['#1E9E62', '#0F6B43'] as const,
-  tileMileage: ['#6D48D8', '#5230A0'] as const,
+  tileEstimate: [brand.royal, brand.royalDeep] as const,
+  tileMileage: [brand.royal, brand.royalDeep] as const,
 
   // ── 1A mesh gradient presets ──────────────────────────────────────────
   // docs/DESIGN_1A.md §2. Named variants, not a per-screen literal. Angles
@@ -203,27 +199,27 @@ export const gradients = {
   // LinearGradient takes start/end points, not a CSS angle — these arrays
   // are the colour ramp only.
   /** Onboarding / sign-in / splash — the full 5-stop ramp, warmest. */
-  meshHero: [brand.royalInk, brand.royalBright, brand.magenta, brand.burnt] as const,
+  meshHero: [colors.surface, colors.surfaceMuted, colors.surface] as const,
   /** Home hero — 3-stop short form ending in burnt. */
-  meshHome: [brand.royalInk, brand.royal, brand.magenta, brand.burnt] as const,
+  meshHome: [colors.surface, colors.surfaceMuted, colors.surface] as const,
   /** Damage report / Lead detail — bluer cut, no orange stop. */
-  meshCool: [brand.royal, brand.royalBright, '#6B3BC4'] as const,
+  meshCool: [colors.surface, colors.surfaceMuted, colors.surface] as const,
   /** Pipeline board header — cooler still, violet-leaning, no orange. */
-  meshNight: [brand.royalInk, brand.royal, '#7A2E9E'] as const,
+  meshNight: [colors.surface, colors.surfaceMuted, colors.surface] as const,
   /** Storm map background — desaturated, no orange (pins carry the colour). */
-  meshMap: ['#101c3f', brand.royalInk, '#182a6b'] as const,
+  meshMap: [colors.surface, colors.surfaceMuted, colors.surface] as const,
 } satisfies Record<string, GradientStops>;
 
 export const radii = {
   sm: 8,
   md: 12,
-  card: 18,   // 1A: bumped from 16 — docs/DESIGN_1A.md §4
+  card: 12,
   lg: 20,
   xl: 24,
   pill: 999,
 
   // iOS-17 control shapes — buttons and inputs stop being full pills.
-  button: 14,
+  button: 10,
   control: 10,
 };
 
@@ -248,6 +244,9 @@ export const fontSize = {
   titleLg: 24,
   titleXl: 28,
   display: 34,
+  hero: 48,
+  heroCompact: 40,
+  score: 64,
 
   // Backwards-compatible aliases used in existing components.
   xs: 11,
@@ -270,6 +269,7 @@ export const fontWeight = {
   // a platform falls back to if it can't resolve the named font family), and
   // 800 had no numeric home until now.
   extrabold: '800' as const,
+  black: '900' as const,
 };
 
 // 1A type system — docs/DESIGN_1A.md §3. `archivo` loads as named-weight
@@ -279,6 +279,8 @@ export const fontWeight = {
 // existing `fontWeight` tokens (RN needs the family name AND the numeric
 // weight lines up for platforms that only honor one of the two).
 export const fontFamily = {
+  display: 'RoofWiseDisplay',
+  heading: 'RoofWiseHeading',
   archivo: {
     regular: 'Archivo_400Regular',
     medium: 'Archivo_500Medium',
@@ -291,6 +293,24 @@ export const fontFamily = {
     android: 'monospace',
     default: 'ui-monospace, Menlo, monospace',
   }) as string,
+};
+
+// Condensed display lettering is reserved for headlines and key readouts.
+// Body copy and controls retain Archivo for readability in the field.
+export const typography = {
+  display: {
+    fontFamily: fontFamily.display,
+    fontSize: fontSize.hero,
+    letterSpacing: -0.7,
+    textTransform: 'uppercase' as const,
+    color: colors.text,
+  },
+  heading: {
+    fontFamily: fontFamily.heading,
+    fontSize: fontSize.display,
+    letterSpacing: -0.4,
+    color: colors.text,
+  },
 };
 
 /**
@@ -320,12 +340,13 @@ export const touchTarget = {
 export const navigationDock = {
   ground: colors.bg,
   surface: colors.surface,
-  selectedFill: colors.brandSoft,
+  selectedFill: colors.accentSoft,
+  selectedInk: colors.accentInk,
   pressedFill: colors.fillQuiet,
   border: colors.hairline,
   focusRing: colors.text,
-  edgeInset: spacing.lg,
-  bottomInset: spacing.md,
+  edgeInset: spacing.sm,
+  bottomInset: spacing.xs,
   topInset: spacing.sm,
   height: 72,
   maxWidth: 480,
@@ -400,20 +421,20 @@ const thumbShadow: ViewStyle = Platform.select({
 const raisedShadow: ViewStyle = Platform.select({
   ios: {
     shadowColor: colors.navy,
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
   },
-  android: { elevation: 4 },
+  android: { elevation: 2 },
   // react-native-web maps the shadow props onto `box-shadow`, so the two
   // rungs that carry the design's depth are visible in the web export too —
   // the flat rungs above stay shadowless there, which is exactly the
   // hierarchy we want.
   web: {
     shadowColor: colors.navy,
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
   },
   default: {},
 }) as ViewStyle;
@@ -426,16 +447,16 @@ const raisedShadow: ViewStyle = Platform.select({
 const heroShadow: ViewStyle = Platform.select({
   ios: {
     shadowColor: brand.royal,
-    shadowOpacity: 0.3,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
   },
-  android: { elevation: 10 },
+  android: { elevation: 3 },
   web: {
     shadowColor: brand.royal,
-    shadowOpacity: 0.3,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
   },
   default: {},
 }) as ViewStyle;
@@ -486,6 +507,7 @@ export const theme = {
   fontSize,
   fontWeight,
   fontFamily,
+  typography,
   dataLabel,
   touchTarget,
   navigationDock,

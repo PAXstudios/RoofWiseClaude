@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { navItems, type TabHeaderProps } from './navItems';
 import {
-  colors,
+  colors, fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -69,8 +69,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   title: {
+    fontFamily: fontFamily.heading,
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
+    fontWeight: fontWeight.regular,
     color: colors.navy,
   },
   actions: { flexDirection: 'row', gap: spacing.md },
@@ -88,13 +89,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderStrong,
   },
-  btnSecondaryText: {
+  btnSecondaryText: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     color: colors.navy,
   },
   btnPrimary: { backgroundColor: colors.accent },
-  btnPrimaryText: {
+  btnPrimaryText: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     color: colors.textInverse,

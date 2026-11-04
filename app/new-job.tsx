@@ -2056,8 +2056,8 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     fontSize: fontSize.titleSm,
-    fontFamily: fontFamily.archivo.bold,
-    fontWeight: fontWeight.bold,
+    fontFamily: fontFamily.display,
+    fontWeight: fontWeight.regular,
     color: colors.navy,
   },
 

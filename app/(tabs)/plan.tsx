@@ -47,13 +47,11 @@ import {
 import { daysInStage, goingColdLeads } from '@/components/pipeline/chain';
 import type { Inspection, KnockRouteTarget } from '@/lib/models/types';
 import {
-  brand,
   colors,
   dataLabel,
   fontFamily,
   fontSize,
   fontWeight,
-  glass,
   motion,
   radii,
   shadows,
@@ -776,20 +774,20 @@ const styles = StyleSheet.create({
   // Day hero — the brand sky, with the day's real counts living inside it
   // rather than as three separate white cells below.
   dayHero: {
-    borderRadius: radii.xl,
+    borderRadius: radii.card,
     overflow: 'hidden',
     padding: spacing.lg,
     gap: spacing.xs,
     // Painted under the mesh so the card is never briefly transparent.
-    backgroundColor: brand.royalInk,
+    backgroundColor: colors.surface,
     ...shadows.hero,
   },
-  dayHeroMesh: { borderRadius: radii.xl },
+  dayHeroMesh: { borderRadius: radii.card },
   dayHeroKicker: { ...dataLabel, color: colors.onMesh, opacity: 0.8, letterSpacing: 1.4 },
   dayHeroDate: {
     fontSize: fontSize.titleXl,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.onMesh,
     letterSpacing: -0.6,
   },
@@ -799,10 +797,10 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     minHeight: touchTarget.sticky,
-    backgroundColor: glass.smokeFill,
+    backgroundColor: colors.surfaceMuted,
     borderRadius: radii.card,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.smokeBorder,
+    borderColor: colors.border,
     padding: spacing.sm,
     gap: spacing.sm,
   },
@@ -810,16 +808,16 @@ const styles = StyleSheet.create({
   statValueRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   statValue: {
     fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.display,
     color: colors.onMesh,
     fontVariant: ['tabular-nums'],
   },
-  statValueNone: { fontSize: fontSize.titleMd, fontFamily: fontFamily.archivo.regular, color: colors.brandSoft },
+  statValueNone: { fontSize: fontSize.titleMd, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
   // "INSPECTIONS" / "KNOCKS TODAY" — the mock's stat-label convention (§3).
   statLabel: {
     ...dataLabel,
-    color: colors.brandSoft,
+    color: colors.textMuted,
     // 0.3 rather than 1.1: at three-across, "INSPECTIONS" broke mid-word.
     letterSpacing: 0.3,
   },

@@ -145,7 +145,7 @@ export function RichCard({
 
   const shell: StyleProp<ViewStyle> = [
     styles.card,
-    elevation === 'raised' ? shadows.raised : shadows.card,
+    elevation === 'raised' ? shadows.card : undefined,
     onPress && styles.tappable,
     style,
   ];

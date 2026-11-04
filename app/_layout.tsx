@@ -47,6 +47,8 @@ export default function RootLayout() {
   const router = useRouter();
   useBackgroundJobs();
   const [fontsReady, fontError] = useFonts({
+    RoofWiseDisplay: require('@/assets/fonts/BarlowCondensed-BlackItalic.ttf'),
+    RoofWiseHeading: require('@/assets/fonts/BarlowCondensed-Bold.ttf'),
     Archivo_400Regular,
     Archivo_500Medium,
     Archivo_600SemiBold,

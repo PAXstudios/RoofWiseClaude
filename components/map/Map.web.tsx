@@ -626,9 +626,9 @@ const styles = StyleSheet.create({
     marginTop: -3,
   },
   title: {
-    fontFamily: fontFamily.archivo.bold,
+    fontFamily: fontFamily.heading,
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
+    fontWeight: fontWeight.regular,
     color: colors.onMesh,
     textAlign: 'center',
   },

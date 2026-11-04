@@ -1,3 +1,23 @@
+# Current design authority — Courtside on the existing app
+
+The owner selected the Courtside Higgsfield mockup, generation
+`ba2cc28e-874c-4d6e-8765-e5ada0d385d5`, then clarified that only the design of
+the existing Codex app should change. Reference:
+`docs/references/RoofWise-Courtside.png`. Current scope:
+`docs/MOCKUP_IMPLEMENTATION.md`.
+
+Use white page grounds, navy text, burnt-orange primary actions, supporting blue,
+light-gray surfaces, restrained borders, angular graphics and the existing logo.
+Use bundled Barlow Condensed display/headings and Archivo for controls/body copy.
+Values live in `theme/tokens.ts`; decorative roof cuts are never evidence.
+
+Preserve all existing routes, features, stores, handlers and data. Keep the five
+tabs, 56pt touch minimum and 88pt sticky primary actions. Do not add features,
+change API contracts, configure a new app/backend or change build/distribution
+setup for this task. This authority supersedes the historical dark mesh below.
+
+---
+
 # Design 1A — "Field Standard" — the app's visual system
 
 Source of truth for the 2026-09-03 redesign. Extracted from the owner's Claude

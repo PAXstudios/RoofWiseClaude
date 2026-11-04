@@ -277,12 +277,12 @@ export default function EditDetectionView() {
 
       <View style={styles.header}>
         <Pressable onPress={onDiscard} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="close" size={24} color={colors.textInverse} />
+          <Ionicons name="close" size={24} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Edit detection</Text>
         {selectedId && (
           <Pressable onPress={onEditSelected} hitSlop={10} style={styles.headerBtn}>
-            <Ionicons name="create-outline" size={22} color={colors.textInverse} />
+            <Ionicons name="create-outline" size={22} color={colors.text} />
           </Pressable>
         )}
       </View>
@@ -342,7 +342,7 @@ export default function EditDetectionView() {
                 <Ionicons
                   name={activeSoftSpot ? 'checkmark-circle' : 'hand-left-outline'}
                   size={18}
-                  color={activeSoftSpot ? colors.textInverse : colors.cream}
+                  color={activeSoftSpot ? colors.text : colors.textMuted}
                 />
                 <Text style={[styles.evChipText, activeSoftSpot && styles.evChipTextActive]}>
                   Soft spot (felt)
@@ -405,14 +405,14 @@ function uniqueCategories(markers: DamageMarker[]): DamageCategory[] {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: brand.black },
+  root: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     gap: spacing.sm,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: colors.surface,
   },
   // Glove-sized close / edit targets (Drift #1) — were icons in 4pt of padding.
   headerBtn: {
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
   canvas: { flex: 1, backgroundColor: brand.black },
 
   toolbar: {
-    backgroundColor: colors.navy,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
     height: touchTarget.standard,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   },
   catChipTextActive: { color: colors.textInverse },
 
-  rowLabel: { ...dataLabel, color: colors.onMesh, opacity: 0.6, marginRight: spacing.xs },
+  rowLabel: { ...dataLabel, color: colors.textMuted, opacity: 1, marginRight: spacing.xs },
   // Evidence chips: brand-blue when active so they never read as the orange
   // category selection; the soft-spot toggle goes green — it is a confirmation.
   evChip: {
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     height: touchTarget.standard,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: colors.surfaceMuted,
     justifyContent: 'center',
   },
   evChipActive: { backgroundColor: colors.brand },
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.archivo.semibold,
   },
   evChipTextActive: { color: colors.textInverse },
-  softChip: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  softChip: { borderWidth: 1, borderColor: colors.borderStrong },
   softChipActive: { backgroundColor: colors.success, borderColor: colors.success },
 
   sevRow: { flexDirection: 'row', gap: spacing.sm },
@@ -487,11 +487,11 @@ const styles = StyleSheet.create({
     flex: 1,
     height: touchTarget.preferred,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sevChipActive: { backgroundColor: colors.cream },
+  sevChipActive: { backgroundColor: colors.brandSoft, borderWidth: 1, borderColor: colors.brand },
   sevText: {
     color: colors.onMesh,
     fontSize: fontSize.bodyMd,

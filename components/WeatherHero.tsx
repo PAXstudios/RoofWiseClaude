@@ -1060,9 +1060,9 @@ const styles = StyleSheet.create({
 
   readingBlock: { gap: spacing.xs },
   title: {
-    fontFamily: fontFamily.archivo.bold,
+    fontFamily: fontFamily.heading,
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
+    fontWeight: fontWeight.regular,
     color: colors.textInverse,
     letterSpacing: -0.2,
   },
@@ -1119,9 +1119,9 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     color: colors.textInverse,
   },
-  titleAlone: { fontSize: fontSize.titleXl },
+  titleAlone: { fontFamily: fontFamily.heading, fontSize: fontSize.titleXl },
   /** Headline sitting inside the meta column — tighter than the display slot. */
-  titleTight: { fontSize: fontSize.titleMd, marginBottom: spacing.xs },
+  titleTight: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.titleMd, marginBottom: spacing.xs },
   metaSecondary: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.brandSoft },
   /** Warm secondary for the burnt hero — 5.3:1 on `stormSevere`. */
   metaSecondaryWarm: { color: colors.accentSoft },

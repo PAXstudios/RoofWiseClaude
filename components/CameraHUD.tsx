@@ -20,7 +20,7 @@ import {
   type MotionSample,
 } from '@/lib/services/deviceMotion';
 import { pitchDegreesToRatio, yawToOrientation } from '@/lib/models/types';
-import { colors, dataLabel, fontSize, glass, radii, spacing } from '@/theme/tokens';
+import { colors, dataLabel, fontSize, radii, spacing } from '@/theme/tokens';
 
 type Props = {
   /** Currently-selected slope (S, N, etc.) so the cluster can flag a heading that drifts. */
@@ -87,7 +87,7 @@ export function CameraHUD({
       )}
       {motion && (
         <View style={styles.chip}>
-          <Ionicons name="trending-up" size={14} color={colors.textInverse} />
+          <Ionicons name="trending-up" size={14} color={colors.text} />
           <Text style={styles.chipText}>
             {motion.pitchDegrees.toFixed(1)}° · {pitchDegreesToRatio(motion.pitchDegrees)}
           </Text>
@@ -95,13 +95,13 @@ export function CameraHUD({
       )}
       {altFeet !== null && (
         <View style={styles.chip}>
-          <Ionicons name="navigate" size={14} color={colors.textInverse} />
+          <Ionicons name="navigate" size={14} color={colors.text} />
           <Text style={styles.chipText}>{altFeet.toFixed(0)} ft</Text>
         </View>
       )}
       {liveShingleCount != null && (
         <View style={styles.chip}>
-          <Ionicons name="scan-outline" size={14} color={colors.textInverse} />
+          <Ionicons name="scan-outline" size={14} color={colors.text} />
           <Text style={styles.chipText}>~{liveShingleCount} shingles in frame</Text>
         </View>
       )}
@@ -119,9 +119,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radii.pill,
-    backgroundColor: glass.smokeFill,
+    backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.smokeBorder,
+    borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -140,9 +140,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: glass.smokeFill,
+    backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.smokeBorder,
+    borderColor: colors.borderStrong,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radii.pill,
@@ -152,6 +152,6 @@ const styles = StyleSheet.create({
   // Instrument readouts (heading, pitch, altitude, live count) read as the
   // mock's mono/uppercase data-label convention (docs/DESIGN_1A.md §3) — an
   // instrument cluster, not prose.
-  chipStrong: { ...dataLabel, color: colors.textInverse, fontSize: fontSize.bodySm, letterSpacing: 0.6 },
-  chipText: { ...dataLabel, color: colors.textInverse, opacity: 0.88 },
+  chipStrong: { ...dataLabel, color: colors.text, fontSize: fontSize.bodySm, letterSpacing: 0.6 },
+  chipText: { ...dataLabel, color: colors.text, opacity: 0.88 },
 });

@@ -130,7 +130,7 @@ const webStyles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   ctaText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
@@ -243,7 +243,7 @@ function PitchGaugeNative() {
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.textInverse} />
+          <Ionicons name="chevron-back" size={26} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Pitch Gauge</Text>
       </View>
@@ -357,7 +357,7 @@ function AttachSheet({
         <View style={[styles.sheetWrap, { paddingBottom: insets.bottom + spacing.lg }]}>
           {/* Stop the scrim's dismiss from firing on taps inside the sheet. */}
           <Pressable onPress={() => {}}>
-            <GlassCard level="high" radius={radii.xl} style={styles.sheet}>
+            <GlassCard onLight level="high" radius={radii.xl} style={[styles.sheet, { backgroundColor: colors.surface }]}>
               {ins === null ? (
                 <>
                   <Text style={styles.sheetTitle}>Attach {degrees}° to a job</Text>
@@ -391,7 +391,7 @@ function AttachSheet({
                               {item.reportId} · {item.address}
                             </Text>
                           </View>
-                          <Ionicons name="chevron-forward" size={20} color={colors.textInverse} />
+                          <Ionicons name="chevron-forward" size={20} color={colors.text} />
                         </Pressable>
                       )}
                     />
@@ -405,7 +405,7 @@ function AttachSheet({
                     accessibilityRole="button"
                     accessibilityLabel="Back to jobs"
                   >
-                    <Ionicons name="chevron-back" size={20} color={colors.textInverse} />
+                    <Ionicons name="chevron-back" size={20} color={colors.text} />
                     <Text style={styles.sheetBackText}>Jobs</Text>
                   </Pressable>
                   <Text style={styles.sheetTitle}>
@@ -480,7 +480,7 @@ function clampTransform(rollDegrees: number): number {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.navy },
+  root: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -506,10 +506,10 @@ const styles = StyleSheet.create({
   hint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.onMesh, opacity: 0.78, textAlign: 'center', paddingHorizontal: spacing.xxl },
 
   readout: { alignItems: 'center', gap: spacing.xs },
-  degrees: { fontFamily: fontFamily.archivo.extrabold, fontSize: fontSize.display * 2.8, fontWeight: fontWeight.extrabold, color: colors.onMesh, letterSpacing: -2 },
+  degrees: { fontFamily: fontFamily.display, fontSize: fontSize.display * 2.8, fontWeight: fontWeight.regular, color: colors.onMesh, letterSpacing: -2 },
   degreesImplausible: { color: colors.warn },
   ratio: { fontFamily: fontFamily.mono, fontSize: fontSize.titleLg, fontWeight: fontWeight.semibold, color: colors.accent, marginTop: -spacing.sm },
-  implausible: {
+  implausible: { fontFamily: fontFamily.archivo.semibold,
     color: colors.warn,
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
@@ -545,8 +545,8 @@ const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: colors.scrim, justifyContent: 'flex-end' },
   sheetWrap: { paddingHorizontal: spacing.md },
   sheet: { padding: spacing.lg, gap: spacing.md },
-  sheetTitle: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold },
-  sheetBody: { color: colors.textInverse, fontFamily: fontFamily.archivo.regular, opacity: 0.8, fontSize: fontSize.bodySm, lineHeight: 18 },
+  sheetTitle: { color: colors.text, fontFamily: fontFamily.heading, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular },
+  sheetBody: { color: colors.text, fontFamily: fontFamily.archivo.regular, opacity: 0.8, fontSize: fontSize.bodySm, lineHeight: 18 },
   sheetBack: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.small,
     alignSelf: 'flex-start',
   },
-  sheetBackText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  sheetBackText: { fontFamily: fontFamily.archivo.semibold, color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   list: { maxHeight: 360 },
   row: {
     minHeight: touchTarget.standard,
@@ -567,8 +567,8 @@ const styles = StyleSheet.create({
   },
   rowSep: { height: spacing.sm },
   rowBody: { flex: 1, gap: 2 },
-  rowTitle: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
-  rowSub: { color: colors.textInverse, opacity: 0.7, fontSize: fontSize.bodySm },
+  rowTitle: { fontFamily: fontFamily.archivo.bold, color: colors.text, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  rowSub: { fontFamily: fontFamily.archivo.regular, color: colors.text, opacity: 0.7, fontSize: fontSize.bodySm },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   // 64pt chips — the "preferred" target for a gloved thumb.
   chip: {
@@ -581,8 +581,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
-  chipText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
-  chipSub: { color: colors.textInverse, opacity: 0.7, fontSize: fontSize.caption },
+  chipText: { fontFamily: fontFamily.archivo.bold, color: colors.text, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  chipSub: { fontFamily: fontFamily.archivo.regular, color: colors.text, opacity: 0.7, fontSize: fontSize.caption },
   sheetBtn: {
     minHeight: touchTarget.standard,
     flexDirection: 'row',
@@ -593,8 +593,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.surface,
   },
-  sheetBtnText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  sheetBtnText: { fontFamily: fontFamily.archivo.semibold, color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   cancel: { minHeight: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
-  cancelText: { color: colors.textInverse, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  cancelText: { fontFamily: fontFamily.archivo.semibold, color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   pressed: { opacity: 0.7 },
 });

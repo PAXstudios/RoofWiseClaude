@@ -13,6 +13,7 @@ import {
   FlatList,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -39,6 +40,7 @@ import Animated, {
 import { MeshBackground } from '@/components/ui/MeshBackground';
 import {
   PacketScene,
+  ONBOARDING_SCENE_SIZE,
   ScanScene,
   StormScene,
   VerdictScene,
@@ -52,7 +54,6 @@ import {
   fontFamily,
   fontSize,
   fontWeight,
-  glass,
   motion,
   radii,
   shadows,
@@ -136,7 +137,7 @@ export default function Onboarding() {
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       {/* The system's one signature background — full 5-stop ramp, warmest
           variant in the app (docs/DESIGN_1A.md §2, "Onboarding 1 / Sign-in"
           row). Replaces the old flat-black + Aurora-orb hero. */}
@@ -167,6 +168,7 @@ export default function Onboarding() {
           data={SCENES}
           keyExtractor={(s) => s.key}
           horizontal
+          style={styles.carousel}
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={onScroll}
@@ -239,7 +241,12 @@ function AmbientDrift({ children }: { children: React.ReactNode }) {
 function SceneSlide({ scene, active, width }: { scene: Scene; active: boolean; width: number }) {
   const { Illustration } = scene;
   return (
-    <View style={[styles.slide, { width }]}>
+    <ScrollView
+      style={[styles.slideViewport, { width }]}
+      contentContainerStyle={styles.slide}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator
+    >
       <View style={styles.stageWrap}>
         <AmbientDrift>
           <Illustration active={active} />
@@ -272,7 +279,7 @@ function SceneSlide({ scene, active, width }: { scene: Scene; active: boolean; w
           </Animated.Text>
         </Animated.View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -311,10 +318,11 @@ function Dot({ active }: { active: boolean }) {
 const styles = StyleSheet.create({
   // Dark edge under the mesh (offscreen safe-area slivers, a slow grain
   // load) — matches the ramp's own 0% stop rather than pure black.
-  root: { flex: 1, backgroundColor: brand.royalInk },
+  root: { flex: 1, backgroundColor: colors.bg },
   safe: { flex: 1 },
 
   topBar: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -347,23 +355,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     justifyContent: 'center',
     borderRadius: radii.pill,
-    backgroundColor: glass.smokeFill,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: glass.smokeBorder,
+    borderColor: colors.border,
   },
   skipText: {
-    color: colors.textInverse,
-    opacity: 0.85,
+    color: colors.textMuted,
     fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     fontSize: fontSize.bodyMd,
   },
 
-  // Illustration takes the free space at the top and centers within it; the
-  // copy sits directly above the footer. Centering the whole group instead
-  // left a large dead gap under the text on tall screens.
-  slide: { flex: 1, paddingHorizontal: spacing.xl },
-  stageWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  // Keep the horizontal pager bounded while each page can scroll vertically.
+  // Fixed-size art must not collapse into the copy on short screens or when
+  // larger system text needs more room. Next and Skip stay outside the scroll.
+  carousel: { flex: 1, minHeight: 0 },
+  slideViewport: { flex: 1, minHeight: 0 },
+  slide: { flexGrow: 1, paddingHorizontal: spacing.xl },
+  stageWrap: {
+    flexGrow: 1,
+    flexShrink: 0,
+    minHeight: ONBOARDING_SCENE_SIZE + spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   copy: {
     alignItems: 'flex-start',
     alignSelf: 'stretch',
@@ -387,9 +402,10 @@ const styles = StyleSheet.create({
   // breaking that two-line rhythm.
   title: {
     color: colors.onMesh,
-    fontFamily: fontFamily.archivo.extrabold,
-    fontWeight: fontWeight.extrabold,
-    fontSize: fontSize.display + 4,
+    fontFamily: fontFamily.display,
+    fontWeight: fontWeight.regular,
+    fontSize: fontSize.heroCompact,
+    textTransform: 'uppercase',
     letterSpacing: -1.2,
     lineHeight: 42,
   },
@@ -402,7 +418,7 @@ const styles = StyleSheet.create({
     lineHeight: 25,
   },
 
-  footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.md },
+  footer: { flexShrink: 0, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.md },
   dots: { flexDirection: 'row', gap: spacing.sm, alignSelf: 'center' },
   // backgroundColor is set per-instance in <Dot> (active → burntLight,
   // inactive → onMesh) — this base only carries shape.
@@ -413,7 +429,7 @@ const styles = StyleSheet.create({
   // brand-tinted `shadows.hero` is the "coloured shadow" §6 calls for.
   cta: {
     height: touchTarget.sticky,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     backgroundColor: brand.burnt,
     flexDirection: 'row',
     alignItems: 'center',
@@ -431,8 +447,7 @@ const styles = StyleSheet.create({
   },
   secondary: { alignSelf: 'center', minHeight: touchTarget.standard, justifyContent: 'center' },
   secondaryText: {
-    color: colors.onMesh,
-    opacity: 0.6,
+    color: colors.textMuted,
     fontFamily: fontFamily.archivo.medium,
     fontWeight: fontWeight.medium,
     fontSize: fontSize.bodyMd,

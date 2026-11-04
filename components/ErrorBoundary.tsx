@@ -7,6 +7,7 @@ import { recordError, toText } from '@/lib/services/diagnostics';
 import { useToastStore } from '@/lib/stores/toastStore';
 import {
   colors,
+  fontFamily,
   fontSize,
   fontWeight,
   radii,
@@ -128,14 +129,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
   },
-  title: {
+  title: { fontFamily: fontFamily.heading,
     fontSize: fontSize.titleLg,
-    fontWeight: fontWeight.bold,
+    fontWeight: fontWeight.regular,
     color: colors.navy,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
-  body: {
+  body: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodyLg,
     color: colors.slate,
     textAlign: 'center',
@@ -151,7 +152,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.orange,
     marginTop: spacing.sm,
   },
-  primaryBtnText: {
+  primaryBtnText: { fontFamily: fontFamily.archivo.semibold,
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
@@ -170,7 +171,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.fillQuiet,
   },
-  secondaryBtnText: {
+  secondaryBtnText: { fontFamily: fontFamily.archivo.semibold,
     color: colors.navy,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
@@ -183,14 +184,14 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: colors.warn,
   },
-  detailLabel: {
+  detailLabel: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.semibold,
     color: colors.slate,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  detailText: { fontSize: fontSize.bodyMd, color: colors.navy },
+  detailText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.navy },
   // Scrollable so a long native+component stack never gets clipped —
   // the whole point of this screen is that the roofer can read (and copy)
   // the actual failure, not a truncated hint of it.
@@ -201,7 +202,7 @@ const styles = StyleSheet.create({
     color: colors.textSubtle,
     lineHeight: 18,
   },
-  detailHint: {
+  detailHint: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodySm,
     color: colors.slate,
     marginTop: spacing.xs,

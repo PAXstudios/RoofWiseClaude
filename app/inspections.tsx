@@ -20,7 +20,7 @@ import { summarizeInspection } from '@/components/DamageDetailSection';
 import { RichCard } from '@/components/ui/RichCard';
 import { IconChip, type ChipTone, type IoniconName } from '@/components/ui/IconChip';
 import { Pill, type PillTone } from '@/components/ui/Pill';
-import {
+import { fontFamily,
   colors,
   fontSize,
   fontWeight,
@@ -227,8 +227,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
-  sub: {
+  title: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold, color: colors.text },
+  sub: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.caption,
     color: colors.textSubtle,
     marginTop: 1,
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
     borderRadius: radii.control,
   },
-  searchInput: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
+  searchInput: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
 
   chipScroll: { maxHeight: touchTarget.standard, marginTop: spacing.xs, flexGrow: 0 },
   chipScrollContent: { paddingHorizontal: spacing.lg, alignItems: 'center' },
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipActive: { backgroundColor: colors.brand },
-  chipText: { fontSize: fontSize.bodySm, color: colors.text, fontWeight: fontWeight.semibold },
+  chipText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, color: colors.text, fontWeight: fontWeight.semibold },
   chipTextActive: { color: colors.textInverse },
 
   content: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxxl },
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   // exists to leave behind.
   list: { gap: spacing.md },
 
-  rowMeta: {
+  rowMeta: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.caption,
     color: colors.textSubtle,
     textTransform: 'capitalize',
@@ -299,8 +299,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingHorizontal: spacing.xs,
   },
-  emptyTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  emptyBody: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  emptyTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  emptyBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
   emptyBtn: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.xl,
@@ -310,5 +310,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.xs,
   },
-  emptyBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  emptyBtnText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
 });

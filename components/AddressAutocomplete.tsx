@@ -585,7 +585,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.lg,
   },
-  dropdownEmptyText: { color: colors.slate, fontSize: fontSize.bodySm },
+  dropdownEmptyText: { fontFamily: fontFamily.archivo.regular, color: colors.slate, fontSize: fontSize.bodySm },
 
   // Status lines — sun-readable, never a whisper of italic caption.
   notice: {

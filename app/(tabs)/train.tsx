@@ -447,16 +447,16 @@ const styles = StyleSheet.create({
   },
 
   // Accuracy dial — the one dark, cinematic card on this screen.
-  dialShell: { borderRadius: radii.xl, ...shadows.hero },
+  dialShell: { borderRadius: radii.card, ...shadows.hero },
   dialCard: {
-    borderRadius: radii.xl,
+    borderRadius: radii.card,
     overflow: 'hidden',
     alignItems: 'center',
     paddingVertical: spacing.xxl,
     paddingHorizontal: spacing.xl,
     gap: spacing.lg,
     // Painted under the gradient so the card is never briefly transparent.
-    backgroundColor: brand.royalInk,
+    backgroundColor: colors.surface,
   },
   dialRingWrap: {
     width: DIAL_SIZE,
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
   dialValue: {
     fontSize: fontSize.titleXl,
     fontWeight: fontWeight.regular,
-    fontFamily: fontFamily.archivo.extrabold,
+    fontFamily: fontFamily.display,
     color: colors.onMesh,
     fontVariant: ['tabular-nums'],
     letterSpacing: -0.5,

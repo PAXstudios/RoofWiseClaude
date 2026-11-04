@@ -16,7 +16,7 @@ import { PlanView } from '@/components/knock/PlanView';
 import { useKnockFinderStore } from '@/lib/stores/knockFinderStore';
 import { useToastStore } from '@/lib/stores/toastStore';
 import { formatDateTime } from '@/lib/format/date';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { fontFamily, colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 export default function KnockPlanScreen() {
   const router = useRouter();
@@ -98,8 +98,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxxl * 2 },
   headerBtn: { width: touchTarget.standard, height: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
-  notes: { fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 21 },
-  notesInput: { minHeight: 96, fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 21, padding: spacing.md, borderRadius: radii.md, backgroundColor: colors.fillQuiet, textAlignVertical: 'top' },
+  notes: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 21 },
+  notesInput: { fontFamily: fontFamily.archivo.regular, minHeight: 96, fontSize: fontSize.bodyMd, color: colors.text, lineHeight: 21, padding: spacing.md, borderRadius: radii.md, backgroundColor: colors.fillQuiet, textAlignVertical: 'top' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
-  emptyText: { fontSize: fontSize.bodyMd, color: colors.textMuted, fontWeight: fontWeight.medium },
+  emptyText: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodyMd, color: colors.textMuted, fontWeight: fontWeight.medium },
 });

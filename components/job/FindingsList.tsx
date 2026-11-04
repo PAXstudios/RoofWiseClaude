@@ -148,7 +148,7 @@ export function FindingsList({ inspection }: { inspection: Inspection }) {
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.md },
-  coverage: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  coverage: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
   // The 1A findings pattern: a coloured left accent bar reads the severity
   // before a word is read, same craft rule as the tile-ground/ink pairing.
   card: {
@@ -163,10 +163,10 @@ const styles = StyleSheet.create({
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   cardMain: { flex: 1, gap: 2 },
   cardTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, color: colors.text },
-  cardSub: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  cardSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
   rowTitle: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.semibold, color: colors.text },
   confidenceBlock: { alignItems: 'flex-end', gap: 1 },
-  confidenceValue: { fontSize: fontSize.titleSm, fontFamily: fontFamily.archivo.bold, fontVariant: ['tabular-nums'] },
+  confidenceValue: { fontSize: fontSize.titleSm, fontFamily: fontFamily.display, fontVariant: ['tabular-nums'] },
   confidenceLabel: { color: colors.textSubtle },
   slopeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   // 56pt chips — a gloved thumb opens the photo (Drift #1).
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   slopeChipDir: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.bold, color: colors.text },
-  slopeChipCount: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  slopeChipCount: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
   collateralRow: {
     minHeight: touchTarget.standard,
     flexDirection: 'row',
@@ -191,5 +191,5 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   empty: { alignItems: 'center', gap: spacing.sm, padding: spacing.lg },
-  emptyText: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
+  emptyText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
 });

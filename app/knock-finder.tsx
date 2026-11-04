@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   },
   planRowLatest: { borderColor: colors.accent, borderWidth: 1.5, ...shadows.card },
   planRing: { width: 52, height: 52, borderRadius: 26, borderWidth: 3, borderColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  planRingValue: { fontFamily: fontFamily.archivo.extrabold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.accent },
+  planRingValue: { fontFamily: fontFamily.display, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.accent },
   planMain: { flex: 1, gap: 2 },
   planTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   planTitle: { flexShrink: 1, fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.navy },

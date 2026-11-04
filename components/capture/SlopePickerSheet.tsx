@@ -14,7 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { hudSelected, hudSelectedInk } from '@/components/capture/hud/glass';
 import type { SlopeOrientation } from '@/lib/models/types';
-import { colors, fontFamily, fontSize, fontWeight, glass, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 
 /** The eight compass slopes, laid out as a compass rose reads: row by row. */
 const ROSE: SlopeOrientation[][] = [
@@ -61,7 +61,7 @@ export function SlopePickerSheet({
         <View style={[styles.sheetWrap, { paddingBottom: insets.bottom + spacing.lg }]}>
           {/* Stop the scrim's dismiss from firing on taps inside the sheet. */}
           <Pressable onPress={() => {}}>
-            <GlassCard level="high" radius={radii.xl} style={styles.sheet}>
+            <GlassCard onLight level="high" radius={radii.xl} style={styles.sheet}>
               <View style={styles.header}>
                 <Text style={styles.title}>{title}</Text>
                 {!!reason && <Text style={styles.reason}>{reason}</Text>}
@@ -134,13 +134,13 @@ const styles = StyleSheet.create({
   sheet: { padding: spacing.lg, gap: spacing.md },
   header: { gap: spacing.xs },
   title: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
   },
   reason: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.8,
     fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.regular,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: touchTarget.preferred,
     borderRadius: radii.button,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   // tracked) without dropping to caption size — this is the one thing a
   // roofer must read at a glance, not an auxiliary meta tag.
   cellText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
     fontFamily: fontFamily.mono,
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   },
   cellTextActive: { color: hudSelectedInk },
   cellCount: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.7,
     fontSize: fontSize.caption,
     fontFamily: fontFamily.archivo.regular,
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   cellCountActive: { color: hudSelectedInk, opacity: 0.85 },
   cancel: { minHeight: touchTarget.standard, alignItems: 'center', justifyContent: 'center' },
   cancelText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,

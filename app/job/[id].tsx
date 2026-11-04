@@ -616,7 +616,7 @@ export default function JobDetail() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <MeshBackground variant="cool" />
       {/* 1A screen 04 is one continuous report masthead: controls, address,
           property context, then the scored bar. The real tabbed workflow
@@ -1024,7 +1024,7 @@ function CompactHero({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: brand.royalInk },
+  root: { flex: 1, backgroundColor: colors.bg },
   jobBody: { flex: 1, backgroundColor: colors.bg },
   reportHero: {
     paddingHorizontal: spacing.xl,
@@ -1051,21 +1051,21 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   reportScoreRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.lg },
-  reportScoreLabel: { ...dataLabel, color: colors.onMesh, opacity: 0.62 },
+  reportScoreLabel: { ...dataLabel, color: colors.textMuted, opacity: 1 },
   reportScore: {
     color: brand.burntLight,
-    fontFamily: fontFamily.archivo.extrabold,
-    fontWeight: fontWeight.extrabold,
+    fontFamily: fontFamily.display,
+    fontWeight: fontWeight.regular,
     fontSize: 36,
     lineHeight: 38,
     letterSpacing: -1.8,
     marginTop: 0,
   },
   reportScoreBody: { flex: 1, paddingBottom: spacing.xs },
-  reportScoreTrack: { height: 9, borderRadius: radii.pill, backgroundColor: 'rgba(242,240,231,0.22)', overflow: 'hidden' },
+  reportScoreTrack: { height: 9, borderRadius: radii.pill, backgroundColor: colors.border, overflow: 'hidden' },
   reportScoreFill: { height: 9, borderRadius: radii.pill },
   reportScoreMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
-  reportScoreEnd: { color: colors.onMesh, opacity: 0.55, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption },
+  reportScoreEnd: { color: colors.textMuted, opacity: 1, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption },
   reportBandPill: { maxWidth: '72%', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: brand.burntDeep },
   reportBandText: { color: colors.textInverse, fontFamily: fontFamily.mono, fontWeight: fontWeight.bold, fontSize: 9, textTransform: 'uppercase' },
   header: {
@@ -1120,7 +1120,7 @@ const styles = StyleSheet.create({
     borderColor: colors.warn,
   },
   missingTitle: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, color: colors.text },
-  missingBody: { fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginTop: 2 },
+  missingBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18, marginTop: 2 },
 
   // ── Compact hero ──────────────────────────────────────────────────────────
   heroCard: {
@@ -1157,8 +1157,8 @@ const styles = StyleSheet.create({
   heroInfo: { flex: 1, gap: 1 },
   heroEyebrow: { ...dataLabel, color: colors.textSubtle },
   heroCustomer: { fontSize: fontSize.titleSm, fontFamily: fontFamily.archivo.bold, color: colors.text, letterSpacing: -0.2 },
-  heroAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  heroOneLiner: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 1 },
+  heroAddress: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
+  heroOneLiner: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 1 },
 
   heroFooter: {
     flexDirection: 'row',
@@ -1169,7 +1169,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   stagePillBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: touchTarget.small },
-  heroMeta: { flex: 1, fontSize: fontSize.caption, color: colors.textSubtle },
+  heroMeta: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.caption, color: colors.textSubtle },
   heroAmount: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.bold, color: colors.text, fontVariant: ['tabular-nums'] },
 
   tabsBar: { marginHorizontal: spacing.lg, marginBottom: spacing.sm },
@@ -1185,5 +1185,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryBtnText: { color: colors.text, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  secondaryBtnText: { fontFamily: fontFamily.archivo.semibold, color: colors.text, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
 });

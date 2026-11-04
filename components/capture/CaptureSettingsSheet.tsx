@@ -42,7 +42,6 @@ import {
   fontFamily,
   fontSize,
   fontWeight,
-  glass,
   hudMotion,
   motion,
   radii,
@@ -181,6 +180,7 @@ export function CaptureSettingsSheet({ visible, onClose, livePausedReason }: Pro
           accessibilityLabel="Close capture settings"
         />
         <GlassCard
+          onLight
           onArt
           radius={radii.xl}
           style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
@@ -322,7 +322,7 @@ export function CaptureSettingsSheet({ visible, onClose, livePausedReason }: Pro
                   }}
                   accessibilityRole="button"
                 >
-                  <Ionicons name="scan-outline" size={20} color={colors.textInverse} />
+                  <Ionicons name="scan-outline" size={20} color={colors.text} />
                   <Text style={styles.ctaText}>Turn on Live overlay instead</Text>
                 </Pressable>
               )}
@@ -376,7 +376,7 @@ function SettingRow({
       accessibilityState={accessibilityState}
     >
       <View style={styles.rowIcon}>
-        <Ionicons name={icon} size={22} color={colors.textInverse} />
+        <Ionicons name={icon} size={22} color={colors.text} />
       </View>
       <View style={styles.rowText}>
         <Text style={styles.rowTitle}>{title}</Text>
@@ -405,7 +405,7 @@ function Explainer({
           accessibilityRole="button"
           accessibilityLabel="Back to capture settings"
         >
-          <Ionicons name="chevron-back" size={26} color={colors.textInverse} />
+          <Ionicons name="chevron-back" size={26} color={colors.text} />
         </Pressable>
         <Text style={styles.title}>{title}</Text>
       </View>
@@ -420,7 +420,7 @@ function Chevron({ badge }: { badge: string }) {
       <View style={styles.badge}>
         <Text style={styles.badgeText}>{badge}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textInverse} />
+      <Ionicons name="chevron-forward" size={20} color={colors.text} />
     </View>
   );
 }
@@ -446,6 +446,7 @@ const styles = StyleSheet.create({
   scrim: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
   scrimTap: { flex: 1 },
   sheet: {
+    backgroundColor: colors.surface,
     paddingTop: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderBottomLeftRadius: 0,
@@ -456,17 +457,17 @@ const styles = StyleSheet.create({
     width: 36,
     height: 5,
     borderRadius: radii.pill,
-    backgroundColor: glass.borderStrong,
+    backgroundColor: colors.borderStrong,
     marginBottom: spacing.md,
   },
   title: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     fontFamily: fontFamily.archivo.bold,
   },
   subtitle: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.78,
     fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.regular,
@@ -483,26 +484,26 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: glass.border,
+    borderBottomColor: colors.border,
   },
   rowPressed: { opacity: 0.7 },
   rowIcon: {
     width: touchTarget.small,
     height: touchTarget.small,
     borderRadius: radii.pill,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rowText: { flex: 1, gap: 2 },
   rowTitle: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,
   },
   rowSub: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.75,
     fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.regular,
@@ -513,18 +514,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radii.pill,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: glass.borderStrong,
+    borderColor: colors.borderStrong,
   },
   // "Full app" / "No sensor" / "Turn on" — the mock's status-badge convention.
-  badgeText: { ...dataLabel, color: colors.textInverse, letterSpacing: 0.6 },
+  badgeText: { ...dataLabel, color: colors.text, letterSpacing: 0.6 },
 
   switchTrack: {
     width: 51,
     height: 31,
     borderRadius: radii.pill,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
     padding: 2,
     justifyContent: 'center',
   },
@@ -550,13 +551,13 @@ const styles = StyleSheet.create({
   },
   explainerBody: { gap: spacing.md, paddingTop: spacing.sm },
   headline: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
     fontFamily: fontFamily.archivo.bold,
   },
   body: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.9,
     fontSize: fontSize.bodyMd,
     fontFamily: fontFamily.archivo.regular,
@@ -564,7 +565,7 @@ const styles = StyleSheet.create({
   },
   bodyStrong: { fontWeight: fontWeight.bold, fontFamily: fontFamily.archivo.bold, opacity: 1 },
   deviceLine: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.6,
     fontSize: fontSize.caption,
     fontFamily: fontFamily.mono,
@@ -589,14 +590,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     height: touchTarget.standard,
     borderRadius: radii.button,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.borderStrong,
+    borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   doneText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.bold,
     fontFamily: fontFamily.archivo.bold,

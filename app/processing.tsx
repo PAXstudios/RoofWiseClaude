@@ -17,7 +17,7 @@ import {
   queueSlopeAnalysis,
   type SlopeAnalysisProgress,
 } from '@/lib/services/analysisQueue';
-import {
+import { fontFamily,
   colors,
   fontSize,
   fontWeight,
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
 
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  countLine: {
+  countLine: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodySm,
     color: colors.textMuted,
     marginTop: spacing.sm,
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
     marginTop: spacing.md,
   },
-  retryBtnText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  retryBtnText: { fontFamily: fontFamily.archivo.semibold, color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
   // Retry-all — the one loud control on the screen (only when failures exist).
   retryAll: {
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     ...shadows.raised,
   },
-  retryAllText: {
+  retryAllText: { fontFamily: fontFamily.archivo.semibold,
     color: colors.textInverse,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
@@ -209,8 +209,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xxxl,
     paddingHorizontal: spacing.xl,
   },
-  emptyTitle: { fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.text },
-  emptyBody: {
+  emptyTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.titleMd, fontWeight: fontWeight.semibold, color: colors.text },
+  emptyBody: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodyMd,
     color: colors.textMuted,
     textAlign: 'center',
@@ -225,5 +225,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.md,
   },
-  secondaryBtnText: { color: colors.text, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  secondaryBtnText: { fontFamily: fontFamily.archivo.semibold, color: colors.text, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
 });

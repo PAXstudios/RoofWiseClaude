@@ -31,7 +31,7 @@ import { PhotoActionsSheet } from '@/components/sheets/PhotoActionsSheet';
 import { describeAnalysisError } from '@/lib/services/gemini';
 import { scorePhotos } from '@/lib/services/photoQuality';
 import { isGeminiConfigured } from '@/lib/env';
-import {
+import { fontFamily,
   colors,
   fontSize,
   fontWeight,
@@ -432,12 +432,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  reportId: { fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold },
-  title: { fontSize: fontSize.titleLg, fontWeight: fontWeight.bold, color: colors.navy },
+  reportId: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption, color: colors.slate, fontWeight: fontWeight.semibold },
+  title: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.titleLg, fontWeight: fontWeight.regular, color: colors.navy },
 
   scroll: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
 
-  cardSub: { fontSize: fontSize.bodyMd, color: colors.slate },
+  cardSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.slate },
 
   warnBanner: {
     flexDirection: 'row',
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     alignItems: 'center',
   },
-  warnText: { color: colors.navy, fontSize: fontSize.bodySm, flex: 1 },
+  warnText: { fontFamily: fontFamily.archivo.regular, color: colors.navy, fontSize: fontSize.bodySm, flex: 1 },
   errorBanner: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -456,9 +456,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     alignItems: 'center',
   },
-  errorText: { color: colors.danger, fontSize: fontSize.bodySm, flex: 1 },
+  errorText: { fontFamily: fontFamily.archivo.regular, color: colors.danger, fontSize: fontSize.bodySm, flex: 1 },
 
-  hint: { fontSize: fontSize.bodySm, color: colors.slate, marginTop: -spacing.xs },
+  hint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.slate, marginTop: -spacing.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   thumb: { width: 100, height: 100, borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.surfaceMuted },
   thumbImg: { width: '100%', height: '100%' },
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
   },
 
   footer: { padding: spacing.xl, gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
-  progressText: { color: colors.slate, fontSize: fontSize.bodySm, textAlign: 'center' },
+  progressText: { fontFamily: fontFamily.archivo.regular, color: colors.slate, fontSize: fontSize.bodySm, textAlign: 'center' },
   btnRow: { flexDirection: 'row', gap: spacing.md },
   // The quiet Next under a live Analyze primary — still a full 56pt row.
   queueBtn: {
@@ -484,12 +484,12 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     minHeight: touchTarget.standard,
   },
-  nextBtnText: {
+  nextBtnText: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyMd,
     color: colors.brand,
     fontWeight: fontWeight.semibold,
   },
-  queueBtnText: { color: colors.slate, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
+  queueBtnText: { fontFamily: fontFamily.archivo.medium, color: colors.slate, fontSize: fontSize.bodySm, fontWeight: fontWeight.medium },
   secondaryBtn: {
     flex: 1,
     height: touchTarget.preferred,
@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryBtnDisabled: { opacity: 0.45 },
-  secondaryBtnText: { color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
+  secondaryBtnText: { fontFamily: fontFamily.archivo.semibold, color: colors.navy, fontWeight: fontWeight.semibold, fontSize: fontSize.bodyMd },
   primaryBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -513,8 +513,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryBtnDisabled: { opacity: 0.4 },
-  primaryBtnText: { color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
+  primaryBtnText: { fontFamily: fontFamily.archivo.bold, color: colors.textInverse, fontWeight: fontWeight.bold, fontSize: fontSize.bodyLg },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyText: { color: colors.slate, fontSize: fontSize.bodyMd },
+  emptyText: { fontFamily: fontFamily.archivo.regular, color: colors.slate, fontSize: fontSize.bodyMd },
 });

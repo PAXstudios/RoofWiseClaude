@@ -96,8 +96,8 @@ const styles = StyleSheet.create({
   previewMain: { flex: 1, gap: 2 },
   title: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.brand,
   },
   caption: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },

@@ -77,7 +77,7 @@ module.exports = {
       },
       adaptiveIcon: {
         foregroundImage: './assets/roofwise-app-logo.png',
-        backgroundColor: '#F2F0E7',
+        backgroundColor: '#FFFFFF',
       },
     },
     web: {
@@ -100,7 +100,7 @@ module.exports = {
           image: './assets/roofwise-app-logo.png',
           imageWidth: 220,
           resizeMode: 'contain',
-          backgroundColor: '#F2F0E7',
+          backgroundColor: '#FFFFFF',
         },
       ],
       'expo-apple-authentication',

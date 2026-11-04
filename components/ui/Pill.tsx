@@ -28,9 +28,9 @@ export type PillSize = 'sm' | 'md';
 const TONES: Record<PillTone, { soft: string; ink: string; solid: string; solidInk: string }> = {
   neutral: { soft: colors.fillQuiet, ink: colors.textMuted, solid: colors.textMuted, solidInk: colors.textInverse },
   brand: { soft: colors.brandSoft, ink: brand.royalDeep, solid: colors.brand, solidInk: colors.textInverse },
-  accent: { soft: colors.accentSoft, ink: colors.accentInk, solid: colors.accent, solidInk: colors.text },
+  accent: { soft: colors.accentSoft, ink: colors.accentInk, solid: colors.accent, solidInk: colors.textInverse },
   success: { soft: colors.successSoft, ink: colors.successInk, solid: colors.success, solidInk: colors.text },
-  warn: { soft: colors.warnSoft, ink: colors.warnInk, solid: colors.warn, solidInk: colors.text },
+  warn: { soft: colors.warnSoft, ink: colors.warnInk, solid: colors.warn, solidInk: colors.warnOnSolid },
   danger: { soft: colors.dangerSoft, ink: colors.dangerInk, solid: colors.danger, solidInk: colors.textInverse },
   info: { soft: colors.infoSoft, ink: brand.royalDeep, solid: colors.info, solidInk: colors.textInverse },
 };
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   pillSm: { minHeight: 22, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   pillMd: { minHeight: 28, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   label: { fontWeight: fontWeight.semibold, fontFamily: fontFamily.archivo.semibold, letterSpacing: 0.2 },
-  labelSm: { fontSize: fontSize.caption },
-  labelMd: { fontSize: fontSize.bodySm },
+  labelSm: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption },
+  labelMd: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm },
   dot: { width: 7, height: 7, borderRadius: 4 },
 });

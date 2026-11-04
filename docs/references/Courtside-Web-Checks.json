@@ -1,0 +1,301 @@
+{
+  "scope": "Existing Codex app; design changes only",
+  "base": "8abaed78f94c7833d2045e7660846467333ebbf2",
+  "checks": [
+    {
+      "route": "/",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/leads",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/map",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/plan",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/settings",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/train",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/+not-found",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/activity",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/analyze",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/annotate",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/damage-explainer",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/do-not-knock",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/door-knocking",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/edit-detection",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/estimate/[id]",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/estimator",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/hail-tracer",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/inspections",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/job/[id]",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/knock-finder",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/knock-plan/[id]",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/lead/[id]",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/mileage",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/new-job",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/new-lead",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/notifications",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/onboarding",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/p/[token]",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/photo-report",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/pitch-gauge",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/processing",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/proposal/[jobId]",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/quick-inspection",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/reports",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/safety-check",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/search",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/settings/about",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/settings/automations",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/settings/backup",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/settings/branding",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/settings/diagnostics",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/settings/inspector-profile",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/settings/pricing",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/settings/service-area",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/storm-alert/[id]",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/swipe-review",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/weather",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/welcome",
+      "blank": false,
+      "overflow": false,
+      "errors": []
+    }
+  ],
+  "errors": []
+}

@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   RefreshControl,
+  useWindowDimensions,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -47,8 +48,8 @@ import { selectUnreadCount, useNotificationStore } from '@/lib/stores/notificati
 import { coverPhotoUri, recordCardUrl } from '@/lib/services/propertyRecord';
 import { activityHref } from '@/components/home/activityRoute';
 import { MeshBackground } from '@/components/ui/MeshBackground';
+import { BrandGeometry } from '@/components/ui/BrandGeometry';
 import { IconChip, CHIP_TONES, type ChipTone } from '@/components/ui/IconChip';
-import { RichCard } from '@/components/ui/RichCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Pill, type PillTone } from '@/components/ui/Pill';
@@ -66,7 +67,6 @@ import {
   type InspectionStatus,
 } from '@/lib/models/types';
 import {
-  brand,
   colors,
   dataLabel,
   fontFamily,
@@ -79,6 +79,7 @@ import {
   shadows,
   spacing,
   touchTarget,
+  typography,
 } from '@/theme/tokens';
 
 function tap() {
@@ -135,6 +136,7 @@ const STATUS_PILL_TONE: Record<InspectionStatus, PillTone> = {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const inspections = useInspectionStore((s) => s.inspections);
@@ -328,39 +330,38 @@ export default function HomeScreen() {
         />
       }
     >
-      {/* ── The cinematic moment ────────────────────────────────────────
-          Greeting + stat row + WeatherHero are ONE bleed-to-edge mesh block,
-          not three modules on the paper ground — docs/DESIGN_1A.md §6's
-          curved-bottom mesh hero. `MeshBackground` carries the 5-stop ramp
-          and grain on its own; everything below stays light and quiet. */}
+      {/* Courtside masthead: real identity, search and store-derived metrics. */}
       <View style={styles.heroBlock}>
         <MeshBackground variant="home" />
 
         <Rise index={0}>
           <View style={styles.headerRow}>
-            <Text style={styles.greeting} accessibilityRole="header">
-              {greeting}
-            </Text>
+            <PressableScale accessibilityRole="button" accessibilityLabel="Open profile and settings" onPress={() => router.push('/settings')} style={styles.identity}>
+              <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandLogo} contentFit="contain" />
+              <Text style={styles.greeting}>{greeting}</Text>
+            </PressableScale>
             <View style={styles.headerActions}>
-              <HeaderIconButton
-                icon="search-outline"
-                label="Search"
-                onPress={() => router.push('/search')}
-              />
+              <HeaderIconButton icon="add" label="Quick add: inspection, job, lead, or estimate" onPress={() => { tap(); onQuickAdd(); }} />
+
               <HeaderIconButton
                 icon={unread > 0 ? 'notifications' : 'notifications-outline'}
                 label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
                 badge={unread}
                 onPress={() => router.push('/notifications')}
               />
-              <HeaderIconButton
-                icon="person-circle-outline"
-                label="Settings"
-                onPress={() => router.push('/settings')}
-              />
+
             </View>
           </View>
         </Rise>
+
+        <View style={styles.headlineWrap}>
+          <BrandGeometry />
+          <Text accessibilityRole="header" style={[styles.headline, width < 360 && styles.headlineCompact]}>YOUR NEXT JOB{'\n'}STARTS HERE.</Text>
+        </View>
+        <PressableScale accessibilityRole="button" accessibilityLabel="Search jobs, addresses and customers" onPress={() => router.push('/search')} style={styles.searchEntry}>
+          <Ionicons name="search-outline" size={20} color={colors.textMuted} />
+          <Text style={styles.searchEntryText}>Search jobs, addresses, customers</Text>
+        </PressableScale>
 
         {/* The mock's header stat row — Revenue YTD / Leads / Pipeline, real
             numbers from lib/services/pipeline.ts (see the useMemo above),
@@ -373,14 +374,14 @@ export default function HomeScreen() {
             onPress={() => router.push('/reports')}
             accessibilityLabel={`Revenue year to date $${formatShort(revenueYTD)}. Open reports.`}
           />
-          <View style={styles.heroStatDivider} />
+
           <HeroStat
             value={String(openLeads)}
             label="Leads"
             onPress={() => router.push('/reports')}
             accessibilityLabel={`${openLeads} open leads. Open reports.`}
           />
-          <View style={styles.heroStatDivider} />
+
           <HeroStat
             value={`$${formatShort(pipelineValue)}`}
             label="Pipeline"
@@ -389,24 +390,8 @@ export default function HomeScreen() {
           />
         </Rise>
 
-        {/* The owner's headline ask — first module under the stats, per
-            the v3 Home composition. It self-selects among alert / calm /
-            checking / unavailable and always renders SOMETHING, so this slot
-            is never an empty gap between the stats and the tools. */}
-        <Rise index={1} style={styles.heroSlot}>
-          <Animated.View style={heroParallaxStyle}>
-            <WeatherHero scrollY={scrollY} />
-          </Animated.View>
-        </Rise>
       </View>
 
-      {/* No standalone Storm Alert card here: WeatherHero (mounted above,
-          in the slot WeatherTile used to occupy) reads useStormAlertStore
-          itself and renders the full escalated treatment — flag, headline,
-          real cluster consequence line, dismiss — as its own state A. A
-          second card here would duplicate it and break "one cinematic
-          moment per screen." Drift #4 still holds: it only appears with a
-          genuine active alert, because that's WeatherHero's own gate. */}
       {!activeAlert && __DEV__ && (
         <Pressable
           style={styles.debugStorm}
@@ -424,53 +409,20 @@ export default function HomeScreen() {
         </Pressable>
       )}
 
-      {/* Hero CTAs — side by side (Drift #3). Quick Inspection is the one
-          burnt moment; New Job is a crafted, royal-chipped card. */}
+      {/* Courtside's paired actions preserve the original capture and job flows. */}
       <Rise index={2} style={styles.heroRow}>
-        <PressableScale
-          style={[styles.heroCta, styles.heroPrimaryShadow]}
-          accessibilityRole="button"
-          accessibilityLabel="Quick Inspection. Camera to AI to claim packet."
-          onPress={() => {
-            tap();
-            router.push('/quick-inspection');
-          }}
-        >
-          <View style={styles.heroPrimaryClip}>
-            <LinearGradient
-              colors={gradients.accent}
-              style={StyleSheet.absoluteFill}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            />
-            <View style={styles.heroPrimaryContent}>
-              <View style={styles.heroPrimaryIconBadge}>
-                <Ionicons name="scan-outline" size={22} color={colors.textInverse} />
-              </View>
-              <View>
-                <Text style={styles.heroPrimaryText}>Quick{'\n'}Inspection</Text>
-                <Text style={styles.heroPrimarySub}>Camera → AI → Claim packet</Text>
-              </View>
-            </View>
-          </View>
+        <PressableScale style={[styles.heroCta, styles.primaryAction]} accessibilityRole="button" accessibilityLabel="Quick Inspection. Camera to AI to claim packet." onPress={() => { tap(); router.push('/quick-inspection'); }}>
+          <Ionicons name="camera-outline" size={22} color={colors.textInverse}/>
+          <Text style={styles.pairedActionText}>Quick inspection</Text>
         </PressableScale>
-
-        <RichCard
-          onPress={() => {
-            tap();
-            router.push('/new-job');
-          }}
-          accessibilityLabel="New Job. Customer, insurance, roof."
-          style={styles.heroCta}
-          contentStyle={styles.heroQuietContent}
-        >
-          <IconChip name="briefcase-outline" tone="blue" size="md" />
-          <View>
-            <Text style={styles.heroQuietText}>New{'\n'}Job</Text>
-            <Text style={styles.heroQuietSub}>Customer · Insurance · Roof</Text>
-          </View>
-        </RichCard>
+        <PressableScale style={[styles.heroCta, styles.newJobAction]} accessibilityRole="button" accessibilityLabel="New Job. Customer, insurance, roof." onPress={() => { tap(); router.push('/new-job'); }}>
+          <Ionicons name="add-circle-outline" size={22} color={colors.textInverse}/>
+          <Text style={styles.pairedActionText}>New job</Text>
+        </PressableScale>
       </Rise>
+
+      {agenda.hasItems && <Rise index={3}><TodayModule agenda={agenda} /></Rise>}
+      <SectionHeader title="Tools & services"/>
 
       {/* Tools — directly under the two hero CTAs (owner 2026-09-03): the
           four things a roofer opens between jobs, each its own saturated
@@ -478,62 +430,40 @@ export default function HomeScreen() {
       <Rise index={3} style={styles.toolGrid}>
         <ToolTile
           icon="thunderstorm"
-          gradient={gradients.tileStorm}
           title="Storm Tracer"
           sub="Hail + wind map"
           onPress={() => router.push({ pathname: '/(tabs)/map', params: { filter: 'storms' } } as any)}
         />
         <ToolTile
           icon="compass"
-          gradient={gradients.tileKnock}
           title="Knock Planner"
           sub="Storm-hit streets"
           onPress={() => router.push('/knock-finder')}
         />
         <ToolTile
           icon="calculator"
-          gradient={gradients.tileEstimate}
           title="Estimator"
           sub="Solar + cost"
           onPress={() => router.push('/estimator')}
         />
         <ToolTile
           icon="car"
-          gradient={gradients.tileMileage}
           title="Mileage"
           sub="Tax log"
           onPress={() => router.push('/mileage')}
         />
       </Rise>
 
-      {/* Today — the roofer's real next actions (today's inspections,
-          follow-ups due, leads going cold, the live route), each row landing
-          on its job or lead. It sits right under the hero CTAs ONLY when
-          there is something to do: on a quiet day it is absent entirely, so
-          the weather + map first-screenful the owner asked for is untouched
-          and no "nothing today" placeholder ever occupies the cockpit. */}
-      {agenda.hasItems && (
-        <Rise index={3}>
-          <TodayModule agenda={agenda} />
-        </Rise>
-      )}
-
-      {/* Area Activity — the owner's second headline module, directly under
-          the hero CTAs so weather and map are the two things the first screen
-          is about. Always rendered: the card owns its own honest states (no
-          Maps key / no service area / no qualifying storms) and never
-          fabricates a pin or a count (Drift #5).
-
-          It sits ABOVE the stats deliberately. The stats row costs ~100pt and
-          on a fresh install reads "$0 / 0 / $0" — the least useful thing on a
-          390×844 first screen — and with it in front, the 200pt map body
-          started below the fold, so the owner's "map AND the weather" ask was
-          only half met on first paint. Weather and map now both land in the
-          first screenful; the numbers are one thumb-flick away. */}
+      {/* Live field intelligence retains its own honest loading and error states. */}
       <Rise index={3}>
         <AreaActivityCard />
       </Rise>
 
+        <Rise index={1} style={styles.heroSlot}>
+          <Animated.View style={heroParallaxStyle}>
+            <WeatherHero scrollY={scrollY} />
+          </Animated.View>
+        </Rise>
       {/* Revenue / Leads / Pipeline now live in the header stat row (above,
           inside the mesh hero) rather than a second copy down here — one
           number per metric, not two that could drift. */}
@@ -814,20 +744,6 @@ export default function HomeScreen() {
       )}
     </Animated.ScrollView>
 
-    <Rise index={9} style={styles.fabWrap}>
-      <PressableScale
-        style={styles.fab}
-        pressedScale={0.9}
-        accessibilityRole="button"
-        accessibilityLabel="Quick add: inspection, job, lead, or estimate"
-        onPress={() => {
-          tap();
-          onQuickAdd();
-        }}
-      >
-        <Ionicons name="add" size={28} color={colors.textInverse} />
-      </PressableScale>
-    </Rise>
     <QuickActionsSheet visible={quickOpen} onClose={() => setQuickOpen(false)} />
     </View>
   );
@@ -883,7 +799,7 @@ function HeaderIconButton({
       onPress={onPress}
     >
       <View style={styles.iconBtnFill}>
-        <Ionicons name={icon} size={22} color={colors.textInverse} />
+        <Ionicons name={icon} size={22} color={colors.text} />
         {badge && badge > 0 ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
@@ -921,7 +837,7 @@ function HeroStat({
       <Text style={styles.heroStatValue} numberOfLines={1}>
         {value}
       </Text>
-      <Text style={[styles.heroStatLabel, dataLabel]} numberOfLines={1}>
+      <Text style={[styles.heroStatLabel, dataLabel]} numberOfLines={2}>
         {label}
       </Text>
     </PressableScale>
@@ -937,13 +853,11 @@ function SectionTitle({ title }: { title: string }) {
 
 function ToolTile({
   icon,
-  gradient,
   title,
   sub,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  gradient: readonly [string, string];
   title: string;
   sub: string;
   onPress: () => void;
@@ -959,17 +873,15 @@ function ToolTile({
         onPress();
       }}
     >
-      <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.toolTile}>
+      <View style={styles.toolTile}>
         <View style={styles.toolTileIcon}>
-          <Ionicons name={icon} size={24} color={colors.textInverse} />
+          <Ionicons name={icon} size={24} color={colors.text} />
         </View>
-        <Text style={styles.toolTileTitle} numberOfLines={1}>
-          {title}
-        </Text>
-        <Text style={styles.toolTileSub} numberOfLines={1}>
-          {sub}
-        </Text>
-      </LinearGradient>
+        <View style={styles.toolTileCopy}>
+          <Text style={styles.toolTileTitle} numberOfLines={2}>{title}</Text>
+          <Text style={styles.toolTileSub} numberOfLines={1}>{sub}</Text>
+        </View>
+      </View>
     </PressableScale>
   );
 }
@@ -994,10 +906,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.xl,
     gap: spacing.lg,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+
     overflow: 'hidden',
-    backgroundColor: brand.royalInk,
+    backgroundColor: colors.surface,
   },
   heroSlot: { minHeight: touchTarget.standard },
 
@@ -1007,16 +918,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  greeting: {
-    flex: 1,
-    fontSize: fontSize.display,
-    fontFamily: fontFamily.archivo.extrabold,
-    // Tight, large, high-contrast — the onboarding display voice, carried
-    // into the app's own titles. The hero's own "white" (never pure
-    // #FFFFFF over a mesh — docs/DESIGN_1A.md §1).
-    color: colors.onMesh,
-    letterSpacing: -0.8,
-  },
+  identity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: touchTarget.standard },
+  brandLogo: { width: 36, height: 36 },
+  greeting: { flex: 1, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.medium, color: colors.text },
+  headlineWrap: { position: 'relative', overflow: 'hidden', paddingVertical: spacing.xs },
+  headline: { ...typography.display, lineHeight: 48, paddingRight: spacing.xxxl },
+  headlineCompact: { fontSize: fontSize.heroCompact, lineHeight: fontSize.heroCompact },
+  searchEntry: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: touchTarget.standard, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.control, backgroundColor: colors.surface },
+  searchEntryText: { flex: 1, color: colors.textMuted, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm },
+  primaryAction: { backgroundColor: colors.accent },
+  newJobAction: { backgroundColor: colors.brand },
+  pairedActionText: { color: colors.textInverse, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, flexShrink: 1 },
   headerActions: { flexDirection: 'row' },
   badge: { position: 'absolute', top: -4, right: -6, minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, borderWidth: 2, borderColor: colors.navy },
   badgeText: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.bold, color: colors.textInverse },
@@ -1030,9 +942,9 @@ const styles = StyleSheet.create({
     width: touchTarget.small,
     height: touchTarget.small,
     borderRadius: radii.pill,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: glass.border,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1040,24 +952,24 @@ const styles = StyleSheet.create({
   // The mesh hero's own stat row — REVENUE YTD / LEADS / PIPELINE, typeset
   // directly on the mesh (no card): a big Archivo number over a mono
   // `dataLabel` caption is the contrast, per docs/DESIGN_1A.md §3.
-  heroStatsRow: { flexDirection: 'row', alignItems: 'center' },
-  heroStat: { flex: 1, minHeight: touchTarget.small, gap: 2 },
+  heroStatsRow: { gap: spacing.sm, flexDirection: 'row', alignItems: 'stretch' },
+  heroStat: { flex: 1, minHeight: touchTarget.preferred, gap: spacing.sm, padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, backgroundColor: colors.surface },
   heroStatValue: {
-    fontSize: fontSize.titleLg,
-    fontFamily: fontFamily.archivo.bold,
+    fontSize: fontSize.titleXl,
+    fontFamily: fontFamily.display,
     color: colors.onMesh,
     letterSpacing: -0.5,
     fontVariant: ['tabular-nums'],
   },
-  heroStatLabel: { color: 'rgba(242,240,231,0.72)' },
-  heroStatDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: 'rgba(242,240,231,0.22)' },
+  heroStatLabel: { color: colors.textMuted },
+  heroStatDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.border },
 
   stack: { gap: spacing.md },
 
   // Hero CTAs — one burnt-gradient moment + one royal-chipped RichCard,
   // side by side, matched heights.
   heroRow: { flexDirection: 'row', gap: spacing.md },
-  heroCta: { flex: 1, minHeight: 132 },
+  heroCta: { flex: 1, minHeight: touchTarget.preferred, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radii.button },
 
   // Quick Inspection: shadow lives on the outer (unclipped) layer so the
   // brand-tinted lift isn't clipped by the gradient's rounded corners — the
@@ -1116,7 +1028,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   sectionHeaderSpacing: { marginBottom: spacing.sm },
-  sectionMeta: {
+  sectionMeta: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
     fontVariant: ['tabular-nums'],
@@ -1148,7 +1060,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
   },
-  groupSub: {
+  groupSub: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodySm,
     color: colors.textMuted,
     marginTop: 2,
@@ -1189,7 +1101,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.fillQuiet,
   },
-  debugStormText: {
+  debugStormText: { fontFamily: fontFamily.archivo.medium,
     color: colors.textMuted,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.medium,
@@ -1200,22 +1112,28 @@ const styles = StyleSheet.create({
   toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   toolTileShadow: { width: '47.5%', borderRadius: radii.card, ...shadows.card },
   toolTile: {
-    minHeight: 104,
+    minHeight: touchTarget.preferred,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
     borderRadius: radii.card,
-    padding: spacing.lg,
-    justifyContent: 'space-between',
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     overflow: 'hidden',
   },
+  toolTileCopy: { flex: 1, gap: spacing.xs },
   toolTileIcon: {
-    width: 44,
-    height: 44,
+    width: 32,
+    height: 32,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: glass.fill,
+    backgroundColor: colors.brandSoft,
   },
-  toolTileTitle: { marginTop: spacing.sm, fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.bold, color: colors.textInverse },
-  toolTileSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.medium, color: colors.textInverse, opacity: 0.82 },
+  toolTileTitle: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.semibold, color: colors.text },
+  toolTileSub: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.regular, color: colors.textMuted },
 
   recentRow: { gap: spacing.md, paddingRight: spacing.xl },
   // Shadow on the outer wrapper, clip + fill on the inner PressableScale —
@@ -1248,8 +1166,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
   },
-  recentAddress: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  recentMeta: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: spacing.xs },
+  recentAddress: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
+  recentMeta: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle, marginTop: spacing.xs },
 
   estimateImage: { width: '100%', height: 84, borderRadius: radii.md, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
   estimateCard: {
@@ -1268,18 +1186,18 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },
-  estimateRange: {
+  estimateRange: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.caption,
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
-  estimateAddress: {
+  estimateAddress: { fontFamily: fontFamily.archivo.medium,
     fontSize: fontSize.bodyMd,
     color: colors.text,
     fontWeight: fontWeight.medium,
     marginTop: spacing.xs,
   },
-  estimateMeta: {
+  estimateMeta: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.caption,
     color: colors.textMuted,
     marginTop: 2,
@@ -1307,21 +1225,8 @@ const styles = StyleSheet.create({
   },
   // A row that opens something takes the glove floor (Drift #1).
   activityRowPressable: { minHeight: touchTarget.standard },
-  activityMsg: { fontSize: fontSize.bodyMd, color: colors.text },
-  activityTime: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
+  activityMsg: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.text },
+  activityTime: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle, marginTop: 2 },
 
-  fabWrap: {
-    position: 'absolute',
-    right: spacing.xl,
-    bottom: spacing.xl,
-  },
-  fab: {
-    width: touchTarget.standard,
-    height: touchTarget.standard,
-    borderRadius: radii.pill,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.hero,
-  },
+
 });

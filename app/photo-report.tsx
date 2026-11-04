@@ -438,9 +438,9 @@ const styles = StyleSheet.create({
   headlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headlineTitle: {
     flex: 1,
-    fontFamily: fontFamily.archivo.bold,
+    fontFamily: fontFamily.heading,
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
+    fontWeight: fontWeight.regular,
     color: colors.text,
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
@@ -455,8 +455,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  noticeText: { flex: 1, fontSize: fontSize.bodySm, color: colors.danger, lineHeight: 18 },
-  noticeTextQuiet: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  noticeText: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodySm, color: colors.danger, lineHeight: 18 },
+  noticeTextQuiet: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
   rows: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
@@ -498,6 +498,6 @@ const styles = StyleSheet.create({
   actionBusy: { opacity: 0.5 },
   actionText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
-  emptyTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.titleSm, fontWeight: fontWeight.bold, color: colors.text, textAlign: 'center' },
+  emptyTitle: { fontFamily: fontFamily.heading, fontSize: fontSize.titleSm, fontWeight: fontWeight.regular, color: colors.text, textAlign: 'center' },
   emptyText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
 });

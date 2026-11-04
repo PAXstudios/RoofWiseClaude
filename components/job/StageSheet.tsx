@@ -79,5 +79,5 @@ const styles = StyleSheet.create({
   rowActive: { backgroundColor: colors.fillQuiet },
   rowBody: { flex: 1 },
   rowLabel: { fontSize: fontSize.bodyLg, fontFamily: fontFamily.archivo.semibold, color: colors.text },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 1 },
+  rowSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 1 },
 });

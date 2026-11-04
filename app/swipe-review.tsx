@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.fillQuiet,
   },
-  hintText: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: fontWeight.semibold },
+  hintText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption, color: colors.textMuted, fontWeight: fontWeight.semibold },
 
   actions: {
     flexDirection: 'row',
@@ -719,13 +719,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.hairline,
     marginBottom: spacing.sm,
   },
-  sheetTitle: {
+  sheetTitle: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
     color: colors.navy,
     textAlign: 'center',
   },
-  sheetBody: {
+  sheetBody: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodyMd,
     color: colors.textMuted,
     textAlign: 'center',
@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sheetSkipText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textMuted },
+  sheetSkipText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.textMuted },
 
   // Sub-screen empty state: thin icon, 15pt message, one quiet button — no
   // icon-in-tinted-circle (spec empty-state pattern).
@@ -767,5 +767,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  doneBtnText: { color: colors.navy, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
+  doneBtnText: { fontFamily: fontFamily.archivo.semibold, color: colors.navy, fontSize: fontSize.bodyLg, fontWeight: fontWeight.semibold },
 });

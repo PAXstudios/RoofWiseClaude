@@ -164,8 +164,8 @@ const styles = StyleSheet.create({
   // huge, confident label carrying the semantic colour, not a plain number.
   headline: {
     fontSize: fontSize.display,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.extrabold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     letterSpacing: -1,
   },
   track: { marginTop: 2 },
@@ -191,8 +191,8 @@ const styles = StyleSheet.create({
   statCell: { flex: 1, gap: 2 },
   statValue: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.display,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },

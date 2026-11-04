@@ -229,8 +229,8 @@ const styles = StyleSheet.create({
   head: { gap: spacing.xs },
   title: {
     fontSize: fontSize.titleXl,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.brand,
   },
   subtitle: {

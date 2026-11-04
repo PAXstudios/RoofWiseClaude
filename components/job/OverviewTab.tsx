@@ -758,22 +758,22 @@ const styles = StyleSheet.create({
     gap: 2,
     ...shadows.card,
   },
-  glanceValue: {
+  glanceValue: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
     color: colors.text,
     marginTop: spacing.xs,
     fontVariant: ['tabular-nums'],
   },
-  glanceLabel: { fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.textMuted },
-  glanceCaption: { fontSize: fontSize.caption, color: colors.textSubtle },
+  glanceLabel: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodySm, fontWeight: fontWeight.semibold, color: colors.textMuted },
+  glanceCaption: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle },
 
   bodyRows: { gap: spacing.xs },
   roofLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
 
-  recordLine: { fontSize: fontSize.bodySm, color: colors.textMuted },
-  recordHint: { fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
-  recordFoot: { fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 16 },
+  recordLine: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
+  recordHint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.text, lineHeight: 18 },
+  recordFoot: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle, lineHeight: 16 },
   agentRow: { gap: spacing.xs, marginTop: spacing.xs },
   agentBtns: { flexDirection: 'row', gap: spacing.sm },
   agentBtn: {
@@ -786,19 +786,19 @@ const styles = StyleSheet.create({
     borderRadius: radii.button,
     backgroundColor: colors.fillQuiet,
   },
-  agentBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  agentBtnText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
 
-  cardLabel: {
+  cardLabel: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
     fontWeight: fontWeight.semibold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  cardSub: { fontSize: fontSize.bodyMd, color: colors.textMuted },
+  cardSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.textMuted },
 
   safetyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
-  safetyText: { fontSize: fontSize.bodySm, color: colors.textMuted },
+  safetyText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted },
 
   collateralRow: {
     flexDirection: 'row',
@@ -819,8 +819,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.control,
     backgroundColor: colors.fillQuiet,
   },
-  zonePhotoCount: { fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
-  collateralLabel: { flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
+  zonePhotoCount: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodySm, fontWeight: fontWeight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
+  collateralLabel: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodyMd, color: colors.text },
   collateralChecked: { textDecorationLine: 'line-through', color: colors.textMuted },
 
   britChip: {
@@ -832,9 +832,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   britChipActive: { backgroundColor: colors.brand },
-  britChipText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  britChipText: { fontFamily: fontFamily.archivo.semibold, color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
   britChipTextActive: { color: colors.textInverse },
-  evidenceWarn: { fontSize: fontSize.bodySm, color: colors.danger, marginTop: spacing.sm },
+  evidenceWarn: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.danger, marginTop: spacing.sm },
 
   analyzeBtn: {
     flexDirection: 'row',
@@ -846,9 +846,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
     marginTop: spacing.md,
   },
-  analyzeBtnText: { color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
+  analyzeBtnText: { fontFamily: fontFamily.archivo.semibold, color: colors.text, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold },
 
-  notesInput: {
+  notesInput: { fontFamily: fontFamily.archivo.regular,
     minHeight: 96,
     fontSize: fontSize.bodyMd,
     color: colors.text,
@@ -869,7 +869,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     marginTop: spacing.sm,
   },
-  signedBadgeText: { color: colors.success, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
+  signedBadgeText: { fontFamily: fontFamily.archivo.semibold, color: colors.success, fontSize: fontSize.caption, fontWeight: fontWeight.semibold },
 
   // ── Sticky dual-button bar (docs/DESIGN_1A.md §6) ─────────────────────────
   // Sits below the ScrollView, not inside it — a fixed footer in the tab's
@@ -913,8 +913,8 @@ const styles = StyleSheet.create({
   reportCtaContent: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
   reportCtaText: { color: colors.text, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.bold },
 
-  gateHint: { fontSize: fontSize.bodySm, color: colors.warn, fontWeight: fontWeight.medium, textAlign: 'center' },
-  finalizedHint: { fontSize: fontSize.bodySm, color: colors.textSubtle, textAlign: 'center' },
+  gateHint: { fontFamily: fontFamily.archivo.medium, fontSize: fontSize.bodySm, color: colors.warn, fontWeight: fontWeight.medium, textAlign: 'center' },
+  finalizedHint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textSubtle, textAlign: 'center' },
 
   // The "cited storm event" info card — brand-tinted ground, per §6.
   citedEventCard: { backgroundColor: colors.brandSoft, borderColor: colors.brand },
@@ -924,11 +924,11 @@ const styles = StyleSheet.create({
   evidenceImageWrap: { height: 210, backgroundColor: colors.surfaceMuted },
   evidenceImage: { flex: 1 },
   evidenceImageLabel: { position: 'absolute', left: spacing.md, top: spacing.md, paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: radii.sm, backgroundColor: 'rgba(11,26,92,0.84)' },
-  evidenceImageLabelText: { fontFamily: fontFamily.mono, fontWeight: fontWeight.semibold, fontSize: fontSize.caption, color: colors.onMesh },
+  evidenceImageLabelText: { fontFamily: fontFamily.mono, fontWeight: fontWeight.semibold, fontSize: fontSize.caption, color: colors.textInverse },
   evidenceSummary: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   evidenceTitle: { fontFamily: fontFamily.archivo.bold, fontWeight: fontWeight.bold, fontSize: fontSize.bodyMd, color: colors.text },
   evidenceSub: { marginTop: spacing.xs, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, lineHeight: 18, color: colors.textMuted },
   evidenceConfidence: { alignItems: 'flex-end' },
-  evidenceConfidenceValue: { fontFamily: fontFamily.archivo.extrabold, fontWeight: fontWeight.extrabold, fontSize: fontSize.titleSm, color: colors.accent },
+  evidenceConfidenceValue: { fontFamily: fontFamily.display, fontWeight: fontWeight.regular, fontSize: fontSize.titleSm, color: colors.accent },
   evidenceConfidenceLabel: { fontFamily: fontFamily.mono, fontSize: fontSize.caption, color: colors.textMuted },
 });

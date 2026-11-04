@@ -69,9 +69,9 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center', gap: 1 },
   divider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.hairline },
   value: {
-    fontFamily: fontFamily.archivo.extrabold,
+    fontFamily: fontFamily.display,
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
+    fontWeight: fontWeight.regular,
     color: colors.text,
     fontVariant: ['tabular-nums'],
     letterSpacing: -0.3,

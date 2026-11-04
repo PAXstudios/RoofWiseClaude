@@ -148,7 +148,7 @@ export default function Welcome() {
           logic and provider buttons are unchanged — this is presentation
           only, scoped to this screen's own transition. */}
       <Stack.Screen options={{ headerShown: false, animation: 'fade' }} />
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <MeshBackground variant="hero" />
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -183,7 +183,7 @@ export default function Welcome() {
                   tint — the segmented control is the first thing a returning
                   user's thumb touches, so it is the one control on this
                   screen worth the literal onboarding surface. */}
-              <GlassCard level="base" onArt radius={radii.control + 2} style={styles.segment}>
+              <GlassCard level="base" onLight onArt radius={radii.control + 2} style={styles.segment}>
                 {segThumbW > 0 && (
                   <Animated.View
                     style={[styles.segmentThumb, { width: segThumbW }, segThumbStyle]}
@@ -222,7 +222,7 @@ export default function Welcome() {
                 accessibilityRole="button"
                 accessibilityLabel="Continue with Google"
               >
-                <Ionicons name="logo-google" size={18} color={colors.textInverse} />
+                <Ionicons name="logo-google" size={18} color={colors.text} />
                 <Text style={styles.providerText}>Continue with Google</Text>
               </Pressable>
             </Animated.View>
@@ -277,7 +277,7 @@ export default function Welcome() {
                     <Ionicons
                       name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                       size={19}
-                      color="rgba(255,255,255,0.55)"
+                      color={colors.textMuted}
                     />
                   </Pressable>
                 }
@@ -311,11 +311,11 @@ export default function Welcome() {
                 accessibilityLabel={isSignUp ? 'Create account' : 'Sign in'}
               >
                 {loading ? (
-                  <ActivityIndicator color={colors.textInverse} />
+                  <ActivityIndicator color={colors.text} />
                 ) : (
                   <>
                     <Text style={styles.ctaText}>{isSignUp ? 'Create account' : 'Sign in'}</Text>
-                    <Ionicons name="arrow-forward" size={19} color={colors.textInverse} />
+                    <Ionicons name="arrow-forward" size={19} color={colors.text} />
                   </>
                 )}
               </Pressable>
@@ -363,11 +363,11 @@ function Field({
   const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.field, focused && styles.fieldFocused]}>
-      <Ionicons name={icon} size={19} color="rgba(255,255,255,0.5)" />
+      <Ionicons name={icon} size={19} color={colors.textMuted} />
       <TextInput
         {...input}
         style={styles.input}
-        placeholderTextColor="rgba(255,255,255,0.38)"
+        placeholderTextColor={colors.textSubtle}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
       />
@@ -378,7 +378,7 @@ function Field({
 
 const styles = StyleSheet.create({
   // Dark edge under the mesh — matches the ramp's own 0% stop.
-  root: { flex: 1, backgroundColor: brand.royalInk },
+  root: { flex: 1, backgroundColor: colors.bg },
   safe: { flex: 1 },
   flex: { flex: 1 },
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.lg },
@@ -400,8 +400,8 @@ const styles = StyleSheet.create({
   // type scale too.
   title: {
     color: colors.onMesh,
-    fontFamily: fontFamily.archivo.extrabold,
-    fontWeight: fontWeight.extrabold,
+    fontFamily: fontFamily.heading,
+    fontWeight: fontWeight.regular,
     fontSize: fontSize.display + 4,
     letterSpacing: -1.2,
     lineHeight: 42,
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     bottom: spacing.xs,
     left: spacing.xs,
     borderRadius: radii.control,
-    backgroundColor: glass.fillHigh,
+    backgroundColor: colors.brandSoft,
     ...shadows.thumb,
   },
   segmentItem: {
@@ -437,13 +437,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentText: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.6,
     fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     fontSize: fontSize.bodyMd,
   },
-  segmentTextActive: { color: colors.textInverse, opacity: 1 },
+  segmentTextActive: { color: colors.text, opacity: 1 },
 
   providers: { gap: spacing.sm },
   // Smoke fill/border — the over-ART glass pair (GlassCard's `onArt`,
@@ -452,16 +452,16 @@ const styles = StyleSheet.create({
   provider: {
     minHeight: touchTarget.preferred,
     borderRadius: radii.pill,
-    backgroundColor: glass.smokeFill,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: glass.smokeBorder,
+    borderColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
   },
   providerText: {
-    color: colors.textInverse,
+    color: colors.text,
     fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     fontSize: fontSize.bodyMd,
@@ -470,8 +470,8 @@ const styles = StyleSheet.create({
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   divider: { flex: 1, height: 1, backgroundColor: glass.border },
   dividerText: {
-    color: colors.onMesh,
-    opacity: 0.5,
+    color: colors.textMuted,
+    opacity: 1,
     fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodySm,
   },
@@ -484,14 +484,14 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.preferred,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.lg,
-    backgroundColor: glass.smokeFill,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: glass.smokeBorder,
+    borderColor: colors.border,
   },
   fieldFocused: { borderColor: brand.royal, backgroundColor: glass.fill },
   input: {
     flex: 1,
-    color: colors.textInverse,
+    color: colors.text,
     fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.bodyLg,
     paddingVertical: spacing.md,
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
     ...shadows.hero,
   },
   ctaPressed: { backgroundColor: brand.burntDeep, transform: [{ scale: 0.985 }] },
-  ctaDisabled: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  ctaDisabled: { backgroundColor: colors.fillDisabled },
   ctaText: {
     color: colors.textInverse,
     fontFamily: fontFamily.archivo.bold,

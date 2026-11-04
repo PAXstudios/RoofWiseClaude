@@ -45,7 +45,7 @@ import { recordCardUrl, recordFactsLine, recordRoofLine, recordStatusBadge } fro
 import { usePropertyRecordStore } from '@/lib/stores/propertyRecordStore';
 import { useDoNotKnockStore } from '@/lib/stores/doNotKnockStore';
 import { blockedBy } from '@/lib/services/doNotKnock';
-import { colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
+import { fontFamily, colors, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 import { outcomeColor, outcomeIcon } from './outcomeStyle';
 import { saveKnock, type SaveKnockResult } from './saveKnock';
 import { appointmentAt, appointmentFields, isAppointmentTimestamp } from '@/lib/services/appointmentTime';
@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   body: { gap: spacing.lg, paddingBottom: spacing.md },
   field: { gap: spacing.sm },
-  fieldLabel: {
+  fieldLabel: { fontFamily: fontFamily.archivo.semibold,
     fontSize: fontSize.bodySm,
     color: colors.textSubtle,
     fontWeight: fontWeight.semibold,
@@ -817,7 +817,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.control,
     backgroundColor: colors.surfaceMuted,
   },
-  input: { flex: 1, fontSize: fontSize.bodyLg, color: colors.text, minHeight: touchTarget.standard },
+  input: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodyLg, color: colors.text, minHeight: touchTarget.standard },
   notes: {
     minHeight: touchTarget.preferred,
     paddingHorizontal: spacing.md,
@@ -826,9 +826,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   locatingRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  locatingText: { fontSize: fontSize.bodyLg, color: colors.textMuted },
+  locatingText: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyLg, color: colors.textMuted },
   note: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
-  noteText: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  noteText: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
   noteDanger: { color: colors.danger, fontWeight: fontWeight.semibold },
 
   nearby: {
@@ -839,8 +839,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     backgroundColor: colors.brandSoft,
   },
-  nearbyTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.text },
-  nearbyBody: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  nearbyTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.bold, color: colors.text },
+  nearbyBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
   nearbyBtn: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.lg,
@@ -849,7 +849,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  nearbyBtnText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.brand },
+  nearbyBtnText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.brand },
 
   archivedCard: {
     flexDirection: 'row',
@@ -860,9 +860,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fillQuiet,
   },
   archivedDot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  archivedTitle: { fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
-  archivedBody: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
-  archivedNotes: { fontSize: fontSize.bodyMd, color: colors.text, marginTop: spacing.xs, lineHeight: 20 },
+  archivedTitle: { fontFamily: fontFamily.archivo.bold, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold, color: colors.text },
+  archivedBody: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  archivedNotes: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.text, marginTop: spacing.xs, lineHeight: 20 },
 
   recordCard: {
     flexDirection: 'row',
@@ -873,9 +873,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   recordPhoto: { width: 96, height: 72, borderRadius: radii.md, backgroundColor: colors.fillQuiet },
-  recordFacts: { fontSize: fontSize.bodyMd, color: colors.text, marginTop: spacing.xs, lineHeight: 20 },
-  recordHint: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: spacing.xs, lineHeight: 18 },
-  recordSource: { fontSize: fontSize.caption, color: colors.textSubtle, marginTop: spacing.xs },
+  recordFacts: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodyMd, color: colors.text, marginTop: spacing.xs, lineHeight: 20 },
+  recordHint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: spacing.xs, lineHeight: 18 },
+  recordSource: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.caption, color: colors.textSubtle, marginTop: spacing.xs },
   lookupBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -886,9 +886,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
   },
   lookupBtnOff: { backgroundColor: colors.fillQuiet },
-  lookupText: { flex: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.brand },
+  lookupText: { fontFamily: fontFamily.archivo.semibold, flex: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.brand },
   lookupTextOff: { color: colors.textMuted },
-  lookupCost: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: fontWeight.semibold },
+  lookupCost: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption, color: colors.textMuted, fontWeight: fontWeight.semibold },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   // 56pt chips, two per row (Drift #1).
@@ -905,7 +905,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  chipText: { flex: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  chipText: { fontFamily: fontFamily.archivo.semibold, flex: 1, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   chipTextActive: { color: colors.textInverse },
 
   rowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
   },
   pickHalf: { flexBasis: '47%' },
   pickActive: { backgroundColor: colors.text },
-  pickText: { fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.semibold },
+  pickText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, color: colors.text, fontWeight: fontWeight.semibold },
   pickTextActive: { color: colors.textInverse },
 
   dial: {
@@ -935,7 +935,7 @@ const styles = StyleSheet.create({
 
   historyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 28 },
   historyDot: { width: 10, height: 10, borderRadius: 5 },
-  historyText: { flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
+  historyText: { fontFamily: fontFamily.archivo.regular, flex: 1, fontSize: fontSize.bodySm, color: colors.textMuted, lineHeight: 18 },
 
   footer: { gap: spacing.sm, paddingTop: spacing.sm },
   saveBtn: {
@@ -946,9 +946,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveBtnDisabled: { backgroundColor: colors.fillDisabled },
-  saveText: { color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
+  saveText: { fontFamily: fontFamily.archivo.bold, color: colors.textInverse, fontSize: fontSize.bodyLg, fontWeight: fontWeight.bold },
   saveTextDisabled: { color: colors.textMuted },
-  saveHint: { fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
+  saveHint: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, textAlign: 'center' },
   secondaryRow: { flexDirection: 'row', gap: spacing.sm },
   secondaryBtn: {
     flex: 1,
@@ -961,6 +961,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryDanger: { backgroundColor: colors.dangerSoft },
-  secondaryText: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  secondaryText: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
   secondaryDangerText: { color: colors.danger },
 });

@@ -99,7 +99,7 @@ export function ReviewDrawer({
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Back to the camera">
         <View style={[styles.sheetWrap, { paddingBottom: insets.bottom + spacing.md }]}>
           <Pressable onPress={() => {}}>
-            <GlassCard level="high" radius={radii.xl} style={styles.sheet}>
+            <GlassCard onLight level="high" radius={radii.xl} style={[styles.sheet, { backgroundColor: colors.surface }]}>
               <View style={styles.head}>
                 <View style={styles.headText}>
                   <Text style={styles.title}>Photos</Text>
@@ -113,7 +113,7 @@ export function ReviewDrawer({
                   accessibilityRole="button"
                   accessibilityLabel="Back to the camera"
                 >
-                  <Ionicons name="close" size={26} color={colors.textInverse} />
+                  <Ionicons name="close" size={26} color={colors.text} />
                 </Pressable>
               </View>
 
@@ -217,13 +217,13 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: HUD_GAP },
   headText: { flex: 1, gap: 2 },
   title: {
-    color: colors.textInverse,
+    color: colors.text,
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.bold,
-    fontFamily: fontFamily.archivo.bold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
   },
   subtitle: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.8,
     fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.regular,
@@ -237,13 +237,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   status: {
-    color: colors.textInverse,
+    color: colors.text,
     opacity: 0.85,
     fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.regular,
     lineHeight: 18,
   },
-  statusWarn: { color: colors.warnSoft, opacity: 1 },
+  statusWarn: { color: colors.warnInk, opacity: 1 },
   strip: { gap: HUD_GAP, alignItems: 'flex-start', paddingVertical: spacing.xs },
   thumbCol: { alignItems: 'center', gap: spacing.xs, minWidth: TILE },
   pressed: { opacity: 0.75 },
@@ -319,5 +319,5 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     fontFamily: fontFamily.archivo.semibold,
   },
-  doneTextOff: { color: colors.textInverse, opacity: 0.6 },
+  doneTextOff: { color: colors.textMuted },
 });

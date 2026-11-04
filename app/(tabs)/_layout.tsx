@@ -57,7 +57,7 @@ export default function TabsLayout() {
   // edge-to-edge under the home indicator.
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <MeshBackground variant="home" />
       <Tabs
         tabBar={renderTabBar}

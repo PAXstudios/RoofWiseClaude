@@ -69,8 +69,8 @@ export function Shutter({
       ? colors.success
       : levelOk === false
       ? colors.warn
-      : colors.textInverse
-    : colors.textInverse;
+      : colors.accent
+    : colors.accent;
 
   const label = busy
     ? 'Capturing photo'
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   ringBusy: { opacity: 0.6 },
-  core: { width: CORE, height: CORE, borderRadius: radii.pill, backgroundColor: colors.surface },
+  core: { width: CORE, height: CORE, borderRadius: radii.pill, backgroundColor: colors.accent },
   // Busy: the core pulls in to a rounded square — the "recording" glyph
   // every camera uses for "the shutter is doing something".
   coreBusy: { width: CORE_BUSY, height: CORE_BUSY, borderRadius: radii.md },

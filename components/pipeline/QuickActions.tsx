@@ -2,7 +2,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '@/components/PressableScale';
 import type { IoniconName } from '@/components/ui/IconChip';
-import { colors, fontFamily, fontSize, fontWeight, glass, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, fontFamily, fontSize, fontWeight, radii, spacing, touchTarget } from '@/theme/tokens';
 import { openDirections, openMail, openPhone, openSms } from './contact';
 
 type Props = {
@@ -118,7 +118,7 @@ export function QuickActions({
           accessibilityLabel={a.a11y}
           onPress={a.onPress}
         >
-          <Ionicons name={a.icon} size={20} color={dark ? colors.onMesh : colors.text} />
+          <Ionicons name={a.icon} size={20} color={colors.text} />
           <Text style={[styles.label, dark && styles.labelDark]} numberOfLines={1}>
             {a.label}
           </Text>
@@ -142,12 +142,12 @@ const styles = StyleSheet.create({
   },
   // Glass-over-art pair (theme/tokens.ts `glass`) — never a flat white chip
   // laid over the mesh, so the tile still reads as glass rather than paper.
-  actionDark: { backgroundColor: glass.fill, borderWidth: StyleSheet.hairlineWidth, borderColor: glass.border },
+  actionDark: { backgroundColor: colors.surfaceMuted, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   label: {
     fontSize: fontSize.caption,
     fontFamily: fontFamily.archivo.semibold,
     fontWeight: fontWeight.semibold,
     color: colors.text,
   },
-  labelDark: { color: colors.onMesh },
+  labelDark: { color: colors.text },
 });

@@ -532,8 +532,8 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: fontSize.titleSm,
-    fontWeight: fontWeight.semibold,
-    fontFamily: fontFamily.archivo.semibold,
+    fontWeight: fontWeight.regular,
+    fontFamily: fontFamily.heading,
     color: colors.navy,
   },
   cardSub: { fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.regular, color: colors.slate },
@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
   },
   scopeTitleSel: { color: colors.textInverse },
   scopeSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.slate, marginTop: 2 },
-  scopeSubSel: { color: colors.onMesh, opacity: 0.78 },
+  scopeSubSel: { color: colors.textInverse, opacity: 0.9 },
 
   priceCard: {
     borderRadius: radii.card,

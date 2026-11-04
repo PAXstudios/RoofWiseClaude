@@ -75,12 +75,10 @@ const styles = StyleSheet.create({
   },
   title: {
     flexShrink: 1,
-    fontSize: fontSize.bodySm,
-    fontWeight: fontWeight.semibold,
-    fontFamily: fontFamily.archivo.semibold,
-    color: colors.textSubtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    fontSize: fontSize.titleMd,
+    fontFamily: fontFamily.heading,
+    color: colors.text,
+    letterSpacing: -0.2,
   },
   titleOnDark: { color: colors.textInverse, opacity: 0.7 },
 

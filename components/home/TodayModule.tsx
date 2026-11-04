@@ -11,7 +11,7 @@ import { useLeadStore } from '@/lib/stores/leadStore';
 import { useKnockSessionStore } from '@/lib/stores/knockSessionStore';
 import { useTaskStore } from '@/lib/stores/taskStore';
 import type { Inspection, Lead, Task } from '@/lib/models/types';
-import { colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
+import { fontFamily, colors, fontSize, fontWeight, radii, shadows, spacing, touchTarget } from '@/theme/tokens';
 import { daysInStage, goingColdLeads } from '@/components/pipeline/chain';
 import { followUpsDue, inspectionsToday, tasksDueToday, dayBounds } from './todayAgenda';
 
@@ -226,15 +226,15 @@ const styles = StyleSheet.create({
   },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   rowBody: { flex: 1 },
-  rowTitle: { fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
-  rowSub: { fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
-  moreText: {
+  rowTitle: { fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.bodyMd, fontWeight: fontWeight.semibold, color: colors.text },
+  rowSub: { fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm, color: colors.textMuted, marginTop: 2 },
+  moreText: { fontFamily: fontFamily.archivo.medium,
     flex: 1,
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.medium,
     color: colors.text,
   },
-  counts: {
+  counts: { fontFamily: fontFamily.archivo.regular,
     fontSize: fontSize.caption,
     color: colors.textSubtle,
     marginTop: spacing.sm,
