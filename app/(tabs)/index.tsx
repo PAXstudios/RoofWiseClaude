@@ -47,8 +47,6 @@ import { QuickActionsSheet } from '@/components/sheets/QuickActionsSheet';
 import { selectUnreadCount, useNotificationStore } from '@/lib/stores/notificationStore';
 import { coverPhotoUri, recordCardUrl } from '@/lib/services/propertyRecord';
 import { activityHref } from '@/components/home/activityRoute';
-import { MeshBackground } from '@/components/ui/MeshBackground';
-import { BrandGeometry } from '@/components/ui/BrandGeometry';
 import { IconChip, CHIP_TONES, type ChipTone } from '@/components/ui/IconChip';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -332,8 +330,6 @@ export default function HomeScreen() {
     >
       {/* Courtside masthead: real identity, search and store-derived metrics. */}
       <View style={styles.heroBlock}>
-        <MeshBackground variant="home" />
-
         <Rise index={0}>
           <View style={styles.headerRow}>
             <PressableScale accessibilityRole="button" accessibilityLabel="Open profile and settings" onPress={() => router.push('/settings')} style={styles.identity}>
@@ -355,8 +351,7 @@ export default function HomeScreen() {
         </Rise>
 
         <View style={styles.headlineWrap}>
-          <BrandGeometry />
-          <Text accessibilityRole="header" style={[styles.headline, width < 360 && styles.headlineCompact]}>YOUR NEXT JOB{'\n'}STARTS HERE.</Text>
+          <Text accessibilityRole="header" style={[styles.headline, width < 360 && styles.headlineCompact]}>Your workday</Text>
         </View>
         <PressableScale accessibilityRole="button" accessibilityLabel="Search jobs, addresses and customers" onPress={() => router.push('/search')} style={styles.searchEntry}>
           <Ionicons name="search-outline" size={20} color={colors.textMuted} />
@@ -430,24 +425,28 @@ export default function HomeScreen() {
       <Rise index={3} style={styles.toolGrid}>
         <ToolTile
           icon="thunderstorm"
+          tone="blue"
           title="Storm Tracer"
           sub="Hail + wind map"
           onPress={() => router.push({ pathname: '/(tabs)/map', params: { filter: 'storms' } } as any)}
         />
         <ToolTile
           icon="compass"
+          tone="orange"
           title="Knock Planner"
           sub="Storm-hit streets"
           onPress={() => router.push('/knock-finder')}
         />
         <ToolTile
           icon="calculator"
+          tone="navy"
           title="Estimator"
           sub="Solar + cost"
           onPress={() => router.push('/estimator')}
         />
         <ToolTile
           icon="car"
+          tone="neutral"
           title="Mileage"
           sub="Tax log"
           onPress={() => router.push('/mileage')}
@@ -799,7 +798,7 @@ function HeaderIconButton({
       onPress={onPress}
     >
       <View style={styles.iconBtnFill}>
-        <Ionicons name={icon} size={22} color={colors.text} />
+        <Ionicons name={icon} size={22} color={colors.textInverse} />
         {badge && badge > 0 ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
@@ -810,12 +809,7 @@ function HeaderIconButton({
   );
 }
 
-/**
- * The mesh hero's own stat cell — a big Archivo number over a mono
- * `dataLabel` caption, both in the hero's paper-tinted "white"
- * (`colors.onMesh`, never pure white over a gradient — docs/DESIGN_1A.md
- * §1). No card, no chip: on the mesh the typographic contrast IS the design.
- */
+/** Real report metrics, grouped on the navy dashboard masthead. */
 function HeroStat({
   value,
   label,
@@ -851,17 +845,27 @@ function SectionTitle({ title }: { title: string }) {
   return <Text style={styles.sectionTitle}>{title}</Text>;
 }
 
+const TOOL_TONES = {
+  blue: { fill: colors.headerBg, border: colors.headerBorder, ink: colors.tileBlueInk, muted: colors.textMuted, iconFill: colors.surface },
+  orange: { fill: colors.tileOrange, border: colors.accentBorder, ink: colors.tileOrangeInk, muted: colors.accentInk, iconFill: colors.accentSoft },
+  navy: { fill: colors.navy, border: colors.navyBorder, ink: colors.textInverse, muted: colors.onDarkMuted, iconFill: colors.navyRaised },
+  neutral: { fill: colors.surface, border: colors.border, ink: colors.text, muted: colors.textMuted, iconFill: colors.brandSoft },
+};
+
 function ToolTile({
   icon,
+  tone,
   title,
   sub,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
+  tone: keyof typeof TOOL_TONES;
   title: string;
   sub: string;
   onPress: () => void;
 }) {
+  const palette = TOOL_TONES[tone];
   return (
     <PressableScale
       style={styles.toolTileShadow}
@@ -873,13 +877,13 @@ function ToolTile({
         onPress();
       }}
     >
-      <View style={styles.toolTile}>
-        <View style={styles.toolTileIcon}>
-          <Ionicons name={icon} size={24} color={colors.text} />
+      <View style={[styles.toolTile, { backgroundColor: palette.fill, borderColor: palette.border }]}>
+        <View style={[styles.toolTileIcon, { backgroundColor: palette.iconFill }]}>
+          <Ionicons name={icon} size={24} color={palette.ink} />
         </View>
         <View style={styles.toolTileCopy}>
-          <Text style={styles.toolTileTitle} numberOfLines={2}>{title}</Text>
-          <Text style={styles.toolTileSub} numberOfLines={1}>{sub}</Text>
+          <Text style={[styles.toolTileTitle, { color: palette.ink }]} numberOfLines={2}>{title}</Text>
+          <Text style={[styles.toolTileSub, { color: palette.muted }]} numberOfLines={2}>{sub}</Text>
         </View>
       </View>
     </PressableScale>
@@ -893,12 +897,7 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
 
-  // ── Mesh bleed-to-edge hero block ───────────────────────────────────────
-  // Negative margins cancel the scroll container's gutter + top pad so the
-  // mesh runs to all three edges; the bottom keeps a large radius (30 — the
-  // mock's own curved-bottom figure, docs/DESIGN_1A.md §6 — a one-off past
-  // `radii.xl`'s 24, same license as the onboarding hero's one-off 44px type)
-  // so the block reads as a pane the light content slides out from under.
+  // Full-width dashboard masthead, followed by the grouped workspace.
   heroBlock: {
     marginHorizontal: -spacing.xl,
     marginTop: -spacing.md,
@@ -908,11 +907,11 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
 
     overflow: 'hidden',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.navy,
   },
   heroSlot: { minHeight: touchTarget.standard },
 
-  // Large-title header, now on the mesh rather than the paper ground.
+  // Profile and utilities share the masthead's inverse contrast pair.
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -920,10 +919,10 @@ const styles = StyleSheet.create({
   },
   identity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: touchTarget.standard },
   brandLogo: { width: 36, height: 36 },
-  greeting: { flex: 1, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.medium, color: colors.text },
+  greeting: { flex: 1, fontSize: fontSize.bodyMd, fontFamily: fontFamily.archivo.medium, color: colors.onDarkMuted },
   headlineWrap: { position: 'relative', overflow: 'hidden', paddingVertical: spacing.xs },
-  headline: { ...typography.display, lineHeight: 48, paddingRight: spacing.xxxl },
-  headlineCompact: { fontSize: fontSize.heroCompact, lineHeight: fontSize.heroCompact },
+  headline: { ...typography.heading, fontSize: fontSize.heroCompact, lineHeight: 44, color: colors.textInverse },
+  headlineCompact: { fontSize: fontSize.display, lineHeight: fontSize.heroCompact },
   searchEntry: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: touchTarget.standard, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.control, backgroundColor: colors.surface },
   searchEntryText: { flex: 1, color: colors.textMuted, fontFamily: fontFamily.archivo.regular, fontSize: fontSize.bodySm },
   primaryAction: { backgroundColor: colors.accent },
@@ -941,27 +940,25 @@ const styles = StyleSheet.create({
   iconBtnFill: {
     width: touchTarget.small,
     height: touchTarget.small,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.control,
+    backgroundColor: colors.navyRaised,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: colors.border,
+    borderColor: colors.navyBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  // The mesh hero's own stat row — REVENUE YTD / LEADS / PIPELINE, typeset
-  // directly on the mesh (no card): a big Archivo number over a mono
-  // `dataLabel` caption is the contrast, per docs/DESIGN_1A.md §3.
+  // Upright figures and compact captions keep small-phone metrics readable.
   heroStatsRow: { gap: spacing.sm, flexDirection: 'row', alignItems: 'stretch' },
-  heroStat: { flex: 1, minHeight: touchTarget.preferred, gap: spacing.sm, padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, backgroundColor: colors.surface },
+  heroStat: { flex: 1, minHeight: touchTarget.preferred, gap: spacing.sm, padding: spacing.md, borderWidth: 1, borderColor: colors.navyBorder, borderRadius: radii.md, backgroundColor: colors.navyRaised },
   heroStatValue: {
     fontSize: fontSize.titleXl,
-    fontFamily: fontFamily.display,
-    color: colors.onMesh,
+    fontFamily: fontFamily.heading,
+    color: colors.textInverse,
     letterSpacing: -0.5,
     fontVariant: ['tabular-nums'],
   },
-  heroStatLabel: { color: colors.textMuted },
+  heroStatLabel: { color: colors.onDarkMuted },
   heroStatDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.border },
 
   stack: { gap: spacing.md },
@@ -1107,27 +1104,25 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
   },
 
-  // 2×2 tool tiles: 96pt tall (well past the 56pt floor), full-bleed gradient,
-  // white type — the colour and prominence the owner asked for.
+  // Two-column tools use flat brand fills and stacked labels at small widths.
   toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   toolTileShadow: { width: '47.5%', borderRadius: radii.card, ...shadows.card },
   toolTile: {
-    minHeight: touchTarget.preferred,
+    minHeight: touchTarget.preferred + touchTarget.small,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceMuted,
     borderRadius: radii.card,
     padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
     overflow: 'hidden',
   },
-  toolTileCopy: { flex: 1, gap: spacing.xs },
+  toolTileCopy: { alignSelf: 'stretch', gap: spacing.xs },
   toolTileIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: radii.control,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.brandSoft,

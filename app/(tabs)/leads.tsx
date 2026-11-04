@@ -1342,9 +1342,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.surfaceMuted,
   },
-  mastheadFilterActive: { backgroundColor: colors.surface },
+  mastheadFilterActive: { backgroundColor: colors.brand },
   mastheadFilterText: { color: colors.onMesh, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption },
-  mastheadFilterTextActive: { color: colors.text },
+  mastheadFilterTextActive: { color: colors.textInverse },
   mastheadSort: {
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.md,
@@ -1511,6 +1511,11 @@ const styles = StyleSheet.create({
   columnFill: { flex: 1 },
 
   stageSummary: {
+    backgroundColor: colors.headerBg,
+    borderTopLeftRadius: radii.card,
+    borderTopRightRadius: radii.card,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.headerBorder,
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
@@ -1534,7 +1539,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.fillQuiet,
   },
-  stageCountText: { color: colors.textMuted, fontFamily: fontFamily.mono, fontSize: fontSize.caption },
+  stageCountText: { color: colors.textMuted, fontFamily: fontFamily.archivo.semibold, fontSize: fontSize.caption },
   stageSummaryCount: {
     fontSize: fontSize.bodySm,
     fontFamily: fontFamily.archivo.semibold,

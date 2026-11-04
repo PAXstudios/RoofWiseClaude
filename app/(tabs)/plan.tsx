@@ -809,7 +809,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: fontSize.titleLg,
     fontWeight: fontWeight.regular,
-    fontFamily: fontFamily.display,
+    fontFamily: fontFamily.heading,
     color: colors.onMesh,
     fontVariant: ['tabular-nums'],
   },
@@ -860,7 +860,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg + 2,
     fontSize: fontSize.caption,
     fontWeight: fontWeight.semibold,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.textSubtle,
     fontVariant: ['tabular-nums'],
   },
@@ -904,7 +904,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
-  rowMeta: { fontSize: fontSize.caption, fontFamily: fontFamily.mono, color: colors.textSubtle, marginTop: 2 },
+  rowMeta: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.medium, color: colors.textSubtle, marginTop: 2 },
 
   actionRow: {
     flexDirection: 'row',

@@ -88,7 +88,7 @@ export function RichCard({
   const body = (
     <View style={styles.clip}>
       {hasHeader && (
-        <View style={[styles.header, !hasBody && !footer && styles.headerOnly]}>
+        <View style={[styles.header, iconTone === 'orange' && styles.headerWarm, !hasBody && !footer && styles.headerOnly]}>
           {icon && <IconChip name={icon} tone={iconTone} size="md" />}
 
           {(title || subtitle) && (
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radii.card,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    borderColor: colors.border,
   },
   // A whole-card tap is a primary action, so it takes the glove-sized target.
   tappable: { minHeight: touchTarget.standard },
@@ -188,7 +188,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
+    backgroundColor: colors.brandSoft,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
+  headerWarm: { backgroundColor: colors.accentSoft, borderBottomColor: colors.accentBorder },
   headerOnly: { paddingBottom: spacing.lg },
   headerText: { flex: 1, gap: 2 },
   title: {
@@ -221,9 +225,10 @@ const styles = StyleSheet.create({
   },
 
   bodyPad: { padding: spacing.lg },
-  bodyUnderHeader: { paddingTop: 0 },
+  bodyUnderHeader: { paddingTop: spacing.lg },
 
   footer: {
+    backgroundColor: colors.surfaceMuted,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
     paddingHorizontal: spacing.lg,

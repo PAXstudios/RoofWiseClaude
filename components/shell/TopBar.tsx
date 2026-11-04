@@ -64,9 +64,9 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingHorizontal: spacing.xxl,
     paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.brandSoft,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.headerBorder,
   },
   title: {
     fontFamily: fontFamily.heading,
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: touchTarget.standard,
     paddingHorizontal: spacing.xl,
-    borderRadius: radii.pill,
+    borderRadius: radii.control,
   },
   btnSecondary: {
     backgroundColor: colors.surface,

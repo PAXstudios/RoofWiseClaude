@@ -16,10 +16,14 @@ working branch have been removed from this change set.
 
 ## Appearance
 
-- White page grounds, navy ink, orange primary actions and supporting blue.
-- Bundled Barlow Condensed for display/headings; the existing Archivo body font.
-- Angular blue/orange decorative roof cuts, light-gray cards, thin borders and
-  restrained shadows.
+- Navy dashboard masthead and navigation, blue-tinted headers, white cards on
+  a cool blue-gray canvas, and burnt-orange priority actions/selected mobile tab.
+- Distinct blue, orange, navy and neutral tool tiles with stacked readable labels.
+- Bundled Barlow Condensed headings and upright readouts; Archivo body, section
+  titles, controls and metadata with reduced tracking.
+- “Your workday” replaces the Home slogan and decorative roof cuts; desktop
+  navigation uses the existing official logo. Flat surfaces and consistent
+  rounded rectangles replace decorative treatments in these areas.
 - Existing real photographs, measurements, findings and counts remain data-driven.
 - The existing five tabs, capture controls, job tabs, sheets, account flows,
   four-screen onboarding and workflow actions remain.
@@ -30,10 +34,10 @@ working branch have been removed from this change set.
 
 | Existing area | Design application |
 | --- | --- |
-| Home | Courtside masthead, compact tool cards, paired orange/blue actions, real metrics |
-| Pipeline / leads | White masthead, light columns/cards and condensed headings |
+| Home | Navy masthead, distinct brand-color tools, paired orange/blue actions, real metrics |
+| Pipeline / leads | Blue-tinted masthead/column headers, blue active filters, white content cards |
 | Capture / review / annotations | Light control panels, navy labels, blue selections, orange shutter; original capture/review logic |
-| Job Overview / Measure / Photos / Proposal / Tasks | Consistent typography, light surfaces and readable assessment labels |
+| Job Overview / Measure / Photos / Proposal / Tasks | Blue selected tabs, grouped canvas, tinted module headers and readable assessment labels |
 | Maps / weather / canvassing / planning | Light controls and sheets with existing imagery and data |
 | Estimates / reports / training / mileage | Condensed readouts, shared cards, existing actions and calculations |
 | Settings / account / onboarding | Existing screens and handlers with the Courtside appearance |
@@ -101,3 +105,23 @@ changes and validation. The replacement preview is now published with runtime
 [Open the SDK 58 preview](https://expo.dev/accounts/roofwise/projects/roofwise/updates/85c5d06c-452c-4652-a407-3323916d1e2e).
 Use this link with the owner's current Expo Go. Native/web exports, 14 suites,
 TypeScript, lint and Expo Doctor 20/20 pass; the physical-phone pass remains.
+
+## Brand color refinement — November 4, 2026
+
+The owner requested more color and clearer separation between app sections.
+The shared tokens, headers, cards, metrics, capture panels and navigation carry
+this refinement across the existing app. Home, Pipeline, Plan, Train, Settings,
+new-job chrome and job tabs receive focused presentation updates. Existing
+handlers, routes, stores, status meanings and SDK 58 distribution settings remain.
+Earlier screenshots in this document describe the prior white-ground version;
+they are not a visual verification of the November 4 refinement.
+
+TypeScript, zero-warning lint, all 14 regression suites, expanded light/dark
+contrast checks, installed-SDK compatibility and Expo Doctor 20/20 pass. A
+cache-cleared iOS/Android/web export succeeds without loading EAS values or
+dotenv, generating 55 static web routes including aliases. This is compile
+verification, not a configured replacement preview. Automatic approval review
+blocked the configured export despite the recorded earlier approval; the SDK 58
+preview linked above still shows the previous design. Publication requires a
+fresh explicit confirmation for the existing client configuration in downloadable
+bundles. No fresh browser/native visual pass is claimed.

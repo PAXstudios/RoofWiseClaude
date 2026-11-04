@@ -12,12 +12,10 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { mobileBottomItems, type TabBarProps } from './navItems';
-import { colors, fontFamily, fontSize, motion, navigationDock, radii, spacing, touchTarget } from '@/theme/tokens';
+import { fontFamily, fontSize, motion, navigationDock, radii, spacing, touchTarget } from '@/theme/tokens';
 
-// The floating pill tab bar — docs/DESIGN_1A.md §4. Off the bottom edge with
-// side margins (not edge-to-edge), full-pill radius, the active tab wearing
-// a quiet paper/navy chip behind icon+label. Same tabPress/navigation contract as
-// before this reskin — only the paint changed.
+// The navy dock uses a burnt-orange selected state and rounded rectangles.
+// Only presentation changes; the SDK 58 navigation contract stays intact.
 //
 // Rendered by expo-router's <Tabs tabBar={...}> in app/(tabs)/_layout.tsx, so
 // it receives the navigator's live `state` (which tab is focused) and
@@ -183,7 +181,7 @@ function TabButton({
           <Ionicons
             name={(active ? activeIcon : icon) as any}
             size={navigationDock.iconSize}
-            color={active ? navigationDock.selectedInk : colors.textMuted}
+            color={active ? navigationDock.selectedInk : navigationDock.inactiveInk}
           />
         </Animated.View>
         <Text numberOfLines={1} style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
@@ -193,8 +191,7 @@ function TabButton({
 }
 
 const styles = StyleSheet.create({
-  // Opaque through the home-indicator inset so the full bottom edge is warm
-  // paper; a transparent wrapper exposed the orange stop in the screen mesh.
+  // Keep the home-indicator inset on the surrounding grouped canvas.
   wrap: {
     backgroundColor: navigationDock.ground,
     paddingTop: navigationDock.topInset,
@@ -233,7 +230,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     borderWidth: 2,
     borderColor: 'transparent',
-    borderRadius: radii.pill,
+    borderRadius: radii.control,
   },
   tabChipActive: {
     backgroundColor: navigationDock.selectedFill,
@@ -243,7 +240,7 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontFamily: fontFamily.archivo.medium,
     fontSize: fontSize.caption,
-    color: colors.textMuted,
+    color: navigationDock.inactiveInk,
   },
   tabLabelActive: {
     fontFamily: fontFamily.archivo.bold,

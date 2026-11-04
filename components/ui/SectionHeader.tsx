@@ -19,17 +19,7 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
-/**
- * Small uppercase label that opens a group of content.
- *
- * Deliberately quiet — 13/semibold in `textSubtle` — because the typographic
- * contrast in this design comes from big light numbers sitting against small
- * bold labels. A section header that competes with its own section is what
- * makes a screen feel flat.
- *
- * The action is secondary chrome, so it takes the 44pt target rather than
- * the 56pt one, and buys the rest back with hitSlop.
- */
+/** Clear section titles with a quiet, accessible trailing action. */
 export function SectionHeader({ title, action, onDark = false, style }: Props) {
   const icon = action?.icon === undefined ? 'chevron-forward' : action.icon;
 
@@ -75,12 +65,12 @@ const styles = StyleSheet.create({
   },
   title: {
     flexShrink: 1,
-    fontSize: fontSize.titleMd,
-    fontFamily: fontFamily.heading,
+    fontSize: fontSize.bodyLg,
+    fontFamily: fontFamily.archivo.semibold,
     color: colors.text,
     letterSpacing: -0.2,
   },
-  titleOnDark: { color: colors.textInverse, opacity: 0.7 },
+  titleOnDark: { color: colors.textInverse },
 
   action: {
     flexDirection: 'row',

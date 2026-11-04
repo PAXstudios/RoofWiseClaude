@@ -6,10 +6,16 @@ the existing Codex app should change. Reference:
 `docs/references/RoofWise-Courtside.png`. Current scope:
 `docs/MOCKUP_IMPLEMENTATION.md`.
 
-Use white page grounds, navy text, burnt-orange primary actions, supporting blue,
-light-gray surfaces, restrained borders, angular graphics and the existing logo.
-Use bundled Barlow Condensed display/headings and Archivo for controls/body copy.
-Values live in `theme/tokens.ts`; decorative roof cuts are never evidence.
+The owner's November 4 refinement requests more brand color and clearer visual
+separation. Use navy for the Home masthead and navigation, blue-tinted workflow
+headers and module headers, white cards on a cool blue-gray grouped canvas, and
+burnt orange for priority actions and selected navigation. Tool surfaces use
+coordinated blue, orange and navy pairs. Keep semantic status colors meaningful.
+Use flat fills, restrained borders, consistent control shapes and the existing
+logo. The Home heading is “Your workday”; remove its oversized slogan and roof
+cut decoration. Use bundled Barlow Condensed for headings and upright readouts,
+Archivo for controls, section titles, body copy and compact metadata. Values
+live in `theme/tokens.ts`; decorative graphics are never evidence.
 
 Preserve all existing routes, features, stores, handlers and data. Keep the five
 tabs, 56pt touch minimum and 88pt sticky primary actions. Do not add features,

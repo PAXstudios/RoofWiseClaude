@@ -82,7 +82,7 @@ export function JobTabs({ tabs, active, onChange, style }: Props) {
 const styles = StyleSheet.create({
   track: {
     flexDirection: 'row',
-    backgroundColor: colors.fillQuiet,
+    backgroundColor: colors.headerBg,
     borderRadius: radii.button,
     padding: 3,
     gap: 2,
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   segmentActive: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.brand,
     ...shadows.thumb,
   },
   segmentPressed: { opacity: 0.6 },
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.archivo.semibold,
     color: colors.textSubtle,
   },
-  labelActive: { color: colors.brand, fontFamily: fontFamily.archivo.bold },
+  labelActive: { color: colors.textInverse, fontFamily: fontFamily.archivo.bold },
   badge: {
     minWidth: 15,
     height: 15,

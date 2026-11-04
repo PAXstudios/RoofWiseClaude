@@ -9,6 +9,7 @@
 
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { navItems, type TabBarProps } from './navItems';
 import { fontFamily,
   colors,
@@ -23,9 +24,7 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab }: TabBarPr
   return (
     <View style={styles.rail}>
       <View style={styles.brandRow}>
-        <View style={styles.brandMark}>
-          <Ionicons name="home" size={20} color={colors.textInverse} />
-        </View>
+        <Image source={require('@/assets/roofwise-app-logo.png')} style={styles.brandMark} contentFit="contain" />
         <Text style={styles.brandName}>RoofWise</Text>
       </View>
 
@@ -59,7 +58,7 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab }: TabBarPr
               <Ionicons
                 name={icon as any}
                 size={22}
-                color={active ? colors.brand : colors.textMuted}
+                color={active ? colors.textInverse : colors.onDarkMuted}
               />
               <Text style={[styles.itemLabel, active && styles.itemLabelActive]}>
                 {label}
@@ -77,9 +76,9 @@ const SIDEBAR_WIDTH = 248;
 const styles = StyleSheet.create({
   rail: {
     width: SIDEBAR_WIDTH,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.navy,
     borderRightWidth: 1,
-    borderRightColor: colors.border,
+    borderRightColor: colors.navyBorder,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
   },
@@ -93,15 +92,11 @@ const styles = StyleSheet.create({
   brandMark: {
     width: 40,
     height: 40,
-    borderRadius: radii.md,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   brandName: { fontFamily: fontFamily.archivo.bold,
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.bold,
-    color: colors.navy,
+    color: colors.textInverse,
   },
   nav: { gap: spacing.xs },
   item: {
@@ -112,14 +107,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radii.md,
   },
-  itemActive: { backgroundColor: colors.brandSoft },
+  itemActive: { backgroundColor: colors.brand },
   itemLabel: { fontFamily: fontFamily.archivo.medium,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.medium,
-    color: colors.textMuted,
+    color: colors.onDarkMuted,
   },
   itemLabelActive: {
-    color: colors.brand,
+    color: colors.textInverse,
     fontWeight: fontWeight.semibold,
   },
 });

@@ -13,13 +13,17 @@ entry does not count as tracked.
 
 ## Now (committed next steps, in order — see docs/PRODUCT_SYNTHESIS.md §5 for the full rationale)
 
-**Current task boundary (#130): preserve Courtside and upgrade the existing
-Codex app to SDK 58 so the owner can open it in the installed Expo Go.** The
-product backlog below is not a request to add features, configure native builds
-or deploy a replacement app. The existing-project preview update is authorized.
+**Current task boundary (#132): refine the existing Courtside app with stronger
+RoofWise brand color, clearer surface hierarchy and professional typography.**
+Preserve all routes, handlers, real data, SDK 58 configuration and the existing
+preview project. The product backlog below is not a request to add features or
+deploy a replacement app. Existing-branch push and preview publication are
+authorized by the owner's earlier instructions.
 
 
-- [ ] **Courtside device verification:** check bundled condensed fonts, white camera/settings/slope controls, orange shutter, selected-tab contrast, and the original onboarding's horizontal swipes/vertical content scroll with larger text on a short iPhone/Android screen. Source and build results are documented in #124–#125; device behavior is not inferred from screenshots. Customer/export additions were removed in #124. — #123–#125
+- [ ] **Publish the brand-color preview:** source and the unconfigured iOS/Android/web export are verified in #132. Automatic approval review rejected export/publication with existing EAS client values, even after checking the recorded #129 approval and unchanged RoofWise destination. Obtain a fresh explicit confirmation covering the same client API keys and Supabase public configuration in downloadable app bundles before resuming configured export and preview publication. Keep the current live preview unchanged until then. — #132
+
+- [ ] **Courtside device verification:** check the revised navy masthead/dock, tinted headers/cards, colored tools, bundled fonts, camera/settings/slope controls, orange shutter, selected-tab contrast, and the original onboarding's horizontal swipes/vertical content scroll with larger text on a short iPhone/Android screen. Source and build results are documented in #124–#125; device behavior is not inferred from screenshots. Customer/export additions were removed in #124. — #123–#125
 
 
 

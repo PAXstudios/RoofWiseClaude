@@ -18,7 +18,7 @@ vm.runInNewContext(compiled, {
     return { Platform: { select: values => values.web ?? values.default } };
   },
 });
-const { colors } = tokenExports;
+const { colors, navigationDock } = tokenExports;
 function rgb(hex) {
   assert.match(hex, /^#[\da-f]{6}$/i);
   return hex.slice(1).match(/../g).map(channel => parseInt(channel, 16));
@@ -82,7 +82,7 @@ for (const tone of ['neutral', 'brand', 'accent', 'success', 'warn', 'danger', '
     }
   }
 }
-const grounds = Object.fromEntries(['bg', 'surface', 'surfaceMuted'].map(name => [name, colors[name]]));
+const grounds = Object.fromEntries(['bg', 'surface', 'surfaceMuted', 'headerBg', 'brandSoft'].map(name => [name, colors[name]]));
 // JobTabs' inactive labels sit on a translucent track, not bare paper.
 const quietTrack = composite(colors.fillQuiet, colors.bg);
 grounds['fillQuiet over bg'] = quietTrack;
@@ -97,6 +97,28 @@ for (const [ground, paint] of Object.entries(grounds)) {
 assert.ok(luminance(colors.text) < luminance(colors.textMuted));
 assert.ok(luminance(colors.textMuted) < luminance(colors.textSubtle));
 console.log('PASS primary, secondary and subtle text preserve their visual hierarchy');
+
+// The colored dashboard, tools and navigation must retain normal-text contrast
+// in every interactive state, including press feedback on the selected tab.
+for (const [name, ink, fill] of [
+  ['dashboard heading', colors.textInverse, colors.navy],
+  ['dashboard caption', colors.onDarkMuted, colors.navyRaised],
+  ['dock inactive', navigationDock.inactiveInk, navigationDock.surface],
+  ['dock selected', navigationDock.selectedInk, navigationDock.selectedFill],
+  ['dock pressed selected', navigationDock.selectedInk, navigationDock.pressedFill],
+  ['dock pressed inactive', navigationDock.inactiveInk, navigationDock.pressedFill],
+  ['blue tool', colors.tileBlueInk, colors.headerBg],
+  ['orange tool', colors.tileOrangeInk, colors.tileOrange],
+  ['orange tool caption', colors.accentInk, colors.tileOrange],
+  ['green stat caption', colors.textSubtle, colors.tileGreen],
+  ['orange stat caption', colors.textSubtle, colors.tileOrange],
+]) {
+  const ratio = contrast(ink, fill);
+  assert.ok(ratio >= 4.5, `${name}: ${ratio.toFixed(2)}:1 is below 4.5:1`);
+  console.log(`PASS ${name}: ${ratio.toFixed(2)}:1`);
+}
+assert.ok(contrast(navigationDock.focusRing, navigationDock.surface) >= 3);
+assert.ok(contrast(navigationDock.focusRing, navigationDock.selectedFill) >= 3);
 
 // These labels paint their severity color as a solid fill over photographs.
 // Read each component's actual maps so a text-token-as-fill regression is

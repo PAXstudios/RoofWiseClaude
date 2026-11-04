@@ -71,15 +71,18 @@ export const colors = {
   cream: '#FFFFFF',
   slate: '#5A6180',
 
-  // iOS grouped ground — white cards sit on this so content reads as content
-  // even when compact. 1A: a warm PAPER ground (not cool gray) — cards stay
-  // pure white so the paper still reads as a ground, not a tint on the cards.
-  bg: '#FFFFFF',
+  // Grouped canvas separates content cards from the surrounding workspace.
+  bg: '#EEF2F6',
   surface: '#FFFFFF',
-  // Neutrals carry a slight warm/paper bias so they read as chosen, not defaulted.
-  surfaceMuted: '#F5F7FA',
-  border: '#E3E9F0',
-  borderStrong: '#C6D2DE',
+  surfaceMuted: '#E7EEF5',
+  border: '#D4DEE8',
+  borderStrong: '#B9CADB',
+  headerBg: '#DCEBF6',
+  headerBorder: '#B7D1E5',
+  accentBorder: '#EBC7B5',
+  navyRaised: '#203A53',
+  navyBorder: '#36516B',
+  onDarkMuted: '#C3D2E1',
 
   // Chrome fills — ink at low alpha so they sit on any light surface.
   hairline: 'rgba(11,26,92,0.10)',      // separators, bar borders
@@ -87,15 +90,13 @@ export const colors = {
   fillQuiet: 'rgba(11,26,92,0.05)',     // grey-fill secondary buttons, segmented tracks
 
   text: '#14283F',
-  textMuted: '#52647A',
+  textMuted: '#465B70',
   // Small metadata and placeholders still need normal-text contrast: at
   // least 4.5:1 on paper, white cards, muted inputs and quiet-fill tracks
   // over paper. Keep this quieter than textMuted without fading the labels.
-  textSubtle: '#5C6978',
+  textSubtle: '#526273',
   textInverse: '#FFFFFF',
-  // The mesh hero's "white" — a warm paper tint, never pure #FFFFFF over a
-  // coloured gradient (docs/DESIGN_1A.md §1). Use for text/icons over
-  // MeshBackground where `textInverse` would read as an off-brand pure white.
+  // Compatibility ink for light, flat MeshBackground surfaces.
   onMesh: '#14283F',
 
   accent: brand.burnt,
@@ -313,17 +314,12 @@ export const typography = {
   },
 };
 
-/**
- * The mock's recurring "STEP 01 · CAPTURE" / "REVENUE YTD" / "RW-2841"
- * convention: uppercase monospace, wide tracking, small. Spread this into a
- * Text style rather than hand-rolling font/letterSpacing per screen.
- * Colour is the caller's (an inverse tone on a mesh hero, `textMuted` on paper).
- */
+/** Compact metadata shares the app's readable control face. */
 export const dataLabel = {
-  fontFamily: fontFamily.mono,
+  fontFamily: fontFamily.archivo.semibold,
   fontSize: fontSize.caption,
   fontWeight: fontWeight.semibold,
-  letterSpacing: 1.1,
+  letterSpacing: 0.5,
   textTransform: 'uppercase' as const,
 };
 
@@ -335,16 +331,16 @@ export const touchTarget = {
   sticky: 88,        // sticky primary CTAs in thumb zone
 };
 
-// Light suspended navigation, refined from 1A's pill geometry. The owner's
-// device review keeps bottom chrome paper/navy, including on dark map screens.
+// Navy anchors navigation; burnt orange identifies the current destination.
 export const navigationDock = {
   ground: colors.bg,
-  surface: colors.surface,
-  selectedFill: colors.accentSoft,
-  selectedInk: colors.accentInk,
-  pressedFill: colors.fillQuiet,
-  border: colors.hairline,
-  focusRing: colors.text,
+  surface: colors.navy,
+  selectedFill: colors.accent,
+  selectedInk: colors.textInverse,
+  inactiveInk: colors.onDarkMuted,
+  pressedFill: colors.navyRaised,
+  border: colors.navyBorder,
+  focusRing: colors.textInverse,
   edgeInset: spacing.sm,
   bottomInset: spacing.xs,
   topInset: spacing.sm,

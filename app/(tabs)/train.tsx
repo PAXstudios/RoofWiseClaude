@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
   dialValue: {
     fontSize: fontSize.titleXl,
     fontWeight: fontWeight.regular,
-    fontFamily: fontFamily.display,
+    fontFamily: fontFamily.heading,
     color: colors.onMesh,
     fontVariant: ['tabular-nums'],
     letterSpacing: -0.5,
@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
   sectionMeta: {
     fontSize: fontSize.bodySm,
     fontWeight: fontWeight.semibold,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.accent,
     fontVariant: ['tabular-nums'],
   },
@@ -584,5 +584,5 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   // "4m ago" — timestamp convention (§3).
-  queueSub: { fontSize: fontSize.caption, fontFamily: fontFamily.mono, color: colors.textSubtle, marginTop: 2 },
+  queueSub: { fontSize: fontSize.caption, fontFamily: fontFamily.archivo.medium, color: colors.textSubtle, marginTop: 2 },
 });

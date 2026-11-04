@@ -32,7 +32,7 @@ export const hudDisc: ViewStyle = {
 
 /** The same surface as a rounded rectangle (pills, strips, drawers). */
 export const hudPanel: ViewStyle = {
-  backgroundColor: colors.surface,
+  backgroundColor: colors.brandSoft,
   borderWidth: StyleSheet.hairlineWidth * 2,
   borderColor: colors.borderStrong,
 };

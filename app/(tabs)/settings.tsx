@@ -1112,7 +1112,7 @@ const styles = StyleSheet.create({
   rowSub: { fontSize: fontSize.bodySm, fontFamily: fontFamily.archivo.regular, color: colors.textMuted, marginTop: 2 },
   detail: {
     fontSize: fontSize.bodyMd,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
@@ -1192,7 +1192,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: fontSize.bodyMd,
     fontWeight: fontWeight.semibold,
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.archivo.medium,
     color: colors.text,
     fontVariant: ['tabular-nums'],
   },

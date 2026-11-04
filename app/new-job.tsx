@@ -1899,6 +1899,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   header: {
+    backgroundColor: colors.brandSoft,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.headerBorder,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
@@ -1924,7 +1927,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     overflow: 'hidden',
   },
-  progressFill: { height: 3, backgroundColor: colors.navy, borderRadius: radii.pill },
+  progressFill: { height: 3, backgroundColor: colors.brand, borderRadius: radii.pill },
 
   scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.lg },
   stepBody: { gap: spacing.lg },

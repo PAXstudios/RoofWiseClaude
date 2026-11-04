@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     overflow: 'hidden',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.headerBorder,
   },
   largeRow: {
     flexDirection: 'row',
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
     overflow: 'hidden',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.headerBorder,
   },
   backBtn: {
     width: touchTarget.standard,

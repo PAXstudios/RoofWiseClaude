@@ -11,7 +11,7 @@ import {
   spacing,
   touchTarget,
 } from '@/theme/tokens';
-import { IconChip, type ChipTone, type IoniconName } from './IconChip';
+import { CHIP_TONES, IconChip, type ChipTone, type IoniconName } from './IconChip';
 
 /**
  * A change against a REAL prior period.
@@ -42,8 +42,8 @@ const DIRECTION_TONE: Record<StatDelta['direction'], NonNullable<StatDelta['tone
 };
 
 const TONE_COLOR: Record<NonNullable<StatDelta['tone']>, string> = {
-  good: colors.success,
-  bad: colors.danger,
+  good: colors.successInk,
+  bad: colors.dangerInk,
   neutral: colors.textMuted,
 };
 
@@ -92,7 +92,7 @@ export function StatCard({
     <>
       <IconChip name={icon} tone={tone} size="md" />
       <View style={styles.readout}>
-        <Text style={styles.value} numberOfLines={1}>
+        <Text style={[styles.value, { color: CHIP_TONES[tone].fg }]} numberOfLines={1}>
           {value}
         </Text>
         <Text style={styles.label} numberOfLines={2}>
@@ -119,7 +119,7 @@ export function StatCard({
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={a11y}
-        style={[styles.card, style]}
+        style={[styles.card, { backgroundColor: CHIP_TONES[tone].bg }, style]}
       >
         {body}
       </PressableScale>
@@ -127,7 +127,7 @@ export function StatCard({
   }
 
   return (
-    <View style={[styles.card, style]} accessibilityRole="summary" accessibilityLabel={a11y}>
+    <View style={[styles.card, { backgroundColor: CHIP_TONES[tone].bg }, style]} accessibilityRole="summary" accessibilityLabel={a11y}>
       {body}
     </View>
   );
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   readout: { gap: 2 },
   value: {
     fontSize: fontSize.titleXl,
-    fontFamily: fontFamily.display,
+    fontFamily: fontFamily.heading,
     color: colors.text,
     letterSpacing: -1,
     fontVariant: ['tabular-nums'],
