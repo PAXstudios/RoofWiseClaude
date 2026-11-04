@@ -37,15 +37,19 @@ The full feature spec lives at [`docs/SPEC.md`](./docs/SPEC.md). This log captur
 
 ## Context Summary
 
-> Last refreshed: 2026-11-03 (after entry #124).
+> Last refreshed: 2026-11-03 (after entry #129).
 
-**Current owner instruction (#124):** RoofWise is already built in Codex. Apply
-**Courtside design changes only** to that existing code. Do not create an app,
-add features/routes, alter business logic, configure a backend, change build
-profiles or begin distribution work for this request. The verified existing
-Codex branch is `PAXstudios/RoofWiseClaude` → `codex/design-1a-completion`, head
-`8abaed78f94c7833d2045e7660846467333ebbf2` (verified read-only on November 3).
-The working redesign is based on that exact source.
+**Current owner instruction (#124–#129):** RoofWise is already built in Codex.
+Apply **Courtside design changes only** to that existing code. Do not create an
+app, add features/routes, alter business logic, configure another backend or
+change build profiles. The owner subsequently asked to see the live app,
+completed Expo device authentication and explicitly approved publishing the
+preview with its existing client API keys and Supabase public configuration.
+That permits the existing project's EAS preview update, not unrelated native
+builds or feature work. The source is `PAXstudios/RoofWiseClaude` →
+`codex/design-1a-completion`; the published application code is
+`4454a9a9d0868a052f8d2db05e53eec213e063c3`, based on the original Codex
+`8abaed78f94c7833d2045e7660846467333ebbf2` source.
 
 **Current appearance:** Courtside supersedes historical dark-mesh Design 1A.
 White pages, navy ink, burnt orange primary actions, blue accents, light-gray
@@ -97,16 +101,25 @@ isolated fixtures; browser previews use empty isolated storage. Native mounted
 camera/sensor/gesture/PDF/force-quit and live-service proof remains a device gate,
 not something screenshots establish. #123's broad app passed 13 suites/55 route
 checks. #124's final design-only state restores the original 12 suites/49 routes;
-its final checks are recorded in that entry. No sample records are inserted.
+its final checks are recorded in that entry. #128 also passes TypeScript,
+lint, the 12 original suites and web export. Online Expo Doctor flags SDK 57
+patch updates (20/21); dependencies remain unchanged. #129 exports fresh iOS,
+Android and web bundles with the existing EAS preview configuration and verifies
+all nine configured values in each native bundle without printing their values.
+Publication is not physical-device proof. No sample records are inserted.
 
-**Delivery:** Work is local and reviewable. `AGENTS.md` forbids push, merge or PR
-without an explicit owner request; publication to the existing Codex branch is
-a separate final action. Do not configure another app/backend to deliver a
-visual update. This session has no Expo login or injected API keys; that is not
-evidence that the owner's already-built app lacks its existing configuration.
-Read-only native JS export succeeded before the scope clarification; no native
-package or build-profile change was made. Do not pursue the missing development
-client dependency or Apple setup for the current design-only request.
+**Delivery:** The owner authorized the existing Codex branch publication
+(#126–#128) and the Expo preview upload (#129). The Courtside update is published
+to the existing `@roofwise/roofwise` project
+`b1fdcacc-a354-499a-842c-0f5ce6fa2e68`, channel/branch `preview`, environment
+`preview`, runtime `exposdk:57.0.0`, update group
+`eec6ec75-40eb-41d2-a3a6-f730c7c55fa2`. iOS update:
+`01a1a4a3-5e77-7cd9-890e-a6f97cdc8182`; Android update:
+`01a1a4a3-5e77-761a-a56f-b1a0a56eb6bf`. Preview:
+https://expo.dev/accounts/roofwise/projects/roofwise/updates/eec6ec75-40eb-41d2-a3a6-f730c7c55fa2
+No credentials, login codes or configuration values belong in git. No new
+project/backend, native package, build profile, App Store/TestFlight release,
+merge or PR is part of this preview publication.
 
 Open product work remains in `BACKLOG.md`; it is not authorization to expand
 this redesign. Historical entries below retain prior decisions and their dates.
@@ -3487,3 +3500,15 @@ A third fresh critic passed 93 synchronous gate scenarios but reproduced a deepe
 **Limits / follow-ups:** Online Expo Doctor passes 20/21 checks and flags 28 SDK 57 patch-version updates; dependencies remain unchanged because the task is visual. The patch refresh is tracked in BACKLOG. This session's cloud browser cannot connect to the local preview; earlier screenshots are not relabeled as a fresh render. Native layout/gestures, camera/sensors, sharing and live services remain the existing device gate.
 
 **Delivery:** The owner's current instruction satisfies push authorization. Publish the exact checked tree through the connected GitHub account with an expected-head check and no force, then verify the remote SHA. No merge, PR, Expo update or native distribution is part of this design task.
+
+### [2026-11-03] #129 — Authenticate Expo and publish the Courtside preview
+
+**Prompt:** The owner asks how to see the live app, directs Expo login, completes the device-number match, then explicitly answers “Yes” to publishing to the existing RoofWise Expo project with its existing client API keys and Supabase public key in the downloadable app bundle.
+
+**Authorization:** Device authentication succeeds and verifies ownership of `@roofwise/roofwise`. An initial publication attempt was blocked by automatic approval review because login authorization did not separately cover uploading configured client values. No update group was created by that blocked attempt. After the owner explicitly approved that exact upload, publication resumed normally. No authentication credentials, device codes or API values are recorded here.
+
+**Preflight:** The source checkout is clean at `4454a9a9d0868a052f8d2db05e53eec213e063c3`. Existing EAS `preview` configuration is used without changing its values. A cache-cleared Expo export succeeds for iOS, Android and web (55 static routes including aliases). All nine configured client values are found in both fresh native bundles; checks report presence only. Application code, dependencies, build profiles, backend contracts and all 49 original routes remain unchanged from the reviewed Courtside source.
+
+**Publication:** EAS reports Published for group `eec6ec75-40eb-41d2-a3a6-f730c7c55fa2`, project `b1fdcacc-a354-499a-842c-0f5ce6fa2e68`, channel/branch `preview`, environment `preview`, runtime `exposdk:57.0.0`. iOS: `01a1a4a3-5e77-7cd9-890e-a6f97cdc8182`; Android: `01a1a4a3-5e77-761a-a56f-b1a0a56eb6bf`. Source commit is `4454a9a9d0868a052f8d2db05e53eec213e063c3`. The EAS dashboard update opens the Preview controls for Expo Go. No native app-store build, replacement app, production-channel update or backend configuration change is made.
+
+**Follow-ups:** Physical-phone layout, camera/sensors, gestures, sharing and live-service behavior remain the existing BACKLOG device checks. Publishing and bundle-configuration checks do not establish those results. The pre-existing SDK patch refresh remains separate. Context Summary refreshed after five entries since #124.

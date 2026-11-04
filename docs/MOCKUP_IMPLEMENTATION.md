@@ -72,3 +72,20 @@ render rather than a new visual verification of #128.
 
 Font source: https://github.com/google/fonts/tree/main/ofl/barlowcondensed
 The bundled OFL license is retained in `assets/fonts/OFL.txt`.
+
+## Live Expo preview — November 3, 2026
+
+The owner completed Expo authentication and explicitly authorized publishing
+the existing client configuration. Courtside is published from application
+commit `4454a9a9d0868a052f8d2db05e53eec213e063c3` to the existing
+`@roofwise/roofwise` project's `preview` channel/branch and `preview` environment.
+Runtime: `exposdk:57.0.0`.
+
+[Open the Courtside preview](https://expo.dev/accounts/roofwise/projects/roofwise/updates/eec6ec75-40eb-41d2-a3a6-f730c7c55fa2),
+then select Preview to open it in Expo Go with the same Expo account.
+Update group: `eec6ec75-40eb-41d2-a3a6-f730c7c55fa2`.
+
+Fresh iOS/Android bundles include all nine configured preview client values;
+verification withheld their values. This publication makes the existing app
+available for physical-device review; it does not replace those device checks
+or constitute an App Store/TestFlight release.
