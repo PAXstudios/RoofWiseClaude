@@ -11,7 +11,7 @@ export function BrandGeometry({ muted = false }: { muted?: boolean }) {
       accessibilityElementsHidden
       style={s.art}
     >
-      <Svg width="100%" height="100%" viewBox="0 0 120 180">
+      <Svg width="100%" height="100%" viewBox="0 0 120 180" preserveAspectRatio="none">
         <Polygon
           points="120,0 120,66 13,124"
           fill={muted ? colors.brandSoft : brand.royal}
@@ -26,5 +26,7 @@ export function BrandGeometry({ muted = false }: { muted?: boolean }) {
 }
 
 const s = StyleSheet.create({
-  art: { position: "absolute", right: 0, top: 0, width: 100, height: 154 },
+  // Follow the headline's height so both roof cuts remain visible, including
+  // the orange notch on compact phones and when system text grows.
+  art: { position: "absolute", right: 0, top: 0, bottom: 0, width: 100 },
 });

@@ -20,6 +20,8 @@ or deploy a new app. Keep those items separate from the Courtside reskin.
 
 - [ ] **Courtside device verification:** check bundled condensed fonts, white camera/settings/slope controls, orange shutter, selected-tab contrast, and the original onboarding's horizontal swipes/vertical content scroll with larger text on a short iPhone/Android screen. Source and build results are documented in #124–#125; device behavior is not inferred from screenshots. Customer/export additions were removed in #124. — #123–#125
 
+- [ ] **SDK 57 patch-version refresh:** online Expo Doctor currently passes 20/21 checks and recommends 28 package patch updates. Installed-SDK dependency compatibility, TypeScript, lint, regressions and web export pass. Keep upgrades outside the design-only change; apply and verify the coordinated patch set separately. — #128
+
 
 - [ ] **Gauntlet native proof:** on the owner's iPhone, exercise Pipeline drag/Move, camera capture and compass confirmation, duplicate/imported photo review, swipe reject/correct, annotation after deletion/reorder, keyboard sheets, VoiceOver labels, PDF share, force-quit recovery and cache purge. Source/fault-injection critics pass; this is the remaining real-output gate. — #119
 - [ ] **Cross-device correction conflict policy:** the current sync remains last-editor-wins. Before team rollout, define server-side revision/conflict handling so two inspectors cannot silently overwrite the same photo correction or review decision. — #119

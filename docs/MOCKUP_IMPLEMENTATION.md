@@ -45,8 +45,10 @@ are included. Device-specific behavior has not been inferred from web previews.
 
 [Actual app preview](references/RoofWise-Courtside-App-Preview.png).
 [Route/render checks](references/Courtside-Web-Checks.json).
-The closing PROMPT_LOG #124 records current checks. Git publication is a separate
-final action because AGENTS.md requires an explicit owner request before a push.
+The owner authorized publication in #126–#127 and again in the continuation
+request. The Courtside baseline is on `codex/design-1a-completion` at
+`12966b434ed09838876c1b5693353e3bcd96bbf2`; this is the existing app's source
+branch, separate from an installed Expo/native build.
 
 Continuation #125 preserves the condensed Home headline below 360pt and gives
 each original onboarding page vertical scrolling when its art and copy exceed
@@ -57,6 +59,16 @@ use the existing light-surface border token. TypeScript, lint, the original
 The earlier screenshots/route report above predate #125; a new interactive
 browser pass could not reach this session's local preview. Short-screen native
 scrolling and gestures remain in the device checklist.
+
+Continuation #128 finishes two visual details: the Home roof cuts fit the
+headline's actual height, and report statistic cards use readable sentence-case
+Archivo labels with compact padding. Font advance checks fit all three labels
+on a 320pt phone at default text size. TypeScript, lint, all 12 original
+regression suites, installed-SDK compatibility and a fresh web export pass.
+Online Expo Doctor passes 20/21 checks and flags SDK 57 patch-version updates;
+dependencies remain unchanged for this design task. The cloud browser cannot
+reach the local preview, so the linked screenshots remain the earlier #124
+render rather than a new visual verification of #128.
 
 Font source: https://github.com/google/fonts/tree/main/ofl/barlowcondensed
 The bundled OFL license is retained in `assets/fonts/OFL.txt`.

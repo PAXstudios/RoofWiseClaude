@@ -3,7 +3,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '@/components/PressableScale';
 import {
   colors,
-  dataLabel,
   fontFamily,
   fontSize,
   fontWeight,
@@ -54,7 +53,7 @@ type Props = {
   tone?: ChipTone;
   /** Pre-formatted headline number. Rendered in tabular figures. */
   value: string;
-  /** Small bold caps caption under the number. */
+  /** Readable caption under the number. */
   label: string;
   /**
    * OPTIONAL trend line. **Omit it entirely** unless a true prior-period
@@ -69,10 +68,10 @@ type Props = {
 };
 
 /**
- * Colour-chipped stat tile — icon chip, big tabular number, caps label.
+ * Colour-chipped stat tile — icon chip, big tabular number, readable label.
  *
  * The typographic contrast is the design: a large, loosely-tracked figure
- * against a small bold uppercase caption is what makes a number read as a
+ * against a small body-font caption is what makes a number read as a
  * headline instead of a table cell. Put these in a row with `style={{flex:1}}`.
  */
 export function StatCard({
@@ -141,7 +140,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
-    padding: spacing.lg,
+    padding: spacing.md,
     gap: spacing.md,
     ...shadows.card,
   },
@@ -153,9 +152,11 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     fontVariant: ['tabular-nums'],
   },
-  // "REVENUE YTD" / "LEADS" — the mock's stat-label convention (§3).
+  // Courtside pairs condensed figures with sentence-case body labels. Wide
+  // mono tracking split "Inspections" mid-word in the three-card phone row.
   label: {
-    ...dataLabel,
+    fontFamily: fontFamily.archivo.medium,
+    fontSize: fontSize.caption,
     color: colors.textSubtle,
   },
   deltaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

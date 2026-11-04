@@ -3473,3 +3473,17 @@ A third fresh critic passed 93 synchronous gate scenarios but reproduced a deepe
 **Prompt:** Complete the already-authorized Courtside push.
 
 **Delivery decision:** Command-line Git can read the repository but its push failed before authentication because no CLI username/credential is configured. The connected GitHub account can write Git objects. Publish the exact verified final tree through that connection as one commit on top of the existing target, compare its tree SHA with the local tree, and update `codex/design-1a-completion` with an expected-head check and no force. This retains the original 49 routes and excludes the abandoned extra features from the published diff. No application code changes or repeated approval are needed for this transport fallback. The handoff will report the verified remote ref; native/Expo distribution remains outside this push.
+
+### [2026-11-03] #128 — Recover and finish the existing Courtside redesign
+
+**Prompt:** The owner asks to redesign the existing app with Courtside after a previous effort failed, quotes the previous handoff, and explicitly authorizes pushing the update to `codex/design-1a-completion` when needed.
+
+**Recovered source:** The existing checkout and a fresh `git ls-remote` both identify `12966b434ed09838876c1b5693353e3bcd96bbf2` on the requested branch. Its Courtside design is already published. Continue that exact app, retaining its original 49 route files and five-tab navigation; do not scaffold a replacement or infer an Expo/native release from a source push.
+
+**Visual finish:** Home's decorative roof cuts now follow the headline container's actual height so the orange notch is not clipped by its former fixed 154pt height. Report stat cards pair condensed values with sentence-case Archivo captions and 12pt token padding, replacing widely tracked mono captions that split “Inspections” mid-word. No handlers, data, calculations or destinations change.
+
+**Verification:** TypeScript, lint, all 12 existing production-source regression suites, installed-SDK dependency compatibility and a fresh web export (55 static routes including aliases) pass. Route comparison confirms all 49 original route files with no additions/removals. `lib/`, tests, dependency manifests and EAS profiles still match the original `8abaed7` Codex base. Font advance measurements fit Revenue (44.49pt), Inspections (57.85pt) and AI Accuracy (59.94pt) in the conservative 64.67pt label space on a 320pt phone at default text size. Drift rules remain intact, including paired inspection/job actions, real-alert gating, empty stores, taxonomy, thresholds, evidence ownership and auth/native capability gates.
+
+**Limits / follow-ups:** Online Expo Doctor passes 20/21 checks and flags 28 SDK 57 patch-version updates; dependencies remain unchanged because the task is visual. The patch refresh is tracked in BACKLOG. This session's cloud browser cannot connect to the local preview; earlier screenshots are not relabeled as a fresh render. Native layout/gestures, camera/sensors, sharing and live services remain the existing device gate.
+
+**Delivery:** The owner's current instruction satisfies push authorization. Publish the exact checked tree through the connected GitHub account with an expected-head check and no force, then verify the remote SHA. No merge, PR, Expo update or native distribution is part of this design task.
